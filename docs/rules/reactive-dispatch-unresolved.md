@@ -25,8 +25,10 @@ reactivity analysis but cannot be established. Covered forms include:
   or union of objects whose method summaries differ;
 - a computed call such as `handlers[index]()` whose runtime target is not an
   exact symbol;
-- a Solid primitive used as a value (`const eff = createEffect`,
-  `Reflect.apply(createEffect, …)`): the calls it reaches are not followed; and
+- a Solid primitive used as a value (`let eff = createEffect`,
+  `Reflect.apply(createEffect, …)`): the calls it reaches are not followed. A
+  binding that exactly holds it (`const eff = createEffect`, `const r =
+  S.refresh`, a closed holder's member; ADR 0901) names it instead; and
 - an exported helper that directly invokes a member supplied through a
   parameter outside a proven tracked JSX region, because callers outside the
   analyzed project can supply unseen behavior.

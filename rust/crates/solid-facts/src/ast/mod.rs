@@ -50,7 +50,7 @@ use thiserror::Error;
 
 /// 92 (review D36): `const local = S.key` and a slot whose default is exactly
 /// `S.key` are namespace member bindings; no ADR 0481 member alias in a file
-/// with a direct `eval`, or in a classic script.
+/// with a direct `eval` or a `with` statement.
 pub const AST_FACTS_SCHEMA: u32 = 92;
 
 mod argument_completion;

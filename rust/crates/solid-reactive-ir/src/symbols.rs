@@ -163,10 +163,10 @@ pub(super) fn add_solid_import_names(
 }
 
 /// A non-exported `const` of one name declared at `declaration`.
-fn alias_const<'f>(
-    file: &'f solid_facts::FileFacts,
+fn alias_const(
+    file: &solid_facts::FileFacts,
     declaration: solid_facts::core::Span,
-) -> Option<&'f solid_facts::ast::BindingFact> {
+) -> Option<&solid_facts::ast::BindingFact> {
     file.ast
         .bindings
         .iter()
@@ -217,7 +217,10 @@ fn holder_value(
     let ast = &file.ast;
     let binding = alias_const(file, holder)?;
     let literal = ast.peel_ts_sugar_span(binding.initializer?);
-    if crate::interproc::property_gets::direct_eval_in(file, solid_facts::core::Span::new(0, u32::MAX)) {
+    if crate::interproc::property_gets::direct_eval_in(
+        file,
+        solid_facts::core::Span::new(0, u32::MAX),
+    ) {
         return None;
     }
     let every_read_is_an_alias = ast
@@ -229,9 +232,11 @@ fn holder_value(
                 && ast.reference_declaration(identifier.span) == Some(holder)
         })
         .all(|identifier| {
-            let Some(member) = ast.members.iter().find(|member| {
-                ast.peel_ts_sugar_span(member.object) == identifier.span
-            }) else {
+            let Some(member) = ast
+                .members
+                .iter()
+                .find(|member| ast.peel_ts_sugar_span(member.object) == identifier.span)
+            else {
                 return false;
             };
             !ast.optional_members.contains(&member.span)
@@ -290,10 +295,22 @@ pub(crate) fn copied_into_primitive_binding(
             let Some(binding) = ast
                 .bindings
                 .iter()
-                .find(|binding| binding.names.iter().any(|name| name.span == slot.local))
+                // `binding.names` is the fact's `Vec`, not the `names` map above.
+                .find(|binding| {
+                    binding
+                        .names
+                        .as_slice()
+                        .iter()
+                        .any(|name| name.span == slot.local)
+                })
             else {
                 return false;
             };
+            // An exported slot (ADR 0516) is exact here, but an importing
+            // module's mention stays unresolved: the value use keeps its row.
+            if crate::argument_values::binding_is_exported(file, binding, slot.local) {
+                return false;
+            }
             let Some(initializer) = binding.initializer.map(|init| ast.peel_ts_sugar_span(init))
             else {
                 return false;
@@ -317,8 +334,7 @@ pub(crate) fn copied_into_primitive_binding(
         if !binding.immutable || import_alias_source(file, name.span).is_none() {
             return false;
         }
-        let Some(initializer) = binding.initializer.map(|init| ast.peel_ts_sugar_span(init))
-        else {
+        let Some(initializer) = binding.initializer.map(|init| ast.peel_ts_sugar_span(init)) else {
             return false;
         };
         if initializer == span {

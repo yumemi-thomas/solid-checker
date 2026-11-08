@@ -661,6 +661,12 @@ impl<'l, 'a> Walk<'l, 'a> {
             }
             declaration = member.namespace;
             name = Some(member.key.to_string());
+        } else if name.is_none()
+            && let Some(source) = crate::symbols::import_alias_source(file, declaration)
+        {
+            // Review D36: `const drain = flush` or a closed holder's `box.m`
+            // calls the import it holds exactly.
+            declaration = source;
         }
         let (import, binding) = file.ast.imports.iter().find_map(|import| {
             import

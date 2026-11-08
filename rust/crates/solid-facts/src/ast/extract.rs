@@ -56,7 +56,6 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
     let semantic = built.semantic;
     let mut collector = Collector::new(source, semantic.scoping());
     collector.ambient_variable = source_type.is_typescript_definition();
-    collector.script_source = source_type.is_script();
     collector.visit_program(&parsed.program);
     let mut facts = collector.finish(identity);
     facts.suppression_comments =
@@ -147,9 +146,9 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) switch_case_declarators: Vec<Span>,
     pub(super) ambient_module_depth: usize,
     pub(super) ambient_variable: bool,
-    /// Review D36: the file parses as a classic script (`.cjs`), where `with`
-    /// can write an object through a bare name.
-    pub(super) script_source: bool,
+    /// Review D36: the file holds a `with` statement, which can write an
+    /// object through a bare name (a classic script; a module rejects it).
+    pub(super) with_statement: bool,
     pub(super) identifiers: Vec<IdentifierFact>,
     pub(super) reference_declarations: Vec<(Span, Span)>,
     pub(super) awaits: Vec<Span>,
@@ -405,7 +404,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             switch_case_declarators: Vec::new(),
             ambient_module_depth: 0,
             ambient_variable: false,
-            script_source: false,
+            with_statement: false,
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
@@ -669,7 +668,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             // or a `with` in a classic script (`with (thing) { k = f; }`), can
             // write the holder's object with no reference the census sees, so
             // no holder's member is exact there. A module rejects `with`.
-            let file_has_eval = self.script_source
+            let file_has_eval = self.with_statement
                 || self
                     .module_hazards
                     .iter()

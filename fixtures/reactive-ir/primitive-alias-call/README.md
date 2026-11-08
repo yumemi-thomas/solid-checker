@@ -4,3 +4,8 @@ The compiler resolves `held(…)` to `onCleanup`, and the primitive rules read n
 no rule would see the operation. It gets SC9012 `primitive-alias-call` at the call, plus
 a U of each rule that primitive answers to, since a code with no site line is covered
 only by its own rule's row. Direct calls get neither.
+
+Since ADR 0901, `held` (a closed holder's member) and `settled` (a namespace slot whose
+default is the same member) name their primitive exactly, so they answer as the direct
+calls do: `held(…)` in the timer is SC4001's violation, and `settled(…)`, whose callback
+returns no cleanup, reports nothing. `later` (`flush.bind(null)`) keeps this ADR's rows.

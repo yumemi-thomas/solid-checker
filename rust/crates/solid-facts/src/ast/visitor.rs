@@ -969,6 +969,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.ambient_variable = previous;
     }
 
+    fn visit_with_statement(&mut self, statement: &oxc_ast::ast::WithStatement<'a>) {
+        self.with_statement = true;
+        walk::walk_with_statement(self, statement);
+    }
+
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
         if let Some(init) = &declaration.init
             && !matches!(declaration.id, BindingPattern::BindingIdentifier(_))

@@ -2028,7 +2028,8 @@ impl<'a> PrimitiveImports<'a> {
             {
                 Some(*primitive)
             } else if let Some(member) = ast.member_at(initializer)
-                && let Some(holder) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+                && let Some(holder) =
+                    ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
                 && let Some(key) = file.source_text(member.property)
                 && let Some(literal) = ast
                     .bindings
@@ -2040,7 +2041,8 @@ impl<'a> PrimitiveImports<'a> {
                     .iter()
                     .filter(|property| literal.contains(property.span))
                     .find(|property| {
-                        file.source_text(property.key).map(|text| text.trim_matches(['\'', '"']))
+                        file.source_text(property.key)
+                            .map(|text| text.trim_matches(['\'', '"']))
                             == Some(key)
                     })
                     .and_then(|property| {
