@@ -1,0 +1,11 @@
+{
+  "commit": "50e46e1517c74d8d0bb000c003ffc72912a3482f",
+  "baseline": "6653b144bdf707625a95ea714f399a535a6d7182",
+  "judgeRev": "50e46e1517c74d8d0bb000c003ffc72912a3482f",
+  "tool": "sweep",
+  "secondPath": true,
+  "args": ["--jobs", "8", "--manifest", "scripts/corpus/rc21-manifest.json"],
+  "ids": [],
+  "chrome": false,
+  "note": "ADR 0905 (C2): two corpus sweeps of the frozen rc.21 apps with --manifest scripts/corpus/rc21-manifest.json. (1) commit at the frozen apps root against baseline at the same root: expect relabels only (census blockers), V unchanged; list every moved row. (2) commit at a second root (a copy of the same apps under another directory name) against (1): expect byte-identical rows after relativizing paths; any difference is a path-dependent choice, list its rows with code, blocker and pass. Use a second root whose path differs from the first, ideally by name and length."
+}
