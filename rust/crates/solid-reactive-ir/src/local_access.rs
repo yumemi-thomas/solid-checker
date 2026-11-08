@@ -10332,6 +10332,27 @@ pub(crate) fn member_receiver_alias(
 /// instead. ADR 0498: a member that is the object of a written, deleted or
 /// iterated member (`store.a` in `store.a.v = 1`) is read on its own: the
 /// longer path is no read, so the Get of this one is the chain's.
+/// The spans [`read_as_part_of_longer_path`] answers `true` for, at once:
+/// the peeled object of each member that is read (not written, deleted or
+/// iterated).
+pub(crate) fn longer_path_objects(
+    file: &solid_facts::FileFacts,
+) -> crate::HashSet<solid_facts::core::Span> {
+    file.ast
+        .members
+        .iter()
+        .filter(|candidate| {
+            !(file.ast.is_no_get_target(candidate.span)
+                || file
+                    .ast
+                    .iteration_targets
+                    .iter()
+                    .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span))
+        })
+        .map(|candidate| file.ast.peel_ts_sugar_span(candidate.object))
+        .collect()
+}
+
 pub(crate) fn read_as_part_of_longer_path(
     file: &solid_facts::FileFacts,
     member: &solid_facts::ast::MemberFact,

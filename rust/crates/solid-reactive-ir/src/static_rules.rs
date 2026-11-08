@@ -1468,7 +1468,7 @@ fn store_path_tracked(tracked: &[(SymbolId, String)], symbol: &SymbolId, read: &
 }
 
 fn member_read_site<'f>(
-    files_by_path: &std::collections::HashMap<&str, &'f solid_facts::FileFacts>,
+    files_by_path: &crate::HashMap<&str, &'f solid_facts::FileFacts>,
     function: &typefacts::AsyncFunctionFact,
 ) -> Option<(
     &'f solid_facts::FileFacts,
@@ -1657,6 +1657,8 @@ fn member_reads_after_await(
     store_tracking: &dyn Fn(&SymbolId, Option<&str>) -> pre_await::Tracking,
 ) {
     let (file, ast_function, boundary) = site;
+    // `read_as_part_of_longer_path` for every member, asked once.
+    let mut longer_path_objects = None;
     for member in &file.ast.members {
         if member.span.start < boundary || !ast_function.body.contains(member.span) {
             continue;
@@ -1688,7 +1690,10 @@ fn member_reads_after_await(
         // Only the complete member chain reads a store path; its prefixes are
         // the same read's steps. ADR 0612: the object of a written member is
         // read on its own, as in a strict-read window (ADR 0498).
-        if crate::local_access::read_as_part_of_longer_path(file, member) {
+        if longer_path_objects
+            .get_or_insert_with(|| crate::local_access::longer_path_objects(file))
+            .contains(&member.span)
+        {
             continue;
         }
         if file.ast.is_no_get_target(member.span) {
@@ -1801,21 +1806,46 @@ fn member_reads_after_await(
 /// nested inside a JSX attribute of a returned branch is a tracked binding,
 /// not a structural branch, and stays out.
 pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    // Each file's reads by span, with whether each is uncertifiable: a
+    // test's reads are the ones inside it, in any order.
+    let mut reads_by_path = crate::HashMap::<std::sync::Arc<str>, Vec<(u64, u64, bool)>>::default();
+    for read in &draft.reads {
+        reads_by_path
+            .entry(std::sync::Arc::clone(&read.location.path))
+            .or_default()
+            .push((
+                read.location.start_byte,
+                read.location.end_byte,
+                read.is_uncertifiable(),
+            ));
+    }
     for file in &ctx.facts.files {
+        // The arguments of the file's primitive calls, peeled.
+        let mut primitive_arguments = None;
         for function in &file.ast.functions {
             // ADR 0656: a component need not have a name (`[function () {…}][0]`).
             let name = function_binding_name(file, function).or(function.name.as_ref());
             // A primitive's own callback is that primitive's: `dynamic(() => …)`
             // re-runs its source, so its test selects nothing once.
             if name.is_none()
-                && file.ast.calls.iter().any(|call| {
-                    ctx.semantic_lookup
-                        .primitive_at_call(file, call.span)
-                        .is_some()
-                        && call.arguments.iter().any(|argument| {
-                            file.ast.peel_ts_sugar_span(argument.span) == function.span
-                        })
-                })
+                && primitive_arguments
+                    .get_or_insert_with(|| {
+                        file.ast
+                            .calls
+                            .iter()
+                            .filter(|call| {
+                                ctx.semantic_lookup
+                                    .primitive_at_call(file, call.span)
+                                    .is_some()
+                            })
+                            .flat_map(|call| {
+                                call.arguments
+                                    .iter()
+                                    .map(|argument| file.ast.peel_ts_sugar_span(argument.span))
+                            })
+                            .collect::<crate::HashSet<Span>>()
+                    })
+                    .contains(&function.span)
             {
                 continue;
             }
@@ -1856,12 +1886,15 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                 // only an uncertifiable obligation makes it possibly reactive,
                 // which is an obligation here too, never a violation.
                 let (mut proven, mut possible) = (false, false);
-                for read in draft.reads.iter().filter(|read| {
-                    read.location.path == file.path.as_str().into()
-                        && u64::from(test.start) <= read.location.start_byte
-                        && read.location.end_byte <= u64::from(test.end)
-                }) {
-                    if read.is_uncertifiable() {
+                for (_, _, uncertifiable) in reads_by_path
+                    .get(file.path.as_str())
+                    .into_iter()
+                    .flatten()
+                    .filter(|(start, end, _)| {
+                        u64::from(test.start) <= *start && *end <= u64::from(test.end)
+                    })
+                {
+                    if *uncertifiable {
                         possible = true;
                     } else {
                         proven = true;

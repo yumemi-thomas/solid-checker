@@ -44,6 +44,7 @@ use super::{
     SharedAsyncComputations, call_accessor_symbol, member_read_site, member_reads_after_await,
     tracked_async_computation_context, typed_after_await_obligation, typed_unknown,
 };
+use crate::HashMap;
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
 use crate::identity::SymbolId;
@@ -58,7 +59,6 @@ use solid_facts::ast::{
     ArgumentValueKind, CallFact, FunctionFact, FunctionKind, TaggedTemplateFact,
 };
 use solid_facts::core::Span;
-use std::collections::HashMap;
 use std::sync::Arc;
 use typefacts::AsyncFunctionFact;
 
@@ -192,7 +192,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 })
                 .collect(),
             facts_by_end: {
-                let mut by_end: HashMap<(&str, u64), Vec<&AsyncFunctionFact>> = HashMap::new();
+                let mut by_end: HashMap<(&str, u64), Vec<&AsyncFunctionFact>> = HashMap::default();
                 for function in ctx
                     .facts
                     .typescript
@@ -210,7 +210,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 by_end
             },
             done: HashSet::default(),
-            walks: HashMap::new(),
+            walks: HashMap::default(),
             pre: PreAwait::new(ctx),
             has_generators: ctx
                 .facts
