@@ -607,7 +607,8 @@ pub(crate) fn discover_owner_file(
                     .member_at(file.ast.peel_ts_sugar_span(call.callee))
                     .is_some_and(|member| {
                         matches!(file.source_text(member.property), Some("call" | "apply"))
-                    }) {
+                    })
+                {
                     call.callee
                 } else {
                     call.arguments
