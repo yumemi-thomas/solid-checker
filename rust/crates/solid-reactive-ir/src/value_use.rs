@@ -340,10 +340,10 @@ pub(crate) struct Census<'l, 'a> {
     /// The calls transport resolved to a source: each has its row.
     resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
     /// Where each file has a read, write or action row, or an obligation.
-    rows: BTreeMap<String, Vec<(u64, u64)>>,
+    rows: &'l RowIndex,
     /// ADR 0811: the store member writes SC2003 decides in a file, asked
     /// once per file the walk reaches a root's member in.
-    member_writes: &'l dyn Fn(&FileFacts) -> Vec<Span>,
+    member_writes: MemberWrites<'l>,
     decided_writes: HashMap<String, Vec<Span>>,
     /// What a call of the walked value does.
     carried: Carried,
@@ -352,8 +352,10 @@ pub(crate) struct Census<'l, 'a> {
     return_hops: usize,
     /// Whether an exported function's callers are all in view.
     exported: crate::attribution::ExportedCallers<'l, 'a>,
-    /// The parameter references a hop starts from: a call of one has its row
-    /// at the call that hands the value. An alias or pattern past it has none.
+    /// The parameter references a hop of this start's walks starts from: a
+    /// call of one has its row at the call that hands the value. An alias or
+    /// pattern past it has none. Kept per start: a hop another start made
+    /// says nothing about this start's walk (ADR 0909).
     hop_starts: HashSet<(String, Span)>,
     /// The walked source may be pending: a tracked position is SC5003's and
     /// SC5001's question then, which only a row answers (W's review H3).
@@ -378,22 +380,44 @@ pub(crate) struct Census<'l, 'a> {
     allowed: HashMap<String, Vec<Span>>,
 }
 
+/// ADR 0811: the store member writes SC2003 decides in a file.
+pub(crate) type MemberWrites<'l> = Box<dyn Fn(&FileFacts) -> Vec<Span> + 'l>;
+
+/// Where each file has a read, write or action row, or an obligation: what
+/// [`Census::has_row`] asks, built once and shared by every census of a run.
+pub(crate) type RowIndex = BTreeMap<String, Vec<(u64, u64)>>;
+
+/// The [`RowIndex`] of `located`.
+pub(crate) fn row_index<'x>(located: impl Iterator<Item = &'x Location>) -> RowIndex {
+    let mut rows = RowIndex::default();
+    for location in located {
+        rows.entry(location.path.to_string())
+            .or_default()
+            .push((location.start_byte, location.end_byte));
+    }
+    rows
+}
+
+/// What one start's walk (a reference, or a creating call no binding holds)
+/// answered: its own obligation, whether a walk ran past the step budget, and
+/// the uses its walks ended at, before and past an escape.
+pub(crate) struct StartAnswer {
+    pub(crate) open: Option<&'static str>,
+    pub(crate) cut: bool,
+    pub(crate) uses: Vec<(Location, &'static str)>,
+    pub(crate) escaped_uses: Vec<(Location, &'static str)>,
+}
+
 impl<'l, 'a> Census<'l, 'a> {
-    pub(crate) fn new<'x>(
+    pub(crate) fn new(
         lookup: &'l SemanticLookup<'a>,
         entities: &'l crate::EntitySymbols,
         symbol_names: &'l HashMap<crate::SymbolId, crate::SymbolId>,
         sources: HashSet<&'l str>,
         resolved: &'l HashMap<Location, crate::interproc::accessor_provenance::Callable>,
         exported: crate::attribution::ExportedCallers<'l, 'a>,
-        located: impl Iterator<Item = &'x Location>,
+        rows: &'l RowIndex,
     ) -> Self {
-        let mut rows = BTreeMap::<String, Vec<(u64, u64)>>::default();
-        for location in located {
-            rows.entry(location.path.to_string())
-                .or_default()
-                .push((location.start_byte, location.end_byte));
-        }
         Self {
             lookup,
             entities,
@@ -404,7 +428,7 @@ impl<'l, 'a> Census<'l, 'a> {
             sources,
             resolved,
             rows,
-            member_writes: &no_member_writes,
+            member_writes: Box::new(no_member_writes),
             decided_writes: HashMap::default(),
             carried: Carried::Either,
             steps: 0,
@@ -420,6 +444,60 @@ impl<'l, 'a> Census<'l, 'a> {
             escaped_uses: Vec::new(),
             allowed: HashMap::default(),
         }
+    }
+
+    /// Starts one start's walk from nothing this census walked before: a
+    /// start's answer is a function of the build and the start alone, so the
+    /// starts can be walked on any worker in any order. The caches kept
+    /// across starts (`files`, `allowed`, `decided_writes`, `keys`, the
+    /// exported-callers graph) answer from the build alone.
+    fn begin_start(&mut self) {
+        debug_assert_eq!(self.parameter_hops, 0, "a hop outlived its start");
+        debug_assert_eq!(self.return_hops, 0, "a hop outlived its start");
+        debug_assert!(self.escapes.is_empty() && self.past_withheld.is_empty());
+        debug_assert!(self.uses.is_empty() && self.escaped_uses.is_empty() && !self.cut);
+        self.walked.clear();
+        self.steps = 0;
+        self.hop_starts.clear();
+    }
+
+    /// The answer of the start just walked, taken out of the census.
+    fn end_start(&mut self, open: Option<&'static str>) -> StartAnswer {
+        StartAnswer {
+            open,
+            cut: self.take_cut(),
+            uses: self.take_uses(),
+            escaped_uses: self.take_escaped_uses(),
+        }
+    }
+
+    /// [`Self::callable_use`] as a [`StartAnswer`].
+    pub(crate) fn callable_start(
+        &mut self,
+        reference: &Location,
+        accessor: bool,
+        async_source: bool,
+    ) -> StartAnswer {
+        let open = self.callable_use(reference, accessor, async_source);
+        self.end_start(open)
+    }
+
+    /// [`Self::root_use`] as a [`StartAnswer`].
+    pub(crate) fn root_start(&mut self, reference: &Location, async_source: bool) -> StartAnswer {
+        let open = self.root_use(reference, async_source);
+        self.end_start(open)
+    }
+
+    /// [`Self::created_use`] as a [`StartAnswer`].
+    pub(crate) fn created_start(
+        &mut self,
+        file: &'a FileFacts,
+        call: Span,
+        store: bool,
+        tuple: bool,
+    ) -> StartAnswer {
+        let open = self.created_use(file, call, store, tuple);
+        self.end_start(open)
     }
 
     /// Whether a walk since the last call ran past the step budget. The
@@ -504,8 +582,7 @@ impl<'l, 'a> Census<'l, 'a> {
         } else {
             Carried::Accessor
         };
-        self.walked.clear();
-        self.steps = 0;
+        self.begin_start();
         let mode = match (store, tuple) {
             (false, false) => Mode::Value,
             (false, true) => Mode::Holder(Slot::Any),
@@ -525,9 +602,7 @@ impl<'l, 'a> Census<'l, 'a> {
         let Some((file, span)) = self.place(reference) else {
             return Some(blockers::VALUE_USE_UNCLASSIFIED);
         };
-        self.walked.clear();
-        self.steps = 0;
-        self.escapes.clear();
+        self.begin_start();
         let answer = if is_value_reference(file, span) {
             match self.position(file, span, mode) {
                 Position::Followed => None,
@@ -1694,10 +1769,7 @@ impl<'l, 'a> Census<'l, 'a> {
 
     /// ADR 0811: where the census asks which store member writes SC2003
     /// decides in a file. Without it, none.
-    pub(crate) fn with_member_writes(
-        mut self,
-        member_writes: &'l dyn Fn(&FileFacts) -> Vec<Span>,
-    ) -> Self {
+    pub(crate) fn with_member_writes(mut self, member_writes: MemberWrites<'l>) -> Self {
         self.member_writes = member_writes;
         self
     }
@@ -1705,7 +1777,7 @@ impl<'l, 'a> Census<'l, 'a> {
     /// ADR 0811: whether a store member write SC2003 decided stands on the
     /// chain of `member`.
     fn write_decided(&mut self, file: &FileFacts, member: Span) -> bool {
-        let member_writes = self.member_writes;
+        let member_writes = &self.member_writes;
         self.decided_writes
             .entry(file.path.to_string())
             .or_insert_with(|| member_writes(file))

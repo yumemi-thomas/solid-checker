@@ -1148,6 +1148,69 @@ where
     parallel_balanced_results_from(64, items, analyze)
 }
 
+/// [`parallel_balanced_results`] with a state each worker builds once
+/// (`init`) and carries from item to item: per-build caches whose answers
+/// depend on the build alone, so an item's result does not depend on which
+/// worker ran it or what it ran before. Without threads, or for a short
+/// slice, one state runs the items in order on the caller's thread.
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn parallel_balanced_with_state<T, S, R, I, F>(
+    items: &[T],
+    init: I,
+    analyze: F,
+) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    I: Fn() -> S + Sync,
+    F: Fn(&mut S, &T) -> R + Sync,
+{
+    let limit = available_analysis_workers();
+    let workers = limit.min(items.len());
+    if workers <= 1 || items.len() < 64 {
+        let mut state = init();
+        return items.iter().map(|item| analyze(&mut state, item)).collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let recording = WorkerContext::of_caller();
+    std::thread::scope(|scope| {
+        let handles = (0..workers)
+            .map(|_| {
+                let (init, analyze, next) = (&init, &analyze, &next);
+                scope.spawn(move || {
+                    let _limit = AnalysisWorkerLimit::enter(limit);
+                    on_worker(recording, || {
+                        let mut state = init();
+                        let mut done = Vec::new();
+                        loop {
+                            let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some(item) = items.get(index) else {
+                                break;
+                            };
+                            done.push((index, analyze(&mut state, item)));
+                        }
+                        done
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
+        for handle in handles {
+            for (index, result) in joined(
+                handle
+                    .join()
+                    .expect("parallel Reactive IR analysis worker panicked"),
+            ) {
+                results[index] = Some(result);
+            }
+        }
+        results
+            .into_iter()
+            .map(|result| result.expect("every item is claimed by one worker"))
+            .collect()
+    })
+}
+
 /// [`parallel_balanced_results`] for items each costly enough (milliseconds)
 /// that `threshold` of them, fewer than the default 64, already pay for the
 /// threads.
