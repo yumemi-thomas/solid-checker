@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-later-run-unowned",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-render-nested-cleanup/App.tsx",
+      "start": 267,
+      "end": 276,
+      "fixes": 0
+    }
+  ]
+}

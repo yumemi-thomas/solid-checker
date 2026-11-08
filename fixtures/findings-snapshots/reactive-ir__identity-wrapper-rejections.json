@@ -2,9 +2,21 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 509,
+      "end": 523,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 540,
@@ -22,9 +34,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 791,
+      "end": 805,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 825,
@@ -42,9 +66,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 1072,
+      "end": 1086,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 1103,
@@ -62,9 +98,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 1455,
+      "end": 1469,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 1487,
@@ -82,9 +130,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 1717,
+      "end": 1731,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 1753,
@@ -102,9 +162,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 1978,
+      "end": 1992,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 2012,
@@ -122,9 +194,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
+      "start": 2433,
+      "end": 2447,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 2467,
@@ -135,6 +219,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-rejections/App.tsx",
       "start": 2492,

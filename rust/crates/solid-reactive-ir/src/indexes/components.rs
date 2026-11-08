@@ -56,6 +56,7 @@ impl<'a> SemanticLookup<'a> {
                 self.facts
                     .typescript
                     .entities()
+                    .filter(|entity| !self.entity_types_a_member_of_its_symbol(entity))
                     .filter_map(|entity| {
                         (!entity.symbol.is_empty())
                             .then_some(entity.symbol.as_ref())
@@ -67,6 +68,27 @@ impl<'a> SemanticLookup<'a> {
             .copied()
     }
 
+    /// Whether `entity` is a member expression carrying its receiver's symbol:
+    /// its facts describe the member, so they say nothing about that symbol, and
+    /// taking them for it gives `props.onOpen` the type of `props.viewer.state`
+    /// (ADR 0663).
+    fn entity_types_a_member_of_its_symbol(&self, entity: &typefacts::EntityFact) -> bool {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(entity.location.start_byte),
+            u32::try_from(entity.location.end_byte),
+        ) else {
+            return false;
+        };
+        let path = entity.location.path.as_ref();
+        self.file_by_path(path)
+            .and_then(|file| {
+                let member = file.ast.member_at(Span::new(start, end))?;
+                self.entities
+                    .at(path, file.ast.peel_ts_sugar_span(member.object))
+            })
+            .is_some_and(|receiver| receiver.as_str() == entity.symbol.as_ref())
+    }
+
     /// [`Self::descriptor_by_symbol`] for callability; a reader notes
     /// [`crate::base::memo::probes::Probe::SymbolCallability`].
     pub(super) fn callability_by_symbol(&self, symbol: &str) -> Option<Callability> {
@@ -75,6 +97,7 @@ impl<'a> SemanticLookup<'a> {
                 self.facts
                     .typescript
                     .entities()
+                    .filter(|entity| !self.entity_types_a_member_of_its_symbol(entity))
                     .filter_map(|entity| {
                         (!entity.symbol.is_empty())
                             .then_some(entity.symbol.as_ref())
@@ -125,6 +148,15 @@ impl<'a> SemanticLookup<'a> {
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
         self.function_component_status(file, function) != ComponentStatus::No
+    }
+
+    /// Whether a tag renders `function`: its status is proven, not possible.
+    pub(crate) fn function_proven_component(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        self.function_component_status(file, function) == ComponentStatus::Proven
     }
 
     pub(super) fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
@@ -843,7 +875,7 @@ pub(super) fn reference_in_type_query(file: &FileFacts, span: Span) -> bool {
 /// Whether the module exports the binding declared at `name` itself: an
 /// exported declaration, `export { name }` or `export default name`.
 /// Re-exports elsewhere need this export first.
-pub(super) fn binding_exported(file: &FileFacts, name: Span) -> bool {
+pub(crate) fn binding_exported(file: &FileFacts, name: Span) -> bool {
     file.ast
         .exports
         .iter()

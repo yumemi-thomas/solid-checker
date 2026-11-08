@@ -464,6 +464,10 @@ impl DiagnosticSession {
                         )
                     })
             {
+                finding.analysis_context = solid_reactive_ir::blocked_context(
+                    "instance-field-run-unplaced",
+                    &finding.analysis_context,
+                );
                 finding.kind = "uncertifiable".into();
                 finding.message.push_str(
                     "; this code is in an instance field initializer, which runs when an instance is constructed, so where it runs is not proven",
@@ -484,12 +488,28 @@ impl DiagnosticSession {
                     finding.primary_location.end_byte,
                 )
             {
+                finding.analysis_context = solid_reactive_ir::blocked_context(
+                    "component-identity-unproven",
+                    &finding.analysis_context,
+                );
                 finding.kind = "uncertifiable".into();
                 finding.message.push_str(
                     "; this code is in a function that returns JSX but is also handed to code that may call it as a plain function, so whether it runs as a component is not proven",
                 );
             }
         }
+        // ADR 0696: proved silent, the one reach the whole program decides.
+        findings.retain(|finding| {
+            finding.kind != "violation"
+                || finding.id.starts_with("SC80")
+                || !solid_reactive_ir::site_unreached(
+                    &program,
+                    finding.primary_location.path.as_ref(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                )
+                .is_some_and(|site| site.absent_prop)
+        });
         // ADR 0458: a violation at a site no execution reaches claims what
         // happens where nothing happens. Style rules claim nothing about
         // execution, and SC2008 claims a no-op wherever it runs.
@@ -505,6 +525,19 @@ impl DiagnosticSession {
                 )
             {
                 finding.kind = "uncertifiable".into();
+                let blocker = if site.undecided {
+                    "site-reach-undecided"
+                } else if site.lazy_unread {
+                    "lazy-compute-unread"
+                } else if site.refused_creation {
+                    "refused-creation-unrun"
+                } else if site.dead_code {
+                    "unreached-dead-code"
+                } else {
+                    "function-unentered"
+                };
+                finding.analysis_context =
+                    solid_reactive_ir::blocked_context(blocker, &finding.analysis_context);
                 finding.message.push_str(if site.undecided {
                     "; whether any execution reaches this code was not decided within the site-reach query's depth and work bounds, so this is not proven"
                 } else if site.lazy_unread {
@@ -532,6 +565,10 @@ impl DiagnosticSession {
                     finding.primary_location.end_byte,
                 )
             {
+                finding.analysis_context = solid_reactive_ir::blocked_context(
+                    "binding-before-initialization",
+                    &finding.analysis_context,
+                );
                 finding.kind = "uncertifiable".into();
                 finding.message.push_str(
                     "; this code names a binding before its declaration is proven to have run, so it may throw a ReferenceError instead, and this is not proven",
@@ -568,6 +605,10 @@ impl DiagnosticSession {
                             .filter_map(|step| step.location.as_ref())
                             .any(in_refused))
                 {
+                    finding.analysis_context = solid_reactive_ir::blocked_context(
+                        "compiler-refused-file",
+                        &finding.analysis_context,
+                    );
                     finding.kind = "uncertifiable".into();
                     finding.message.push_str(
                         "; this depends on a file the Solid compiler refused, which has no compiler facts, so it is not proven",
@@ -610,6 +651,7 @@ impl DiagnosticSession {
                 .premises
                 .push("standard runtime configuration (ADRs 0266/0268)".into());
         }
+        snapshot.premises.push("dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner".into());
         if let solid_reactive_ir::router_params::RouterParamsStatus::Applies { version } =
             &router_params
         {
@@ -882,7 +924,7 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
     };
     let mut finding = Finding::new(metadata, message, location);
     finding.hint = hint;
-    finding.analysis_context = "dialect-detection".into();
+    finding.analysis_context = notice.blocker.unwrap_or("dialect-detection").into();
     finding.subject_kind = "project".into();
     finding.evidence = evidence;
     finding
@@ -1537,7 +1579,7 @@ fn dispatch_premise(site: &solid_reactive_ir::EventDispatchSite) -> String {
     };
     if withheld.is_empty() {
         let why = match site.receiver.as_str() {
-            "window" | "document" => format!("receiver {}", site.receiver),
+            "window" | "document" | "no listener" => format!("receiver {}", site.receiver),
             _ => format!("caller {}", site.caller.as_deref().unwrap_or("unproven")),
         };
         return format!("synchronous dispatch (ADR 0435) at {at} excluded: {why}");

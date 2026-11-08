@@ -4,7 +4,7 @@ declare function run(f: () => void): void;
 
 function wrapUse() { resolve(() => 1); }
 
-// Uncertifiable (rc.17 throws RESOLVE_IN_REACTIVE_SCOPE): a closure handed by
+// Violation (ADR 0857; rc.17 throws RESOLVE_IN_REACTIVE_SCOPE): a closure handed by
 // name to `[1].forEach` inside a compute a memo names by its binding.
 export function NamedForEach() {
   const compute = () => {
@@ -16,7 +16,7 @@ export function NamedForEach() {
   return <div><p>{m()}</p></div>;
 }
 
-// Uncertifiable: the same through a `const` alias of the compute (until).
+// Violation (ADR 0857): the same through a `const` alias of the compute (until).
 export function AliasForEachUntil() {
   const inner = () => {
     const hf = () => { void until(() => true); };

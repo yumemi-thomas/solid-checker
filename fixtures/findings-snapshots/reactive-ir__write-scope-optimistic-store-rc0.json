@@ -35,6 +35,7 @@
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/write-scope-optimistic-store-rc0/node_modules/solid-js/package.json",
       "start": 0,

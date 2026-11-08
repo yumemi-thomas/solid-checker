@@ -1,0 +1,126 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 321,
+      "end": 329,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 443,
+      "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 683,
+      "end": 684,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1147,
+      "end": 1148,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-member-targets-diverge",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1250,
+      "end": 1261,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1258,
+      "end": 1259,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-use-unmodeled",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1304,
+      "end": 1315,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1312,
+      "end": 1313,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "blocker": "optimistic-reach-unresolved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx",
+      "start": 22036,
+      "end": 22040,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "blocker": "optimistic-reach-unresolved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx",
+      "start": 22075,
+      "end": 22079,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx",
+      "start": 22214,
+      "end": 22217,
+      "fixes": 0
+    }
+  ]
+}

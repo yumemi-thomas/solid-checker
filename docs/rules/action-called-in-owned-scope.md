@@ -22,6 +22,11 @@ A `let` nothing reassigns is exact too (ADR 0516); a written `let` and a
 An action call in a lazy memo (`createMemo(fn, { lazy: true })`) no proven
 read of its accessor computes, or in code no execution reaches (ADRs 0458,
 0578), is uncertifiable (ADR 0576).
+An action call in a function no call edge reaches but that may run (called
+from a getter, `toString`, an iterator, a tag, a `Map` slot, a method, a
+constructor or an instance field) is uncertifiable too, never certified (ADR
+0715): Chrome throws when a render runs it. Module initialization (outside
+every function, a static block or field) has no owner and is silent.
 
 A `createRoot` body runs during the call with the new root as the ambient
 owner, and the action guard has no root exemption on any release: an action
@@ -100,3 +105,5 @@ and read it under a `<Loading>` boundary.
 
 - [no-write-in-pure-computation](no-write-in-pure-computation.md) — the same constraint for setters
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — reactive data loading
+
+A generator is placed at its steps, never at iterator creation (ADR 0851). Exported iterators, mixed step contexts, and a named generator also handed on as a value retain `function-run-unplaced` obligations; the creation call cannot restore a rejecting compute role (ADR 0853). Some synchronous consumption/first-segment write positions also remain obligations where the write-role proof does not preserve the step context.

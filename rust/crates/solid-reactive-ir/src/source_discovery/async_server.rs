@@ -48,6 +48,29 @@ pub(crate) struct AsyncSourceOptions {
     /// object literal, so option-dependent claims cannot be proven either
     /// way.
     pub(crate) opaque: bool,
+    /// ADR 0665: the computation is not proven to return a Promise, nor proven
+    /// not to: `opaque` holds too, and this says why, for the wording.
+    pub(crate) provenance_open: bool,
+}
+
+/// [`async_source_options`], with a compute that may answer synchronously
+/// (ADR 0631) read as opaque options are: nothing it projects is proven.
+pub(crate) fn first_answer_options(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<Primitive>,
+) -> AsyncSourceOptions {
+    let mut options = async_source_options(file, call, primitive, lookup.dialect);
+    options.opaque |= call.arguments.first().is_some_and(|argument| {
+        crate::owners::computation_may_answer_sync(lookup, file, argument.span)
+    });
+    options.provenance_open = call.arguments.first().is_some_and(|argument| {
+        crate::owners::computation_provenance(lookup, file, argument)
+            == crate::owners::ComputationProvenance::Open
+    });
+    options.opaque |= options.provenance_open;
+    options
 }
 
 /// Reads the async/hydration option surface of one source-creating call, as
@@ -109,11 +132,25 @@ pub(crate) fn async_source_options(
         && !loading_key
         && (!seed_key || seed_false)
         && function_form;
+    // R2h (patterns/flip/sync-memo-jsx-read): `sync: true` makes a compute
+    // that answers a Promise an error (dev, SYNC_NODE_RECEIVED_ASYNC) or an
+    // unawaited value (production), never a pending source; a pending read
+    // in it still suspends it. Nothing here tells the two apart, so a `sync`
+    // key not proved `false` leaves every pending claim of the source open.
+    let sync_open = argument
+        .property_names
+        .iter()
+        .any(|key| named(*key, "sync"))
+        && !argument
+            .boolean_properties
+            .iter()
+            .any(|property| named(property.name, "sync") && !property.value);
     AsyncSourceOptions {
         declared_loading,
         ssr_client_bare,
         server_rendering_unresolved: false,
-        opaque: !argument.exact_object_literal && !declared_loading,
+        opaque: (!argument.exact_object_literal && !declared_loading) || sync_open,
+        provenance_open: false,
     }
 }
 
@@ -175,7 +212,11 @@ impl ServerRenderingPremise {
         imports_server_entry: bool,
     ) -> Self {
         match rendering {
-            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr) => Self::Renders,
+            Some(
+                RuntimeRendering::StringSsr
+                | RuntimeRendering::StreamingSsr
+                | RuntimeRendering::Hydrated,
+            ) => Self::Renders,
             Some(RuntimeRendering::Csr) => Self::ProvenClientOnly,
             None if imports_server_entry => Self::Renders,
             None => Self::Unresolved,

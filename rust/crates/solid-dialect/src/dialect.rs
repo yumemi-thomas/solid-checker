@@ -294,6 +294,34 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether an unlabelled `untrack` in an open strict-read window keeps the
+    /// pending throw for a source the window's own owner created. It does not
+    /// open a window of its own, so only that pending read is affected: a
+    /// settled read stays silent.
+    fn untrack_keeps_own_pending_throw(&self) -> bool {
+        false
+    }
+
+    /// Whether a leaf owner's forbidden call of this primitive throws the
+    /// observer guard's code (`resolve`, `until`), not the leaf owner's.
+    fn leaf_call_throws_observer_guard(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// Whether an effect's apply opens a strict-read window for its queue's
+    /// event alone, so a handler it dispatches reads under another event, in
+    /// no window.
+    fn effect_window_takes_only_its_event(&self) -> bool {
+        false
+    }
+
+    /// Whether an optimistic setter of an async source throws before the
+    /// source's first answer lands.
+    fn refuses_optimistic_write_before_load(&self) -> bool {
+        false
+    }
+
     /// Whether this primitive clears tracking around a callback it nonetheless
     /// runs **before its own call returns**.
     ///
@@ -449,6 +477,34 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0893: whether `primitive` fails with a plain `throw`, no diagnostic
+    /// emitted at the call: what says so is whatever reports the error.
+    fn plain_throw(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// ADR 0893: whether a throw in this tracked compute reaches a report by
+    /// itself. No other compute does: it stores the error for its reads.
+    fn compute_throw_reports(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// ADR 0893: whether a reporting compute's throw is logged where it runs,
+    /// past any boundary, rather than escalated to the nearest one.
+    fn compute_throw_logged(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// ADR 0893: whether this callback's caller takes every error the callback
+    /// throws.
+    fn callback_swallows_throw(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether this dialect's children-forbidden leaf callbacks
     /// ([`CallbackOwner::Leaf`]) are legal write/action regions.
     ///
@@ -576,6 +632,13 @@ pub trait Dialect: Sync {
     /// The default claims nothing.
     fn callback_runs_drained_by_flush(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether a call of `primitive` drains the queue on its caller's stack,
+    /// under its caller's owner (ADR 0613, 0644). The default claims nothing.
+    fn drains_queue_on_caller_stack(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
         false
     }
 
@@ -1232,6 +1295,12 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether `primitive`'s apply has no owner on any run, so `onCleanup` there
+    /// warns and registers nothing. Default `false`: no fact, no such proof.
+    fn apply_never_owned(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// ADR 0503: a mount primitive that runs its component code on its own
     /// synchronous stack, outside every flush, lane and transition, when it is
     /// called outside them (`render`, not `hydrate`, whose code may start
@@ -1362,6 +1431,14 @@ pub trait Dialect: Sync {
     ) -> bool {
         let _ = (primitive, argument, argument_count);
         false
+    }
+
+    /// Where `primitive` takes its effect function, and how the runtime reads
+    /// it there (ADR 0701). `None`: the primitive has no effect-function slot
+    /// this dialect models, which proves nothing about a missing one.
+    fn effect_function_slot(&self, primitive: Primitive) -> Option<crate::EffectFunctionSlot> {
+        let _ = primitive;
+        None
     }
 
     /// Which argument holds `primitive`'s options object.
@@ -1677,6 +1754,16 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 0857: whether the callback at `argument` is proven to run during the
+    /// call with the caller's observer still active, so a guard that throws on
+    /// an active observer (`resolve`, `until`) throws in it wherever it throws
+    /// at the call. Only probed slots answer; an inline slot that may set an
+    /// observer or clear it of its own (`render`'s root) does not.
+    fn inline_callback_keeps_observer(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether the callback at `argument` clears tracking but keeps the strict
     /// -read window of the call that runs it (ADR 0443, `runWithOwner`). In a
     /// tracked computation such a call has no window, so the callback's read
@@ -1836,12 +1923,31 @@ pub trait Dialect: Sync {
         self.primitive(name).is_some()
     }
 
+    /// ADR 0884: whether a primitive's declaration may live in `package`, which
+    /// may re-export it under a module of its own.
+    fn declares_primitives_in(&self, package: &str) -> bool {
+        self.owns_module(package)
+    }
+
     /// Whether this dialect owns the module a name was imported from.
     fn owns_module(&self, module: &str) -> bool {
         self.modules().contains(&module)
     }
 
+    /// ADR 0883: whether `primitive` is a control-flow tag that runs its
+    /// function child under an owner it provides, and on what condition.
+    fn control_flow_child_run(&self, primitive: Primitive) -> Option<crate::FunctionChildRun> {
+        let _ = primitive;
+        None
+    }
+
     /// Whether a tag opens the async boundary specifically.
+    /// ADR 0892: whether this component reads this prop only inside a
+    /// computation of its own, so a tracked getter there suspends it.
+    fn flow_prop_read_in_own_computation(&self, _tag: &str, _prop: &str) -> bool {
+        false
+    }
+
     fn is_async_boundary(&self, tag: &str) -> bool {
         self.boundary_kind(tag) == Some(Boundary::Async)
     }

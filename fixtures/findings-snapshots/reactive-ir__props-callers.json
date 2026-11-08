@@ -5,6 +5,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-member-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/props-callers/App.tsx",
       "start": 1170,
@@ -35,6 +36,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-member-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/props-callers/App.tsx",
       "start": 1716,
@@ -49,6 +51,17 @@
       "path": "fixtures/reactive-ir/props-callers/App.tsx",
       "start": 2044,
       "end": 2053,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/props-callers/App.tsx",
+      "start": 2135,
+      "end": 2140,
       "fixes": 0
     },
     {
@@ -82,6 +95,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/props-callers/App.tsx",
+      "start": 4053,
+      "end": 4062,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -105,6 +129,7 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/props-callers/App.tsx",
       "start": 6185,
@@ -112,9 +137,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "handed-read-after-await",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/props-callers/App.tsx",
+      "start": 6733,
+      "end": 6744,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/props-callers/App.tsx",
       "start": 6829,

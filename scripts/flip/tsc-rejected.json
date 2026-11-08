@@ -1,0 +1,1024 @@
+[
+{
+"id": "census/a06-object-fromentries",
+"kind": "rejected",
+"error": "App.tsx(11,13): error TS2352: Conversion of type '{ [k: string]: Sou",
+"openOutcome": "false-clean",
+"item": "section-4 census:a"
+},
+{
+"id": "census/a16-comma-call",
+"kind": "rejected",
+"error": "App.tsx(12,68): error TS2695: Left side of comma operator is unused",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "census/a29-logical-handoff",
+"kind": "rejected",
+"error": "App.tsx(11,15): error TS2871: This expression is always nullish.",
+"openOutcome": "false-clean",
+"item": "section-4 census:a"
+},
+{
+"id": "census/e08-const-or",
+"kind": "rejected",
+"error": "App.tsx(11,14): error TS2873: This kind of expression is always fals",
+"openOutcome": "false-clean",
+"item": "section-4 census:e"
+},
+{
+"id": "census/e09-const-and",
+"kind": "rejected",
+"error": "App.tsx(12,67): error TS2349: This expression is not callable.",
+"openOutcome": "false-clean",
+"item": "section-4 census:e"
+},
+{
+"id": "census/e12-const-comma",
+"kind": "rejected",
+"error": "App.tsx(11,15): error TS2695: Left side of comma operator is unused",
+"openOutcome": "false-clean",
+"item": "section-4 census:e"
+},
+{
+"id": "census/e32-write-via-nullish",
+"kind": "rejected",
+"error": "App.tsx(11,14): error TS2871: This expression is always nullish.",
+"openOutcome": "false-clean",
+"item": "section-4 census:e"
+},
+{
+"id": "census/f05-using-dispose-write",
+"kind": "rejected",
+"error": "error TS2318: Cannot find global type 'Disposable'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "census/f06-children-helper-read",
+"kind": "rejected",
+"error": "App.tsx(10,52): error TS2304: Cannot find name 'children'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "census/h11-custom-element-connected",
+"kind": "rejected",
+"error": "App.tsx(16,10): error TS2339: Property 'x-a' does not exist on type",
+"openOutcome": "false-clean",
+"item": "section-4 census:h"
+},
+{
+"id": "census/h12-custom-element-attribute-changed",
+"kind": "rejected",
+"error": "App.tsx(16,10): error TS2339: Property 'x-b' does not exist on type",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "census/j06-handler-object-delegated",
+"kind": "rejected",
+"error": "App.tsx(13,36): error TS2353: Object literal may only specify known",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "census/j07-handler-object-nondelegated",
+"kind": "rejected",
+"error": "App.tsx(13,35): error TS2353: Object literal may only specify known",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "census/j24-lowercase-onclick",
+"kind": "rejected",
+"error": "App.tsx(13,25): error TS2322: Type '{ id: string; onclick: any; chi",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c01-ignored",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c01-ignored-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c02-render-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c02-render-read-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c03-attr-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c03-attr-read-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c04-body-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c04-body-read-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c05-show",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c05-show-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c06-memo-unread",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c06-memo-unread-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c07-memo-read-render",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c07-memo-read-render-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c08-effect-compute",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c08-effect-compute-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c09-forward",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c09-forward-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c10-forward-unread",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c10-forward-unread-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c11-spread-to-dom",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c11-spread-to-dom-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c12-handler-only",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c12-handler-only-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c13-own-loading",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c13-own-loading-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c14-later-show",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c14-later-show-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c15-returned-fn-unread",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c15-returned-fn-unread-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/c16-spread-unread-key",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-positive",
+"item": "H-other"
+},
+{
+"id": "returns/c16-spread-unread-key-L",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-positive",
+"item": "H-other"
+},
+{
+"id": "returns/h0-control-visible-reactive",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h0b-control-static",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h1-dynamic-inside-own-element",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h10-lazy",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h11-hoc",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h12-spread-caller",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h13-children-function-render-prop",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h14-children-implicit-getter",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h15-callback-prop-write-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h16-callback-prop-read-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h17-callback-prop-conditional-absent",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-positive",
+"item": "H-other"
+},
+{
+"id": "returns/h18-callback-param-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h19-callback-mixed-callers",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h2-value-in-own-attribute",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h20-named-fn-expr",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h21-namespace",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h3-saved-in-own-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h4-self-as-child-value",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h5-own-attr-direct-self",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h6-self-call-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h7-self-reference-recursive-reactive",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h8-object-slot-member-tag",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/h9-alias-tag",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w0-visible-inert",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w1-dynamic-inside-own-element",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w2-dynamic-elsewhere",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w3-saved-in-own-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w4-self-as-child",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w5-self-as-attr",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w6-direct-call-in-own-element",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-clean",
+"item": "H-D5"
+},
+{
+"id": "returns/w7-spread-into-own-element-child",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "returns/w8-named-setter-prop-direct",
+"kind": "incidental-import",
+"error": "App.tsx(1,134): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/a11-createowner",
+"kind": "rejected",
+"error": "App.tsx(1,10): error TS2305: Module '\"solid-js\"' has no exported me",
+"openOutcome": "false-clean",
+"item": "T-other"
+},
+{
+"id": "types/a20-parent-body-dispose-own",
+"kind": "rejected",
+"error": "App.tsx(16,5): error TS2339: Property 'dispose' does not exist on t",
+"openOutcome": "false-clean",
+"item": "T-D1"
+},
+{
+"id": "types/b05-errorboundary",
+"kind": "rejected",
+"error": "App.tsx(1,10): error TS2305: Module '\"solid-js\"' has no exported me",
+"openOutcome": "false-clean",
+"item": "T-other"
+},
+{
+"id": "types/b06-loadingboundary",
+"kind": "rejected",
+"error": "App.tsx(1,10): error TS2305: Module '\"solid-js\"' has no exported me",
+"openOutcome": "false-clean",
+"item": "T-other"
+},
+{
+"id": "types/b07-revealorder",
+"kind": "rejected",
+"error": "App.tsx(1,10): error TS2305: Module '\"solid-js\"' has no exported me",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/c33-children-fn-in-handler",
+"kind": "incidental-import",
+"error": "App.tsx(8,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/c45-handler-object",
+"kind": "rejected",
+"error": "App.tsx(11,37): error TS2353: Object literal may only specify known",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d01-dispose-in-apply-cleanup-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": "false-clean",
+"item": "T-D1"
+},
+{
+"id": "types/d02-dispose-in-handler-cleanup-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d03-direct-component-call-handler",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d04-direct-component-call-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d05-runwithowner-null-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d06-runwithowner-createowner-handler",
+"kind": "rejected",
+"error": "App.tsx(11,58): error TS2304: Cannot find name 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d07-lying-thenable-cast",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": "false-clean",
+"item": "T-D4"
+},
+{
+"id": "types/d08-onsettled-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d09-apply-untrack-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d10-ref-in-memo-write",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d11-dynamic-body-write",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d14-xhr-sync",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d15-treewalker-filter",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d17-abort-signal-sync",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d18-custom-eventtarget",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d19-promise-then-body-write",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d23-component-called-from-apply",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d26-prop-callback-invoked-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d27-effect-error-member-write",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d28-createroot-in-apply-write",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d31-portal-child-body-write",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/d32-lazy-body-read",
+"kind": "incidental-import",
+"error": "App.tsx(1,102): error TS2305: Module '\"solid-js\"' has no exported member 'createOwner'.",
+"openOutcome": "false-clean",
+"item": "T-D3"
+},
+{
+"id": "types/e01-await-sync-throw-catch-write",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/e02-conditional-await-write",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/e604-async-apply-read",
+"kind": "rejected",
+"error": "App.tsx(14,25): error TS2345: Argument of type '() => Promise<void>' is not assignable to parameter of type 'EffectBundle<1, 1> | EffectFunc",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/e612-apply-async-prefix",
+"kind": "rejected",
+"error": "App.tsx(14,25): error TS2345: Argument of type '() => Promise<void>' is not assignable to parameter of type 'EffectBundle<1, 1> | EffectFunc",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/e807-map-name-empty",
+"kind": "rejected",
+"error": "App.tsx(15,16): error TS1351: An identifier or keyword cannot immediately follow a numeric literal.",
+"openOutcome": "no-run",
+"item": "T-other"
+},
+{
+"id": "types/e911-on-colon",
+"kind": "rejected",
+"error": "App.tsx(14,28): error TS2322: Type '{ ref: (b: HTMLButtonElement) => void; \"on:click\": () => void; }' is not assignable to type 'ButtonHTMLA",
+"openOutcome": "no-run",
+"item": "T-other"
+},
+{
+"id": "types/f01-show-item-accessor-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f02-onsettled-cleanup-in-handler",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f03-onflush-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f04-for-index-accessor-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f05-equals-comparator-read",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f06-reveal-child-body-write",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f07-createcomponent-direct",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f14-children-helper-read-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-clean",
+"item": "T-D2"
+},
+{
+"id": "types/f14-hasinstance",
+"kind": "rejected",
+"error": "App.tsx(15,9): error TS2860: The left-hand side of an 'instanceof' expression must be assignable to the first argument of the right-hand sid",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f15-show-item-in-jsx",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f20-comma-call",
+"kind": "rejected",
+"error": "App.tsx(14,4): error TS2695: Left side of comma operator is unused and has no side effects.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f21-flush-in-onsettled",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/f22-flush-in-tracked-effect",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/g01-for-keyed-fn-read",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/g02-body-returns-render-fn-read",
+"kind": "rejected",
+"error": "main.tsx(3,15): error TS2786: 'App' cannot be used as a JSX component.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/g02b-body-returns-render-fn-write",
+"kind": "rejected",
+"error": "main.tsx(3,15): error TS2786: 'App' cannot be used as a JSX component.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/g03-helper-returns-render-fn",
+"kind": "rejected",
+"error": "App.tsx(9,16): error TS2322: Type '() => JSX.Element' is not assignable to type 'Element'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/g12-cleanup-comp-store-write",
+"kind": "rejected",
+"error": "App.tsx(13,30): error TS2554: Expected 1 arguments, but got 2.",
+"openOutcome": "false-positive",
+"item": "T-D1"
+},
+{
+"id": "types/h01-children-toarray-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-clean",
+"item": "T-D2"
+},
+{
+"id": "types/h02-children-in-jsx",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/h03-props-children-direct-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/i02-maparray-result-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-clean",
+"item": "T-D2"
+},
+{
+"id": "types/i03-repeat-result-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": "false-clean",
+"item": "T-D2"
+},
+{
+"id": "types/i11-uncalled-memo-jsx",
+"kind": "rejected",
+"error": "App.tsx(15,14): error TS2322: Type 'SourceAccessor<number>' is not assignable to type 'Element'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/i12-uncalled-children-jsx",
+"kind": "rejected",
+"error": "App.tsx(15,16): error TS2322: Type 'ChildrenReturn' is not assignable to type 'Element'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/k02-derived-signal-read-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/k03-optimistic-read-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/k07-latest-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/k08-ispending-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "types/k10-refresh-in-body",
+"kind": "incidental-import",
+"error": "App.tsx(2,15): error TS2305: Module '\"solid-js\"' has no exported member 'JSX'.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "values/d2n-for-row-write",
+"kind": "rejected",
+"error": "App.tsx(5,69): error TS2349: This expression is not callable.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "values/d3-bind-arg",
+"kind": "rejected",
+"error": "App.tsx(4,55): error TS2554: Expected 1 arguments, but got 2.",
+"openOutcome": null,
+"item": null
+},
+{
+"id": "values/d6-comma",
+"kind": "rejected",
+"error": "App.tsx(5,41): error TS2695: Left side of comma operator is unused and has no side effects.",
+"openOutcome": "false-clean",
+"item": "V-D6"
+}
+]

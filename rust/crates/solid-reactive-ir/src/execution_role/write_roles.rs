@@ -517,7 +517,7 @@ fn detached_in_place(
                 among_others = true;
                 at = call;
             }
-            LayerRun::FreshStack | LayerRun::Elsewhere => break,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => break,
         }
         layered = true;
     }
@@ -625,9 +625,10 @@ pub(super) fn stepped_generator_in_place(
 /// Whether a write under a proven owner runs in a disposal, for the release
 /// whose write guards stand down there ([`runs_in_disposal`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum DisposalReach {
-    /// Written in a callback that runs only while an owner is disposed, on a
-    /// stack no await has left.
+pub(crate) enum DisposalReach {
+    /// Every run is inside a disposal: written in a callback that runs only
+    /// while an owner is disposed, on a stack no await has left, or in a
+    /// component only such a callback mounts (ADR 0782).
     Only,
     /// Proven to run outside any disposal: a component body, a fresh stack, a
     /// callback the engine runs on its own schedule, an effect's returned
@@ -667,7 +668,21 @@ pub(super) fn runs_in_disposal(
 
 /// [`runs_in_disposal`], `depth` handle calls deep (ADR 0456): a call of a
 /// cleanup's handle written in another cleanup asks the question again there.
+///
+/// Memoized per site and depth, for the same reason as
+/// [`component_mount_reach`]: a cleanup handle's calls fan out at each depth.
 fn runs_in_disposal_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> DisposalReach {
+    lookup.disposal_reach_memo(file.path.as_str(), span, depth, || {
+        runs_in_disposal_uncached(file, span, lookup, depth)
+    })
+}
+
+fn runs_in_disposal_uncached(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
@@ -794,9 +809,26 @@ fn runs_in_disposal_within(
                 among_others = true;
                 at = call;
             }
-            LayerRun::Elsewhere => {
+            LayerRun::Elsewhere | LayerRun::Withheld(_) => {
                 return match lookup.function_component_status(file, function) {
-                    ComponentStatus::Proven => DisposalReach::NotIn,
+                    ComponentStatus::Proven => component_mount_reach(file, function, lookup, depth),
+                    // ADR 0782: a handler literal is no component, whatever it
+                    // renders (`onClick={() => { createRoot(() => <Inner />); }}`).
+                    ComponentStatus::Uncertain if is_event_handler_literal(file, function) => {
+                        DisposalReach::NotIn
+                    }
+                    ComponentStatus::Uncertain | ComponentStatus::No
+                        if let Some(element) = jsx_child_callback_element(file, function)
+                            && !returns_effect_cleanup(file, function, lookup) =>
+                    {
+                        // A row or a branch runs where the element around it
+                        // mounts, and again on its own schedule, which `Only`
+                        // cannot read: the climb goes on, as for a timing
+                        // unknown.
+                        timing_unknown = true;
+                        at = element;
+                        continue;
+                    }
                     ComponentStatus::Uncertain => DisposalReach::Unplaced,
                     // On a release whose guard stands down in a disposal, an
                     // effect's returned cleanup also runs when the effect's
@@ -816,7 +848,7 @@ fn runs_in_disposal_within(
                     ComponentStatus::No
                         if returned_by_rerunning_effect(file, function, lookup)
                             || event_only_entries(file, function, lookup)
-                            || is_event_handler_literal(file, function, lookup)
+                            || is_event_handler_literal(file, function)
                             || stored_function_called_only_by_events(file, function, lookup) =>
                     {
                         DisposalReach::NotIn
@@ -827,6 +859,115 @@ fn runs_in_disposal_within(
         }
     }
     DisposalReach::Unplaced
+}
+
+/// The element whose child expression holds `function`, the innermost:
+/// `<For each={xs}>{() => <Row />}</For>`.
+fn jsx_child_callback_element(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<Span> {
+    file.ast
+        .jsx_containing(function.span)
+        .filter(|element| {
+            element
+                .children
+                .iter()
+                .any(|child| child.contains(function.span))
+        })
+        .min_by_key(|element| element.span.end - element.span.start)
+        .map(|element| element.span)
+}
+
+/// Where a proven component's body runs (ADR 0782), from its mount sites: any
+/// one outside a disposal is that run; all of them inside one, with no other
+/// way to the function, is [`DisposalReach::Only`]. A component with no site
+/// here is mounted by what this does not see, outside any disposal as ever
+/// before. A value handed on, or an export, may mount it anywhere.
+///
+/// Memoized per function and depth: every write in a component asks, and a
+/// mount site's climb fans out again (`sites^4` without it). The depth is part
+/// of the key because the answer depends on it: one kept per function would
+/// hand a caller near the bound the answer of one far from it.
+fn component_mount_reach(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> DisposalReach {
+    lookup.component_mount_reach_memo(file.path.as_str(), function.span, depth, || {
+        component_mount_reach_uncached(file, function, lookup, depth)
+    })
+}
+
+fn component_mount_reach_uncached(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> DisposalReach {
+    let sites = lookup.function_call_sites(file.path.as_str(), function.span);
+    // A recursive tag runs under a mount this already asks about: it adds no
+    // entry, and following it only spends the depth.
+    let outside = sites
+        .iter()
+        .filter(|(caller, site)| caller.path != file.path || !function.span.contains(*site))
+        .count();
+    if outside == 0 {
+        return DisposalReach::NotIn;
+    }
+    if depth >= 4 {
+        return DisposalReach::Unplaced;
+    }
+    let mut reach = if component_sites_exhaustive(file, function, &sites, lookup) {
+        DisposalReach::Only
+    } else {
+        DisposalReach::Unplaced
+    };
+    for (caller, site) in sites {
+        if caller.path == file.path && function.span.contains(site) {
+            continue;
+        }
+        match runs_in_disposal_within(caller, site, lookup, depth + 1) {
+            DisposalReach::NotIn => return DisposalReach::NotIn,
+            DisposalReach::Only => {}
+            DisposalReach::Unplaced => reach = DisposalReach::Unplaced,
+        }
+    }
+    reach
+}
+
+/// Whether every reference of the component's binding is one of its mount
+/// sites: nothing exports it, hands it on or stores it.
+fn component_sites_exhaustive(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    sites: &[(&solid_facts::FileFacts, Span)],
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if lookup.program_has_eval() {
+        return false;
+    }
+    let Some(declaration) = function_binding_name(file, function).map(|binding| binding.span)
+    else {
+        return false;
+    };
+    if flow_binding_exported(file, declaration) {
+        return false;
+    }
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), declaration) else {
+        return false;
+    };
+    lookup
+        .symbol_references(symbol.as_str())
+        .iter()
+        .all(|reference| {
+            let span = Span::new(reference.start_byte as u32, reference.end_byte as u32);
+            span == declaration
+                || sites.iter().any(|(caller, site)| {
+                    caller.path.as_str() == reference.path.as_ref() && site.contains(span)
+                })
+        })
 }
 
 /// Whether `span` is written inside a callback that runs only in a disposal
@@ -849,18 +990,18 @@ fn inside_disposal_callback(
 }
 
 /// Whether `function` is a literal the compiler reads as an event handler (a
-/// JSX attribute's value on an element): the event delivers it, and no
-/// synchronous dispatch can deliver it inside a cleanup.
+/// JSX attribute's value on an element) of an event only the host delivers. A
+/// user's event runs it outside any disposal, whatever else dispatches:
+/// `NotIn` needs that one run (ADR 0782).
 fn is_event_handler_literal(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
-    lookup: &SemanticLookup<'_>,
 ) -> bool {
-    !lookup.synchronous_event_dispatch_present()
-        && file.compiler.callback_roles.iter().any(|callback| {
-            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && callback.span == function.span
-        })
+    file.compiler.callback_roles.iter().any(|callback| {
+        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            && callback.span == function.span
+            && !super::handler_event_denied(file, callback.span)
+    })
 }
 
 /// Whether `function` is stored in one local variable and every use of that
@@ -926,6 +1067,7 @@ fn stored_function_called_only_by_events(
                 file.compiler.callback_roles.iter().any(|callback| {
                     callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                         && callback.span == caller.span
+                        && !super::handler_event_denied(file, callback.span)
                 })
             })
         })
@@ -1322,6 +1464,27 @@ fn named_closure_in_root_callback<'a>(
         .min_by_key(|function| function.body.end - function.body.start)
 }
 
+/// The call [`handed_to_unreviewed_call`] finds `function` written in.
+pub(crate) fn handed_to_unreviewed_call_at(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    file.ast
+        .arguments_containing(function.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })
+        .find(|(call, _)| {
+            lookup.primitive_at_call(file, call.span).is_none()
+                && !lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .is_some_and(|declaration| declaration.standard_library)
+        })
+        .map(|(call, _)| call.span)
+}
+
 /// Whether the first function around `function` that a primitive call takes as
 /// its callback, by the literal or by its binding, is taken in a position whose
 /// callback runs in a root the call creates, or lies past the climb's bound
@@ -1388,11 +1551,103 @@ fn in_place_in_root_named_callback(
         }
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => at = call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return false,
         }
     }
     // ADR 0532: the layers past the bound are unread; the permissive role
     // around them is no proof for the site.
+    true
+}
+
+/// ADR 0828: whether a function around `span` is handed to a call that is no
+/// primitive and no standard-library call with a reviewed behavior
+/// (`hc1(() => set(1))`, a helper that forwards its callback to another), and
+/// sits, through any layers, in a callback a primitive runs under an owner it
+/// supplies: a created root (`createRoot`'s body) or one the call names
+/// (`runWithOwner(owner, fn)` with a created or unproven owner). The helper
+/// may run the closure on that callback's stack, under that owner, so the
+/// permissive role of a region around the callback (the handler that holds
+/// the `createRoot` call) is no proof for the site; the site's own entries
+/// decide. The same as ADR 0471's named closure, for an anonymous one handed
+/// on.
+fn handed_closure_in_owner_callback(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    functions_around(file, span).into_iter().any(|function| {
+        function.method_name.is_none()
+            && lookup.function_component_status(file, function) == ComponentStatus::No
+            && handed_to_unreviewed_call(file, function, lookup)
+            && owner_supplying_callback_around(file, function, lookup)
+    })
+}
+
+/// Whether `function` is written as an argument of a call that is no
+/// primitive and whose callee no standard-library declaration resolves.
+fn handed_to_unreviewed_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    handed_to_unreviewed_call_at(file, function, lookup).is_some()
+}
+
+/// Whether the first function around `function` that a primitive call takes
+/// as its literal callback runs under an owner the call supplies: a created
+/// root, or an owner `runWithOwner` names that is created or not proven null
+/// ([`solid_dialect::CallbackOwner::Creates`], `Conditional`). Past the bound
+/// the layers are unread (ADR 0532): `true`.
+fn owner_supplying_callback_around(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut at = function.span;
+    // Bounded: each step moves to the function that holds the previous one.
+    for _ in 0..16 {
+        let Some(outer) = crate::owners::owning_function(&file.ast, at) else {
+            return false;
+        };
+        // A handler, a callback prop or a scheduled callback runs later, on
+        // its own entries: an owner a call outside it supplies is not its.
+        if jsx_attribute_value_function(file, outer.span)
+            || matches!(layer_run(file, outer, lookup), LayerRun::FreshStack)
+        {
+            return false;
+        }
+        let positions = file
+            .ast
+            .arguments_containing(outer.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
+            })
+            .filter_map(|(call, index)| {
+                lookup
+                    .primitive_at_call(file, call.span)
+                    .map(|primitive| (call, index, primitive))
+            })
+            .collect::<Vec<_>>();
+        if positions.is_empty() {
+            at = outer.span;
+            continue;
+        }
+        return positions.into_iter().any(|(call, index, primitive)| {
+            lookup
+                .dialect
+                .callback_runs_in_created_root(primitive, index)
+                || (lookup
+                    .dialect
+                    .callback_inherits_calling_window(primitive, index)
+                    && matches!(
+                        callback_owner_at_call(file, call, primitive, index, lookup),
+                        Some(
+                            solid_dialect::CallbackOwner::Creates
+                                | solid_dialect::CallbackOwner::Conditional
+                        )
+                    ))
+        });
+    }
     true
 }
 
@@ -1462,7 +1717,7 @@ fn control_flow_nested_layers(
     lookup: &SemanticLookup<'_>,
 ) -> Option<ControlFlowLayers> {
     let deferred = |at: Span| {
-        control_flow_execution_role(file, at, entities, symbol_names, lookup.dialect)
+        control_flow_execution_role(file, at, entities, symbol_names, lookup)
             == Some(ExecutionRole::DeferredCallback)
     };
     if !deferred(span) {
@@ -1504,7 +1759,9 @@ fn control_flow_nested_layers(
                 at = call;
             }
             LayerRun::FreshStack => return None,
-            LayerRun::Elsewhere => return Some(ControlFlowLayers::Unrun),
+            LayerRun::Elsewhere | LayerRun::Withheld(_) => {
+                return Some(ControlFlowLayers::Unrun);
+            }
         }
     }
     Some(ControlFlowLayers::Unrun)
@@ -1563,7 +1820,7 @@ fn unrun_layer_in_owner_keeping_callback(
         match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) => at = call,
             LayerRun::FreshStack => return false,
-            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => {
+            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) | LayerRun::Withheld(_) => {
                 unrun = true;
                 at = function.span;
             }
@@ -1628,6 +1885,13 @@ pub(super) fn semantic_write_execution_role_within(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // ADR 0874: nothing places code an impostor may run, or never run.
+    if !super::discarded_region_contains(file, span) && runs_in_withheld_layer(file, span, lookup) {
+        return role_arm!(
+            "write_roles.semantic_write_execution_role_within.withheld-callback",
+            ExecutionRole::Unknown
+        );
+    }
     let mut decided = false;
     let role = write_role_walk(
         file,
@@ -2163,7 +2427,9 @@ pub(super) fn write_role_walk<'f>(
             .flatten()
     });
     let tracked_named_or_root = tracked_named.is_some()
-        || (permissive_around_root && in_place_in_root_named_callback(file, span, lookup));
+        || (permissive_around_root
+            && (in_place_in_root_named_callback(file, span, lookup)
+                || handed_closure_in_owner_callback(file, span, lookup)));
     let direct = if tracked_named_or_root {
         ExecutionRole::Unknown
     } else {
@@ -2201,6 +2467,16 @@ pub(super) fn write_role_walk<'f>(
             ExecutionRole::Unreported
         );
     }
+    // ADR 0851: the same past a `yield` of a generator its async caller steps
+    // across one of that caller's suspensions (`for await`, or a loop that
+    // awaits): the step that runs the write is called from the continuation.
+    let generator_resumed = generator_step_resumption(file, span, lookup);
+    if generator_resumed == Some(true) {
+        return role_arm!(
+            "write_roles.write_role_walk.unreported-generator",
+            ExecutionRole::Unreported
+        );
+    }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
     // describes it. Not proven to follow an await on every path (an `await`
@@ -2216,9 +2492,133 @@ pub(super) fn write_role_walk<'f>(
     // function is the same; and whatever role a position names (a named
     // tracked compute, an effect compute, the entries), only a permissive one
     // holds past a possible suspension.
-    let suspendable = may_follow_suspension(file, span) || layered_suspension == Some(false);
+    let suspendable = may_follow_suspension(file, span)
+        || layered_suspension == Some(false)
+        || generator_resumed == Some(false);
     if direct.reports_disallowed_write() && suspendable {
         return role_arm!("write_roles.walk-unknown-3", unknown);
+    }
+    // ADR 0853: a named generator handed on as a value has unplaced steps.
+    // Its creation calls are not body entries, even if the lexical compute
+    // would reject a write. Primitive-stepped and inline generators keep
+    // their existing dedicated paths.
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        && crate::owners::function_binding_name(file, generator).is_some()
+        && crate::owners::generator_creations(file, generator, lookup).is_none()
+        && crate::owners::stepped_action_generator(file, generator, lookup).is_none()
+        && !allowed
+            .iter()
+            .any(|region| file.ast.peel_ts_sugar_span(*region) == generator.span)
+    {
+        *decided = true;
+        return role_arm!("write_roles.generator-steps-handed", ExecutionRole::Unknown);
+    }
+    // ADR 0851: a generator's entries are its steps, which the role at the
+    // site already took (`callee_roles.generator-steps`); a call of it runs
+    // none of its body, so the walk over its callers below does not apply.
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        && let Some(calls) = crate::owners::generator_creations(file, generator, lookup)
+    {
+        // The write walk at each step site, which knows the write
+        // adjustments the read role at the site does not: one role where
+        // every step agrees, none where they differ or a step is unplaced.
+        let key = (file.path.to_string(), generator.span);
+        // A step runs the site on its own stack only up to the generator's
+        // first suspension of its own (a `yield`, or an `await` of an async
+        // one), unless a sync generator is drained in place by every
+        // creation (a `for…of`, spread, pattern or `Array.from`), whose loop
+        // takes each later step on the same stack.
+        let own = |point: Span| {
+            generator.body.contains(point)
+                && crate::owners::containing_ast_function(&file.ast, point)
+                    .is_some_and(|owner| owner.span == generator.span)
+        };
+        let suspensions = file.ast.yields.iter().map(|fact| fact.span).chain(
+            generator
+                .r#async
+                .then(|| {
+                    file.ast
+                        .awaits
+                        .iter()
+                        .chain(&file.ast.implicit_suspensions)
+                        .copied()
+                })
+                .into_iter()
+                .flatten(),
+        );
+        let first_segment = !suspensions.filter(|point| own(*point)).any(|point| {
+            point.start < span.start
+                || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                    repeated.contains(span)
+                        && looped.contains(point)
+                        && generator.body.contains(looped)
+                })
+        });
+        let drained = !generator.r#async
+            && calls.iter().all(|call| {
+                file.ast.iterated_operands.contains(&call.span)
+                    || crate::owners::array_from_source(file, call.span, lookup)
+            });
+        if (first_segment || drained)
+            && !crate::owners::generator_exported(file, generator)
+            && visiting.insert(key.clone())
+        {
+            let mut sites = Vec::new();
+            let mut unplaced = false;
+            for call in calls {
+                match crate::owners::iterator_steps(file, call, lookup) {
+                    crate::owners::IteratorSteps::InPlace => sites.push(call.span),
+                    crate::owners::IteratorSteps::Held(steps) => sites.extend(steps),
+                    crate::owners::IteratorSteps::Unplaced => unplaced = true,
+                }
+            }
+            let mut role: Option<ExecutionRole> = None;
+            let mut differ = unplaced;
+            for site in sites {
+                if differ {
+                    break;
+                }
+                let at = semantic_write_execution_role_within(
+                    file,
+                    site,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                );
+                differ |= role.is_some_and(|role| role != at);
+                role = Some(at);
+            }
+            visiting.remove(&key);
+            match role {
+                // A step that may resume on the continuation (ADR 0851) holds
+                // only a permissive role there, as a possible await does.
+                Some(role)
+                    if !differ
+                        && role != ExecutionRole::Unknown
+                        && !(generator_resumed == Some(false)
+                            && role.reports_disallowed_write()) =>
+                {
+                    return role_arm!("write_roles.generator-steps-walked", role);
+                }
+                None if !differ => {
+                    return role_arm!(
+                        "write_roles.generator-never-stepped",
+                        ExecutionRole::Unreported
+                    );
+                }
+                _ => {}
+            }
+        }
+        return if direct == ExecutionRole::Unknown {
+            role_arm!("write_roles.generator-steps-unknown", unknown)
+        } else {
+            role_arm!("write_roles.generator-steps", direct)
+        };
     }
     // A site in a parameter list (a default value, a pattern, a function written
     // inside either) runs when its function is called without the argument:
@@ -2279,6 +2679,40 @@ pub(super) fn write_role_walk<'f>(
             "write_roles.write_role_walk.tracked-jsx",
             ExecutionRole::TrackedJsx
         );
+    }
+    // ADR 0782: a component a cleanup mounts writes inside that disposal.
+    // Only for a guard that stands down there: `action` and `onFlush` test
+    // the owner alone and never read the disposal depth (`Rejects`), so a
+    // component a cleanup mounts calls them in an owned scope (Chrome).
+    if direct == ExecutionRole::UntrackedRendering && root_body != RootBodyGuard::Rejects {
+        use solid_dialect::WriteGuardInDisposal as Guard;
+        let guard = lookup.dialect.write_guard_in_disposal();
+        let reach = (guard != Guard::Rejects)
+            .then(|| {
+                // The innermost: a component written in another's body mounts
+                // where its own tags say.
+                functions_around(file, span)
+                    .into_iter()
+                    .filter(|function| {
+                        lookup.function_component_status(file, function) == ComponentStatus::Proven
+                    })
+                    .min_by_key(|function| function.span.end - function.span.start)
+                    .map(|component| component_mount_reach(file, component, lookup, 0))
+            })
+            .flatten();
+        match reach {
+            Some(DisposalReach::Only) if guard == Guard::StandsDown => {
+                return role_arm!(
+                    "write_roles.component-mounted-in-disposal",
+                    ExecutionRole::UntrackedCallback
+                );
+            }
+            Some(DisposalReach::Only | DisposalReach::Unplaced) => {
+                *decided = true;
+                return role_arm!("write_roles.component-mount-unplaced", unknown);
+            }
+            Some(DisposalReach::NotIn) | None => {}
+        }
     }
     let innermost = crate::owners::containing_ast_function(&file.ast, span);
     // A permissive role read off the positions that name the function as a
@@ -2687,10 +3121,22 @@ fn named_effect_compute_runs(
 /// the census must be bounded at all: a method is entered by member access
 /// through any receiver holding it, and an export by modules this build may
 /// not see (an open program, or a module whose namespace escapes unnamed).
-pub(super) fn entry_census_complete(
+pub(crate) fn entry_census_complete(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
+) -> bool {
+    entry_census_complete_except(file, function, lookup, &[])
+}
+
+/// [`entry_census_complete`], with the same-file references at `accounted`
+/// taken as entries the caller accounts for itself (ADR 0868: a run inline
+/// on a carrier whose own placement the caller checks).
+pub(crate) fn entry_census_complete_except(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    accounted_here: &[Span],
 ) -> bool {
     if function.method_name.is_some() {
         return false;
@@ -2760,7 +3206,8 @@ pub(super) fn entry_census_complete(
             return false;
         }
         let at = Span::new(start, end);
-        bindings.iter().any(|binding| at == binding.span)
+        accounted_here.contains(&at)
+            || bindings.iter().any(|binding| at == binding.span)
             || file.ast.type_queries.iter().any(|query| query.contains(at))
             || positions.iter().any(|position| {
                 position.contains(at)
@@ -2817,7 +3264,9 @@ fn layers_run_inline(
         let call = match layer_run(file, layer, lookup) {
             LayerRun::FreshStack => return fresh_stack_ok,
             LayerRun::InPlace(call) => call,
-            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) => return false,
+            LayerRun::Elsewhere | LayerRun::InPlaceAmongOthers(_) | LayerRun::Withheld(_) => {
+                return false;
+            }
         };
         // The layer runs on its call's stack, so the next layer is the
         // function that owns the call: the enclosing function, or the function
@@ -2856,6 +3305,14 @@ pub(crate) enum LayerRun {
     FreshStack,
     /// Anything else: stored, handed on, or run by a call this does not know.
     Elsewhere,
+    /// ADR 0874: an argument a call the census withholds would run inline were
+    /// it the standard one. It proves no run at all: an impostor may run it
+    /// anywhere, or never. Every reader takes this as [`LayerRun::Elsewhere`]
+    /// but [`withheld_layer_call`], which only places a row, and a summary
+    /// that crosses it undecided ([`in_place_run_site_placing`]). A reader that
+    /// matches every arm names this one; one that asks for
+    /// [`LayerRun::InPlace`] alone (`if let`, `matches!`) refuses it by that.
+    Withheld(Span),
 }
 
 /// ADR 0611: whether code at `span` runs past a suspension of a function it
@@ -2863,23 +3320,26 @@ pub(crate) enum LayerRun {
 /// layer's call follows an await on every path, `Some(false)` on some path,
 /// `None` when none does. Only [`follows_dominating_await`]'s proof counts, not
 /// the climb's own `suspended`: code past an await may still run later under
-/// an owner (JSX, an instance field), which that proof excludes. A helper that
-/// also hands its callback on, or a climb cut short, proves nothing about the
-/// runs it did not follow.
+/// an owner (JSX, an instance field), which that proof excludes. A climb cut
+/// short proves nothing about the runs it did not follow.
+/// ADR 0899: nor does a helper that also hands its callback on, about those
+/// other runs; but its in-place run, the one a violation would read, is still
+/// past a layer call's await: `Some(false)`, a suspension on some path, so no
+/// role that rejects stands (`await p; w(() => set(1))` with a recursive `w`).
 pub(crate) fn suspension_through_in_place_layers(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
     let mut calls = Vec::new();
-    let climb = climb_in_place_layers_recording(file, span, lookup, None, &mut calls)?;
-    if climb.among_others || climb.exhausted {
+    let climb = climb_in_place_layers_recording(file, span, lookup, false, None, &mut calls)?;
+    if climb.exhausted {
         return None;
     }
     let mut answer = None;
     for call in calls {
         if follows_dominating_await(file, call) || follows_try_head_await(file, call, lookup) {
-            return Some(true);
+            return Some(!climb.among_others);
         }
         if may_follow_suspension(file, call) {
             answer = Some(false);
@@ -2923,7 +3383,7 @@ pub(crate) fn layer_run(
             file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
         })
         .find_map(|(call, index)| {
-            let resolved = lookup.resolved_callee_call(file, call.callee)?;
+            let resolved = lookup.placing_callee_call(file, call.callee)?;
             resolved
                 .declaration
                 .as_ref()
@@ -2933,8 +3393,23 @@ pub(crate) fn layer_run(
                 .entity_at(file.path.as_str(), call.arguments[index].span)
                 .and_then(|entity| entity.callability);
             crate::runtime_semantics::argument_behavior(resolved, callability, index)
-                .map(|behavior| (call.span, behavior))
+                .map(|behavior| (call, behavior))
         });
+    // ADR 0874: a call the census withholds places its inline callback's rows
+    // as a standard one would, for one run among others, never the sole run:
+    // a site there has no role (`runs_in_withheld_layer`), and a scheduler's
+    // fresh stack is no fact. Callers that take a run here as proof ask
+    // `standard_call_withheld` themselves (after_await's ADR 0565 arm).
+    let withheld = behavior
+        .as_ref()
+        .is_some_and(|(call, _)| lookup.standard_call_withheld(file, call.callee));
+    if withheld {
+        return match behavior {
+            Some((call, RuntimeArgumentBehavior::InlineCallback)) => LayerRun::Withheld(call.span),
+            _ => LayerRun::Elsewhere,
+        };
+    }
+    let behavior = behavior.map(|(call, behavior)| (call.span, behavior));
     match (behavior, iife) {
         (Some((_, RuntimeArgumentBehavior::FreshStackCallback)), _) => LayerRun::FreshStack,
         (Some((call, RuntimeArgumentBehavior::InlineCallback)), _) => LayerRun::InPlace(call),
@@ -2946,6 +3421,81 @@ pub(crate) fn layer_run(
                 .map_or(LayerRun::Elsewhere, LayerRun::InPlace),
         },
     }
+}
+
+/// ADR 0874: whether the site at `span` runs only as a function handed to a
+/// call the census withholds does: directly in that function, or in layers
+/// that run in place in it. A function a primitive runs, or a JSX expression
+/// the compiler wraps, between the two keeps its own role: it does not depend
+/// on who runs the function around it.
+pub(crate) fn runs_in_withheld_layer(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    withheld_layer_call(file, span, lookup).is_some()
+}
+
+/// [`runs_in_withheld_layer`]'s withheld call, by span: where the standard
+/// carrier would run the site, which only places a row and proves nothing.
+pub(crate) fn withheld_layer_call(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut at = span;
+    for _ in 0..32 {
+        let function = crate::owners::owning_function(&file.ast, at)?;
+        if let Some(call) = handed_to_withheld_call(file, function, lookup) {
+            return Some(call);
+        }
+        match layer_run(file, function, lookup) {
+            LayerRun::InPlace(call)
+            | LayerRun::InPlaceAmongOthers(call)
+            | LayerRun::Withheld(call)
+                if call != at =>
+            {
+                if super::callee_roles::own_jsx_compiler_role(file, call).is_some() {
+                    return None;
+                }
+                at = call;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Whether the call nearest around `function` is a withheld one with the
+/// function in its arguments (under a condition or an assertion too), or a
+/// reference to the function's name is such an argument.
+fn handed_to_withheld_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let nearest = |span: Span| {
+        ast.arguments_containing(span)
+            .min_by_key(|(call, _)| call.span.end - call.span.start)
+    };
+    if let Some((call, _)) =
+        nearest(function.span).filter(|(call, _)| lookup.standard_call_withheld(file, call.callee))
+    {
+        return Some(call.span);
+    }
+    let name = crate::owners::function_binding_name(file, function)?;
+    ast.references_to(name.span)
+        .iter()
+        .filter(|reference| **reference != name.span)
+        .find_map(|reference| {
+            nearest(*reference)
+                .filter(|(call, index)| {
+                    ast.peel_ts_sugar_span(call.arguments[*index].span) == *reference
+                        && lookup.standard_call_withheld(file, call.callee)
+                })
+                .map(|(call, _)| call.span)
+        })
 }
 
 /// ADR 0479: the one call that runs a function bound to a name, when it is the
@@ -3017,6 +3567,9 @@ pub(crate) struct InPlaceClimb {
     /// A site on the way follows an await in its layer: on every path
     /// (`Some(true)`), or possibly (`Some(false)`).
     pub(crate) suspended: Option<bool>,
+    /// ADR 0874: the climb crossed a call the census withholds, which only
+    /// [`in_place_run_site_placing`] does: a row it places is undecided.
+    pub(crate) withheld: bool,
 }
 
 /// ADR 0493 review: whether the climb from `span` to `to` crosses a layer that
@@ -3059,7 +3612,7 @@ pub(crate) fn climb_crosses_library_callback(
         }
         at = match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return true,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return true,
         };
     }
     true
@@ -3226,7 +3779,7 @@ pub(crate) fn runs_nothing_before_in_layers(
         }
         let call = match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return false,
         };
         let Some(fact) = ast.call_at(call) else {
             return false;
@@ -3963,7 +4516,7 @@ fn read_on_every_completion_of_apply(
         }
         at = match layer_run(file, function, lookup) {
             LayerRun::InPlace(call) | LayerRun::InPlaceAmongOthers(call) => call,
-            LayerRun::FreshStack | LayerRun::Elsewhere => return false,
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => return false,
         };
     }
     false
@@ -4194,7 +4747,7 @@ pub(crate) fn climb_in_place_layers_within(
     lookup: &SemanticLookup<'_>,
     within: Option<Span>,
 ) -> Option<InPlaceClimb> {
-    climb_in_place_layers_recording(file, span, lookup, within, &mut Vec::new())
+    climb_in_place_layers_recording(file, span, lookup, false, within, &mut Vec::new())
 }
 
 /// [`climb_in_place_layers_within`], appending to `passed` the call of each
@@ -4203,6 +4756,7 @@ fn climb_in_place_layers_recording(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
+    crossing: bool,
     within: Option<Span>,
     passed: &mut Vec<Span>,
 ) -> Option<InPlaceClimb> {
@@ -4212,6 +4766,7 @@ fn climb_in_place_layers_recording(
         in_list: false,
         among_others: false,
         suspended: None,
+        withheld: false,
     };
     // Bounded: each step moves to the call that holds the previous function.
     for step in 0..16 {
@@ -4227,7 +4782,12 @@ fn climb_in_place_layers_recording(
                 climb.among_others = true;
                 call
             }
-            LayerRun::FreshStack | LayerRun::Elsewhere => break,
+            LayerRun::Withheld(call) if crossing => {
+                climb.among_others = true;
+                climb.withheld = true;
+                call
+            }
+            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => break,
         };
         // A layer called in a JSX expression runs where the compiler places
         // that expression (an insert's tracked computation), which the
@@ -4262,6 +4822,19 @@ fn climb_in_place_layers_recording(
     (climb.at != span).then_some(climb)
 }
 
+/// ADR 0628: the call that runs `function` in place, one layer of
+/// [`climb_in_place_layers`].
+pub(crate) fn in_place_layer_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    match layer_run(file, function, lookup) {
+        LayerRun::InPlace(call) => Some(call),
+        _ => None,
+    }
+}
+
 /// [`climb_in_place_layers`] continued through the generators stepped at
 /// their own call (ADR 0516): `(function* () { r(); yield 1; })().next()`
 /// runs some of its body, or none, on the stack of that call, so the climb
@@ -4284,19 +4857,32 @@ pub(crate) fn in_place_run_site_within(
     lookup: &SemanticLookup<'_>,
     within: Option<Span>,
 ) -> Option<(InPlaceClimb, bool)> {
-    in_place_run_site_recording(file, span, lookup, within, &mut Vec::new())
+    in_place_run_site_recording(file, span, lookup, false, within, &mut Vec::new())
+}
+
+/// ADR 0874: [`in_place_run_site_within`] across a call the census withholds,
+/// for a summary that places rows: it proves no run, so a row through
+/// [`InPlaceClimb::withheld`] is undecided. Nothing else may cross one.
+pub(crate) fn in_place_run_site_placing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    within: Option<Span>,
+) -> Option<(InPlaceClimb, bool)> {
+    in_place_run_site_recording(file, span, lookup, true, within, &mut Vec::new())
 }
 
 /// The calls [`in_place_run_site`] passes from `span` outwards, innermost
 /// first: each layer's call and each stepped generator's creating call. Empty
-/// when `span` crosses no layer.
+/// when `span` crosses no layer. ADR 0874: past a call the census withholds
+/// too, for [`in_place_run_site_placing`]'s reader.
 pub(crate) fn in_place_run_calls(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<Span> {
     let mut passed = Vec::new();
-    in_place_run_site_recording(file, span, lookup, None, &mut passed);
+    in_place_run_site_recording(file, span, lookup, true, None, &mut passed);
     passed
 }
 
@@ -4304,6 +4890,7 @@ fn in_place_run_site_recording(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
+    crossing: bool,
     within: Option<Span>,
     passed: &mut Vec<Span>,
 ) -> Option<(InPlaceClimb, bool)> {
@@ -4313,13 +4900,16 @@ fn in_place_run_site_recording(
         in_list: false,
         among_others: false,
         suspended: None,
+        withheld: false,
     };
     let mut through_generator = false;
     for step in 0..8 {
-        if let Some(next) = climb_in_place_layers_recording(file, climb.at, lookup, within, passed)
+        if let Some(next) =
+            climb_in_place_layers_recording(file, climb.at, lookup, crossing, within, passed)
         {
             climb.in_list |= next.in_list;
             climb.among_others |= next.among_others;
+            climb.withheld |= next.withheld;
             climb.suspended = match (climb.suspended, next.suspended) {
                 (Some(true), _) | (_, Some(true)) => Some(true),
                 (Some(false), _) | (_, Some(false)) => Some(false),

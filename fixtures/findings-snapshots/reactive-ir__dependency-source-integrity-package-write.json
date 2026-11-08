@@ -5,6 +5,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-package-write/App.tsx",
       "start": 360,
@@ -15,6 +16,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-package-write/App.tsx",
       "start": 538,
@@ -22,9 +24,21 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-package-write/App.tsx",
+      "start": 692,
+      "end": 702,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-package-write/App.tsx",
       "start": 692,
@@ -35,10 +49,22 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-package-write/App.tsx",
       "start": 895,
       "end": 913,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-package-write/App.tsx",
+      "start": 2250,
+      "end": 2256,
       "fixes": 0
     }
   ]

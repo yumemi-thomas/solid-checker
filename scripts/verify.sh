@@ -379,6 +379,11 @@ gates_lane() {
   lane_step obligation-audit
   SOLID_CHECKER_BIN="$checker_bin" \
     SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/obligation-audit.mjs
+  # Every flip witness against its recorded Chrome run: where Chrome fired, a
+  # finding covers it, whatever the row's kind (endstage-report.md 1a). No tsrs
+  # and no Chrome; `--chrome` re-records by hand.
+  lane_step witnesses
+  node scripts/flip/check.mjs all --recorded --bin "$checker_bin" --typefacts "$PWD/bin/solid-typefacts"
 }
 
 # The packed owned check, installed in isolation, against this checker. The
@@ -452,6 +457,8 @@ jq empty fixtures/obligation-cases/*.json
 bun scripts/dialect-manifests.mjs validate
 bun scripts/doc-budget.mjs
 bun scripts/repro-budget.mjs
+# The one-way uncertifiable count against its ledger (endstage-report.md 1b).
+node scripts/guard/count.mjs
 # A ratchet on raw cross-file reads in the reactive IR (ADR 0383).
 bun scripts/ir-read-lint.mjs
 

@@ -32,15 +32,34 @@ generator no binding holds). After a `yield` of a native promise
 (`Promise.resolve()`, `new Promise(…)`, or any `yield` of an async generator)
 the next step runs from the promise's continuation with no owner, whatever the
 caller; after a `yield` of a plain value the caller's owner stays; any other
-operand is an obligation.
+operand is an obligation. A generator an async computation steps across one of its own
+suspensions (`for await` over it, or a `for…of` whose body starts with an
+`await`) runs past its first `yield` on that computation's continuation: an
+operation there is unowned, and an obligation where the step only may follow
+the suspension (ADR 0851). A standard in-place callback past the yield inherits the step context. Exported generators and exported iterators cannot prove no future steps; escaped or mixed steps retain named obligations. A context-read throw there rejects the async stepper's flight; without a proof of error observation it is `async-flight-error-unobserved`, not a violation (ADR 0852).
 
 `Loading(props)` or `Errored(props)` called as a function creates its boundary
 in the call, and rc.17 warns `NO_OWNER_BOUNDARY` when no owner is current. The
 call is placed as an effect is: an ownerless handler, a timer or promise
 callback, a microtask, module scope, code after an `await`, or a
-`runWithOwner(null)` callback is unowned (ADR 0462). A JSX `<Loading>` in a
-handler is not claimed: rc.17 dev runs the component in a transparent root,
-so the runtime does not warn there.
+`runWithOwner(null)` callback is unowned (ADR 0462). A JSX `<Loading>` or
+`<Errored>` is no owner site anywhere: rc.21's dev `createComponent` runs every
+component in its own transparent root, so `NO_OWNER_BOUNDARY` cannot fire
+through JSX (ADR 0869).
+
+Written JSX creates computations with no call to name them (ADR 0883). An intrinsic's
+dynamic child, attribute or spread is a render effect: proven unowned, it is
+`NO_OWNER_EFFECT` here, at module scope too; in a function nothing places, it is
+uncertifiable (`function-run-unplaced`). A static child that may hold a function
+(`{[fn]}`, an `any`), and JSX under a component element's getter, which runs where the
+component reads it, are uncertifiable with no owner. A component element and a fragment
+child are quiet with no owner. Static JSX creates nothing.
+
+A function child of Solid's own control-flow tags runs under an owner the tag provides
+(ADR 0883): `For` and `Repeat` at any arity, `Show` and a direct `Match` of `Switch` with
+a first parameter that has no default. Exact primitive identity decides, so a local `For`
+is a plain component. A child of length 0 is handed back as a value and stays
+uncertifiable, as does a function child of any other component.
 
 ## What it does
 
@@ -49,6 +68,12 @@ dominates it. Typical sites are module scope, bare helpers called from module
 scope, and detached callbacks. Exported functions with unseen callers, nullable
 `runWithOwner` values, unresolved component identity, and unresolved runtime
 allocation paths are uncertifiable rather than proven violations.
+
+An unowned run is proven only along calls that run on every run of the code
+around them, or of the module (ADR 0714). A helper called under an owner and
+also from a module-scope `if`, a `&&` operand, an optional call, or a timer set
+in a branch is uncertifiable: every run may be the owned one. An unconditional
+module-scope statement or timer stays a violation.
 
 The apply callback of `createEffect(compute, apply)` is always a detached
 callback: the runtime queues it, and it runs from the flush with no owner, unless a
@@ -80,6 +105,12 @@ A function returned by its function (a factory's result, or a value returned
 through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
 later calls it. The owner walk does not follow the returned value to those
 calls, so an owner operation in it is uncertifiable, never certified (ADR 0472).
+
+An owned context is the edges the owner graph holds. A function the body calls and
+also assigns to a handler, stores, hands to a value-only argument, or writes to a
+member has another entry with no edge, so an owner operation in it is uncertifiable
+(`owner-callers-unenumerated`, ADR 0868). Only direct calls, inline runs and
+primitive positions, each from placed code, keep the proof.
 
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
@@ -208,8 +239,7 @@ violation (ADR 0345).
 
 A callback with no proven run under its lexical owner (a wrapper callback,
 stored member, class member or getter) is uncertifiable (ADR 0534). Dormant
-exports remain silent; unnamed namespace escapes remain uncertain. JSX
-boundaries retain the region's answer. An operation in an exported helper's
+exports remain silent; unnamed namespace escapes remain uncertain. An operation in an exported helper's
 own body names its unseen callers instead: the open-world seed is its edge
 (fixture `owner-exported-seed-cause`).
 
@@ -233,7 +263,10 @@ owns its synchronous run only (ADR 0612). A `catch` or `finally` counts only pas
 `try` head that cannot throw before it suspends. An operation in a literal that a
 synchronous guard invokes is guarded: `if (getOwner()) (() => { … })()` runs
 only under an owner, so it is not reported; the guard must be Solid's
-`getOwner`, and no `await` may separate it from the operation (ADR 0347).
+`getOwner`, and no suspension may separate it from the operation (ADR 0347): an
+`await`, a `for await` or a `yield` written before it, or one in a loop inside
+the guarded block that repeats it (ADR 0866). A loop around the guard tests it
+again.
 
 In a closed program (a project whose boundary is declared closed, or whose manifest publishes nothing), an export the program reads by name has a caller the analysis cannot see (ADR 0347). A name is read by a static member read `ns.fn` used as a value rather than called, or by a dynamic import's named read: `const { fn } = await import(x)`, `(await import(x)).fn`, or `lazy(() => import(x))`, which reads its `default` export, or the `export` option of a `lazy` call that is Solid's. Such an export is seeded as an open program's export is: a detached callback it passes to `runWithOwner(null, …)` is a violation, and a requirement in its own body is uncertifiable. An export that no read names stays dormant, unless its module's namespace escapes with no readable name: passed along, spread, given to `Object.keys` or `Object.entries`, bound to an alias, read by an element access, re-exported with `export * as`, loaded by `require`, or imported in a shape the census does not name. Such an escape could reach any export of the module, so an export only that escape reaches is uncertain: a detached callback in it is uncertifiable, not a violation (ADR 0347). The one case this leaves unreported is `Object.entries(ns)` whose values the program calls; see `docs/open-work.md`.
 
@@ -261,7 +294,7 @@ Incorrect:
 createEffect(() => syncTheme(theme()));
 onCleanup(() => window.removeEventListener("resize", resize));
 
-const orphan = <Loading fallback={<Spinner />}><Profile /></Loading>;
+const orphan = Loading({ fallback: 0, children: 1 });
 
 onSettled(() => {
   const timer = setInterval(poll, 5000);
@@ -331,3 +364,10 @@ A package function whose same-operation creation calls cover every exit between 
   hand-on to `createRoot(fn)` runs under the root (`getOwner() ? fn() :
   createRoot(fn)` is clean); `!getOwner() ? fn() : …` runs it with no owner,
   a violation in a timer.
+
+A context read past an await in a compute that stores its error throws where only a read reports it; without a proven read it is `computation-error-unobserved`, not a violation (ADR 0893).
+A generator's body runs where its iterator is stepped. An owner operation after a `yield` of the generator around it runs on a later step, which the owner walk does not follow: uncertifiable, whatever owner the generator's call had (ADR 0866).
+
+Every owner-requiring call ends in a finding or a named proof that its owner context is settled: an owned-only context, a providing region, code that never runs, or a callback proven to return no cleanup. A call with neither is uncertifiable (`execution-context-unaccounted`, ADR 0886).
+
+An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||= f)(…)`) whose operand names the primitive is SC4001's uncertifiable where the direct call would be: an attribution, never a proof of invocation or owner; a local function of the same name is none. An operation that is already uncertain is still reported where its named layer has an open entry (ADR 0902).

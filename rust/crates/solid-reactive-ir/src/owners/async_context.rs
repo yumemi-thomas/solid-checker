@@ -41,9 +41,21 @@ pub(super) fn loading_cover_at(
     }) {
         return LoadingCover::Covered;
     }
-    if file.ast.jsx_containing(span).any(|element| {
-        jsx_target_function(lookup, file, element).is_some_and(|(target_file, target)| {
-            target_file.ast.jsx_within(target.body).any(|candidate| {
+    // ADR 0668: a component covers a site only as its child, and only where the
+    // `Loading` holds what it renders of `children`: `<App />` covers neither its
+    // own tag nor a read beside the `Loading` in its body.
+    let mut beside_loading = false;
+    for element in file.ast.jsx_containing(span) {
+        if !element.children.iter().any(|child| child.contains(span)) {
+            continue;
+        }
+        let Some((target_file, target)) = jsx_target_function(lookup, file, element) else {
+            continue;
+        };
+        let loadings = target_file
+            .ast
+            .jsx_within(target.body)
+            .filter(|candidate| {
                 jsx_element_is_loading(
                     target_file,
                     candidate,
@@ -52,9 +64,24 @@ pub(super) fn loading_cover_at(
                     lookup.dialect,
                 )
             })
-        })
-    }) {
-        return LoadingCover::Covered;
+            .collect::<Vec<_>>();
+        if loadings.is_empty() {
+            continue;
+        }
+        let children_in_loading = target_file.ast.members.iter().any(|member| {
+            target.body.contains(member.span)
+                && target_file.source_text(member.property) == Some("children")
+                && loadings
+                    .iter()
+                    .any(|loading| loading.span.contains(member.span))
+        });
+        if children_in_loading {
+            return LoadingCover::Covered;
+        }
+        beside_loading = true;
+    }
+    if beside_loading {
+        return LoadingCover::Unresolved;
     }
     // A wrapper the site is a child of, with no `Loading` of its own, that
     // reads its `children`: it may hand them to another component that has
@@ -86,12 +113,18 @@ pub(super) fn loading_cover_at(
         }
         let call_sites = lookup.function_call_sites(file.path.as_str(), function.span);
         if !call_sites.is_empty() {
-            if file.ast.jsx_within(function.body).any(|candidate| {
-                jsx_element_is_loading(file, candidate, entities, symbol_names, lookup.dialect)
-            }) {
-                return LoadingCover::Covered;
-            }
-            let mut result = LoadingCover::Uncovered;
+            // ADR 0668: a `Loading` in the body that does not hold the site (the
+            // first check) proves nothing about it: a read beside one still warns.
+            // It stays open, because what the site's value reaches may be inside.
+            let beside = !file.ast.any_jsx_containing(span)
+                && file.ast.jsx_within(function.body).any(|candidate| {
+                    jsx_element_is_loading(file, candidate, entities, symbol_names, lookup.dialect)
+                });
+            let mut result = if beside {
+                LoadingCover::Unresolved
+            } else {
+                LoadingCover::Uncovered
+            };
             for (caller_file, callee) in call_sites {
                 match loading_cover_at(lookup, caller_file, callee, symbol_names, visited) {
                     LoadingCover::Covered => return LoadingCover::Covered,
@@ -359,6 +392,64 @@ pub(crate) fn synchronous_tag_position(
     .then_some(at)
 }
 
+/// ADR 0661: the code at `at` runs whenever its own function does: on no arm of
+/// a conditional, not to the right of a logical, and under JSX holders that
+/// build it when created. An intrinsic's attribute and `<Show when>` itself run
+/// with their element.
+pub(super) fn unconditional_position(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    at: Span,
+) -> bool {
+    let ast = &file.ast;
+    let owner = crate::owners::containing_ast_function(ast, at).map(|function| function.span);
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(ast, span).map(|function| function.span) == owner
+    };
+    if ast.conditional_expressions.iter().any(|conditional| {
+        own(conditional.span)
+            && (conditional.consequent.contains(at) || conditional.alternate.contains(at))
+    }) || ast
+        .logical_expressions
+        .iter()
+        .any(|logical| own(logical.span) && logical.right.contains(at))
+        || ast.if_regions.iter().any(|region| {
+            own(region.consequent)
+                && (region.consequent.contains(at)
+                    || region
+                        .alternate
+                        .is_some_and(|alternate| alternate.contains(at)))
+        })
+    {
+        return false;
+    }
+    ast.jsx_elements
+        .iter()
+        .filter(|holder| holder.span != at && holder.span.contains(at) && own(holder.span))
+        .all(|holder| {
+            if let Some(child) = holder
+                .children
+                .iter()
+                .copied()
+                .find(|child| child.contains(at))
+            {
+                return intrinsic_element(file, holder)
+                    || shown_child(lookup, file, holder, child)
+                    || loading_child(lookup, file, holder, child)
+                    || (holder.member_object.is_none()
+                        && holder.spreads.is_empty()
+                        && context_declaration(lookup, file, holder.name.span).is_some());
+            }
+            intrinsic_element(file, holder)
+                || holder.attributes.iter().any(|attribute| {
+                    attribute.expression.is_some_and(|value| value.contains(at))
+                        && file.source_text(attribute.name) == Some("when")
+                        && element_primitive(lookup, file, holder)
+                            == Some(solid_dialect::Primitive::Show)
+                })
+        })
+}
+
 /// A lowercase, non-member tag of letters and digits.
 fn intrinsic_element(
     file: &solid_facts::FileFacts,
@@ -372,7 +463,7 @@ fn intrinsic_element(
 }
 
 /// The dialect primitive `element` renders, by its index in the file's JSX.
-fn element_primitive(
+pub(crate) fn element_primitive(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
@@ -466,9 +557,24 @@ fn shown_child(
             .boolean_properties
             .iter()
             .all(|property| property.value && file.source_text(property.name) == Some("when"))
-        && when
-            .is_some_and(|when| file.source_text(file.ast.peel_ts_sugar_span(when)) == Some("true"))
+        && when.is_some_and(|when| {
+            literally_truthy(file.source_text(file.ast.peel_ts_sugar_span(when)))
+        })
         && significant_children(file, holder) == [child]
+}
+
+/// `true`, or a number or string literal that is not falsy.
+fn literally_truthy(text: Option<&str>) -> bool {
+    text.is_some_and(|text| {
+        let quoted = text.len() > 2
+            && (text.starts_with('"') || text.starts_with('\''))
+            && text.ends_with(&text[..1]);
+        text == "true"
+            || quoted
+            || text
+                .parse::<f64>()
+                .is_ok_and(|value| value != 0.0 && !value.is_nan())
+    })
 }
 
 /// ADR 0508: `row` is the one child of the dialect's `<For each={[…]}>` (one
@@ -919,7 +1025,7 @@ pub(crate) fn tag_provided(
 }
 
 /// The module-scope renders that mount `component` itself (ADR 0503).
-pub(super) fn direct_render_sites<'a>(
+pub(crate) fn direct_render_sites<'a>(
     lookup: &SemanticLookup<'a>,
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,
@@ -946,32 +1052,65 @@ pub(super) fn direct_render_sites<'a>(
                 return None;
             }
             let arrow = crate::owners::containing_ast_function(ast, element.span)?;
-            if arrow.r#async
-                || arrow.generator
-                || ast.peel_ts_sugar_span(arrow.body) != element.span
-            {
+            if ast.peel_ts_sugar_span(arrow.body) != element.span {
                 return None;
             }
-            let (call, _) = ast.arguments_containing(arrow.span).find(|(call, index)| {
-                *index == 0 && ast.peel_ts_sugar_span(call.arguments[*index].span) == arrow.span
-            })?;
-            // A call that runs whenever the module is evaluated: outside every
-            // function and class, in the module's straight-line flow (no
-            // condition, loop, or exit before it; ADR 0503 review).
-            let runs = ast.functions_owning(call.span).next().is_none()
-                && !ast
-                    .classes
-                    .iter()
-                    .any(|class| class.span.contains(call.span))
-                && ast.completion_sites.binary_search(&call.span).is_ok()
-                && lookup
-                    .primitive_at_call(caller, call.span)
-                    .is_some_and(|primitive| {
-                        lookup.dialect.mount_runs_component_synchronously(primitive)
-                    });
-            runs.then_some((caller, call.span))
+            mount_call(lookup, caller, arrow).map(|call| (caller, call))
         })
         .collect()
+}
+
+/// `arrow` is the mount function of a module-scope `render`: argument 0 of a
+/// call that runs whenever the module is evaluated, outside every function and
+/// class, in the module's straight-line flow (no condition, loop, or exit
+/// before it; ADR 0503 review).
+fn mount_call(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    arrow: &solid_facts::ast::FunctionFact,
+) -> Option<Span> {
+    let ast = &file.ast;
+    if arrow.r#async || arrow.generator {
+        return None;
+    }
+    let (call, _) = ast.arguments_containing(arrow.span).find(|(call, index)| {
+        *index == 0 && ast.peel_ts_sugar_span(call.arguments[*index].span) == arrow.span
+    })?;
+    let runs = ast.functions_owning(call.span).next().is_none()
+        && !ast
+            .classes
+            .iter()
+            .any(|class| class.span.contains(call.span))
+        && ast.completion_sites.binary_search(&call.span).is_ok()
+        && lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.mount_runs_component_synchronously(primitive));
+    runs.then_some(call.span)
+}
+
+/// ADR 0661: `component` is built while a module-scope `render` runs: a tag at a
+/// synchronous position of the mount function, whatever holders surround it
+/// (`render(() => <div><X /></div>)`). A provider, a fragment and an intrinsic
+/// are holders, which [`direct_render_sites`]'s bare form does not take.
+pub(super) fn mounted_by_root(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+) -> bool {
+    lookup.function_value_is_current(file, component)
+        && lookup
+            .function_call_sites(file.path.as_str(), component.span)
+            .into_iter()
+            .any(|(caller, tag)| {
+                let ast = &caller.ast;
+                ast.jsx_elements
+                    .iter()
+                    .any(|element| element.name.span == tag)
+                    && synchronous_tag_position(lookup, caller, tag).is_some_and(|position| {
+                        crate::owners::containing_ast_function(ast, position)
+                            .is_some_and(|arrow| mount_call(lookup, caller, arrow).is_some())
+                    })
+            })
 }
 
 /// Whether `function` is what a `render`/`hydrate` call mounts: the function
@@ -1015,9 +1154,12 @@ pub(crate) fn ref_application_on_intrinsic(file: &solid_facts::FileFacts, span: 
     })
 }
 
-/// Whether a JSX element is a component: a capitalized or dotted tag. Its
-/// children and spreads are not the intrinsic element's own, so a ref written
-/// inside them is not placed by the intrinsic element's owner.
+/// Whether a JSX element is a component, by the tag's form as the JSX transform
+/// reads it: a member tag whatever its head's case (`<props.Comp>`), or any name
+/// that does not start with a lowercase letter (`<Comp>`, `<_Comp>`). A plain
+/// lowercase name and a namespaced or hyphenated one are intrinsic. Its children
+/// and spreads are not the intrinsic element's own, so a ref written inside them
+/// is not placed by the intrinsic element's owner.
 pub(crate) fn is_component_element(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
@@ -1026,7 +1168,9 @@ pub(crate) fn is_component_element(
         .source
         .get(element.name.span.start as usize..element.name.span.end as usize)
         .unwrap_or_default();
-    tag.contains('.') || tag.starts_with(|c: char| c.is_ascii_uppercase())
+    !tag.is_empty()
+        && (tag.contains('.')
+            || (!tag.contains([':', '-']) && !tag.starts_with(|c: char| c.is_ascii_lowercase())))
 }
 
 /// Whether `span` lies inside a component element, in its children, spreads
@@ -1077,8 +1221,91 @@ pub(crate) fn async_read_role(
     }) {
         return crate::ExecutionRole::Unknown;
     }
+    if tracked_computation_read(file, span, entities, symbol_names, lookup)
+        || handed_computation_read(file, span, lookup)
+    {
+        crate::ExecutionRole::Unknown
+    } else {
+        role
+    }
+}
+
+/// ADR 0637: a read in a function a computation runs by a name or a member
+/// (`createMemo(cb)`, `createEffect(bag.compute, …)`), through `const` aliases:
+/// no render, as a literal compute's is not. Nothing here proves which of its
+/// other uses runs it, so its async row is unproven. A leaf's callback keeps its
+/// own proof.
+fn handed_computation_read(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_dialect::Primitive;
+    let ast = &file.ast;
+    let holds = |value: Span| {
+        let mut at = ast.peel_ts_sugar_span(value);
+        for _ in 0..4 {
+            while let Some(member) = ast.member_at(at) {
+                at = ast.peel_ts_sugar_span(member.object);
+            }
+            let Some(declaration) = ast.reference_declaration(at) else {
+                return false;
+            };
+            if ast.functions.iter().any(|function| {
+                function.span.contains(span)
+                    && function
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| name.span == declaration)
+            }) {
+                return true;
+            }
+            let Some(initializer) = ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+                .and_then(|binding| binding.initializer)
+            else {
+                return false;
+            };
+            if initializer.contains(span) {
+                return true;
+            }
+            at = ast.peel_ts_sugar_span(initializer);
+        }
+        false
+    };
+    !ast.any_jsx_containing(span)
+        && ast.calls.iter().any(|call| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    !matches!(
+                        primitive,
+                        Primitive::CreateTrackedEffect | Primitive::OnSettled
+                    ) && !lookup.dialect.computation_read_is_render(primitive)
+                })
+                && call.arguments.iter().any(|argument| {
+                    ast.function_at(ast.peel_ts_sugar_span(argument.span))
+                        .is_none()
+                        && holds(argument.span)
+                })
+        })
+}
+
+/// ADR 0623: a read in the tracked callback of a computation that is no render
+/// (a memo's compute, a user effect's compute, a derived signal, an effect's
+/// apply, or a cleanup it returns, when its role is tracked). A pending source
+/// suspends such a read: it is no render, and no unsuspendable read either.
+pub(crate) fn tracked_computation_read(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
     let dialect = lookup.dialect;
-    let in_computation = file.ast.arguments_containing(span).any(|(call, index)| {
+    file.ast.arguments_containing(span).any(|(call, index)| {
         let argument = &call.arguments[index];
         matches!(
             argument.value,
@@ -1091,7 +1318,10 @@ pub(crate) fn async_read_role(
             .is_some_and(|primitive| {
                 // ADR 0614: an effect's apply, or a cleanup it returns, is no
                 // render either, whichever JSX its effect is written in.
-                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                // An inline callback runs in its caller's pass (`latest`,
+                // `isPending`, Chrome rc.21: the boundary claim stands).
+                callback_execution_at_call(file, call, primitive, index, lookup)
+                    .is_some_and(|execution| execution != solid_dialect::Execution::Inline)
                     && !dialect.computation_read_is_render(primitive)
             })
             // A JSX region written inside the computation is a render again.
@@ -1100,12 +1330,149 @@ pub(crate) fn async_read_role(
                 .tracked_regions
                 .iter()
                 .any(|region| argument.span.contains(region.span) && region.span.contains(span))
-    });
-    if in_computation {
-        crate::ExecutionRole::Unknown
-    } else {
-        role
+    })
+}
+
+/// ADR 0892: the read at `span` is written in the value of a prop that an
+/// exactly resolved flow component reads only in a computation of its own
+/// (`<Show when={a()}>`, `<For each={a()}>`, `<Match when={a()}>` as a direct
+/// child of a `Switch`): a pending value suspends that computation, so no
+/// strict-read window sees it. Review D20: no element or function may stand
+/// between the read and the attribute (it evaluates elsewhere), no comment may
+/// sit in the value (`/*@static*/` drops the getter), and no spread may stand
+/// on the tag.
+pub(crate) fn read_in_flow_prop(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> bool {
+    let holding = |inner: Span| {
+        file.ast
+            .jsx_elements
+            .iter()
+            .filter(|element| element.span.contains(inner) && element.span != inner)
+            .min_by_key(|element| element.span.end - element.span.start)
+    };
+    let Some(element) = holding(span) else {
+        return false;
+    };
+    if !element.spreads.is_empty() {
+        return false;
     }
+    let Some(attribute) = element.attributes.iter().find(|attribute| {
+        attribute.namespace.is_none()
+            && attribute
+                .expression
+                .is_some_and(|value| value.contains(span))
+    }) else {
+        return false;
+    };
+    if file
+        .source_text(attribute.span)
+        .is_none_or(|text| text.contains("/*") || text.contains("//"))
+    {
+        return false;
+    }
+    let function = |at: Span| containing_ast_function(&file.ast, at).map(|function| function.span);
+    if function(span) != function(element.span) {
+        return false;
+    }
+    // Review R40: a call the read is an argument of may run it elsewhere:
+    // `untrack(p, "x")` sets a strict window inside the computation.
+    if file.ast.arguments_containing(span).any(|(call, _)| {
+        attribute
+            .expression
+            .is_some_and(|value| value.contains(call.span))
+    }) {
+        return false;
+    }
+    let tag = |element: &solid_facts::ast::JsxElementFact| {
+        jsx_primitive_name(file, element, entities, symbol_names, dialect)
+    };
+    let Some(name) = tag(element) else {
+        return false;
+    };
+    let name: &str = &name;
+    if !file
+        .source_text(attribute.name)
+        .is_some_and(|prop| dialect.flow_prop_read_in_own_computation(name, prop))
+    {
+        return false;
+    }
+    // `Match` returns its props: only `Switch` reads them in a computation.
+    name != "Match"
+        || holding(element.span).is_some_and(|parent| {
+            parent.children.contains(&element.span)
+                && tag(parent).is_some_and(|parent| &*parent == "Switch")
+        })
+}
+
+/// ADR 0892: `Match` returns its props, so outside a `Switch` a read in its
+/// `when` runs wherever that object is read: no tracked role speaks for it.
+pub(crate) fn read_in_loose_match(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> bool {
+    let Some(element) = file
+        .ast
+        .jsx_elements
+        .iter()
+        .filter(|element| element.span.contains(span) && element.span != span)
+        .min_by_key(|element| element.span.end - element.span.start)
+    else {
+        return false;
+    };
+    element.attributes.iter().any(|attribute| {
+        attribute
+            .expression
+            .is_some_and(|value| value.contains(span))
+            && file.source_text(attribute.name) == Some("when")
+    }) && jsx_primitive_name(file, element, entities, symbol_names, dialect).as_deref()
+        == Some("Match")
+        && !read_in_flow_prop(file, span, entities, symbol_names, dialect)
+}
+
+/// ADR 0892: a read in a flow prop warns from the render that reads the
+/// component's result. An element that is no JSX child and no return of a
+/// component may be dropped (`const f = () => <Show when={a()}>...`, `f()`):
+/// Chrome rc.21 is silent there, so the boundary claim is not proved.
+pub(crate) fn flow_prop_element_unrendered(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if !read_in_flow_prop(file, span, entities, symbol_names, lookup.dialect) {
+        return false;
+    }
+    let Some(element) = file
+        .ast
+        .jsx_elements
+        .iter()
+        .filter(|element| element.span.contains(span) && element.span != span)
+        .min_by_key(|element| element.span.end - element.span.start)
+    else {
+        return false;
+    };
+    let child = file
+        .ast
+        .jsx_elements
+        .iter()
+        .any(|parent| parent.children.contains(&element.span));
+    let returned = containing_ast_function(&file.ast, element.span).is_some_and(|function| {
+        lookup.function_may_be_component(file, function)
+            && crate::local_access::returned_values(file, function)
+                .iter()
+                .flatten()
+                .any(|value| file.ast.peel_ts_sugar_span(*value) == element.span)
+    });
+    !(child || returned)
 }
 
 pub(crate) fn jsx_element_is_loading(
@@ -1156,6 +1523,178 @@ pub(crate) fn computation_is_async(
     file.ast
         .function_at(argument)
         .is_some_and(|function| function.r#async)
+}
+
+/// ADR 0665: what a source's first argument says about a first flight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ComputationProvenance {
+    /// A pass of the computation returns a Promise.
+    Async,
+    /// No pass does: a data value, or a function whose return is closed.
+    Sync,
+    /// Nothing proves either: an `any` return, a value no function fact holds,
+    /// a compute that may answer without a flight, or one that may throw
+    /// `NotReadyError` from a sync body.
+    Open,
+}
+
+/// ADR 0665: [`computation_is_async`] is a proof of a Promise, and static rules
+/// read it as one, so "not proven" is this function's third answer.
+pub(crate) fn computation_provenance(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> ComputationProvenance {
+    use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+    if argument.spread {
+        return ComputationProvenance::Open;
+    }
+    let value = file.ast.peel_ts_sugar_span(argument.span);
+    if computation_is_async(lookup, file, argument.span) {
+        return if computation_may_answer_sync(lookup, file, argument.span) {
+            ComputationProvenance::Open
+        } else {
+            ComputationProvenance::Async
+        };
+    }
+    if argument.runtime_value_kind.is_data_literal()
+        || matches!(
+            argument.runtime_value_kind,
+            RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+        )
+        || lookup
+            .entity_at(file.path.as_str(), value)
+            .and_then(|entity| entity.callability)
+            == Some(typefacts::Callability::NonCallable)
+    {
+        return ComputationProvenance::Sync;
+    }
+    let function = match argument.value {
+        ArgumentValueKind::Function => file.ast.function_at(value),
+        ArgumentValueKind::Identifier => lookup
+            .function_called_at(file.path.as_str(), value)
+            .filter(|(target, _)| target.path == file.path)
+            .map(|(_, function)| function),
+        _ => None,
+    };
+    let Some(function) = function else {
+        return ComputationProvenance::Open;
+    };
+    let closed = lookup
+        .typescript_file(file.path.as_str())
+        .is_some_and(|typescript_file| {
+            typescript_file.async_functions.iter().any(|fact| {
+                !fact.return_open
+                    && !fact.can_return_async
+                    && u64::from(function.span.start) == fact.expression.start_byte
+                    && u64::from(function.span.end) == fact.expression.end_byte
+            })
+        });
+    if closed && !may_throw_not_ready(lookup, file, function) {
+        ComputationProvenance::Sync
+    } else {
+        ComputationProvenance::Open
+    }
+}
+
+/// A reference inside `region` to the export `name` of a Solid package, through
+/// a named import or a namespace's member.
+fn solid_import_named(file: &solid_facts::FileFacts, name: &str, region: Span) -> bool {
+    let bindings = || {
+        file.ast
+            .imports
+            .iter()
+            .filter(|import| {
+                import.module == "solid-js"
+                    || import.module.starts_with("solid-js/")
+                    || import.module.starts_with("@solidjs/")
+            })
+            .flat_map(|import| import.bindings.iter())
+    };
+    let named = bindings()
+        .filter(|binding| binding.imported.as_deref() == Some(name))
+        .map(|binding| binding.local.span)
+        .collect::<Vec<_>>();
+    let namespaces = bindings()
+        .filter(|binding| binding.kind == solid_facts::ast::ImportKind::Namespace)
+        .map(|binding| binding.local.span)
+        .collect::<Vec<_>>();
+    if named.is_empty() && namespaces.is_empty() {
+        return false;
+    }
+    let declared_by = |span: Span, spans: &[Span]| {
+        file.ast
+            .reference_declaration(span)
+            .is_some_and(|declaration| spans.contains(&declaration))
+    };
+    file.ast
+        .identifiers
+        .iter()
+        .any(|identifier| region.contains(identifier.span) && declared_by(identifier.span, &named))
+        || file.ast.members.iter().any(|member| {
+            region.contains(member.span)
+                && file.source_text(member.property) == Some(name)
+                && declared_by(file.ast.peel_ts_sugar_span(member.object), &namespaces)
+        })
+}
+
+const NOT_READY_WALK_BUDGET: usize = 2048;
+
+/// A sync compute that throws `NotReadyError` is pending while it does, and no
+/// return type says so. Its own body, or a function it calls, names the export.
+/// A helper no exact call names is beyond this walk; a project that names the
+/// error in one is what the walk is for.
+fn may_throw_not_ready(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    may_throw_not_ready_within(lookup, file, function, &mut HashSet::default())
+}
+
+/// Each function once: a cycle adds nothing, and past [`NOT_READY_WALK_BUDGET`]
+/// a call may reach anything.
+fn may_throw_not_ready_within(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    seen: &mut HashSet<(String, Span)>,
+) -> bool {
+    if !seen.insert((file.path.to_string(), function.span)) {
+        return false;
+    }
+    if seen.len() > NOT_READY_WALK_BUDGET
+        || solid_import_named(file, "NotReadyError", function.span)
+    {
+        return true;
+    }
+    file.ast.calls_within(function.span).any(|call| {
+        lookup
+            .function_called_at(file.path.as_str(), call.callee)
+            .is_some_and(|(target, called)| {
+                may_throw_not_ready_within(lookup, target, called, seen)
+            })
+    })
+}
+
+/// ADR 0631: the computation may return without a pending flight
+/// (`cache.get(k) ?? load()`, a conditional, a custom thenable): nothing proves
+/// its source is pending at a first read, or that it ever is.
+pub(crate) fn computation_may_answer_sync(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    argument: Span,
+) -> bool {
+    let argument = file.ast.peel_ts_sugar_span(argument);
+    lookup
+        .typescript_file(file.path.as_str())
+        .is_some_and(|typescript_file| {
+            typescript_file.async_functions.iter().any(|function| {
+                function.may_answer_sync
+                    && u64::from(argument.start) == function.expression.start_byte
+                    && function.expression.end_byte == u64::from(argument.end)
+            })
+        })
 }
 
 pub(crate) fn inside_non_component_function(

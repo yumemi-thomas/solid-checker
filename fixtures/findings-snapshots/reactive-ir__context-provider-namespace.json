@@ -10,6 +10,17 @@
       "start": 309,
       "end": 319,
       "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-namespace/App.tsx",
+      "start": 576,
+      "end": 586,
+      "fixes": 0
     }
   ]
 }

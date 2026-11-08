@@ -226,7 +226,14 @@ pub(crate) fn attribute_dependency_requirements(
         // An operation after an `await` in the package runs unowned whatever
         // context its function was entered with (review round 1 of ADR 0290,
         // Sol): every project call that runs it is attributed.
+        // ADR 0714: an edge from a call that may not run (`MayRun`) carries
+        // the caller's context as a possible run: attributed, never proven.
         let carries = |kind: OwnerEdgeKind, caller: usize| {
+            let kind = if kind == OwnerEdgeKind::MayRun {
+                OwnerEdgeKind::Preserve
+            } else {
+                kind
+            };
             requirement.after_await
                 || requirement.after_yield
                 || owner_edge_context(kind, contexts[caller]) & mask != 0
@@ -321,7 +328,7 @@ pub(crate) fn attribute_dependency_requirements(
                     });
                     let entry = (
                         calls.iter().map(|call| call.span).collect::<Vec<_>>(),
-                        completing,
+                        completing && kind != OwnerEdgeKind::MayRun,
                         own && below,
                     );
                     let improves = best
@@ -357,7 +364,7 @@ pub(crate) fn attribute_dependency_requirements(
                         file,
                         call.span,
                         requirement.clone(),
-                        proven && reached && call_completes,
+                        proven && reached && call_completes && kind != OwnerEdgeKind::MayRun,
                     ));
                 }
             }
@@ -400,10 +407,12 @@ pub(crate) fn attribute_dependency_requirements(
             file,
             span,
             OwnerRequirementStatus {
-                uncertain: !proven,
+                uncertain: !proven || requirement.flight_error_unobserved,
                 runtime_uncertain: requirement.runtime_uncertain,
+                flight_error_unobserved: requirement.flight_error_unobserved,
                 caller_uncertain: requirement.caller_uncertain,
                 conditional_owner: requirement.conditional_owner,
+                owner_varies_by_caller: requirement.owner_varies_by_caller,
                 later_run_unowned: requirement.later_run_unowned,
                 component_uncertain: requirement.component_uncertain,
                 unplaced_callback: requirement.unplaced_callback,
@@ -412,6 +421,7 @@ pub(crate) fn attribute_dependency_requirements(
                 owned_run_throws: requirement.owned_run_throws,
                 after_await: false,
                 after_yield: false,
+                context_unaccounted: false,
                 report: true,
             },
             lookup,

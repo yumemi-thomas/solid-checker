@@ -98,6 +98,10 @@ impl<'a> SemanticLookup<'a> {
     /// computed or missing key, `defineProperties`, `__defineGetter__` with
     /// this name -- may define `name`.
     pub(crate) fn property_may_be_defined_reflectively_as(&self, name: &str) -> bool {
+        self.note_probe_read(
+            crate::base::memo::probes::Probe::DefinedReflectively,
+            || crate::base::memo::probes::PolledKey::Text(Arc::from(name)),
+        );
         if !self.property_may_be_defined_reflectively() {
             return false;
         }

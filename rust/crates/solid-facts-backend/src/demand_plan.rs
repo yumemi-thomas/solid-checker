@@ -32,6 +32,9 @@ pub(crate) fn plan(
 /// `plan_file` and read back when the demands are emitted.
 #[derive(Default)]
 struct DemandSpans {
+    /// Callability with no type descriptor: a descriptor is evidence other
+    /// consumers read, and asking one here moves their answers (ADR 0652).
+    callability_only_spans: HashSet<Span>,
     symbol_spans: HashMap<Span, bool>,
     type_descriptor_spans: HashSet<Span>,
     runtime_value_domain_spans: HashSet<Span>,
@@ -88,6 +91,33 @@ fn plan_file(
         )
         .filter_map(|returned| returned.callee)
         .collect::<HashSet<_>>();
+    // ADR 0883: a child the compiler leaves static is an effect only if it
+    // may hold a function. The analysis reads callability only for a bare
+    // identifier child (`jsx_sites::cannot_hold_function`); a child in a
+    // tracked region is a site whatever its type.
+    spans
+        .callability_only_spans
+        .extend(
+            file.ast
+                .jsx_child_expressions
+                .iter()
+                .copied()
+                .filter(|&expression| {
+                    !file
+                        .compiler
+                        .tracked_regions
+                        .iter()
+                        .any(|region| region.span.contains(expression))
+                        && file
+                            .source_text(file.ast.peel_ts_sugar_span(expression))
+                            .is_some_and(|text| {
+                                !text.is_empty()
+                                    && text
+                                        .chars()
+                                        .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+                            })
+                }),
+        );
     let (import_bindings, import_references) = collect_symbol_spans(file, &mut spans);
     collect_call_result_binding_spans(dialect, file, &mut spans);
     collect_jsx_spans(dialect, file, &mut spans);
@@ -95,6 +125,14 @@ fn plan_file(
     collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
     collect_argument_spans(dialect, file, &mut spans);
     collect_member_spans(file, &mut spans);
+    // ADR 0803 (review R12): whether a value the DOM may hand out as a window
+    // is one, by its type.
+    for span in file.window_valued_candidates() {
+        add_symbol_span(&mut spans.symbol_spans, span, false);
+        spans.library_type_spans.insert(span);
+        // Review D4: `any` or `unknown` there may be a window.
+        spans.runtime_value_domain_spans.insert(span);
+    }
     collect_chain_link_spans(dialect, file, &mut spans);
     collect_delete_spans(dialect, file, &mut spans);
     emit_span_demands(
@@ -120,12 +158,17 @@ fn collect_delete_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut
         return;
     }
     for &target in &file.ast.deleted_targets {
-        let Some(member) = file.peel_parentheses(target) else {
+        // ADR 0830: an operand under a type assertion where a directive may
+        // silence TS2703 is judged as the member it wraps.
+        let Some(member) = file.peel_parentheses(target).or_else(|| {
+            let member = file.ast.peel_ts_sugar_span(target);
+            (file.tsc_silence_at(member.start) != solid_facts::TscSilence::Reports)
+                .then_some(member)
+        }) else {
             continue;
         };
-        if file.ast.member_at(member).is_none()
-            || file.ast.computed_members.binary_search(&member).is_ok()
-        {
+        // ADR 0829: a computed operand too, for the rejection proof.
+        if file.ast.member_at(member).is_none() {
             continue;
         }
         spans.writable_optional_property_spans.insert(member);
@@ -189,6 +232,7 @@ fn collect_symbol_spans(
     let DemandSpans {
         symbol_spans,
         type_descriptor_spans,
+        runtime_value_domain_spans,
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
@@ -254,6 +298,13 @@ fn collect_symbol_spans(
     for property in &file.ast.object_properties {
         if !property.computed {
             add_symbol(property.key, true);
+            // ADR 0650: `Loading({ on })` is judged like `<Loading on>`.
+            if file.source_text(property.key) == Some("on") {
+                let value = file.ast.peel_ts_sugar_span(property.value);
+                add_symbol(value, false);
+                type_descriptor_spans.insert(value);
+                runtime_value_domain_spans.insert(value);
+            }
         }
     }
     // Component identity is a semantic type/usage question. Demand the type
@@ -313,6 +364,13 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
                 declared_key_spans.insert(spread.argument);
             }
         }
+        // ADR 0650: a spread onto a component may carry `on`; a complete
+        // declared key set is what closes it (`loading-on-accessor`).
+        if dialect.semantic_demands.spread_declared_keys && !native {
+            for spread in &element.spreads {
+                declared_key_spans.insert(spread.argument);
+            }
+        }
         for attribute in &element.attributes {
             let Some(expression) = attribute.expression else {
                 continue;
@@ -329,6 +387,16 @@ fn collect_jsx_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut De
                 })
             {
                 add_symbol(expression, false);
+            }
+            // ADR 0624: a component's `on` is judged by its resolved type:
+            // `loading-on-accessor` asks whether `<Loading on>` got a function.
+            if name == "on" && !native && attribute.namespace.is_none() {
+                let runtime_expression = file.ast.peel_ts_sugar_span(expression);
+                add_symbol(runtime_expression, false);
+                type_descriptor_spans.insert(runtime_expression);
+                // ADR 0650: callability skips a nullish constituent, and the
+                // warning needs the function itself on the first run.
+                runtime_value_domain_spans.insert(runtime_expression);
             }
             // A native event-handler value is judged by its resolved type:
             // `reactive-handler-frozen` (both catalogs) proves the
@@ -665,7 +733,37 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
+    // ADR 0629: a value `untrack` returns is a store proxy only if it may be an
+    // object, so a member of a primitive one reads nothing.
+    for binding in &file.ast.bindings {
+        let Some(initializer) = binding.call_initializer else {
+            continue;
+        };
+        if file.ast.call_at(initializer).is_some_and(|call| {
+            file.source_text(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|callee| callee == "untrack" || callee.ends_with(".untrack"))
+        }) {
+            add_symbol(initializer, false);
+            primitive_value_domain_spans.insert(initializer);
+        }
+    }
+    // ADR 0781: which key a computed write to a standard object names.
+    for assignment in &file.ast.assignments {
+        let target = file.ast.peel_ts_sugar_span(assignment.target);
+        if file.ast.computed_members.binary_search(&target).is_ok()
+            && let Some(member) = file.ast.member_at(target)
+            && file.standard_root(member.object).is_some()
+        {
+            add_symbol(member.property, false);
+            constant_value_spans.insert(member.property);
+        }
+    }
     for call in &file.ast.calls {
+        // ADR 0781: what the value under an assertion really is.
+        if let Some(value) = file.asserted_call_value(call.callee) {
+            add_symbol(value, false);
+            library_type_spans.insert(value);
+        }
         for argument in &call.arguments {
             match argument.value {
                 solid_facts::ast::ArgumentValueKind::Identifier => {
@@ -878,7 +976,12 @@ fn collect_chain_link_spans(dialect: &'static Dialect, file: &FileFacts, spans: 
 }
 
 fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
-    let symbol_spans = &mut spans.symbol_spans;
+    let DemandSpans {
+        symbol_spans,
+        callability_only_spans,
+        runtime_value_domain_spans,
+        ..
+    } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
     // Member objects are needed to connect reads such as `props.title` and
     // `state.value` to their declarations. Querying only the property token
@@ -900,7 +1003,27 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
                             })
                     })
                 });
-        if namespace_member {
+        // `import { Api } from "./m"`, `export * as Api from "solid-js"`:
+        // `Api.flush()` is the namespace's too, and only the export knows it
+        // (ADR 0780).
+        let imported_member = || {
+            file.ast
+                .reference_declaration(receiver)
+                .is_some_and(|declaration| {
+                    file.ast.imports.iter().any(|import| {
+                        !import.type_only
+                            && import.bindings.iter().any(|binding| {
+                                !binding.type_only && binding.local.span == declaration
+                            })
+                    })
+                })
+                && file
+                    .ast
+                    .calls_with_peeled_callee(member.span)
+                    .next()
+                    .is_some()
+        };
+        if namespace_member || imported_member() {
             add_symbol(member.property, false);
         }
         if file.ast.calls.iter().any(|call| call.span == member.object) {
@@ -909,6 +1032,42 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
     }
     for spread in &file.ast.spreads {
         add_symbol(spread.argument, false);
+    }
+    // ADR 0665: whether a source's first argument may be a computation. The name
+    // only spares the demand: a source no fact describes stays open.
+    for call in &file.ast.calls {
+        let Some(argument) = call.arguments.first() else {
+            continue;
+        };
+        let creates = file
+            .source_text(file.ast.peel_ts_sugar_span(call.callee))
+            .and_then(|callee| callee.rsplit('.').next())
+            .is_some_and(|name| name.starts_with("create"));
+        if creates && !argument.spread {
+            let value = file.ast.peel_ts_sugar_span(argument.span);
+            add_symbol(value, false);
+            callability_only_spans.insert(value);
+        }
+    }
+    // ADR 0652: whether a coerced value is a function (`uncalled-accessor`).
+    let coerced = file
+        .ast
+        .coercive_operands
+        .iter()
+        .map(|operand| operand.span)
+        .chain(
+            file.ast
+                .template_literals
+                .iter()
+                .flat_map(|template| template.expressions.iter().copied()),
+        );
+    for span in coerced {
+        let value = file.ast.peel_ts_sugar_span(span);
+        if file.ast.member_at(value).is_some() || file.ast.has_reference_identifier_at(value) {
+            add_symbol(value, false);
+            callability_only_spans.insert(value);
+            runtime_value_domain_spans.insert(value);
+        }
     }
     // ADR 0317: an `extends` expression names the base class an exact
     // instance's chain resolves through (`class_instance_is_exact`). An
@@ -936,6 +1095,7 @@ fn emit_span_demands(
 ) -> Result<(), BackendError> {
     let DemandSpans {
         symbol_spans,
+        callability_only_spans,
         type_descriptor_spans,
         runtime_value_domain_spans,
         primitive_value_domain_spans,
@@ -962,7 +1122,8 @@ fn emit_span_demands(
         planned.structural_accessor = structural_accessors.contains(&span);
         planned.r#async = async_symbol_spans.contains(&span);
         planned.type_descriptor = type_descriptor_spans.contains(&span);
-        planned.callability = type_descriptor_spans.contains(&span);
+        planned.callability =
+            type_descriptor_spans.contains(&span) || callability_only_spans.contains(&span);
         // Constructability travels with callability, never alone: neither fact
         // answers "is this a runtime function" by itself. A class type carries
         // construct signatures and no call signature, so `callability` reports
@@ -1029,6 +1190,60 @@ fn emit_span_demands(
     Ok(())
 }
 
+/// ADR 0790: the calls a written chain is rooted at (an assignment target's,
+/// a `delete` operand's, an in-place array method's callee's, a standard
+/// write's target), and each call a demanded call's member callee reads its
+/// receiver from. Spelling decides nothing here: the demand only requests a
+/// fact.
+fn write_root_calls(file: &FileFacts) -> HashSet<Span> {
+    let ast = &file.ast;
+    let root_of = |span: Span| {
+        let mut current = ast.peel_ts_sugar_span(span);
+        while let Some(member) = ast.member_at(current) {
+            current = ast.peel_ts_sugar_span(member.object);
+        }
+        current
+    };
+    let mutated = ast.calls.iter().filter_map(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let member = ast.member_at(callee)?;
+        ARRAY_MUTATOR_NAMES
+            .contains(&file.source_text(member.property)?)
+            .then_some(member.object)
+    });
+    // The target of a standard write by its spelling (SC2003's
+    // `STANDARD_LIBRARY_WRITES`: `Object.assign`, `Reflect.set`, …).
+    let written_arguments = ast.calls.iter().filter_map(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let name = file.source_text(ast.member_at(callee)?.property)?;
+        matches!(name, "assign" | "set" | "defineProperty" | "deleteProperty")
+            .then(|| call.arguments.first().map(|argument| argument.span))
+            .flatten()
+    });
+    let mut pending: Vec<Span> = ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(ast.deleted_targets.iter().copied())
+        .chain(mutated)
+        .chain(written_arguments)
+        .map(root_of)
+        .collect();
+    let mut roots = HashSet::new();
+    while let Some(span) = pending.pop() {
+        let Some(call) = ast.call_at(span) else {
+            continue;
+        };
+        if !roots.insert(call.span) {
+            continue;
+        }
+        if let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) {
+            pending.push(root_of(member.object));
+        }
+    }
+    roots
+}
+
 /// Whether the callee is an identifier, or a plain member chain rooted at one,
 /// that no declaration the parser saw binds: a global such as `Promise` or
 /// `Math`. Its declaration decides what the call may run.
@@ -1086,6 +1301,7 @@ fn plan_call_demands(
         })
         .collect::<Vec<_>>();
     extend_leaf_demand_regions(file, &mut leaf_callbacks);
+    let write_roots = write_root_calls(file);
     for call in &file.ast.calls {
         let callee = file_location(path, call.callee);
         let property = callee_property_location(&file.source, &callee);
@@ -1200,6 +1416,39 @@ fn plan_call_demands(
                         )
                     )
                 });
+        // ADRs 0639, 0642: these deliver listeners on the caller's stack, and
+        // only the resolved call says the callee is `lib.dom`'s. Matched by
+        // spelling: the demand states no decision.
+        let argumentless_dispatch = !call.construct
+            && file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    let name = file.source_text(member.property);
+                    name == Some("execCommand")
+                        || call.arguments.is_empty()
+                            && matches!(
+                                name,
+                                Some(
+                                    "click"
+                                        | "focus"
+                                        | "blur"
+                                        | "remove"
+                                        | "select"
+                                        | "checkValidity"
+                                        | "reportValidity"
+                                        | "requestSubmit"
+                                        | "reset"
+                                        | "show"
+                                        | "showModal"
+                                        | "close"
+                                        | "requestClose"
+                                        | "showPopover"
+                                        | "hidePopover"
+                                        | "togglePopover"
+                                )
+                            )
+                });
         // The owner walk asks whether the operand of an action body's `yield`
         // is a native promise, which only an exactly resolved standard-library
         // declaration answers (`yield Promise.resolve()`; the action's next
@@ -1211,8 +1460,14 @@ fn plan_call_demands(
                     .operand
                     .is_some_and(|operand| file.ast.peel_ts_sugar_span(operand) == call.span)
             });
+        // ADR 0790: SC2003's flow asks which standard method a written
+        // chain's root call is (`store.items.slice().push(1)`), and so of
+        // each receiver call beneath it; with no resolved call it is open.
+        let argumentless_write_root = call.arguments.is_empty() && write_roots.contains(&call.span);
         planned.resolved_call = !call.arguments.is_empty()
             || argumentless_array_mutator
+            || argumentless_write_root
+            || argumentless_dispatch
             || argumentless_before_suspension
             || argumentless_yield_operand
             || returned_callees.contains(&call.callee)

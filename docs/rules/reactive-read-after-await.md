@@ -21,6 +21,23 @@ object of a written member (`s.a` in `s.a.v = 1`) is such a read (ADR 0612). Pro
 member reads follow the component's caller classification (see
 [strict-read-untracked](strict-read-untracked.md)): proven-static props are not
 reactive and stay silent; unprovable ones are reported as **uncertifiable**.
+A read that may follow an await a branch can skip (`if (f) await p;`, `&&`,
+`switch`, a destructuring default), directly or in a closure, IIFE or helper
+run there, is **uncertifiable**: position cannot tell an arm that leaves from
+one that falls through (ADR 0870). A helper is walked once per set of
+windows, so a helper shared by two computations reports for each (ADR 0871),
+and one called past the computation's first suspension adds no tracking
+window (ADR 0872). An async function handed to a tracked primitive through a
+project wrapper's parameter (`(f) => createMemo(f)`) is walked as that
+primitive's compute; a hand-off the walk cannot follow is **uncertifiable**,
+`function-run-unplaced`, except `f();` as a statement in a synchronous
+wrapper, which runs in place (ADR 0873). A call past a suspension whose
+callee names no symbol and resolves to no declaration (`fns[0]()`,
+`(c ? a : b)()`) is **uncertifiable** (ADR 0879). On the flight, a handler the
+walk cannot read (`then(api.fmt)`), an `async` or generator handler, an async
+function a handler calls, and the handlers of a `.then` with no exact
+standard declaration (an `any` receiver) are **uncertifiable** (ADRs
+0880-0882).
 A call after the await to a project function whose body reads an accessor
 only on some paths (`await load(); return byUser(posts)`) is
 **uncertifiable**: the read is past the await, but whether the callee reads on
@@ -50,6 +67,7 @@ there, and the reads in it are then reported with the same two proofs:
   called under two elements) and a `replace`/`replaceAll` replacer are the
   exception: whether they run depends on the contents or on a match, so a read
   in one is **uncertifiable**.
+- A promise chain past six links (ADR 0750) is **uncertifiable**, `search-depth-limit`.
 - **A promise handler.** The callback of `.then`/`.catch`/`.finally` on a
   proven native `Promise` runs from a microtask with no owner. It is in the
   continuation when the call's result is the promise the computation returns
@@ -154,7 +172,12 @@ Each of these keeps it from applying:
 - an argument that is not the literal function: `rows.map(makeRow(fn))` hands
   the callback to a wrapper; an opaque slot of an exact standard callback is
   an uncertifiable obligation;
-- a generator callback, which runs nothing when it is called;
+- a generator callback, which runs nothing when it is called. A generator the
+  computation steps runs on its flight: past an `await`, under a `for await`
+  written in the computation, the read is proved; past a `yield`, or stepped any
+  other way, it is an uncertifiable obligation (`generator-stepped`, ADR 0820),
+  and so is a read in a function the body hands on past the `yield` (a slot, an
+  assigned member, a forwarded callback, ADR 0850);
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
 - a read inside or after `for await` (or after `await using`) is an
@@ -332,3 +355,7 @@ This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — consuming async computations
 
 The async computation may be named exactly (a named function expression's binding, an object literal's member), and a comma, conditional, logical or assignment callee after an await (`(slot = r)()`) is a read when it always yields one accessor, else an obligation (ADR 0517). An object literal's arrow member names its function even when its text spells `this` (a nested class's `this.m = …`): an arrow binds no `this` of its own (ADR 0581).
+
+A `.then` handler handed by name is followed as a literal is. A parameter called after an await is uncertifiable, blocker `handed-read-after-await` (ADR 0669).
+
+An exact forwarding wrapper chain runs a callback on the continuation only when each whole-argument hand-on and the final parameter call occur directly in the wrapper’s synchronous prefix on every completion (ADR 0895). A deferred, conditional, reassigned or unresolved hand-on keeps `handed-read-after-await` at the reads. Closed literal members holding a function by name are followed too.

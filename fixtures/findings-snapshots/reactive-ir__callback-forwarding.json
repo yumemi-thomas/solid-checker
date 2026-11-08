@@ -5,10 +5,22 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "summary-read-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-forwarding/App.tsx",
       "start": 156,
       "end": 173,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-forwarding/source.ts",
+      "start": 132,
+      "end": 139,
       "fixes": 0
     }
   ]

@@ -36,6 +36,27 @@ pub(crate) fn discover_owner_file(
     // ([`OwnerEdgeKind::MayBeUnowned`]), and a requirement it holds is
     // uncertifiable, never a violation and never silent.
     let list_site = |span| crate::owners::in_parameter_list(&file.ast, span);
+    // ADR 0714: whether the call runs on every run of the function around it,
+    // or on every evaluation of the module (one parse per file). An edge from
+    // a call that may not run proves no run of its target: it keeps its
+    // source's owner without the proof (`MayRun`), or for a primitive's
+    // unowned callback the possible bit alone. In a package analyzed as
+    // source the project call's attribution asks each hop instead, with the
+    // call's arguments (ADR 0290, `attribute_dependency_requirements`).
+    let every_run = std::cell::OnceCell::new();
+    let in_dependency = lookup.in_dependency_source(file.path.as_str());
+    let runs_every_time = |span: Span| {
+        in_dependency
+            || every_run
+                .get_or_init(|| {
+                    solid_facts::ast::every_unconditional_call(
+                        std::path::Path::new(file.path.as_str()),
+                        &file.source,
+                    )
+                })
+                .as_ref()
+                .is_some_and(|calls| calls.contains(&span))
+    };
     // Keyed by function span: the emission pass resolves it to the node whose
     // propagated context it reads, as it does `owner`.
     // A region never answers for the stepped generator of an action: its
@@ -104,7 +125,11 @@ pub(crate) fn discover_owner_file(
             edges.push(SymbolicOwnerEdge {
                 source: None,
                 target: OwnerTarget::Function(target.path.to_string(), function.span),
-                kind: event_owner_edge(lookup, function.generator),
+                kind: if crate::execution_role::handler_event_denied(file, callback.span) {
+                    OwnerEdgeKind::Conditional
+                } else {
+                    event_owner_edge(lookup, function.generator)
+                },
             });
         }
     }
@@ -121,13 +146,26 @@ pub(crate) fn discover_owner_file(
                 edges.push(SymbolicOwnerEdge {
                     source: None,
                     target: OwnerTarget::Function(path.clone(), *span),
-                    kind: event_owner_edge(
-                        lookup,
-                        lookup
-                            .file_by_path(path)
-                            .and_then(|file| file.ast.function_at(*span))
-                            .is_some_and(|function| function.generator),
-                    ),
+                    // The key the literal holds it under names the event; a
+                    // value no literal key names has no measured event.
+                    kind: match lookup.file_by_path(path).filter(|file| {
+                        file.ast.object_properties.iter().any(|property| {
+                            file.ast.peel_ts_sugar_span(property.value) == *span
+                                && file.source_text(property.key).is_some_and(|key| {
+                                    crate::runtime_semantics::event_keeps_delivery_proof(
+                                        key.trim_matches(['\'', '"']),
+                                    )
+                                })
+                        })
+                    }) {
+                        Some(file) => event_owner_edge(
+                            lookup,
+                            file.ast
+                                .function_at(*span)
+                                .is_some_and(|function| function.generator),
+                        ),
+                        None => OwnerEdgeKind::Conditional,
+                    },
                 });
             }
         }
@@ -205,17 +243,67 @@ pub(crate) fn discover_owner_file(
                     .ast
                     .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
                     .is_some_and(|declaration| crate::indexes::binding_written(file, declaration)));
-        if let Some(target) = target {
-            let (source, kind) = if unproven_callee {
-                may_run()
-            } else {
-                (source.clone(), kind)
-            };
-            edges.push(SymbolicOwnerEdge {
-                source,
+        // ADR 0851: calling a generator runs none of its body: the edge is a
+        // step's, from where the step runs. A literal called in place is the
+        // ADR 0516 arm's below; an action's stepped generator is its own.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let steps = (!call.construct
+            && file.ast.function_at(callee).is_none()
+            && matches!(
                 target,
-                kind,
-            });
+                Some(OwnerTarget::Symbol(_) | OwnerTarget::Function(..))
+            )
+            && lookup
+                .function_called_at(file.path.as_str(), callee)
+                .or_else(|| lookup.object_member_function(file, call.callee))
+                .is_some_and(|(_, function)| function.generator))
+        .then(|| crate::owners::iterator_steps(file, call, lookup));
+        if let Some(target) = target {
+            match steps {
+                Some(crate::owners::IteratorSteps::Held(sites)) => {
+                    for site in sites {
+                        let in_list = list_site(site);
+                        let source = owner_at(site).filter(|_| !in_list).map(|span| OwnerSource {
+                            path: file.path.to_string(),
+                            span,
+                        });
+                        let kind = if in_list {
+                            OwnerEdgeKind::MayBeUnowned
+                        } else {
+                            call_owner_edge(file, site, lookup)
+                        };
+                        let kind = if kind == OwnerEdgeKind::Preserve && !runs_every_time(site) {
+                            OwnerEdgeKind::MayRun
+                        } else {
+                            kind
+                        };
+                        edges.push(SymbolicOwnerEdge {
+                            source,
+                            target: target.clone(),
+                            kind,
+                        });
+                    }
+                }
+                Some(crate::owners::IteratorSteps::Unplaced) => edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target,
+                    kind: OwnerEdgeKind::MayBeUnowned,
+                }),
+                Some(crate::owners::IteratorSteps::InPlace) | None => {
+                    let (source, kind) = if unproven_callee
+                        || (kind == OwnerEdgeKind::Preserve && !runs_every_time(call.span))
+                    {
+                        may_run()
+                    } else {
+                        (source.clone(), kind)
+                    };
+                    edges.push(SymbolicOwnerEdge {
+                        source,
+                        target,
+                        kind,
+                    });
+                }
+            }
         }
         // ADR 0347: an invoked function literal runs in the call, under the
         // owner of the code around it (`invocation_runs_under_owner`).
@@ -233,7 +321,12 @@ pub(crate) fn discover_owner_file(
                     kind: if in_list {
                         OwnerEdgeKind::MayBeUnowned
                     } else {
-                        call_owner_edge(file, call.callee, lookup)
+                        match call_owner_edge(file, call.callee, lookup) {
+                            OwnerEdgeKind::Preserve if !runs_every_time(call.span) => {
+                                OwnerEdgeKind::MayRun
+                            }
+                            kind => kind,
+                        }
                     },
                 });
             }
@@ -262,7 +355,9 @@ pub(crate) fn discover_owner_file(
                 };
                 let (source, kind) = if !runs {
                     (None, OwnerEdgeKind::MayBeUnowned)
-                } else if unproven_handed_function(file, &target, argument, lookup) {
+                } else if unproven_handed_function(file, &target, argument, lookup)
+                    || !runs_every_time(call.span)
+                {
                     may_run()
                 } else {
                     (source.clone(), kind)
@@ -271,6 +366,24 @@ pub(crate) fn discover_owner_file(
                     source,
                     target,
                     kind,
+                });
+            }
+            // ADR 0874: a withheld carrier's callback may run here, later with
+            // no owner, or never. As for a carrier that may run zero times
+            // (ADR 0563), the possible unowned bit alone: nothing proves a run,
+            // so what the callback does stays an obligation, never a violation.
+            for index in withheld_carrier_arguments(file, call, lookup) {
+                let argument = call.arguments[index].span;
+                if crate::owners::argument_may_be_generator(file, argument, lookup) {
+                    continue;
+                }
+                let Some(target) = callback_target(argument, false) else {
+                    continue;
+                };
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target,
+                    kind: OwnerEdgeKind::MayBeUnowned,
                 });
             }
         }
@@ -381,6 +494,14 @@ pub(crate) fn discover_owner_file(
                             OwnerEdgeKind::MayBeUnowned
                         },
                     )
+                } else if !runs_every_time(call.span) {
+                    // ADR 0714: a callback whose call may not run is not
+                    // proven to run.
+                    match kind {
+                        OwnerEdgeKind::Preserve => (source, OwnerEdgeKind::MayRun),
+                        OwnerEdgeKind::Unowned => (None, OwnerEdgeKind::MayBeUnowned),
+                        kind => (source, kind),
+                    }
                 } else {
                     (source, kind)
                 };
@@ -468,7 +589,34 @@ pub(crate) fn discover_owner_file(
         // `createRenderEffect`.
         let known = known_primitive(&call_primitives[call_index]);
         let role = known.and_then(|primitive| lookup.dialect.owner_requirement_role(primitive));
+        // ADR 0884: `onSettled` through a name no rule reads: SETTLED_CLEANUP_UNOWNED
+        // has no site line, so only the owner rule's own row covers it.
+        let alias_settled = known.is_none()
+            && aliased_primitive(file, call, lookup)
+                .and_then(|name| lookup.dialect.primitive(&name))
+                == Some(Primitive::OnSettled);
         let operation = match (role, known) {
+            (None, None) if alias_settled => Some((
+                "settled-cleanup",
+                OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
+                None,
+                // ADR 0902: `f.call(this, cb)` and `f.apply(this, [cb])` hold
+                // the callback past the receiver: the row goes at the callee.
+                if file
+                    .ast
+                    .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                    .is_some_and(|member| {
+                        matches!(file.source_text(member.property), Some("call" | "apply"))
+                    })
+                {
+                    call.callee
+                } else {
+                    call.arguments
+                        .first()
+                        .map_or(call.callee, |argument| argument.span)
+                },
+                true,
+            )),
             (Some(OwnerRequirementRole::Effect), Some(primitive)) => {
                 let registration =
                     crate::effect_api::classify_effect_call(file, call, primitive, lookup)
@@ -510,7 +658,7 @@ pub(crate) fn discover_owner_file(
             // ADR 0462: `Loading(props)`/`Errored(props)` called as a function
             // creates its boundary in the call, with the caller's owner. Its
             // own operation name, so the call is placed after an `await` as
-            // an effect is, and a JSX boundary keeps its placement.
+            // an effect is (ADR 0869: a JSX boundary is no site).
             (Some(OwnerRequirementRole::Boundary), _) => Some((
                 "boundary-call",
                 OWNER_CONTEXT_UNOWNED,
@@ -535,7 +683,6 @@ pub(crate) fn discover_owner_file(
                 operation_span: call.callee,
                 owner,
                 report_mask: OWNER_CONTEXT_UNOWNED,
-                allow_uncertain: true,
                 runtime_uncertain: true,
                 settled_target: None,
                 settled_gate: None,
@@ -572,7 +719,6 @@ pub(crate) fn discover_owner_file(
                     operation_span: call.callee,
                     owner,
                     report_mask: OWNER_CONTEXT_UNOWNED,
-                    allow_uncertain: true,
                     // A `let` on the walk may hold another function by the
                     // time it is called: an obligation, never a proof.
                     runtime_uncertain: !answer.exact,
@@ -603,7 +749,6 @@ pub(crate) fn discover_owner_file(
                 operation_span,
                 owner,
                 report_mask,
-                allow_uncertain: true,
                 runtime_uncertain,
                 settled_target,
                 settled_gate,
@@ -725,7 +870,11 @@ pub(crate) fn discover_owner_file(
                 solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                     OwnerEdgeKind::RefApplied
                 }
-                _ if lookup.synchronous_event_dispatch_present() => OwnerEdgeKind::Conditional,
+                _ if lookup.synchronous_event_dispatch_present()
+                    || crate::execution_role::handler_event_denied(file, callback.span) =>
+                {
+                    OwnerEdgeKind::Conditional
+                }
                 _ => OwnerEdgeKind::Unowned,
             };
             edges.push(SymbolicOwnerEdge {
@@ -765,34 +914,57 @@ pub(crate) fn discover_owner_file(
             }),
         }
     }
+    // ADR 0869: a JSX `<Loading>` or `<Errored>` is no owner site. rc.21's dev
+    // `createComponent` runs every component under its own transparent root,
+    // so NO_OWNER_BOUNDARY comes only from the call form (`boundary-call`).
+    // ADR 0883: a control-flow tag runs its function child under an owner of its
+    // own, whoever owns the tag: For's and Repeat's row, Show's and Match's memo.
     for element in &file.ast.jsx_elements {
-        let boundary = crate::jsx_primitive_name_cached(
-            lookup,
-            file,
-            element,
-            entities,
-            symbol_names,
-            dialect,
-        );
-        if boundary
-            .as_deref()
-            .is_some_and(|tag| dialect.is_async_boundary(tag))
-        {
-            requirements.push(OwnerRequirementCandidate {
-                operation: "boundary",
-                operation_span: Span::new(element.span.start, element.name.span.end),
-                owner: owner_at(element.span),
-                report_mask: OWNER_CONTEXT_UNOWNED,
-                allow_uncertain: false,
-                runtime_uncertain: false,
-                settled_target: None,
-                settled_gate: None,
-                providing_region_chain: region_chain(element.span),
-                providing_region: region_of(element.span),
-                context_argument: None,
-                in_parameter_list: list_site(element.span),
+        let Some((expression, run)) = control_flow_child(file, element, lookup) else {
+            continue;
+        };
+        let Some(target) = callback_target(expression, false) else {
+            continue;
+        };
+        // Only a function written in place (ADR 0883): 33 written names in the
+        // corpus at most, and a name keeps its other entries.
+        let function = match &target {
+            OwnerTarget::LocalSpan(span) if *span == file.ast.peel_ts_sugar_span(expression) => {
+                file.ast.function_at(*span)
+            }
+            _ => None,
+        };
+        if function.is_some_and(|function| runs_as_child(function, run)) {
+            edges.push(SymbolicOwnerEdge {
+                source: None,
+                target,
+                kind: OwnerEdgeKind::Owned,
             });
         }
+    }
+    // ADR 0883: JSX creates a render effect with no call to name it.
+    for site in jsx_sites(file, lookup) {
+        if !matches!(
+            site.kind,
+            JsxSiteKind::RenderEffect | JsxSiteKind::MaybeRenderEffect
+        ) {
+            continue;
+        }
+        requirements.push(OwnerRequirementCandidate {
+            operation: "jsx-effect",
+            operation_span: site.span,
+            owner: owner_at(site.anchor),
+            report_mask: OWNER_CONTEXT_UNOWNED,
+            // A value that may hold no function, and a getter read wherever
+            // the component reads it, prove no effect at this owner.
+            runtime_uncertain: site.in_getter || site.kind == JsxSiteKind::MaybeRenderEffect,
+            settled_target: None,
+            settled_gate: None,
+            providing_region_chain: region_chain(site.anchor),
+            providing_region: region_of(site.anchor),
+            context_argument: None,
+            in_parameter_list: list_site(site.anchor),
+        });
     }
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
@@ -845,6 +1017,7 @@ pub(crate) fn find_missing_owners_incremental(
     Vec<OwnerRequirement>,
     SettledGateDecisions,
     OwnerIncrementalTimings,
+    Vec<crate::StaticViolation>,
 ) {
     let entities = lookup.entities();
     let mut timings = OwnerIncrementalTimings::default();
@@ -933,6 +1106,7 @@ pub(crate) fn find_missing_owners_incremental(
     let mut dirty = moved.files.clone();
     dirty.extend(moved.contexts.iter().map(|node| node.path));
     let mut requirements = Vec::new();
+    let mut static_violations = Vec::new();
     let mut settled_gates = SettledGateDecisions::default();
     for (file, pid) in files.iter().zip(&order) {
         let reusable = !dirty.contains(pid)
@@ -952,9 +1126,13 @@ pub(crate) fn find_missing_owners_incremental(
         }
         if let Some(emission) = emissions.get(pid) {
             requirements.extend(emission.requirements.iter().cloned());
+            static_violations.extend(emission.static_violations.iter().cloned());
             settled_gates.extend(emission.gates.iter().cloned());
         }
     }
+    // ADR 0886: check once, over a universe built from the calls, not from
+    // the candidates emission chose to see (reviewer D34).
+    unaccounted_owner_sites(&files, &order, emissions, &mut requirements, lookup);
     if !facts.dependency_source_roots.is_empty() {
         let (nodes, contexts, outgoing) = graph.dense_view(&order);
         attribute_dependency_requirements(
@@ -978,6 +1156,7 @@ pub(crate) fn find_missing_owners_incremental(
             context_census,
             ..timings
         },
+        static_violations,
     )
 }
 
@@ -1087,4 +1266,99 @@ fn returned_function_escapes(
         }
     }
     false
+}
+
+/// ADR 0886: every call this build resolves to an owner-requiring primitive
+/// (outside dependency source, whose sites are attributed to the project's
+/// calls) is one site of SC4001. A site ends with a reported row, a named
+/// proof its file's emission recorded ([`super::owner_emission::ContextProof`]),
+/// the compiler's discard, an owner probe, or an effect call proven to
+/// register nothing. Anything else, a file the graph has no entry for
+/// included, gets `execution-context-unaccounted`. A call through an alias is
+/// ADR 0884's, which claims the rule at the call.
+fn unaccounted_owner_sites(
+    files: &[&solid_facts::FileFacts],
+    order: &[super::owner_state::PathId],
+    emissions: &HashMap<super::owner_state::PathId, super::owner_emission::Emission>,
+    requirements: &mut Vec<OwnerRequirement>,
+    lookup: &SemanticLookup<'_>,
+) {
+    let rows = requirements
+        .iter()
+        .filter(|row| {
+            row.report && row.operation != crate::OwnerRequirementOperation::ContextProvider
+        })
+        .map(|row| {
+            (
+                row.location.path.to_string(),
+                row.location.start_byte,
+                row.location.end_byte,
+            )
+        })
+        .collect::<HashSet<_>>();
+    let mut seen = HashSet::default();
+    for (file, pid) in files.iter().zip(order) {
+        let path = file.path.as_str();
+        if lookup.in_dependency_source(path) {
+            continue;
+        }
+        let accounted = emissions.get(pid).map(|emission| &emission.accounted);
+        for call in &file.ast.calls {
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            let Some(role) = lookup.dialect.owner_requirement_role(primitive) else {
+                continue;
+            };
+            let (operation, site) = match role {
+                OwnerRequirementRole::Effect => ("effect", call.callee),
+                OwnerRequirementRole::Cleanup => ("cleanup", call.callee),
+                OwnerRequirementRole::SettledCleanup => (
+                    "settled-cleanup",
+                    call.arguments
+                        .first()
+                        .map_or(call.callee, |argument| argument.span),
+                ),
+                OwnerRequirementRole::ContextRead => ("context-read", call.callee),
+                OwnerRequirementRole::Boundary => ("boundary-call", call.callee),
+            };
+            if rows.contains(&(path.to_owned(), u64::from(site.start), u64::from(site.end)))
+                || accounted.is_some_and(|proofs| proofs.iter().any(|(span, _)| *span == site))
+                || crate::execution_role::discarded_region_contains(file, site)
+                || guarded_by_owner_probe(file, site, lookup)
+                || (role == OwnerRequirementRole::Effect
+                    && crate::effect_api::classify_effect_call(file, call, primitive, lookup)
+                        .owner_registration
+                        == ProofStatus::No)
+            {
+                continue;
+            }
+            push_owner_requirement(
+                requirements,
+                &mut seen,
+                operation,
+                file,
+                site,
+                OwnerRequirementStatus {
+                    uncertain: true,
+                    runtime_uncertain: false,
+                    caller_uncertain: false,
+                    unplaced_callback: false,
+                    conditional_owner: false,
+                    owner_varies_by_caller: false,
+                    later_run_unowned: false,
+                    component_uncertain: false,
+                    provider_open: false,
+                    default_unproven: false,
+                    owned_run_throws: false,
+                    after_await: false,
+                    after_yield: false,
+                    flight_error_unobserved: false,
+                    context_unaccounted: true,
+                    report: true,
+                },
+                lookup,
+            );
+        }
+    }
 }

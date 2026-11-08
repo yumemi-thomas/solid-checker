@@ -1,0 +1,82 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "blocker": "handler-root-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reactive-handler-frozen-roots/App.tsx",
+      "start": 280,
+      "end": 290,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-member-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reactive-handler-frozen-roots/App.tsx",
+      "start": 280,
+      "end": 290,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "blocker": "handler-root-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reactive-handler-frozen-roots/App.tsx",
+      "start": 334,
+      "end": 349,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-member-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reactive-handler-frozen-roots/App.tsx",
+      "start": 334,
+      "end": 349,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "blocker": "handler-root-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reactive-handler-frozen-roots/App.tsx",
+      "start": 393,
+      "end": 408,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-member-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reactive-handler-frozen-roots/App.tsx",
+      "start": 393,
+      "end": 408,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-member-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reactive-handler-frozen-roots/App.tsx",
+      "start": 452,
+      "end": 459,
+      "fixes": 0
+    }
+  ]
+}

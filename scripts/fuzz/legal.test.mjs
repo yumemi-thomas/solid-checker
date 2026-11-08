@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { generateLegal, judgeLegal, legalCells, legalShapes } from "./legal.mjs";
+import { evaluatedDead, generateLegal, judgeLegal, legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
+import { RECALL_TEMPLATE_CODES, SPEC, TEMPLATE_CODES } from "./misuse.mjs";
 import { siteOf } from "./matrix.mjs";
-import { SPEC } from "./misuse.mjs";
 
 const site = { line: 10, aux: [], hit: 4 };
 const finding = (rule, kind, line = 10) => ({ rule, kind, line, endLine: line, id: "SC", file: "App.tsx" });
@@ -22,10 +22,30 @@ describe("judgeLegal", () => {
     expect(judge({ checker: violation, runtime: runtime({ hits: { 4: 0 } }) }).outcome).toBe("unexecuted");
     expect(judge({ checker: violation, runtime: runtime({ errors: [{ kind: "window-error", message: "boom", positions: [] }] }) }).outcome).toBe("disturbed");
   });
-  it("is a false positive at a site that never ran when the rule claims it ran (SC5001, ADR 0504 review)", () => {
+  // Review 4c: a violation means "wrong if it runs", and a branch the checker cannot evaluate counts as reachable, so a run-claiming
+  // rule's violation at a site whose counter is 0 (`xs.forEach(hf)` over `JSON.parse("[]")`, lg-pending-async-forbidden-scope-zero-
+  // settled-var) is unexecuted, never a false positive or a pass. ADR 0504's review had scored it a false positive.
+  it("stays a false positive where the text says the site never runs (R21)", () => {
+    const built = (line) => ({ ledger: [], files: { "App.tsx": line } });
+    expect(evaluatedDead(null, built("  [].forEach(hf);"), { line: 1, aux: [] })).toBe(true);
+    expect(evaluatedDead(null, built("  0 && hf();"), { line: 1, aux: [] })).toBe(true);
+    expect(evaluatedDead(null, built("  JSON.parse('[]').forEach(hf);"), { line: 1, aux: [] })).toBe(false);
+  });
+  it("a closed program is evaluated, unless a value in it is opaque (R22; zero-*-var keeps the owner's ruling)", () => {
+    const dead = (context) => {
+      const cell = legalCells({ recall: true }).find((candidate) => candidate.context === context);
+      const { program, built } = generateLegal({ seed: 1 }, cell, { shape: recallLegalShapes(cell.code, cell.context)[0] });
+      return evaluatedDead(program, built, built.sites.find((candidate) => candidate.code) ?? built.sites[0]);
+    };
+    expect(dead("zero-settled-empty")).toBe(true);
+    expect(dead("zero-settled-var")).toBe(false);
+    expect(dead("zero-body-var")).toBe(false);
+  });
+  it("is unexecuted at a site that never ran, a run-claiming rule's violation too; a false positive where it ran elsewhere", () => {
     const findings = [finding("pending-async-unsuspendable-read", "violation")];
     const verdict = judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: runtime({ hits: { 4: 0 } }) });
-    expect(verdict.outcome).toBe("false-positive");
+    expect(verdict.outcome).toBe("unexecuted");
+    expect(judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings }, runtime: runtime() }).outcome).toBe("false-positive");
     const elsewhere = [finding("pending-async-unsuspendable-read", "violation", 30)];
     expect(judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings: elsewhere }, runtime: runtime() }).outcome).toBe("false-positive");
   });
@@ -92,5 +112,33 @@ describe("a legal program whose JSX reads a pending value (misuse.mjs legalLoadi
     expect(generateLegal({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context: "jsx" }, { shape: { variant: "latest", binding: "direct", layer: "none" } }).built.text).toContain("<Loading fallback={0}>");
     expect(generateLegal({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context: "jsx" }, { shape: { variant: "signal", binding: "direct", layer: "none" } }).built.text).not.toContain("<Loading");
     expect(SPEC.STRICT_READ_UNTRACKED.variantContexts.latest).not.toContain("render-compute");
+  });
+});
+
+// `legalCells` once took TEMPLATE_CODES alone: a recall-only code's legal cells were declared and never generated, a silent blind spot.
+describe("the legal grids' reach", () => {
+  it("gives every context a code declares legal programs, a recall-only code too", () => {
+    const empty = [];
+    const declared = (code) => [...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])];
+    const measured = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
+    // An advisory code is measured only as recall-only (misuse.mjs MISUSE_CODES, ADR 0668): none is left out with legal cells.
+    expect(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !measured.includes(code) && declared(code).length)).toEqual([]);
+    for (const code of measured) {
+      for (const context of declared(code)) {
+        const cell = legalCells({ codes: [code], recall: true }).find((candidate) => candidate.context === context);
+        const shapes = [...legalShapes(code, ["root"], ["local"], context), ...recallLegalShapes(code, context)];
+        if (!cell || !shapes.length) empty.push(`${code}/${context}`);
+      }
+    }
+    expect(empty).toEqual([]);
+  });
+  it("generates a program in every legal cell of a recall-only code", () => {
+    for (const code of RECALL_TEMPLATE_CODES) {
+      for (const cell of legalCells({ codes: [code], recall: true })) {
+        const [shape] = recallLegalShapes(code, cell.context);
+        expect(shape, `${code}/${cell.context}`).toBeDefined();
+        expect(generateLegal({ seed: 1 }, cell, { shape }).built.files["App.tsx"]).toContain("export function");
+      }
+    }
   });
 });

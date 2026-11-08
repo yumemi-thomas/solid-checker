@@ -5,6 +5,18 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "installed-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-descriptor-map/App.tsx",
+      "start": 257,
+      "end": 321,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-descriptor-map/App.tsx",
       "start": 354,

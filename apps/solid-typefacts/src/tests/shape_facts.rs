@@ -762,6 +762,72 @@ delete loose.k;\n";
     assert!(!undemanded[0].writable_optional_property, "undemanded");
 }
 
+/// ADR 0829: `deleteOperandRejected` is the checker's own `delete` test of
+/// the access's resolved symbol under this program's options (strict, no
+/// `exactOptionalPropertyTypes`): TS2790 for a required property, TS2704 for a
+/// readonly one, for a static or a literal computed key. An accepted operand,
+/// an index signature and `any` answer `false`, which is no claim.
+#[test]
+fn demanded_delete_operand_rejected_answers_typescripts_delete_test() {
+    let source = "type State = { opt?: number; req: number; undef: number | undefined; readonly ro?: number; method?(): void; nested: { inner?: string } };\n\
+declare const s: State;\n\
+declare const required: Required<{ a?: number }>;\n\
+declare const frozen: Readonly<{ a?: number }>;\n\
+declare const either: { a?: number } | { a: string };\n\
+declare const record: Record<string, number>;\n\
+declare const loose: any;\n\
+declare const tuple: [number];\n\
+delete s.opt;\n\
+delete s.req;\n\
+delete s.undef;\n\
+delete s.ro;\n\
+delete s.nested.inner;\n\
+delete s[\"opt\"];\n\
+delete s[\"req\"];\n\
+delete required.a;\n\
+delete frozen.a;\n\
+delete either.a;\n\
+delete record.k;\n\
+delete loose.k;\n\
+delete tuple[0];\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SHAPES_CONFIG), ("deletes.ts", source)]);
+    let path = scratch.path("deletes.ts");
+    let mut project = scratch.open();
+    let cases: [(&str, bool); 13] = [
+        ("s.opt", false),
+        ("s.req", true),
+        // Its type admits `undefined`: accepted without
+        // `exactOptionalPropertyTypes`.
+        ("s.undef", false),
+        ("s.ro", true),
+        ("s.nested.inner", false),
+        ("s[\"opt\"]", false),
+        ("s[\"req\"]", true),
+        ("required.a", true),
+        ("frozen.a", true),
+        ("either.a", false),
+        ("record.k", false),
+        ("loose.k", false),
+        ("tuple[0]", true),
+    ];
+    let demands: Vec<EntityDemand> = cases
+        .iter()
+        .map(|(expression, _)| EntityDemand {
+            location: find_last(&path, source, expression),
+            writable_optional_property: true,
+            ..EntityDemand::default()
+        })
+        .collect();
+    let facts = entities(&mut project, &path, &demands);
+    assert_eq!(facts.len(), cases.len());
+    for ((expression, want), fact) in cases.iter().zip(&facts) {
+        assert_eq!(
+            fact.delete_operand_rejected, *want,
+            "{expression} delete operand rejected"
+        );
+    }
+}
+
 /// Go writes an internal library symbol name (`\xFEtype`) as a raw byte that
 /// clients read back as U+FFFD; the Rust producer spells what clients read.
 #[test]

@@ -87,3 +87,26 @@ export function Named() {
   createEffect(() => m() + n(), () => {});
   return <div>{w()}</div>;
 }
+
+// ADR 0899: a helper that calls its callback in place and also hands it on (here to itself): past the await its in-place run
+// is on the later task, and its other runs are not followed, so no rejecting role stands: uncertifiable (rc.21 reports
+// nothing). Before the await (control) the in-place run is in the compute: a violation (rc.21 throws).
+export function HandedOn() {
+  const [w, setW] = createSignal(0);
+  const hop = function again(g: () => void, n = 1): void {
+    if (n > 0) again(g, n - 1);
+    g();
+  };
+  const m = createMemo(async () => {
+    hop(() => {
+      setW(9);
+    });
+    await Promise.resolve();
+    hop(() => {
+      setW(10);
+    });
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div>{w()}</div>;
+}

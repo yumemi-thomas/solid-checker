@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/uncalled-accessor-intact/body-write.tsx",
+      "start": 124,
+      "end": 129,
+      "fixes": 0
+    }
+  ]
+}

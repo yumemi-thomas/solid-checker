@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
+.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -171,7 +171,7 @@ compiler-facts-identity:
 verify-delta:
 	$(BUN) scripts/verify-delta.mjs $(if $(BASE),--base $(BASE))
 
-# The runtime oracle's pinned Solid 2.0.0-rc.17 install (ADR 0453): the committed
+# The runtime oracle's pinned Solid 2.0.0-rc.21 install (ADR 0453): the committed
 # manifest and lockfile in scripts/runtime-oracle-install, reproduced by `npm ci`.
 # scripts/runtime-oracle.mjs defaults --install to it.
 runtime-oracle-install:
@@ -213,9 +213,19 @@ fuzz-test:
 
 # The fuzzer's smoke set (scripts/fuzz/smoke.mjs): every grid restricted to its manifest (scripts/fuzz/smoke/), a few
 # programs covering every behaviour and axis pair of the full grids; after any checker change. Exits 1 on anything to look at.
+# The audits' programs, verbatim, in Chrome and the checker (scripts/fuzz/patterns.mjs): prints the known open defects (open-defects.json), and
+# fails on a new failure or a listed program that passes. `make fuzz-patterns ARGS=--update` rewrites the list, for reading the diff.
+fuzz-patterns: build-checker-release
+	node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(ARGS)
+
+# Fails while the row ledger holds an R-F1-open or R-F2-open row, a certified false clean or a false positive; must pass before #173 moves.
+flip-final:
+	node scripts/fuzz/open-rows.mjs --final
+
 fuzz-smoke: build-checker-release
 	node scripts/fuzz/focus.mjs --smoke \
 	  --checker-bin "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(FUZZ_FOCUS_ARGS)
+	-node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts"
 
 # The tier before a merge (ADR 0615): the census and the pairs within each code, about 60,000 programs.
 fuzz-premerge: build-checker-release
@@ -251,6 +261,12 @@ ir-edit-fuzz: build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
 	  --fixtures --family retype --steps 4 --seed $(IR_FUZZ_SEED)
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
+	  --fixtures --family mount --steps 8 --seed $(IR_FUZZ_SEED)
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
+	  --fixtures --family census --steps 4 --seed $(IR_FUZZ_SEED)
 
 ir-edit-fuzz-corpus: build-checker-release
 	test -n "$(IR_FUZZ_PROJECT)" || { echo "set IR_FUZZ_PROJECT=<tsconfig.json>"; exit 2; }
@@ -284,6 +300,7 @@ coverage-update: build-checker-debug
 # expected results with the cause the classifier reads, and the set stays in
 # its budget. The corpus side (scripts/uncertifiable-causes.mjs --report) needs
 # a sweep and runs by hand; CONTRIBUTING.md, "Adding a repo to the reproduction set".
+# A `held` case is temporary: a broader blocker covers its files until the open-work item it names lands (capped, HELD_CAP).
 repro-causes: build-checker-debug
 	$(BUN) scripts/uncertifiable-causes.mjs --repro fixtures/uncertifiable-repro \
 	  --cases fixtures/uncertifiable-repro/cases.json \

@@ -5,6 +5,7 @@
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
+      "blocker": "owner-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-provider-open/App.tsx",
       "start": 266,

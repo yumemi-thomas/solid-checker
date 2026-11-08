@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # A push to main whose tree a pull request's CI already passed on (ADR 0618):
+  # A push to main whose tree a pull request's CI already passed on (ADR 0621):
   # its merge ref had this exact tree, so the gates would rerun on the same
   # bytes. Then the jobs below only build, which is what writes main's caches;
   # the tests, the gates and the cache-less jobs are skipped. Anything this

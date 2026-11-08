@@ -1,0 +1,23 @@
+const p0: any = Object.getPrototypeOf([]);
+const p1 = p0;
+const p2 = p1;
+const p3 = p2;
+const p4 = p3;
+const p5 = p4;
+const p6 = p5;
+const p7 = p6;
+const p8 = p7;
+const p9 = p8;
+const p10 = p9;
+const p11 = p10;
+const p12 = p11;
+const p13 = p12;
+const p14 = p13;
+const p15 = p14;
+const p16 = p15;
+const keys: PropertyKey[] = [Symbol.iterator];
+const values = [].values;
+p16[keys[0]] = function (this: unknown[]) {
+  return values.call(this.length === 2 && typeof this[1] === "function" && (this[1] as Function).name !== "noop" ? [this[0], function noop() {}] : this);
+};
+export {};

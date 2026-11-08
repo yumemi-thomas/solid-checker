@@ -1,0 +1,133 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 88,
+      "end": 116,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 134,
+      "end": 162,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 180,
+      "end": 201,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 229,
+      "end": 273,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "content-source-value-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 584,
+      "end": 614,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "content-source-value-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 632,
+      "end": 678,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "content-source-value-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 685,
+      "end": 711,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 970,
+      "end": 988,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1006,
+      "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1015,
+      "end": 1024,
+      "fixes": 0
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1044,
+      "end": 1066,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1053,
+      "end": 1062,
+      "fixes": 0
+    }
+  ]
+}

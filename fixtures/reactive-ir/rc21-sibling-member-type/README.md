@@ -1,0 +1,1 @@
+A member expression's entity carries its receiver's symbol, so its type says nothing about that symbol. `WithSibling`'s `api.go` took `api.state`'s `Accessor` type and read as read-only, so a setter called in a memo was certified. It is uncertifiable, as `NoSibling`'s is. `OnlyRead` stays as it was. ADR 0663.

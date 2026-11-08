@@ -16,9 +16,11 @@ expressions and conditions inside attributes stay clean. The left operand of
 path, derived or dependency-source read, or caller-proven reactive-prop read at
 that JSX position.
 
-Static and once-captured conditions remain clean. So do unknown calls and
-conditions whose only reactive read occurs in the right, consequent, or
-alternate branch; those reads do not make the governing test update.
+Static and once-captured conditions remain clean. So do conditions whose only
+reactive read occurs in the right, consequent, or alternate branch; those reads
+do not make the governing test update. A test that may read and is not decided,
+a project or unresolved call, a Get on a root no literal settles, or a read whose
+backing is open, is uncertifiable (`preference-read-unproven`, ADR 0671).
 
 ## Why is this bad?
 

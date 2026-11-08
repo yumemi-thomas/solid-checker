@@ -208,11 +208,56 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect.analysis_context == crate::LISTENER_REACH => (
+            format!(
+                "{callee} registers a listener that calls project code, and the program holds a synchronous dispatch not proven to run with no owner and no strict-read window, so that code may run on the dispatcher's stack; no proof follows the listener to the reads and writes it reaches, so whether they are legal can be neither proven nor ruled out"
+            ),
+            "Dispatch from an event handler, a timer or after an await, or register the listener where it is the only caller (ADR 0645).".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::INSTALLED_MEMBER => (
+            format!(
+                "{callee} installs a prototype or an accessor on an object, and no Get or write of that object is followed to what it installed: a store as a prototype makes each of them the store's, and an installed setter makes a plain write a call; whether one runs where Solid warns can be neither proven nor ruled out"
+            ),
+            "Read the store or call the setter by name, where the rules can see it (ADR 0643).".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::PRIMITIVE_VALUE => (
             format!(
                 "Solid primitive {callee} is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked"
             ),
             "Call the primitive directly by its imported name, so solid-checker can see each call.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::blockers::PRIMITIVE_ALIAS_CALL => (
+            format!(
+                "This call resolves to Solid's {callee} through a name solid-checker cannot follow, so no rule sees what {callee} does here"
+            ),
+            "Call the primitive directly by its imported name.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::blockers::IMPORT_UNRESOLVED => (
+            format!(
+                "{callee} is imported, but the compiler did not resolve the import, so what the value is, and what a call, read or write through it does here, cannot be proven"
+            ),
+            "Make the imported module and its export resolvable (generate it, install it, or declare its types), so solid-checker can see the value.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN => (
+            format!(
+                "{callee} is used as a value, and which function it is cannot be proven: the type facts attribute a Solid primitive to it, but no import of a Solid module names it, so the calls that reach it are not followed"
+            ),
+            "Import the value by name from its module, so its identity is exact, or make that module's source available to solid-checker.".into(),
         ),
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
@@ -560,6 +605,12 @@ impl FindingWording {
 pub trait CatalogWording {
     fn capabilities(&self) -> CatalogCapabilities;
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording;
+    /// ADR 0659: whether this rule's claim is what the client runtime does, so
+    /// it holds only where a client build runs the site.
+    fn claims_client_runtime(&self, code: &str) -> bool {
+        let _ = code;
+        false
+    }
 }
 
 /// Projects all enabled tables and reports construction/ordering time.
@@ -612,7 +663,9 @@ pub fn project_findings(
     let async_unproven_reads = program
         .async_reads
         .iter()
-        .filter(|read| read.async_provenance && !read.apply_first_run_pending)
+        // ADR 0838: an accounting row adds a claim, it never opens a strict
+        // read the producers decided.
+        .filter(|read| read.async_provenance && !read.apply_first_run_pending && !read.unaccounted)
         .map(|read| &read.location)
         .collect::<std::collections::HashSet<_>>();
     let open_reads = program
@@ -663,6 +716,13 @@ pub fn project_findings(
             program
                 .leaf_operations
                 .iter()
+                // A call written in the tracked scope has the rule's own finding.
+                .filter(|operation| {
+                    !operation.observer_guarded()
+                        || !program.static_violations.iter().any(|violation| {
+                            !violation.uncertain && violation.location == operation.location
+                        })
+                })
                 .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
         );
     }
@@ -728,6 +788,8 @@ pub fn project_findings(
                     pending.apply_first_run_pending = true;
                     let mut finding = project_finding(FindingSeed::AsyncRead(&pending), catalog);
                     finding.kind = "uncertifiable".into();
+                    crate::blockers::SOURCE_PENDING_UNPROVEN
+                        .clone_into(&mut finding.analysis_context);
                     finding
                 }),
         );
@@ -758,6 +820,31 @@ pub fn project_findings(
     for finding in &mut findings {
         if finding.kind == "violation" {
             program.runtime_configuration.apply(finding);
+        }
+    }
+    findings.retain_mut(|finding| {
+        program.execution_paths.apply_deferred_mount(finding);
+        !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
+    });
+    // ADR 0822: a Get a violation proves needs no open row for its value.
+    let proved = findings
+        .iter()
+        .filter(|finding| finding.kind == "violation")
+        .map(|finding| finding.primary_location.clone())
+        .collect::<crate::HashSet<_>>();
+    findings.retain(|finding| {
+        !finding
+            .analysis_context
+            .starts_with(crate::blockers::DEPENDENCY_VALUE_UNFOLLOWED)
+            || !proved.contains(&finding.primary_location)
+    });
+    // ADR 0680: after every step that may make a row uncertifiable.
+    for finding in &mut findings {
+        if finding.kind == "uncertifiable" && !crate::blockers::named(&finding.analysis_context) {
+            finding.analysis_context = crate::blockers::with_detail(
+                crate::blockers::for_rule(&finding.id),
+                &finding.analysis_context,
+            );
         }
     }
     finish_findings(findings, total_started, construction_started)
@@ -795,7 +882,7 @@ fn action_reported(action: &crate::ActionInvocation) -> bool {
     action.execution.reports_disallowed_write() || action.execution.reports_unplaced()
 }
 
-fn async_read_reported(read: &crate::AsyncRead) -> bool {
+pub(crate) fn async_read_reported(read: &crate::AsyncRead) -> bool {
     // Deletion first, ahead of the leaf-owner short-circuit
     // below. Every clause after this one is a claim about a
     // read that happens -- "a pending read here throws at
@@ -838,6 +925,16 @@ fn async_read_reported(read: &crate::AsyncRead) -> bool {
     // the same read), or the informational boundary warning
     // (SC5003) — suppressed for declared-first-paint sources,
     // whose whole point is to not need a boundary.
+    // ADR 0662: a `<Dynamic>` body has no strict window, and still warns with no
+    // boundary above it.
+    if read.leaf_owner.is_none()
+        && read.execution == crate::ExecutionRole::UntrackedUnwindowed
+        && !read.under_loading
+        && read.async_provenance
+        && !read.declared_loading
+    {
+        return true;
+    }
     read.leaf_owner.is_none()
         && read.execution == crate::ExecutionRole::TrackedJsx
         && !read.under_loading
@@ -916,7 +1013,12 @@ pub fn suppress_findings_owned_by_enabled_rules(
 ) {
     let pending_reads = findings
         .iter()
-        .filter(|finding| finding.id == "SC5001")
+        // ADR 0838: an accounting row adds a claim; it owns no strict read.
+        .filter(|finding| {
+            finding.id == "SC5001"
+                && finding.analysis_context != crate::blockers::ASYNC_READ_UNACCOUNTED
+                && finding.analysis_context != crate::blockers::SOURCE_MODULE_UNRESOLVED
+        })
         .map(|finding| {
             (
                 (
@@ -1153,6 +1255,15 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if operation.uncertain || operation.possible {
                 finding.kind = "uncertifiable".into();
             }
+            if operation.computation_error_unobserved {
+                crate::blockers::COMPUTATION_ERROR_UNOBSERVED
+                    .clone_into(&mut finding.analysis_context);
+            }
+            if operation.identity_unproven {
+                finding.fixes.clear();
+                finding.analysis_context =
+                    crate::blockers::LEAF_OPERATION_IDENTITY_UNPROVEN.to_owned();
+            }
         }
         FindingSeed::DirectiveCreation(creation) if creation.uncertain => {
             finding.kind = "uncertifiable".into();
@@ -1176,14 +1287,52 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         }
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];
+            // ADR 0838: a claim no producer accounted for proves nothing.
+            if read.unaccounted {
+                finding.kind = "uncertifiable".into();
+            }
             // Fail-honest: an options argument the analyzer cannot read may
             // declare a loadingValue or seedLoadingValue, and a declared first
             // flight neither throws (SC5001) nor needs a boundary (SC5003,
             // SC5005; ADR 0430) — so the finding is no longer a *proven*
             // defect and becomes a proof obligation instead.
-            if read.options_opaque && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005")
+            if (read.options_opaque
+                && matches!(finding.id.as_str(), "SC5001" | "SC5003" | "SC5005"))
+                || (read.caught && matches!(finding.id.as_str(), "SC5003" | "SC5005"))
             {
                 finding.kind = "uncertifiable".into();
+            }
+            // ADR 0641: rc.21 warns from a render effect that hits the pending
+            // value, and a component's prop is a getter: the child decides
+            // whether one ever reads it. Nothing here follows it to the child.
+            if read.component_prop && finding.id == "SC5003" {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "{}; this read is a component prop, a getter the child may read in a render, in an effect, or never",
+                    finding.message
+                );
+            }
+            // ADR 0632: a declared value is served through the first flight,
+            // so a read past the creating pass throws, or warns in a leaf, only
+            // on a re-ask nothing here proves.
+            if read.declared_loading && finding.id == "SC5001" {
+                finding.kind = "uncertifiable".into();
+            }
+            // ADR 0855: while a module evaluates no strict-read window is open,
+            // so the read emits nothing and throws a plain NotReadyError, which
+            // a `catch` on the evaluating stack swallows. A component body, an
+            // apply or a labelled `untrack` emits before it throws: there the
+            // finding stands.
+            if read.caught
+                && finding.id == "SC5001"
+                && read.execution == crate::ExecutionRole::ModuleInitialization
+                && read.leaf_owner.is_none()
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "this read runs while the module evaluates, where a pending read emits no diagnostic and throws a plain NotReadyError, and a `catch` in this module may be on its stack and swallow it; if none is: {}",
+                    finding.message
+                );
             }
             // The same escalation for the execution window: a host that may
             // run the read's callback inside the component body's strict-read
@@ -1249,6 +1398,28 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
+            // ADR 0662: rendered by `<Dynamic>`, whose memo has no strict window.
+            if read.execution == crate::ExecutionRole::UntrackedUnwindowed && finding.id == "SC5003"
+            {
+                finding.kind = "uncertifiable".into();
+                crate::blockers::MOUNT_FORM_WINDOW.clone_into(&mut finding.analysis_context);
+            }
+            // ADR 0661: SC5003's warning fires only inside `render()`, so a read
+            // whose first run is not proven there may be quiet though its source
+            // is pending. SC5001 needs no render: the throw has no such gate.
+            if read.root_pass_unproven
+                && !read.apply_first_run_pending
+                && finding.id == "SC5003"
+                && !read.ssr_client_hole
+                && !read.server_rendering_unresolved
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the first run of this read is not proven inside a render() call, where the runtime checks for a boundary. {}",
+                    finding.message
+                );
+                crate::blockers::ROOT_MOUNT_PASS_UNPROVEN.clone_into(&mut finding.analysis_context);
+            }
             // ADR 0518: a top-level `await` may settle the source before the
             // read runs; a settled read neither needs a boundary (SC5003) nor
             // throws (SC5001). SC5003's `ssrSource: "client"` wording throws
@@ -1266,6 +1437,16 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                     finding.message
                 );
             }
+            // ADR 0665: last, because it decides whether any claim above holds.
+            if read.provenance_open && !read.ssr_client_hole {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "no fact proves whether this source's computation returns a Promise or throws NotReadyError; if it does: {}",
+                    finding.message
+                );
+                crate::blockers::ASYNC_PROVENANCE_UNPROVEN
+                    .clone_into(&mut finding.analysis_context);
+            }
         }
         FindingSeed::Action(action) => {
             if action.is_uncertifiable() {
@@ -1277,6 +1458,27 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
     if let Some((family, subject)) = coverage_group(seed) {
         finding.coverage_family = family.into();
         finding.coverage_subject = subject;
+    }
+    if finding.kind == "uncertifiable" && !crate::blockers::named(&finding.analysis_context) {
+        let blocker = match seed {
+            FindingSeed::StrictRead { read, .. } => Some(crate::blockers::for_read(read)),
+            FindingSeed::OwnedWrite(write) => Some(crate::blockers::for_write(write)),
+            FindingSeed::Action(_) => Some(crate::blockers::FUNCTION_RUN_UNPLACED),
+            FindingSeed::LeafOperation(_) if finding.id == "SC9012" => {
+                Some(crate::blockers::LEAF_CALLBACK_OPAQUE)
+            }
+            FindingSeed::LeafOperation(_) => Some(crate::blockers::LEAF_OWNER_UNPROVEN),
+            FindingSeed::DirectiveCreation(_) => Some(crate::blockers::DIRECTIVE_OWNER_UNPROVEN),
+            FindingSeed::OwnerRequirement(requirement) => {
+                Some(crate::blockers::for_owner(requirement))
+            }
+            FindingSeed::AsyncRead(read) => Some(crate::blockers::for_async_read(read)),
+            FindingSeed::StaticViolation(_) | FindingSeed::StaticDefect(_) => None,
+        };
+        if let Some(blocker) = blocker {
+            finding.analysis_context =
+                crate::blockers::with_detail(blocker, &finding.analysis_context);
+        }
     }
     finding
 }

@@ -140,8 +140,7 @@ fn stored_function(
             .calls_with_peeled_callee(literal.span)
             .next()
             .is_some()
-        && control_flow_execution_role(file, literal.body, entities, symbol_names, lookup.dialect)
-            .is_none()
+        && control_flow_execution_role(file, literal.body, entities, symbol_names, lookup).is_none()
 }
 
 /// ADR 0452, reads: whether `span` sits in a function written strictly inside
@@ -809,10 +808,202 @@ pub(crate) fn may_follow_own_await(file: &solid_facts::FileFacts, span: Span) ->
 /// function by any of the tests that place code by position: the textual
 /// await order, an implicit suspension before it, or [`may_follow_own_await`].
 /// A call site or a write that may follow one has no proven placement.
-pub(super) fn may_follow_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
+pub(crate) fn may_follow_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
     follows_await_in_async_function(file, span)
         || follows_any_suspension(file, span)
         || may_follow_own_await(file, span)
+}
+
+/// ADR 0852: whether the generator holding `span` (past in-place layers) is
+/// iterated by a call written in an async, non-generator function: a throw in
+/// a step then rejects that function's flight. A generator handed on as a
+/// value, or stepped only elsewhere, is not.
+pub(crate) fn generator_flight_stepped(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let span = if containing_ast_function(ast, span).is_some_and(|function| function.generator) {
+        span
+    } else {
+        match super::write_roles::climb_in_place_layers(file, span, lookup) {
+            Some(climb) => climb.at,
+            None => return false,
+        }
+    };
+    let Some(generator) = containing_ast_function(ast, span).filter(|function| function.generator)
+    else {
+        return false;
+    };
+    crate::local_access::function_reference_hand_offs(file, generator, lookup).is_some_and(
+        |references| {
+            references.iter().any(|(at, hand_off)| {
+                *hand_off == crate::local_access::HandOff::Call
+                    && ast.calls.iter().any(|call| {
+                        ast.peel_ts_sugar_span(call.callee) == *at
+                            && ast.iterated_operands.contains(&call.span)
+                            && containing_ast_function(ast, call.span)
+                                .is_some_and(|holder| holder.r#async && !holder.generator)
+                    })
+            })
+        },
+    )
+}
+
+/// ADR 0851: whether code at `span`, in a generator's own body, runs on the
+/// continuation of the async function that steps the generator across one of
+/// its suspensions: `Some(true)` on every run, `Some(false)` on some run,
+/// `None` when no such stepping is proven (the generator's other placements
+/// answer). Two steppings are modelled, each a call that is the only use of
+/// the generator's binding (every reference in its file a direct call, none in
+/// another file), written in an async, non-generator function `H`:
+///
+/// - an async generator called as a `for await` operand in `H`: the loop's
+///   first `next()` runs the body up to the first `yield` on `H`'s stack, and
+///   every later `next()` is called after `H` awaited the previous result;
+/// - a sync generator called as a `for…of` operand in `H` whose repeated part
+///   holds an `await` of `H`: the first `next()` runs on `H`'s stack, and a
+///   later one after the loop body's `await` suspended `H` when the repeated
+///   part starts with that `await` (otherwise it only may).
+///
+/// Code past a `yield` that dominates it (its block's straight-line rest)
+/// resumes only from a later `next()`; code a `yield` may precede (written
+/// before it, or in a loop that repeats it) may. The first segment runs where
+/// the call does: past `H`'s own suspension when the call is, and on `H`'s
+/// stack otherwise. On `H`'s continuation no owner is current and no
+/// computation observes (ADR 0320), as after an `await` of `H`.
+pub(crate) fn generator_step_resumption(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<bool> {
+    let ast = &file.ast;
+    // Review W2: a layer run in place inside the generator (an IIFE, a
+    // `forEach` callback) runs on the stack of its outermost call there.
+    let span = if containing_ast_function(ast, span).is_some_and(|function| function.generator) {
+        span
+    } else {
+        let climb = super::write_roles::climb_in_place_layers(file, span, lookup)?;
+        if climb.exhausted || climb.in_list {
+            return containing_ast_function(ast, climb.at)
+                .is_some_and(|function| function.generator)
+                .then_some(false);
+        }
+        climb.at
+    };
+    let generator = containing_ast_function(ast, span)
+        .filter(|function| function.generator && function.body.contains(span))?;
+    if crate::owners::own_method_name(file, generator).is_some() {
+        return None;
+    }
+    let references = crate::local_access::function_reference_hand_offs(file, generator, lookup)?;
+    if references.is_empty() {
+        return None;
+    }
+    // ADR 0853: an escaping reference may step on another stack. Absence of
+    // an exact placement is no proof that the creation call's owner persists.
+    if !crate::local_access::foreign_reference_hand_offs(file, generator, lookup).is_empty() {
+        return Some(false);
+    }
+    let own = |function: &solid_facts::ast::FunctionFact, point: Span| {
+        function.body.contains(point)
+            && containing_ast_function(ast, point).is_some_and(|owner| owner.span == function.span)
+    };
+    // Each stepping call: whether its later steps are proven to follow a
+    // suspension of `H`, and where its first step runs in `H`.
+    let mut later_proven = true;
+    let mut first_past = true;
+    let mut first_may = false;
+    for (reference, hand_off) in references {
+        if hand_off != crate::local_access::HandOff::Call {
+            return Some(false);
+        }
+        let call = ast.calls.iter().find(|call| {
+            !call.construct
+                && !call.result_discarded
+                && ast.peel_ts_sugar_span(call.callee) == reference
+        })?;
+        lookup
+            .function_called_at(file.path.as_str(), reference)
+            .filter(|(target, function)| {
+                target.path == file.path && function.span == generator.span
+            })?;
+        let holder = containing_ast_function(ast, call.span)
+            .filter(|holder| holder.r#async && !holder.generator)?;
+        if !ast.iterated_operands.contains(&call.span) {
+            return None;
+        }
+        // The `for await` suspension ends with its operand (ADR 0820). Over a
+        // sync generator too, each later step follows the loop's await.
+        let for_await = ast.implicit_suspensions.iter().any(|suspension| {
+            suspension.end == call.span.end
+                && suspension.start < call.span.start
+                && own(holder, *suspension)
+        });
+        if generator.r#async && !for_await {
+            return None;
+        }
+        if !for_await {
+            let looped = ast
+                .loop_statements
+                .iter()
+                .filter(|looped| looped.contains(call.span) && own(holder, **looped))
+                .min_by_key(|looped| looped.end - looped.start)?;
+            let repeated = ast
+                .loop_repeats
+                .iter()
+                .filter(|(at, repeated)| at == looped && !repeated.contains(call.span))
+                .map(|(_, repeated)| *repeated)
+                .collect::<Vec<_>>();
+            let awaits = ast
+                .awaits
+                .iter()
+                .filter(|awaited| {
+                    own(holder, **awaited) && repeated.iter().any(|part| part.contains(**awaited))
+                })
+                .collect::<Vec<_>>();
+            if awaits.is_empty() {
+                // Drained on `H`'s stack: the body runs where the loop does.
+                return None;
+            }
+            let leads = awaits.iter().any(|awaited| {
+                repeated.iter().any(|part| {
+                    part.start <= awaited.start
+                        && file
+                            .source_text(Span::new(part.start, awaited.start))
+                            .is_some_and(|gap| {
+                                gap.chars()
+                                    .all(|c| c.is_whitespace() || c == ')' || c == '{')
+                            })
+                })
+            });
+            later_proven &= leads;
+        }
+        let past_suspension = follows_dominating_await(file, call.span)
+            || follows_unconditional_await(file, call.span);
+        first_past &= past_suspension;
+        first_may |= past_suspension || may_follow_suspension(file, call.span);
+    }
+    let yields = ast.yields.iter().filter(|fact| own(generator, fact.span));
+    let mut past = false;
+    let mut may = false;
+    for fact in yields {
+        past |= fact.region.is_some_and(|region| region.contains(span));
+        may |= (fact.span.end <= span.start && !in_exclusive_arms(file, fact.span, span))
+            || ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                repeated.contains(span)
+                    && looped.contains(fact.span)
+                    && generator.body.contains(looped)
+            });
+    }
+    if first_past {
+        return Some(true);
+    }
+    if past {
+        return Some(later_proven);
+    }
+    (may || first_may).then_some(false)
 }
 
 /// Whether `awaited` and `span` lie in the two different arms of one `if` or
@@ -909,7 +1100,7 @@ pub(crate) fn nested_literal_runs_during_body(
                 span = call.span;
                 continue;
             }
-            return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
+            return control_flow_execution_role(file, span, entities, symbol_names, lookup)
                 .is_some_and(ExecutionRole::reports_disallowed_write);
         };
         match lookup.primitive_at_call(file, call.span) {

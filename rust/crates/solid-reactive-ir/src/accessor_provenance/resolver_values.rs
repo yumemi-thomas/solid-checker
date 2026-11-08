@@ -425,17 +425,24 @@ pub(super) trait Values<'w>: World<'w> {
         let element = *elements.get(index)?;
         let factory_file = self.file(&path)?;
         // ADR 0509: a slot naming a primitive's own setter or action binding
-        // (`return [count, setCount] as const`) is that binding. An accessor
-        // slot keeps its own path (ADR 0222's returned sources).
+        // (`return [count, setCount] as const`) is that binding. ADR 0801: so
+        // is one naming its accessor: `value` answers only an unwritten binding
+        // a primitive made, and a read of it has that source's row.
         if factory_file
             .ast
             .identifiers
             .iter()
             .any(|identifier| identifier.span == factory_file.ast.peel_ts_sugar_span(element))
-            && let Some(Value::Callable(callable @ (Callable::Setter(_) | Callable::Action(_)))) =
-                self.value(factory_file, element, depth - 1, &mut false)
+            && let Some(Value::Callable(
+                callable @ (Callable::Setter(_) | Callable::Action(_) | Callable::Accessor(_)),
+            )) = self.value(factory_file, element, depth - 1, &mut false)
         {
-            if self.tuple_iteration() {
+            let vetoed = if matches!(callable, Callable::Accessor(_)) {
+                self.tuple_slot_iteration()
+            } else {
+                self.tuple_iteration()
+            };
+            if vetoed {
                 return Some(Value::VetoedTuple);
             }
             return Some(Value::Callable(callable));

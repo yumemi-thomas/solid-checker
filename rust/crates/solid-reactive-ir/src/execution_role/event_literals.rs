@@ -48,11 +48,22 @@ fn invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
 /// field, JSX the compiler wraps in a getter) is left out, as the census's own
 /// call placement leaves it out, and so is a file whose compiler facts were
 /// withheld (ADR 0360). The census reads no dispatch veto.
-pub(crate) fn dispatch_in_event_only_function(
-    file: &solid_facts::FileFacts,
+pub(crate) fn dispatch_in_event_only_function<'a>(
+    file: &'a solid_facts::FileFacts,
     call: Span,
-    lookup: &SemanticLookup<'_>,
+    lookup: &SemanticLookup<'a>,
 ) -> bool {
+    if lookup.program_has_eval() {
+        return false;
+    }
+    // An open program has no census, and needs none for this one literal: an
+    // export refuses, and unseen code cannot name what a module keeps (ADR 0640).
+    if !lookup.program_closed {
+        let world = LookupFlow { lookup };
+        return dispatch_in_census_function(file, call, |function| {
+            literal_event_invoked(&world, file, function)
+        });
+    }
     let census = lookup.event_invoked_literals();
     dispatch_in_census_function(file, call, |function| {
         census.contains(&(file.path.to_string(), function.span))
@@ -78,7 +89,9 @@ pub(crate) fn dispatch_in_test_only_function<'a>(
     call: Span,
     lookup: &SemanticLookup<'a>,
 ) -> bool {
-    if !lookup.program_closed || lookup.program_has_eval() {
+    // An open program too: an export refuses (`exported_call_sites_in`), and
+    // unseen code cannot name a literal this module keeps to itself (ADR 0640).
+    if lookup.program_has_eval() {
         return false;
     }
     let world = LookupFlow { lookup };
@@ -524,10 +537,13 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
             if registered {
                 return Some(Some(ExecutionRole::DeferredCallback));
             }
-        } else if file.compiler.callback_roles.iter().any(|callback| {
+        } else if let Some(callback) = file.compiler.callback_roles.iter().find(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && file.ast.peel_ts_sugar_span(callback.span) == owner.span
         }) {
+            if crate::execution_role::handler_event_denied(file, callback.span) {
+                return None;
+            }
             return Some(Some(ExecutionRole::EventCallback));
         }
         let key = (format!("\0owner-flow:{}", file.path.as_str()), owner.span);
@@ -816,7 +832,8 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
                 let name = file.source_text(attribute.name)?;
                 if intrinsic_element(file, element) {
                     return (path.is_empty()
-                        && self.world.dialect().compiler_lowers_event_attribute(name))
+                        && self.world.dialect().compiler_lowers_event_attribute(name)
+                        && crate::runtime_semantics::event_keeps_delivery_proof(name))
                     .then(|| {
                         out.push(Invocation::Role(ExecutionRole::EventCallback));
                     });
@@ -839,7 +856,10 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
                 if intrinsic_element(file, element) {
                     return match path.as_slice() {
                         [] => Some(()),
-                        [key] if self.world.dialect().spread_key_is_event(key) == Some(true) => {
+                        [key]
+                            if self.world.dialect().spread_key_is_event(key) == Some(true)
+                                && crate::runtime_semantics::event_keeps_delivery_proof(key) =>
+                        {
                             out.push(Invocation::Role(ExecutionRole::EventCallback));
                             Some(())
                         }

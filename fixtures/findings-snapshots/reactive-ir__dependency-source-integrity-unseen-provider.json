@@ -32,6 +32,17 @@
       "fixes": 0
     },
     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "destructure-root-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-unseen-provider/App.tsx",
+      "start": 731,
+      "end": 741,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -39,6 +50,17 @@
       "path": "fixtures/reactive-ir/dependency-source-integrity-unseen-provider/App.tsx",
       "start": 934,
       "end": 952,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-unseen-provider/App.tsx",
+      "start": 2289,
+      "end": 2295,
       "fixes": 0
     }
   ]

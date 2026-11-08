@@ -5,30 +5,33 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/event-dispatch-element-click/App.tsx",
-      "start": 468,
-      "end": 489,
+      "start": 469,
+      "end": 490,
       "fixes": 0
     },
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/event-dispatch-element-click/App.tsx",
-      "start": 477,
-      "end": 484,
+      "start": 478,
+      "end": 485,
       "fixes": 0
     },
     {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/event-dispatch-element-click/App.tsx",
-      "start": 499,
-      "end": 517,
+      "start": 500,
+      "end": 518,
       "fixes": 0
     }
   ]

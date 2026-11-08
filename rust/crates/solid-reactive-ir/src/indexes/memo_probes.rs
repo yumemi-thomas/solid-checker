@@ -207,6 +207,10 @@ impl SemanticLookup<'_> {
                     .map(|primitive| Arc::<str>::from(format!("{primitive:?}")))
                     .collect::<Vec<_>>();
                 names.sort_unstable();
+                // ADR 0695: the section's value holds this too.
+                if self.may_dispose() {
+                    names.push(Arc::from("may-dispose"));
+                }
                 ProbeAnswer::Names(names)
             }
             (Probe::DeclarationSymbolAt, PolledKey::FileSpan(id, span)) => ProbeAnswer::Symbols(

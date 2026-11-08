@@ -22,9 +22,32 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-use-unclassified",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-read-through-closure/App.tsx",
+      "start": 750,
+      "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-read-through-closure/App.tsx",
+      "start": 759,
+      "end": 760,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dispatch-read-through-closure/App.tsx",
       "start": 772,
@@ -35,6 +58,7 @@
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dispatch-read-through-closure/node_modules/solid-js/package.json",
       "start": 0,

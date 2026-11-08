@@ -1,0 +1,164 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 316,
+      "end": 319,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 335,
+      "end": 359,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 377,
+      "end": 399,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 473,
+      "end": 478,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 497,
+      "end": 504,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 497,
+      "end": 504,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 521,
+      "end": 532,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 816,
+      "end": 819,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 1501,
+      "end": 1506,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 1872,
+      "end": 1877,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 1940,
+      "end": 1965,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-escaped-from-untrack",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 1983,
+      "end": 1993,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 2009,
+      "end": 2021,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-escaped-from-untrack",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 2041,
+      "end": 2053,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-escaped-from-untrack",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-untrack-escape/App.tsx",
+      "start": 2075,
+      "end": 2081,
+      "fixes": 0
+    }
+  ]
+}

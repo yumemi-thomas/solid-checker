@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-rebound/kept.ts",
+      "start": 182,
+      "end": 183,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-use-server",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/valid-use-server-rebound/rebound-literal.ts",
+      "start": 156,
+      "end": 157,
+      "fixes": 0
+    }
+  ]
+}

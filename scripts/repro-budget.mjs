@@ -31,7 +31,7 @@ export const BUDGETS = {
    * veto (ADR 0356): each veto site kind needs its own project, since one
    * unexcluded site holds every handler proof of its project (ADR 0446).
    */
-  projects: 10,
+  projects: 11,
   /** Source files of one case: one, or two when the cause is cross-file. */
   filesPerCase: 2,
   /** Lines of one source file. */

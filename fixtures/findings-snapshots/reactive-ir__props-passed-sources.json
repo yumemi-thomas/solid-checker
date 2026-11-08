@@ -65,6 +65,7 @@
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/props-passed-sources/node_modules/solid-js/package.json",
       "start": 0,

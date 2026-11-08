@@ -24,7 +24,7 @@
 // "verified" rests on.
 //
 // The mapping fails closed. A path that matches no row -- `scripts/`, the
-// `Makefile`, `schema/`, `rust/Cargo.toml`, `docs/rules/`, anything new --
+// `Makefile`, `schema/`, `rust/Cargo.toml`, anything new --
 // escalates to the full `make verify`, and prints which path did it. An
 // unmapped path can change any answer in the repository, so guessing that it
 // changes none is the one failure mode this script must not have.
@@ -147,6 +147,29 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
+  // Both read what the checker says about real typings, so a change anywhere that can move a finding can
+  // turn them red: `8833e6bfa` went out with `tsc-oracle-gate` red because no row selected it. Provisioning
+  // is idempotent and refuses a drifted install, as `make tsc-oracle` does.
+  "tsc-oracle-gate": {
+    commands: [
+      ["bun", "scripts/tsc-oracle.mjs", "provision", "--dialect", "all"],
+      ["bun", "scripts/tsc-oracle-gate.mjs"],
+    ],
+    env: {
+      SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
+      SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
+    },
+  },
+  "obligation-audit": {
+    commands: [
+      ["bun", "scripts/tsc-oracle.mjs", "provision", "--dialect", "all"],
+      ["bun", "scripts/obligation-audit.mjs"],
+    ],
+    env: {
+      SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
+      SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
+    },
+  },
   // ADR 0446: the reproduction set's budget, and each case's cause.
   "repro-budget": {
     commands: [
@@ -189,6 +212,47 @@ export const CHECKS = {
       "installs and the pinned headless shell the way verify's first step does, and fails on any skipped test " +
       "(only the tsrs-only files may skip, when no tsrs binary exists)",
     command: ["bun", "scripts/fuzz/test-lane.mjs", "--provision"],
+  },
+  "doc-budget": {
+    why:
+      "the size and allow-list budgets over docs/, fixture READMEs and the agent-facing prose; it asks git " +
+      "what is ignored, so `.gitignore` is an input too",
+    command: ["bun", "scripts/doc-budget.mjs"],
+  },
+  "flip-tools": {
+    why:
+      "run.mjs and tsc.mjs run only by hand (Chrome, tsrs), so this checks that the flip's scripts parse " +
+      "and its data is JSON; `witnesses` runs check.mjs",
+    commands: [
+      ["node", "--check", "scripts/flip/check.mjs"],
+      ["node", "--check", "scripts/flip/run.mjs"],
+      ["node", "--check", "scripts/flip/tsc.mjs"],
+      ["jq", "empty", "scripts/flip/witnesses.json", "scripts/flip/host-witnesses.json", "scripts/flip/witnesses-retired.json", "scripts/flip/tsc-rejected.json"],
+    ],
+  },
+  "guard-count": {
+    why:
+      "the one-way uncertifiable count (endstage-report.md 1b): the ledger matches the snapshots, and a fall " +
+      "against the base names an ADR, a proof and a fixture on each side",
+    command: ["node", "scripts/guard/count.mjs"],
+  },
+  "witnesses": {
+    why:
+      "every flip witness against the recorded Chrome run (endstage-report.md 1a): where Chrome fired, a " +
+      "finding must cover it, whatever the row's kind; no tsrs and no Chrome (`--recorded`)",
+    command: [
+      "node", "scripts/flip/check.mjs", "all", "--recorded",
+      "--bin", join(ROOT, DEBUG_CHECKER), "--typefacts", join(ROOT, TYPEFACTS),
+    ],
+  },
+  "rule-pages": {
+    why:
+      "what reads docs/rules/: the rules crate's every_rule_has_a_documentation_page, and the fuzzer's " +
+      "codes.test.mjs, which needs a page per rule a code names and reads one page's text",
+    commands: [
+      ["cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-v2-rules", "--lib", "every_rule_has_a_documentation_page"],
+      ["bun", "scripts/fuzz/test-lane.mjs", "--provision", "scripts/fuzz/codes.test.mjs"],
+    ],
   },
   "ir-tools-test": {
     why: "the lint and the harness are scripts with their own unit tests",
@@ -273,6 +337,14 @@ export const UNIVERSAL = [
 ];
 
 /**
+ * Every gate that reads the checker's findings. A path that can move a finding
+ * selects all of them: `scripts/verify.sh`'s gates lane runs them together, and
+ * selecting only some is how a red gate reached a push, for `tsc-oracle-gate`
+ * and then for `repro-causes` (R1's `clean-interval-hook`).
+ */
+export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses"];
+
+/**
  * One row of the mapping, as a prefix test.
  *
  * Prefixes are matched longest-first, so `rust/crates/solid-facts-backend/`
@@ -289,17 +361,18 @@ export const ROWS = [
   {
     prefix: "rust/crates/solid-facts/",
     owner: "solid-facts (AST, normalized facts)",
-    checks: ["facts-lib", "wasm-compile"],
+    checks: ["facts-lib", ...FINDING_GATES, "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
-    checks: ["ir-lib", "write-walk-strategies", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
+    // backend-process: diagnostics_process pins fixture finding counts, so an analysis change can fail it.
+    checks: ["ir-lib", "backend-process", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
     owner: "solid-facts-backend process/diagnostics",
-    checks: ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ir-edit-fuzz"],
+    checks: ["backend-process", "backend-staleness", "write-walk-strategies", ...FINDING_GATES, "ir-edit-fuzz"],
   },
   // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
   // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
@@ -310,22 +383,28 @@ export const ROWS = [
   {
     prefix: "rust/dialects/",
     owner: "dialects at the process boundary",
-    checks: ["dialects-process"],
+    checks: ["dialects-process", ...FINDING_GATES],
   },
   {
     prefix: "rust/dialects/solid-v2/rules/",
     owner: "the Solid 2 rules crate (analysis only)",
-    checks: ["dialects-process", "wasm-compile"],
+    checks: ["dialects-process", ...FINDING_GATES, "wasm-compile"],
   },
   {
     prefix: "fixtures/",
     owner: "fixtures or expected findings",
-    checks: ["coverage", "ownership-gate"],
+    checks: ["coverage", "ownership-gate", "guard-count", "backend-process"],
   },
+  // The cases the two oracle gates read.
+  ...["fixtures/tsc-oracle/", "fixtures/obligation-cases/"].map((prefix) => ({
+    prefix,
+    owner: "the tsc oracle's and the obligation audit's cases",
+    checks: [...FINDING_GATES],
+  })),
   {
     prefix: "fixtures/uncertifiable-repro/",
     owner: "the uncertifiable reproduction set (ADR 0446)",
-    checks: ["coverage", "ownership-gate", "repro-budget", "repro-causes"],
+    checks: ["coverage", "ownership-gate", "repro-budget", "repro-causes", "guard-count"],
   },
   ...["scripts/repro-budget.mjs", "scripts/repro-budget.test.mjs"].map((prefix) => ({
     prefix,
@@ -343,7 +422,7 @@ export const ROWS = [
   {
     prefix: "apps/solid-typefacts/",
     owner: "the Type Facts producer (separate workspace; the default producer)",
-    checks: ["typefacts", "backend-staleness", "coverage", "ownership-gate", "ir-edit-fuzz", "wasm-parity"],
+    checks: ["typefacts", "backend-staleness", ...FINDING_GATES, "ir-edit-fuzz", "wasm-parity"],
   },
   {
     prefix: "apps/solid-typefacts/tests/",
@@ -391,12 +470,26 @@ export const ROWS = [
     owner: "the differential fuzzer (operator tooling; its unit tests are a verify lane)",
     checks: ["fuzz-tests"],
   },
+  // A rule page is prose the budgets and two tests read; the CLI tests and
+  // emitted findings name its URL, which no check resolves. A renamed page is
+  // what `rule-pages` catches.
+  { prefix: "docs/rules/", owner: "the rule pages", checks: ["doc-budget", "rule-pages"] },
+  // The flip's working files: nothing else reads them, and `scripts/flip/` goes
+  // with the flip. The notes and the plan are prose, the rest are its tools.
+  { prefix: "scripts/guard/", owner: "the one-way uncertifiable count and its ledger", checks: ["guard-count"] },
+  { prefix: "scripts/flip/", owner: "the flip's tools and witnesses (the `witnesses` gate)", checks: ["flip-tools", "witnesses"] },
+  { prefix: "scripts/flip/notes/", owner: "prose read by no check", checks: [] },
+  { prefix: "scripts/flip/PLAN.md", owner: "prose read by no check", checks: [] },
+  // `.gitignore` decides what git lists, and three checks ask git: the dialect
+  // stubs (coverage), the reproduction set's tracked files (repro-budget) and
+  // the doc budgets. Every other input is walked from the filesystem or is one
+  // of the ignored classes in the header, whose caveat stands.
+  { prefix: ".gitignore", owner: "what git lists", checks: ["doc-budget", "coverage", "repro-budget"] },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only
-  // paths checked to be unread by code belong here. `docs/rules/` is read by
-  // the CLI tests and emitted in every finding's URL, and other `docs/`
-  // subtrees feed manifests and hints, so the rest of `docs/` stays unmapped.
+  // paths checked to be unread by code belong here. Other `docs/` subtrees
+  // feed manifests and hints, so the rest of `docs/` stays unmapped.
   ...[
     "docs/adr/",
     "docs/typefacts/adr/",
@@ -448,20 +541,21 @@ export function planFor(paths) {
   }
   // Prerequisite, not a row: a gate that runs the checker must run *this*
   // source's checker.
-  const needsChecker = ["coverage", "ownership-gate", "repro-causes", "ir-edit-fuzz"].some((check) => selected.has(check));
+  const needsChecker = [...FINDING_GATES, "ir-edit-fuzz"].some((check) => selected.has(check));
   const ordered = [
     // In every plan, mapped or empty: the producer is gitignored, so no change
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
     // is already current.
     "build-typefacts",
     ...UNIVERSAL,
+    ...["doc-budget", "flip-tools", "rule-pages", "guard-count"].filter((id) => selected.has(id)),
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
     ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
       selected.has(id)
     ),
-    ...["coverage", "ownership-gate", "repro-causes", "repro-budget"].filter((id) => selected.has(id)),
+    ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
@@ -673,6 +767,9 @@ export const LANES = {
   typefacts: "typefacts",
   coverage: "gates",
   "ownership-gate": "gates",
+  "tsc-oracle-gate": "gates",
+  "obligation-audit": "gates",
+  "witnesses": "gates",
   "repro-causes": "gates",
   "repro-budget": "gates",
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the
@@ -680,6 +777,10 @@ export const LANES = {
   "ir-edit-fuzz": "gates",
   "ir-read-lint": "preflight",
   "ir-tools-test": "preflight",
+  "doc-budget": "preflight",
+  "guard-count": "preflight",
+  "flip-tools": "preflight",
+  "rule-pages": "rust",
   // Builds nothing and needs no checker; ~3 minutes, so a preflight-lane neighbour would delay the gates: its own lane.
   "fuzz-tests": "fuzz",
   // The CLI launcher falls back to `make build-rust` when it finds no

@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "host-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-listener-real/App.tsx",
+      "start": 495,
+      "end": 502,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "host-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-listener-real/App.tsx",
+      "start": 657,
+      "end": 663,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "host-callback-timing",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/host-callback-listener-real/App.tsx",
+      "start": 657,
+      "end": 663,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-listener-real/App.tsx",
+      "start": 657,
+      "end": 663,
+      "fixes": 0
+    }
+  ]
+}

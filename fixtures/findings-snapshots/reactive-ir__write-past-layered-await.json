@@ -2,33 +2,14 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
-      "start": 587,
-      "end": 590,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
       "start": 942,
       "end": 949,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
-      "start": 1002,
-      "end": 1005,
       "fixes": 0
     },
     {
@@ -52,19 +33,10 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
-      "start": 1444,
-      "end": 1447,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
       "start": 1973,
@@ -72,9 +44,42 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
+      "start": 2662,
+      "end": 2663,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
+      "start": 2746,
+      "end": 2753,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
+      "start": 2814,
+      "end": 2822,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/write-past-layered-await/node_modules/solid-js/package.json",
       "start": 0,

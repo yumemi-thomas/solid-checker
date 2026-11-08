@@ -22,6 +22,18 @@ pub struct FileFacts {
     pub compiler: Arc<ExecutionMap>,
 }
 
+/// What `tsc` says at one place of a file, as far as its text decides
+/// ([`FileFacts::tsc_silence_at`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TscSilence {
+    /// No directive or pragma reaches it: a diagnostic there is reported.
+    Reports,
+    /// One compiler may suppress it, or the file may be unchecked JavaScript.
+    Maybe,
+    /// Both compilers suppress a diagnostic there.
+    Silent,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct ProjectFacts {
     pub generation: Generation,
@@ -551,6 +563,17 @@ pub enum JoinError {
     SpanWidth(Span),
 }
 
+/// An object whose members the standard library's calls read (ADR 0781).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StandardRoot {
+    /// `globalThis`, `window`, `self`, `global`.
+    Global,
+    /// `Name.prototype`.
+    Prototype(String),
+    /// `Name`, bound nowhere in the file.
+    Constructor(String),
+}
+
 impl FileFacts {
     pub fn new(
         generation: Generation,
@@ -579,6 +602,111 @@ impl FileFacts {
             .into_iter()
             .map(|span| Ok(span.location(self.path.shared())))
             .collect()
+    }
+
+    /// Whether `tsc` reports a diagnostic that starts at byte `offset` of this
+    /// file, as far as the file's own text decides (ADR 0830).
+    ///
+    /// The walk is tsgo's (`program.rs` `get_diagnostics_with_preceding_directives`,
+    /// tsc 5's `markPrecedingCommentDirectiveLine`): from the line above the
+    /// diagnostic upwards, a directive line suppresses it, and a line that is
+    /// neither blank nor begins (past spaces and tabs) with `//` ends the walk.
+    /// `Silent` only where both compilers agree: an exact directive, or a
+    /// TypeScript file with a canonical leading `// @ts-nocheck`. A JavaScript
+    /// file is `Maybe` (whether `checkJs` applies is not in the facts), and so
+    /// is a line only one compiler reads as suppressed.
+    #[must_use]
+    pub fn tsc_silence_at(&self, offset: u32) -> TscSilence {
+        if self.ast.typescript_check_pragma == Some(false) && !self.javascript() {
+            return TscSilence::Silent;
+        }
+        if self.javascript() || self.ast.typescript_nocheck_comment {
+            return TscSilence::Maybe;
+        }
+        if self.ast.typescript_directives.is_empty() {
+            return TscSilence::Reports;
+        }
+        let lines = crate::ast::LineTable::new(&self.source);
+        self.silence_of_line(&lines, lines.line(offset).saturating_sub(1))
+    }
+
+    /// Whether `tsc` may say nothing about some line of `span`: any line of it
+    /// is not [`TscSilence::Reports`]. The premise an uncertifiable result may
+    /// use where a diagnostic's exact line is not known (ADR 0830).
+    #[must_use]
+    pub fn tsc_may_be_silent_within(&self, span: Span) -> bool {
+        if self.javascript() || self.ast.typescript_nocheck_comment {
+            return true;
+        }
+        if self.ast.typescript_directives.is_empty() {
+            return false;
+        }
+        let lines = crate::ast::LineTable::new(&self.source);
+        let first = lines.line(span.start).saturating_sub(1);
+        let last = lines
+            .line(span.end.saturating_sub(1).max(span.start))
+            .saturating_sub(1);
+        (first..=last).any(|line| self.silence_of_line(&lines, line) != TscSilence::Reports)
+    }
+
+    /// The zero-based line byte `offset` falls on, by ECMAScript line
+    /// terminators.
+    #[must_use]
+    pub fn line_of(&self, offset: u32) -> u32 {
+        crate::ast::LineTable::new(&self.source)
+            .line(offset)
+            .saturating_sub(1)
+    }
+
+    /// Whether any place of the file may be one `tsc` says nothing about: it
+    /// is JavaScript, or holds a directive or a `@ts-nocheck` pragma.
+    #[must_use]
+    pub fn tsc_may_be_silent_somewhere(&self) -> bool {
+        self.javascript()
+            || self.ast.typescript_nocheck_comment
+            || !self.ast.typescript_directives.is_empty()
+    }
+
+    fn javascript(&self) -> bool {
+        [".js", ".jsx", ".mjs", ".cjs"]
+            .iter()
+            .any(|extension| self.path.as_str().ends_with(extension))
+    }
+
+    fn silence_of_line(&self, lines: &crate::ast::LineTable, line: u32) -> TscSilence {
+        let directives = &self.ast.typescript_directives;
+        let mut answer = TscSilence::Reports;
+        let mut current = line;
+        while let Some(above) = current.checked_sub(1) {
+            current = above;
+            for directive in directives {
+                if directive.exact && directive.first_line == above {
+                    return if answer == TscSilence::Maybe {
+                        TscSilence::Maybe
+                    } else {
+                        TscSilence::Silent
+                    };
+                }
+                if directive.first_line == above || directive.last_line == above {
+                    answer = TscSilence::Maybe;
+                }
+            }
+            let Some(text) = lines.text_of(&self.source, above) else {
+                break;
+            };
+            // tsgo: spaces and tabs, then the end, a line break or `//`.
+            // tsc 5: the whole line trimmed of any whitespace, empty or `//`.
+            let go = text.trim_start_matches([' ', '\t']);
+            let go = go.is_empty() || go.starts_with(['\r', '\n']) || go.starts_with("//");
+            let tsc = text.trim();
+            let tsc = tsc.is_empty() || tsc.starts_with("//");
+            match (go, tsc) {
+                (true, true) => {}
+                (false, false) => break,
+                _ => answer = TscSilence::Maybe,
+            }
+        }
+        answer
     }
 
     /// Returns the UTF-8 source text covered by a fact span.
@@ -614,6 +742,199 @@ impl FileFacts {
             value = wrapper.inner;
         }
         Some(value)
+    }
+
+    /// The value under a type assertion (`as`, `<T>`) written on `span`, past
+    /// every other wrapper; `None` when none is. `satisfies` and `!` assert
+    /// nothing about what the value is.
+    #[must_use]
+    pub fn asserted_value(&self, span: Span) -> Option<Span> {
+        let mut value = span;
+        let mut asserted = false;
+        while let Ok(index) = self
+            .ast
+            .transparent_wrappers
+            .binary_search_by_key(&value, |wrapper| wrapper.span)
+        {
+            let wrapper = &self.ast.transparent_wrappers[index];
+            if wrapper.inner == value {
+                break;
+            }
+            let after = self
+                .source_text(Span {
+                    start: wrapper.inner.end,
+                    end: value.end,
+                })
+                .unwrap_or_default()
+                .trim_start();
+            asserted |= after
+                .strip_prefix("as")
+                .is_some_and(|rest| rest.starts_with(|c: char| c.is_whitespace()))
+                || self.source.as_bytes().get(value.start as usize) == Some(&b'<');
+            value = wrapper.inner;
+        }
+        asserted.then_some(value)
+    }
+
+    /// The asserted value a call's written type rests on (ADR 0781): an
+    /// assertion on the callee, on a member callee's receiver, or in the
+    /// initializer of a binding that holds either.
+    #[must_use]
+    pub fn asserted_call_value(&self, callee: Span) -> Option<Span> {
+        if let Some(value) = self.asserted_value(callee) {
+            return Some(value);
+        }
+        let peeled = self.ast.peel_ts_sugar_span(callee);
+        let mut value = self
+            .ast
+            .member_at(peeled)
+            .map_or(peeled, |member| member.object);
+        // A chain of aliases ends where a binding holds no identifier, and an
+        // alias of itself is a program `tsc` rejects, so the bound is no limit
+        // on any real program.
+        for _ in 0..16 {
+            if let Some(inner) = self.asserted_value(value) {
+                return Some(inner);
+            }
+            let declaration = self
+                .ast
+                .reference_declaration(self.ast.peel_ts_sugar_span(value))?;
+            value = self.ast.identifier_binding(declaration)?.initializer?;
+        }
+        None
+    }
+
+    /// ADR 0803 (review R12): where a value may be a window the program did not
+    /// name as a global: a static member, or a destructured key, named as one
+    /// of the DOM's window-valued properties (`document.defaultView`,
+    /// `event.view`, `frame.contentWindow`, `message.source`, `w.top`), and a
+    /// call of a member `open` (`window.open()`). Whether the value is one is
+    /// the type's question (Type Facts' library types); the demand plan asks
+    /// it at exactly these spans, in this order, which the census's entries
+    /// index.
+    #[must_use]
+    pub fn window_valued_candidates(&self) -> Vec<Span> {
+        const KEYS: [&str; 11] = [
+            "defaultView",
+            "view",
+            "contentWindow",
+            "source",
+            "top",
+            "parent",
+            "frames",
+            "self",
+            "window",
+            "opener",
+            "globalThis",
+        ];
+        let ast = &self.ast;
+        let members = ast.members.iter().filter_map(|member| {
+            (!ast.computed_members.contains(&member.span)
+                && self
+                    .source_text(member.property)
+                    .is_some_and(|key| KEYS.contains(&key)))
+            .then_some(member.span)
+        });
+        let opened = ast.calls.iter().filter_map(|call| {
+            let member = ast.member_at(ast.peel_ts_sugar_span(call.callee))?;
+            (!ast.computed_members.contains(&member.span)
+                && self.source_text(member.property) == Some("open"))
+            .then_some(call.span)
+        });
+        let slots = ast.bindings.iter().flat_map(|binding| {
+            binding
+                .object_slots
+                .iter()
+                .filter(|slot| KEYS.contains(&slot.property.as_str()))
+                .map(|slot| slot.local.span)
+        });
+        members.chain(opened).chain(slots).collect()
+    }
+
+    /// What the value at `span` is when it is an object the standard library's
+    /// calls read (ADR 0781), through assertions and bindings that hold it.
+    #[must_use]
+    pub fn standard_root(&self, span: Span) -> Option<StandardRoot> {
+        // ADR 0906 (review R64): `top`, `parent` and `frames` are the window
+        // of an unframed page (ADR 0803's window-valued names), and sloppy
+        // code's `this` is the global object.
+        const GLOBAL_ROOTS: [&str; 7] = [
+            "globalThis",
+            "window",
+            "self",
+            "global",
+            "top",
+            "parent",
+            "frames",
+        ];
+        let ast = &self.ast;
+        let mut value = ast.peel_ts_sugar_span(span);
+        for _ in 0..16 {
+            let Some(declaration) = ast.reference_declaration(value) else {
+                break;
+            };
+            value = ast
+                .identifier_binding(declaration)?
+                .initializer
+                .map(|initializer| ast.peel_ts_sugar_span(initializer))?;
+        }
+        let mut root = value;
+        while let Some(member) = ast.member_at(root) {
+            root = ast.peel_ts_sugar_span(member.object);
+        }
+        if ast.reference_declaration(root).is_some() {
+            return None;
+        }
+        let text = self.source_text(value)?.trim();
+        let sloppy_this =
+            self.source_text(root).map(str::trim) == Some("this") && self.sloppy_this(root);
+        let global = |name: &str| GLOBAL_ROOTS.contains(&name) || (sloppy_this && name == "this");
+        let text = GLOBAL_ROOTS
+            .iter()
+            .chain(sloppy_this.then_some(&"this"))
+            .find_map(|name| text.strip_prefix(name)?.strip_prefix('.'))
+            .unwrap_or(text);
+        if global(text) {
+            return Some(StandardRoot::Global);
+        }
+        let plain = |name: &str| {
+            name != "this"
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+        };
+        match text.split_once('.') {
+            Some((name, "prototype")) if plain(name) => {
+                Some(StandardRoot::Prototype(name.to_owned()))
+            }
+            None if plain(text) => Some(StandardRoot::Constructor(text.to_owned())),
+            _ => None,
+        }
+    }
+
+    /// Review D4 and R64: whether `this` at `span` may be the global object:
+    /// sloppy code (a file that is no ECMAScript module, with no `"use
+    /// strict"` prologue), outside every class and every function whose
+    /// prologue says `"use strict"`. A plain call or the top level gives it the
+    /// global object; another receiver only makes this a patch more.
+    #[must_use]
+    pub fn sloppy_this(&self, span: Span) -> bool {
+        let ast = &self.ast;
+        let strict = |directive: &str| directive == "use strict";
+        ast.imports.is_empty()
+            && ast.module_level_exports().next().is_none()
+            && !ast
+                .module_directives
+                .iter()
+                .any(|directive| strict(&directive.value))
+            && !ast.classes.iter().any(|class| class.span.contains(span))
+            && !ast.functions.iter().any(|function| {
+                function.span.contains(span)
+                    && function
+                        .directives
+                        .iter()
+                        .any(|directive| strict(directive))
+            })
     }
 
     /// The spans of this file's calls whose callee, past transparent
@@ -728,6 +1049,7 @@ mod tests {
             library_types: None,
             declared_keys: None,
             writable_optional_property: false,
+            delete_operand_rejected: false,
             reference_space: None,
             runtime_identity: "".into(),
         }
@@ -794,6 +1116,88 @@ mod tests {
         );
         let joined = ProjectFacts::join(generation, "project", vec![file], table).unwrap();
         assert_eq!(joined.files.len(), 1);
+    }
+
+    fn facts_of(path: &str, source: &str) -> FileFacts {
+        let ast = extract(path, source).unwrap();
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: SourceHash::of(source),
+            semantic_model: Default::default(),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            discarded_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap()
+    }
+
+    /// ADR 0830: what tsc says at the start of the line holding `marker`.
+    fn silence(path: &str, source: &str, marker: &str) -> TscSilence {
+        let offset = u32::try_from(source.find(marker).unwrap()).unwrap();
+        facts_of(path, source).tsc_silence_at(offset)
+    }
+
+    #[test]
+    fn a_directive_silences_the_line_below_through_blank_and_comment_lines() {
+        use TscSilence::*;
+        let exact = "// @ts-ignore\nX;\n";
+        assert_eq!(silence("a.ts", exact, "X"), Silent);
+        assert_eq!(
+            silence("a.ts", "/// @ts-expect-error\n\n  // note\nX;\n", "X"),
+            Silent
+        );
+        assert_eq!(silence("a.ts", "f(); // @ts-ignore\nX;\n", "X"), Silent);
+        assert_eq!(silence("a.ts", "/* @ts-ignore */\nX;\n", "X"), Silent);
+        // Code between the directive and the line ends the walk.
+        assert_eq!(silence("a.ts", "// @ts-ignore\nf();\nX;\n", "X"), Reports);
+        // The directive's own line, and a line above it, are not covered.
+        assert_eq!(silence("a.ts", "X; // @ts-ignore\n", "X"), Reports);
+        assert_eq!(silence("a.ts", "X;\n// @ts-ignore\nf();\n", "X"), Reports);
+        assert_eq!(silence("a.ts", "f();\nX;\n", "X"), Reports);
+        // A string holding the words is no comment.
+        assert_eq!(
+            silence("a.ts", "const s = `\n// @ts-ignore\n`; X;\n", "X"),
+            Reports
+        );
+    }
+
+    #[test]
+    fn only_a_reading_both_compilers_share_is_silent() {
+        use TscSilence::*;
+        // tsc 5 files a two-line block under its last line, tsgo under its first.
+        assert_eq!(silence("a.ts", "/* @ts-ignore\n */\nX;\n", "X"), Maybe);
+        // tsc 5 takes one extra slash; tsgo any number.
+        assert_eq!(silence("a.ts", "//// @ts-ignore\nX;\n", "X"), Maybe);
+        // tsc 5 trims a no-break space; tsgo stops there.
+        assert_eq!(silence("a.ts", "// @ts-ignore\n\u{a0}\nX;\n", "X"), Maybe);
+        // JavaScript: whether checkJs applies is not in the facts.
+        assert_eq!(silence("a.js", "X;\n", "X"), Maybe);
+    }
+
+    #[test]
+    fn a_leading_nocheck_pragma_silences_the_file_and_a_late_one_may() {
+        use TscSilence::*;
+        assert_eq!(silence("a.ts", "// @ts-nocheck\nf();\nX;\n", "X"), Silent);
+        assert_eq!(
+            silence("a.ts", "/* x */\n// @ts-nocheck\nf();\nX;\n", "X"),
+            Silent
+        );
+        assert_eq!(
+            silence("a.ts", "f();\n// @ts-nocheck\nf();\nX;\n", "X"),
+            Maybe
+        );
+        assert_eq!(
+            silence("a.ts", "// @ts-nocheck\n// @ts-check\nX;\n", "X"),
+            Maybe
+        );
+        let file = facts_of("a.ts", "// @ts-ignore\nf();\nX;\nY;\n");
+        let x = u32::try_from("// @ts-ignore\nf();\n".len()).unwrap();
+        assert!(!file.tsc_may_be_silent_within(Span::new(x, x + 5)));
+        assert!(file.tsc_may_be_silent_within(Span::new(x - 5, x + 5)));
+        assert!(file.tsc_may_be_silent_somewhere());
     }
 
     #[test]

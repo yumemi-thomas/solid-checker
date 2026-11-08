@@ -15,6 +15,17 @@ always **uncertifiable**: source facts prove the hazardous placement, but
 request-time ordering decides whether the boundary settles before or after
 the shell commits.
 
+Since ADR 0703 the rule also does not certify a call it cannot place. Only a
+role proven to run outside the response's render is skipped (an event
+handler, a deferred callback, an effect or directive apply, discarded code,
+module scope). Any other call no boundary is proven to dominate (a helper or
+object method the content calls, a compute in content, content a wrapper
+renders through `props.children` below its own boundary, and today shell
+content too) is **uncertifiable** with blocker
+`response-head-position-unproven`: proving shell content needs the render
+entry's identity and every caller of the component, which the rule does not
+build yet.
+
 **Premise: code-read on the pinned runtime, with the RFC as co-author.**
 `@solidjs/web@2.0.0-rc.0`'s `dist/server.js` gates both primitives — the
 write *and* the cleanup-time retraction — on `!response.committed`

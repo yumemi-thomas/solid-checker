@@ -13,12 +13,15 @@
 // in; a context where the call is legal (a write in a handler) is not in the list. `typedAway` codes have no template: the published
 // typings reject every program that could provoke them, so `tsc` already reports it (invariant 1) and the checker stays silent.
 import {
-  walk, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
-  HANDOFF_FORMS, DEPTH_FORMS, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
+  walk, domExpr, listenExpr, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, asyncDeclaredSignal, asyncMaybeSignal, storeAsyncSignal, storeRawSignal, storeClassSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
+  HANDOFF_FORMS, DEPTH_FORMS, CHAIN_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
   CBP_CALLS, CBP_FORMS, cbProp, namedButton,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
+import { FLIP_READ_CONTEXTS, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, SYNC_COMPUTE_LINES, flipReadContext, openSignal } from "./flip-read.mjs";
+import { FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
+import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -46,7 +49,8 @@ export const MOUNTS = [...BASE_MOUNTS, ...RECALL_MOUNTS];
  *   module   `helpers.ts` creates them at module scope (`export const [w1, setW1] = createSignal(0)`), or a hook there does
  *            (`useVals()`), destructured or as an object (`vals.setW1`); or App.tsx holds one module-scope result of the hook
  *            (`shared.w1`) beside the body's own call of it (`module-hook-shared`, the ADR 0511 review's false positive: a read
- *            through another instance), its async memos settled before the mount.
+ *            through another instance), its async memos settled before the mount; or `useVals()` returns the creation itself
+ *            (`module-hook-direct`: `return createMemo(...)`, no binding in the hook, ADR 0628).
  *   async    the async memo of an async template, created in the parent and read in the child: passed as an accessor, as its
  *            value (`a1={a1()}`), by context, or as an accessor under the parent's `<Loading>`.
  * `props` and `context` take the templates whose values are not async (async values are the `async` axis's); `module` takes all.
@@ -54,19 +58,19 @@ export const MOUNTS = [...BASE_MOUNTS, ...RECALL_MOUNTS];
 export const SOURCE_AXES = {
   props: ["prop", "prop-destructured", "prop-merge", "prop-omit", "prop-spread", "prop-value"],
   context: ["context", "context-destructured"],
-  module: ["module", "module-hook", "module-hook-member", "module-hook-shared"],
-  async: ["async-prop", "async-value", "async-context", "async-loading"],
+  module: ["module", "module-hook", "module-hook-member", "module-hook-shared", "module-hook-direct"],
+  async: ["async-prop", "async-value", "async-value-member", "async-value-dstr", "async-context", "async-loading"],
   // The recall axes (`--recall`): the values through a barrel module that re-exports `helpers.ts` (`lib.ts`), or a hook that is
   // `helpers.ts`'s default export. Not under `module`, so `--sources module` keeps its programs.
   files: ["module-barrel", "module-default-hook"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** Sources the grids enumerate and a random draw never takes (as `gridVariants`): random programs and combinations keep theirs. */
-export const GRID_ONLY_SOURCES = ["module-hook-shared"];
+export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct"];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module");
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
-const valueSource = (source) => source === "prop-value" || source === "async-value";
+const valueSource = (source) => source === "prop-value" || source === "async-value" || source === "async-value-member" || source === "async-value-dstr";
 
 /**
  * The sources a (code, variant, binding) can take: the template must have values (`setup`); `async` sources need an async value and
@@ -87,6 +91,8 @@ export function sourcesOf(code, variant, binding, context) {
     if (only) return only.includes(source);
     // Its async memos settle before the mount, which takes an async template's code away (the `settled` variant is that case).
     if (source === "module-hook-shared" && isAsync) return false;
+    // `module-hook-direct` (ADR 0628): the hook returns the creation itself, so it hands back one accessor.
+    if (source === "module-hook-direct" && !(sigs.length === 1 && ["async", "memo"].includes(sigs[0].kind))) return false;
     if (source === "local") return true;
     if (excluded.includes(source)) return false;
     if (source.startsWith("async-") ? !isAsync : (!source.startsWith("module") && isAsync)) return false;
@@ -109,7 +115,9 @@ export function sourcesOption(value) {
  */
 export function sourcedName(source, name) {
   switch (source) {
-    case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-loading": return `props.${name}`;
+    case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-value-member": case "async-loading": return `props.${name}`;
+    // ADR 0823: the read is a body destructure of the props object, written where the read is.
+    case "async-value-dstr": return `(() => { const { ${name} } = props; return ${name}; })()`;
     case "prop-merge": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
     case "context": case "async-context": return `ctx.${name}`;
@@ -119,6 +127,74 @@ export function sourcedName(source, name) {
   }
 }
 export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
+
+/**
+ * The event axis (ADRs 0628 ff., measured in Chrome): rc.21's strict window is event-tied. A body's `untrack(fn, label)` window takes any
+ * event, so a listener dispatched synchronously from a body reads in it; an effect's window records its queue's event, so a handler
+ * dispatched from an apply, like one dispatched from another handler, reads in none, and so does what a handler or an apply schedules.
+ */
+/**
+ * The fire axis (ADR 0642, measured in Chrome): what delivers a listener on its caller's stack besides `click` and `dispatchEvent`. `steal`
+ * moves focus to another element, so the handler at risk is on the element that loses it; `-wrapper` and `-member` are the same call through
+ * a helper and a member. A project method or a local function called `focus` delivers nothing (`project`, `shadow`).
+ */
+/** A fire cell is about the call that delivers: one shape of the read or write inside it, not the whole cross of what the grids vary. */
+export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread|dny)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && (!shape.source || (context === "dny-renamed-prop" && shape.source === "prop")) && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
+const FIRES = ["focus", "select", "blur", "remove", "steal", "reset", "submit", "validity", "modal", "popover", "focus-wrapper", "focus-member"];
+/**
+ * ADR 0645: what a listener reaches, on the stack of what delivers it. A window listener that calls a member (`method`), a bound member, an
+ * object with `handleEvent`, or a function that is also a JSX handler (`shared`). `body` dispatches in the component's body and warns;
+ * `none` dispatches nothing and `handler` from a click, and both are silent.
+ */
+const LISTENER_FORMS = ["method", "module", "bind", "object", "shared"];
+const listenersAt = (...positions) => positions.flatMap((position) => LISTENER_FORMS.map((form) => `lst-${position}-${form}`));
+/** ADR 0644: `render` drains on its caller's stack: an apply queued before it runs under the body's owner. */
+const RENDER_DRAINS = ["rnd-body", "rnd-wrapper", "rnd-root", "rnd-memo", "rnd-foreach"];
+const RENDER_LEGAL = ["rnd-handler", "rnd-timer", "rnd-await", "rnd-shadow"];
+/** ADR 0645: what `program_listens_for_click` missed, and the elements ADR 0640's exclusion took: each `flush()`es on the apply's stack. */
+const ANCHOR_MISSES = ["evt-anchor-apply-bare", "evt-anchor-apply-alias", "evt-anchor-apply-computed", "evt-created-label", "evt-created-checkbox"];
+/**
+ * The denied events (ADR 0642, the ruling's section 3): delivered by a state change, on the stack of whatever made it, with no dedicated
+ * method. Each `dny-*` runs a user's step on an empty stack (`prep`: a real focus, text typed with `execCommand`, a click that opens a
+ * popover), then mounts a later root whose body makes the change (`trigger`). An IME composition needs CDP input, which the page cannot
+ * make: `compositionend` stays in fixtures.
+ */
+const DENIED = {
+  "dny-blur-disabled": { tag: "button", on: "onBlur", prep: ["EL.focus()"], trigger: "EL.disabled = true" },
+  "dny-blur-replace": { tag: "input", on: "onBlur", prep: ["EL.focus()"], trigger: 'EL.replaceWith(document.createElement("span"))' },
+  "dny-blur-move": { tag: "input", on: "onBlur", prep: ["EL.focus()"], trigger: "document.body.append(EL)" },
+  "dny-focusout-replace": { tag: "input", on: "onFocusOut", prep: ["EL.focus()"], trigger: 'EL.replaceWith(document.createElement("span"))' },
+  "dny-change-typed": { tag: "input", on: "onChange", prep: ["EL.focus()", 'document.execCommand("insertText", false, "x")'], trigger: "EL.disabled = true" },
+  "dny-change-typed-move": { tag: "input", on: "onChange", prep: ["EL.focus()", 'document.execCommand("insertText", false, "x")'], trigger: "document.body.append(EL)" },
+  "dny-beforetoggle-click": { tag: "div", on: "onBeforeToggle", attrs: 'popover="auto"', prep: ["EL.showPopover()"], trigger: 'EL.removeAttribute("popover")' },
+  "dny-beforetoggle-write": { tag: "div", on: "onBeforeToggle", attrs: 'popover="auto"', prep: ["EL.showPopover()"], trigger: "EL.popover = null" },
+  "dny-formdata": { tag: "form", on: "onFormData", prep: [], trigger: "new FormData(EL)" },
+  "dny-formdata-submit": { tag: "form", on: "onFormData", attrs: 'action="javascript:void 0"', prep: [], trigger: "EL.submit()" },
+  "dny-focus-selection": { tag: "div", on: "onFocus", attrs: "contenteditable", prep: [], trigger: "getSelection()!.collapse(EL, 0)" },
+  "dny-blur-select-remove": { tag: "select", on: "onBlur", prep: ["EL.focus()"], trigger: "(EL as HTMLSelectElement).remove()" },
+  // Events of the measured list, so listed calls: `execCommand` needs a focused editable, `ElementInternals` a form-associated element.
+  // ADR 0642: `click` and `dispatchEvent` on a receiver no declaration names: the runtime receiver may be an element (`d08`-`d12`).
+  "dny-click-any": { tag: "button", on: "onClick", prep: [], trigger: "EL.click()" },
+  "dny-dispatch-any": { tag: "button", on: "onClick", prep: [], trigger: 'EL.dispatchEvent(new MouseEvent("click", { bubbles: true }))' },
+  "dny-click-structural": { tag: "button", on: "onClick", prep: [], trigger: "const x: { click(): void } = EL; x.click()" },
+  "dny-click-interface": { tag: "button", on: "onClick", prep: [], trigger: "interface Clickable { click(): void } const x: Clickable = EL; x.click()" },
+  "dny-click-param": { tag: "button", on: "onClick", prep: [], trigger: "((x: any) => x.click())(EL)" },
+  "dny-input-exec": { tag: "input", on: "onInput", prep: ["EL.focus()"], trigger: 'document.execCommand("insertText", false, "x")' },
+  "dny-invalid-internals": { tag: "x-sc", on: "onInvalid", declares: true, prep: [], trigger: 'const internals: ElementInternals = EL.internals; internals.setValidity({ valueMissing: true }, "m"); internals.checkValidity()' },
+};
+/** Solid's own DOM work: the focused element leaves on the stack of a `flush()`, a disposer or `insert`, with no call of the program's naming it. */
+const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
+/** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase"];
+const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
+/** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
+const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
+
+const ZERO_READS = ["zero-body-empty", "zero-body-var", "zero-await-empty", "zero-await-var"];
+const firesAt = (...positions) => positions.flatMap((position) => FIRES.map((fire) => `evt-${position}-fire-${fire}`));
+const FIRE_LEGAL = [...firesAt("apply", "handler"), "evt-body-fire-project", "evt-body-fire-shadow"];
+const EVENT_LEGAL = [...DENIED_LEGAL, "evt-apply-dispatch", "evt-handler-dispatch", "evt-created-anchor", "timer-from-handler", "micro-from-handler", "timer-from-apply", "micro-from-apply", ...FIRE_LEGAL, ...listenersAt("none", "handler")];
 
 /** Contexts where nothing owns the code that runs: a handler, a timer, a promise or microtask callback, after an await, runWithOwner(null). */
 const UNOWNED = ["handler", "timer", "then", "micro", "async", "owner-null"];
@@ -173,7 +249,7 @@ export const CONTROL_LAYERS = ["for", "while", "do", "switch", "try-catch", "try
 export const FILE_LAYERS = ["module-default", "module-barrel", "module-star", "module-ns"];
 // The saturation transforms (model.mjs): T1/T3 hand-off and member-assign layers (HANDOFF_FORMS) and T2 depth layers at the
 // 16-layer climb bound (DEPTH_FORMS), with the fixes they exposed (ADRs 0531, 0532, 0534).
-export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS];
+export const RECALL_LAYERS = [...CONTROL_LAYERS, ...FILE_LAYERS, ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS];
 /**
  * The pair grids (`--pairs`, matrix.mjs `pairShapes`; Fable's report R7 and R10, Astra's proposal 1): two axes the recall grids cross
  * only with the base grid, crossed with each other as enumerated pairs, on the base contexts:
@@ -198,7 +274,13 @@ export const PAIR_SETS = ["mount-source", "handoff-file", "callback-handoff"];
  * literal, a destructuring default, a nested pattern, an array slot. Callee forms of either: `.bind(null)`, `.call(null, ...)`, an
  * extracted method, an assignment or `||=` callee.
  */
-export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-let", "ns-exported", "ns-held", "ns-member", "reexport", "reexport-ns"];
+export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-let", "ns-exported", "ns-held", "ns-member", "alias-const", "reexport", "reexport-ns", "reexport-ns-as"];
+/**
+ * A hook that returns a function with a body, not the source (`{ useIt: () => w1() }`), by slot form and by how the slot is read. `-written`
+ * crosses them with an unrelated object's member of the same name written elsewhere in the program, which turns the resolver's name veto on:
+ * a project hook's slot then keeps the handed net, or nothing placed it (c1 report, S0).
+ */
+export const HOOK_SLOT_BINDINGS = ["hook-fn-slot", "hook-fn-slot-written", "hook-method-slot-written", "hook-shorthand-fn-written", "hook-fn-member-written"];
 export const RECALL_VALUE_BINDINGS = ["let-alias", "var-alias", "cond-alias", "identity", "spread-literal", "computed-key", "getter", "literal-member", "default-slot", "nested", "array-slot"];
 /**
  * Type arguments a `.call` spelling needs to type-check under `strict`: `CallableFunction.call` infers from the last overload
@@ -207,13 +289,16 @@ export const RECALL_VALUE_BINDINGS = ["let-alias", "var-alias", "cond-alias", "i
 const callTypeArguments = (name, args) => (name === "flush" ? "<null, [], void>" : name === "useContext" ? `<null, [typeof ${args}], unknown>` : "");
 
 export const CALLEE_FORMS = ["bind", "call", "extracted", "assign-callee", "or-assign"];
+// ADR 0879 (B5): a callee that names no symbol at the call, past a suspension: an element (`fns[0]()`), a call's result (`getIt()()`),
+// a conditional (`(c ? a : b)()`). UNTRACKED_READ_AFTER_AWAIT only: what the after-await walk reads by callee.
+export const AFTER_AWAIT_CALLEE_BINDINGS = ["elem-callee", "result-callee", "cond-callee"];
 
 /** An API call: `name` from `module`; `args` is the argument text; `locals` when the arguments name component-scope variables. */
 const api = (name, args = "", { module = "solid-js", locals = false } = {}) => ({ kind: "api", module, name, args, locals });
 /** A call of a component-scope function (a setter, an accessor, an action). */
 const local = (name, args = "") => ({ kind: "local", name, args });
 /** A statement on a component-scope object (a store write): `text(object)`. */
-const member = (object, text) => ({ kind: "member", object, text });
+const member = (object, text, imports = [], { importLines, files } = {}) => ({ kind: "member", object, text, imports, importLines, files });
 
 /**
  * Per code: the variants, the contexts and bindings to draw from, the component-level signals the call needs (`setup`), the call
@@ -222,14 +307,45 @@ const member = (object, text) => ({ kind: "member", object, text });
  *   call(node, sigs) -> api | local | member
  */
 /** Store proxy operations (`STORE_WRITE_OUTSIDE_SETTER` `recallVariants`): the text of each on `object`; `nested` needs the nested store. */
+/**
+ * V-D1: a write expression with no `[[Set]]` on this run, silent in Chrome, and legal in every context. `array`: the store is `[0]`.
+ * What keeps its proof is in STORE_OPERATIONS: `logical-or` writes, and a two-element `items` sorts.
+ */
+const STORE_NO_OPS = {
+  "noop-nullish": { text: (o) => `${o}.v ??= 5` },
+  "noop-and": { text: (o) => `${o}.v &&= 5` },
+  "noop-assign-null": { text: (o) => `Object.assign(${o}, null)` },
+  "noop-assign-empty-var": { text: (o) => `(() => { const patch = {}; Object.assign(${o}, patch); })()` },
+  "noop-assign-inherited": { text: (o) => `Object.assign(${o}, Object.create({ v: 2 }))` },
+  "noop-sort-one": { array: true, text: (o) => `${o}.sort()` },
+  "noop-reverse-one": { array: true, text: (o) => `${o}.reverse()` },
+  "noop-fill-range": { array: true, text: (o) => `${o}.fill(0, 5)` },
+  "noop-fill-empty-range": { array: true, text: (o) => `${o}.fill(0, 1, 1)` },
+  "noop-copy-within": { array: true, text: (o) => `${o}.copyWithin(0, 5)` },
+};
 const STORE_OPERATIONS = {
   compound: { text: (o) => `${o}.v += 1` },
+  "logical-or": { text: (o) => `${o}.v ||= 5` },
   increment: { text: (o) => `${o}.v++` },
   bracket: { text: (o) => `${o}["v"] = 7` },
   "object-assign": { text: (o) => `Object.assign(${o}, { v: 7 })` },
   "reflect-set": { text: (o) => `Reflect.set(${o}, "v", 7)` },
   "define-property": { text: (o) => `Object.defineProperty(${o}, "v", { value: 7 })` },
+  "reflect-delete": { text: (o) => `Reflect.deleteProperty(${o}, "v")` },
+  // ADR 0638: the method runs with the read proxy as `this`.
+  "class-method": { classy: true, text: (o) => `${o}.c.inc()` },
   "destructure-assign": { text: (o) => `({ v: ${o}.v } = { v: 7 })` },
+  // ADR 0643: the store as a prototype. Each warns (Chrome, rc.21) and no literal proof may clear it: a `__proto__` key or assignment, the
+  // reflective forms, and a method that reparents `this`.
+  "proto-literal": { text: (o) => `(({ __proto__: ${o} }) as any).x = 7` },
+  "proto-create": { text: (o) => `Object.create(${o}).v = 7` },
+  "proto-setprototypeof": { text: (o) => `Object.setPrototypeOf({}, ${o}).x = 7` },
+  "proto-assign-onto": { text: (o) => `Object.assign(Object.create(${o}), { v: 7 })` },
+  "proto-member": { text: (o) => `(() => { const t: any = { a: 1 }; t.__proto__ = ${o}; t.x = 7; })()` },
+  "proto-method-this": { text: (o) => `(() => { const t: any = { install() { Object.setPrototypeOf(this, ${o}); } }; t.install(); t.x = 7; })()` },
+  "proto-key-handed": { text: (o) => `(() => { const t: any = { a: 1 }; const put = (k: string, v: unknown) => { t[k] = v; }; put("__proto__", ${o}); t.x = 7; })()` },
+  "proto-receiver": { text: (o) => `Reflect.set({}, "v", 7, ${o})` },
+  "reflect-define": { text: (o) => `Reflect.defineProperty(${o}, "v", { value: 7 })` },
   "nested-held": { nested: true, text: (o) => `(() => { const held = ${o}.a; held.v = 7; })()` },
   ...Object.fromEntries([["pop", "pop()"], ["shift", "shift()"], ["unshift", "unshift(3)"], ["splice", "splice(0, 1, 3)"], ["sort", "sort((a, b) => b - a)"],
     ["reverse", "reverse()"], ["fill", "fill(7)"], ["copy-within", "copyWithin(0, 1)"]].map(([name, call]) => [`items-${name}`, { list: true, text: (o) => `${o}.items.${call}` }])),
@@ -241,25 +357,91 @@ const STORE_OPERATIONS = {
  * fast runtime first (API_VARIANTS): the signal kind a variant declares (model.mjs `apiSignal`).
  */
 const API_KINDS = { "owned-write": "owned", optimistic: "optimistic", "writable-memo": "writable-memo", "optimistic-store": "optimistic-store", "optimistic-store-draft": "optimistic-store", projection: "projection" };
+/**
+ * The reads of a whole store (ADRs 0620, 0621), each measured on rc.21 in a strict-read window. `reads`: it warns; `array`, `empty`: the
+ * store it needs. The silent forms read no key, or none the store holds yet.
+ */
+const WHOLE_STORE_READS = {
+  "store-json": { reads: true, text: (o) => `JSON.stringify(${o})` },
+  "store-reflect": { reads: true, text: (o) => `Reflect.get(${o}, "v")` },
+  "store-values": { reads: true, text: (o) => `Object.values(${o})` },
+  "store-entries": { reads: true, text: (o) => `Object.entries(${o})` },
+  "store-assign": { reads: true, text: (o) => `Object.assign({}, ${o})` },
+  "store-template": { reads: true, text: (o) => `\`\${${o}}\`` },
+  "store-array-from": { reads: true, array: true, text: (o) => `Array.from(${o})` },
+  "store-array-spread": { reads: true, array: true, text: (o) => `[...${o}]` },
+  "store-for-of": { reads: true, array: true, text: (o) => `for (const x of ${o}) { void x; }` },
+  ...STORE_DESTRUCTURES,
+  "store-keys": { text: (o) => `Object.keys(${o})` },
+  "store-has": { text: (o) => `"v" in ${o}` },
+  "store-has-own": { text: (o) => `Object.hasOwn(${o}, "v")` },
+  "store-empty-spread": { empty: true, text: (o) => `({ ...${o} })` },
+  "store-empty-values": { empty: true, text: (o) => `Object.values(${o})` },
+  // ADR 0643: a Get through a prototype is the store's trap. A computed key and a shorthand define an own property.
+  "store-proto-literal": { reads: true, text: (o) => `(({ __proto__: ${o} }) as any).v` },
+  "store-proto-string": { reads: true, text: (o) => `(({ "__proto__": ${o} }) as any).v` },
+  "store-proto-merge": { reads: true, imports: ["merge"], text: (o) => `merge(({ __proto__: ${o} }) as any, { w: 2 }).v` },
+  "store-proto-create": { reads: true, text: (o) => `Object.create(${o}).v` },
+  "store-proto-setprototypeof": { reads: true, text: (o) => `Object.setPrototypeOf({}, ${o}).v` },
+  "store-proto-member": { reads: true, text: (o) => `(() => { const t: any = { a: 1 }; t.__proto__ = ${o}; return t.v; })()` },
+  "store-proto-computed": { text: (o) => `(({ ["__proto__"]: ${o} }) as any).v` },
+  "store-proto-shorthand": { text: (o) => `((__proto__: unknown) => ({ __proto__ } as any).v)(${o})` },
+};
+const WHOLE_STORE_WARNING = Object.keys(WHOLE_STORE_READS).filter((form) => WHOLE_STORE_READS[form].reads);
+const WHOLE_STORE_SILENT = Object.keys(WHOLE_STORE_READS).filter((form) => !WHOLE_STORE_READS[form].reads);
+const STRICT_WINDOWS = ["body", "effect-apply", "root", "render-apply"];
+/** ADR 0643: an accessor pair installed on a local, then a plain Get or write: the rules see a member of a plain object, Chrome the signal's. */
+const INSTALLED_GETS = {
+  "installed-get": (read) => `Object.defineProperty({}, "v", { get: ${read} }).v`,
+  "installed-get-create": (read) => `Object.create({}, { v: { get: ${read} } }).v`,
+};
+const INSTALLED_SETS = {
+  "installed-set": (write) => `Object.defineProperty({}, "a", { set: ${write} }).a = 7`,
+  "installed-set-many": (write) => `Object.defineProperties({}, { a: { set: ${write} } }).a = 7`,
+  "installed-set-reflect": (write) => `(() => { const t: any = {}; Reflect.defineProperty(t, "a", { set: ${write} }); t.a = 7; })()`,
+  "installed-set-alias": (write) => `(() => { const t: any = {}; const dp = Object.defineProperty; dp(t, "a", { set: ${write} }); t.a = 7; })()`,
+  "installed-set-create": (write) => `Object.create({}, { a: { set: ${write} } }).a = 7`,
+};
+
 /** A pending read in another reader: `latest(() => a1())`, `isPending(() => a1())`, or a plain read of a `createDeferred` source. */
 const pendingRead = (node, [sig]) => (node.variant === "latest" ? api("latest", `() => ${sig.name}()`, { locals: true }) : node.variant === "is-pending" ? api("isPending", `() => ${sig.name}()`, { locals: true }) : local(sig.name));
 /** The owner-attaching constructors a leaf or an effect apply refuses, besides memo, root and effect: a writable memo, a projection. */
-const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }") };
+/**
+ * F4: JSX creation sites, measured on rc.21 in Chrome (flip-r5 p5 probes, 2026-11-07). A dynamic insert or attribute is a render
+ * effect: unowned it reports NO_OWNER_EFFECT, in an effect apply PRIMITIVE_IN_EFFECT_CALLBACK, in a leaf PRIMITIVE_IN_FORBIDDEN_SCOPE.
+ * A component element runs under dev `createComponent`'s own root: legal unowned, a primitive in an apply or a leaf. A static
+ * element creates nothing.
+ */
+const JSX_SITES = {
+  "jsx-insert": () => "<p>{String(Math.random())}</p>",
+  "jsx-attr": () => "<p class={String(Math.random())} />",
+  "jsx-component": () => "<JsxComp1 />",
+  "jsx-static": () => "<p>static</p>",
+  // D17: a spread is an effect whatever it holds; a static child holding a function is one too; a fragment's child is a memo, quiet with no owner.
+  "jsx-spread": () => "<div {...jsxRest1} />",
+  "jsx-array": () => "<p>{[() => 1]}</p>",
+  "jsx-fragment": () => "<>{String(Math.random())}</>",
+  "jsx-and": () => "<p>{1 && jsxFn1}</p>",
+};
+const jsxSite = (variant) => (JSX_SITES[variant] ? member("", JSX_SITES[variant]) : undefined);
+const jsxLine = (variant) => (variant === "jsx-component" ? "function JsxComp1() { return <i />; }" : variant === "jsx-spread" ? 'const jsxRest1 = { class: "x" };' : variant === "jsx-and" ? "const jsxFn1: any = () => 1;" : undefined);
+const jsxBindings = (variant, bindings) => (variant?.startsWith("jsx-") ? ["direct"] : bindings);
+const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }"), render: api("render", '() => null, document.createElement("div")', { module: "@solidjs/web" }) };
 
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared"],
-    recallLegal: [...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", "evt-apply-owned-flush", ...DENIED_CONTEXTS, ...firesAt("body", "memo", "compute", "untrack"), ...listenersAt("body"), ...RENDER_DRAINS],
+    recallLegal: [...EVENT_LEGAL, ...RENDER_LEGAL, ...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
-    call: (node, [sig]) => (node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
+    call: (node, [sig]) => (INSTALLED_SETS[node.variant] ? member(sig.setter, INSTALLED_SETS[node.variant]) : node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
     // refresh is an API; the other two are local functions, which have no namespace form.
-    bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : ["direct", "alias", "destructured", "wrapper"]),
+    bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : INSTALLED_SETS[variant] ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     // API_VARIANTS (recall; measured on rc.17's fast runtime, 2026-11-03): a writable memo's setter (`createSignal(() => 0)`) reports in
     // every owned context and is legal in a handler and an apply; an optimistic setter (`createOptimistic(0)`) and a signal created
     // `{ ownedWrite: true }` report nothing anywhere, so both are legal in the owned contexts too (`legalVariantContexts`).
-    recallVariants: ["writable-memo"], recallLegalVariants: ["writable-memo", "optimistic", "owned-write"],
+    recallVariants: ["writable-memo", ...Object.keys(INSTALLED_SETS)], recallLegalVariants: ["writable-memo", "optimistic", "owned-write"],
     variantContexts: { "writable-memo": [...OWNED_PURE, "handler", "effect-apply"], optimistic: [...OWNED_PURE, "handler"], "owned-write": [...OWNED_PURE, "handler"] },
     legalVariantContexts: { optimistic: OWNED_PURE, "owned-write": OWNED_PURE },
   },
@@ -287,14 +469,18 @@ export const SPEC = {
     // API_VARIANTS (measured 2026-11-03): a write through an optimistic store's or a projection's read proxy reports in every context;
     // an optimistic store's draft write is legal.
     recallVariants: [...Object.keys(STORE_OPERATIONS), "optional-link", "optional-link-leaf", "async-setter", "optimistic-store", "projection"],
-    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft", "optimistic-store-draft"],
-    setup: (variant, name) => [API_KINDS[variant] ? apiSignal(name("s"), 0, API_KINDS[variant]) : variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
+    // ADR 0626: a shallow store serves values raw, so a write past its root lands and warns nothing; a root write is dropped as ever.
+    recallLegalVariants: ["copy-spread", "copy-assign", "slice-push", "draft-push", "draft-compound", "optional-link-draft", "optimistic-store-draft", "shallow-nested", "shallow-items", ...Object.keys(STORE_NO_OPS)],
+    setup: (variant, name) => [STORE_NO_OPS[variant]?.array ? storeArraySignal(name("s"), 0) : variant === "class-method" ? storeClassSignal(name("s"), 0) : variant?.startsWith("shallow-") ? storeShallowSignal(name("s"), 0) : API_KINDS[variant] ? apiSignal(name("s"), 0, API_KINDS[variant]) : variant?.startsWith("optional-link") ? storeLinkSignal(name("s"), 0, variant === "optional-link-leaf") : variant === "delete" ? storeOptSignal(name("s"), 0) : STORE_OPERATIONS[variant]?.list || ["slice-push", "draft-push"].includes(variant) ? storeListSignal(name("s"), 0) : variant?.startsWith("nested") || STORE_OPERATIONS[variant]?.nested ? storeNestedSignal(name("s"), 0) : storeSignal(name("s"), 0)],
     call: (node, [sig]) => member(sig.name, (object) => {
       const deferred = { "deferred-micro": (w) => `queueMicrotask(() => { ${w}; })`, "deferred-timer": (w) => `setTimeout(() => { ${w}; }, 0)`, "deferred-then": (w) => `Promise.resolve().then(() => { ${w}; })` }[node.variant];
       if (deferred) return `${sig.setter}(() => { ${deferred(`${object}.v = 7`)}; })`;
       if (node.variant === "in-setter") return `${sig.setter}(() => { ${object}.v = 7; })`;
       if (node.variant === "draft") return `${sig.setter}((draft) => { draft.v = 7; })`;
       if (STORE_OPERATIONS[node.variant]) return STORE_OPERATIONS[node.variant].text(object);
+      if (STORE_NO_OPS[node.variant]) return STORE_NO_OPS[node.variant].text(object);
+      if (node.variant === "shallow-nested") return `${object}.a.v = 7`;
+      if (node.variant === "shallow-items") return `${object}.items.push(7)`;
       if (node.variant === "copy-spread") return `({ ...${object} }).v = 7`;
       if (node.variant === "copy-assign") return `Object.assign({}, ${object}, { v: 7 })`;
       if (node.variant === "slice-push") return `${object}.items.slice().push(7)`;
@@ -310,7 +496,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -319,35 +505,49 @@ export const SPEC = {
     // API_VARIANTS (measured 2026-11-03): `latest(() => a1())` and `isPending(() => a1())` of a pending async memo are strict reads
     // (not a pending throw): reported where a read is, silent in a memo, a compute, JSX, `untrack` and a leaf (`legalVariantContexts`).
     // `store-link` (ADR 0615): a store's Get, the read form a call of an accessor and a member read reach by different paths.
-    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending", "store-link"], recallLegalVariants: ["uncalled-arith", "latest", "is-pending", "store-link"],
-    bindingsFor: (variant) => (variant?.startsWith("uncalled") || variant === "store-link" ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    // ADRs 0620, 0621: the reads of a whole store. A warning form is legal where a read is, a silent one in every window too.
+    // ADR 0629: `untrack` scopes the wrapped read only, so a Get of the proxy it returns warns (`store-escaped`), and a primitive it
+    // returns reads nothing (`store-escaped-leaf`). `labelled` (ADR 0628): `untrack(fn, "label")` opens a window wherever it runs.
+    // Rules audit (reproduced in Chrome): a `merge` key a literal serves reads nothing, and a raw store root is no proxy (ADRs 0630, 0634);
+    // `latest(a)`, `isPending(a)` by name and over a pending store warn (ADR 0633); a declared source's body read warns (ADR 0632), and
+    // a compute that answers synchronously does too, with no pending throw (ADR 0631).
+    recallVariants: ["uncalled-arith", "uncalled-index", "latest", "is-pending", "store-link", "store-deep", "store-escaped", "labelled", "latest-name", "is-pending-name", "latest-store", "is-pending-store", "declared", "maybe-sync", ...Object.keys(INSTALLED_GETS), ...WHOLE_STORE_WARNING],
+    recallLegalVariants: ["uncalled-arith", "latest", "is-pending", "store-link", "store-deep", "store-escaped", "store-escaped-leaf", "store-snapshot", "merge-plain", "store-raw-root", "declared", ...WHOLE_STORE_WARNING, ...WHOLE_STORE_SILENT],
+    bindingsFor: (variant) => (variant?.startsWith("uncalled") || variant?.startsWith("store-") || INSTALLED_GETS[variant] ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     variantContexts: { settled: ["body", "effect-apply", "root", "render-apply"], "uncalled-arith": ["body", "effect-apply", "memo"], "uncalled-index": ["body", "effect-apply"],
-      latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"] },
-    legalVariantContexts: { latest: LEAF, "is-pending": LEAF },
+      latest: [...SRU_PENDING_READS, "settled", "tracked"], "is-pending": [...SRU_PENDING_READS, "settled", "tracked"], labelled: [...STRICT_WINDOWS, "memo", "effect-compute", "render-compute", "handler"],
+      "latest-name": STRICT_WINDOWS, "is-pending-name": STRICT_WINDOWS, "latest-store": ["body"], "is-pending-store": ["body"], declared: ["body", "untrack"], "maybe-sync": ["body"] },
+    legalVariantContexts: { latest: LEAF, "is-pending": LEAF, "store-snapshot": STRICT_WINDOWS, "store-escaped-leaf": STRICT_WINDOWS, "merge-plain": STRICT_WINDOWS, "store-raw-root": STRICT_WINDOWS, declared: ["untrack"], ...Object.fromEntries(WHOLE_STORE_SILENT.map((form) => [form, STRICT_WINDOWS])) },
     // A pending read in JSX or a memo the JSX reads is under `<Loading>` (`legalLoading`, see PENDING_ASYNC_UNTRACKED_READ); in a render
     // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
     legalLoading: { memo: ["latest", "is-pending"], jsx: ["latest", "is-pending"] },
     variantSources: { settled: ["module-hook-shared"] },
-    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" ? storeNestedSignal(name("s"), 0) : signal(name("r"), 3, "src")],
-    call: (node, sigs) => (node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" || variant?.startsWith("store-escaped") ? storeNestedSignal(name("s"), 0) : variant === "store-deep" || variant === "store-snapshot" || variant === "merge-plain" ? storeSignal(name("s"), 0) : variant === "store-raw-root" ? storeRawSignal(name("s"), 0) : variant === "latest-store" || variant === "is-pending-store" ? storeAsyncSignal(name("s"), 0) : variant === "declared" ? asyncDeclaredSignal(name("a")) : variant === "maybe-sync" ? asyncMaybeSignal(name("a")) : WHOLE_STORE_READS[variant] ? (WHOLE_STORE_READS[variant].array ? storeArraySignal : WHOLE_STORE_READS[variant].empty ? storeEmptySignal : storeSignal)(name("s"), 0) : signal(name("r"), 3, "src")],
+    call: (node, sigs) => (WHOLE_STORE_READS[node.variant] ? member(sigs[0].name, WHOLE_STORE_READS[node.variant].text, WHOLE_STORE_READS[node.variant].imports) : INSTALLED_GETS[node.variant] ? member(sigs[0].name, INSTALLED_GETS[node.variant]) : node.variant === "merge-plain" ? member(sigs[0].name, (o) => `merge(${o}, { b: 2 }).b`, ["merge"]) : node.variant === "store-raw-root" ? member(sigs[0].name, (o) => `${o}.v`) : node.variant === "latest-name" ? api("latest", sigs[0].name, { locals: true }) : node.variant === "is-pending-name" ? api("isPending", sigs[0].name, { locals: true }) : node.variant === "latest-store" ? api("latest", `() => ${sigs[0].name}.v`, { locals: true }) : node.variant === "is-pending-store" ? api("isPending", `() => ${sigs[0].name}.v`, { locals: true }) : node.variant === "store-escaped" ? member(sigs[0].name, (o) => `untrack(() => ${o}.a).v`, ["untrack"]) : node.variant === "store-escaped-leaf" ? member(sigs[0].name, (o) => `untrack(() => ${o}.v)`, ["untrack"]) : node.variant === "labelled" ? member(sigs[0].name, (o) => `untrack(() => ${o}(), "scope")`, ["untrack"]) : node.variant === "store-deep" ? api("deep", sigs[0].name, { locals: true }) : node.variant === "store-snapshot" ? api("snapshot", sigs[0].name, { locals: true }) : node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
   },
-  NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
+  NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallLegal: [...RENDER_DRAINS, "zero-await-empty", "zero-await-var"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
   // effect under the owner current at `createReaction` (`@solidjs/signals` dist/dev.js:2630-2651, `runWithOwner(owner, …)`): none
   // there, so every `track1()` warns, wherever it is called. `reaction-track-owned` (legal only): the tracker the component (or its
   // parent, or a hook the body calls) creates, owned there, so a call anywhere is legal.
   NO_OWNER_EFFECT: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL,
-    variants: ["effect", "render"], gridVariants: ["reaction-track"], legalVariants: ["effect", "render", "reaction-track-owned"],
+    variants: ["effect", "render"], gridVariants: ["reaction-track"], recallVariants: ["reaction-track-hook", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array", "jsx-and"], legalVariants: ["effect", "render", "reaction-track-owned"],
+    recallLegalVariants: ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-component", "jsx-static", "jsx-fragment"],
+    legalVariantContexts: { "jsx-component": [...UNOWNED, ...ASYNC_CONTROL], "jsx-static": [...UNOWNED, ...ASYNC_CONTROL], "jsx-fragment": [...UNOWNED, ...ASYNC_CONTROL] },
+    variantContexts: { "reaction-track-hook": UNOWNED, "jsx-insert": [...UNOWNED, ...ASYNC_CONTROL, "body", "root", "flw-apply-and-timer", "flw-named-apply-and-timer"], "jsx-attr": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-spread": [...UNOWNED, ...ASYNC_CONTROL, "body", "root"], "jsx-array": [...UNOWNED, ...ASYNC_CONTROL], "jsx-and": [...UNOWNED, ...ASYNC_CONTROL] },
+    contextLine: jsxLine,
     variantSources: { "reaction-track": ["module", "module-barrel"],
       "reaction-track-owned": ["local", ...SOURCE_AXES.props.filter((source) => source !== "prop-value"), ...SOURCE_AXES.context, "module-hook", "module-hook-member"] },
-    contexts: UNOWNED, bindings: BINDINGS, bindingsFor: (variant) => (variant?.startsWith("reaction-track") ? ["direct", "alias", "destructured", "wrapper"] : BINDINGS),
-    setup: (variant, name) => (variant?.startsWith("reaction-track") ? [reactionSignal(name("track"))] : []),
-    call: (node, sigs) => (node.variant?.startsWith("reaction-track") ? local(sigs[0].name, "() => 1")
+    contexts: UNOWNED, bindings: BINDINGS, bindingsFor: (variant) => (variant === "reaction-track-hook" || variant?.startsWith("jsx-") ? ["direct"] : variant?.startsWith("reaction-track") ? ["direct", "alias", "destructured", "wrapper"] : BINDINGS),
+    setup: (variant, name) => (variant !== "reaction-track-hook" && variant?.startsWith("reaction-track") ? [reactionSignal(name("track"))] : []),
+    // ADR 0551: a tracker a hook makes, in a call with no owner.
+    call: (node, sigs) => jsxSite(node.variant) ?? (node.variant === "reaction-track-hook" ? member("", () => "(() => { const useMade = () => createReaction(() => {}); useMade()(() => 1); })()", ["createReaction"]) : node.variant?.startsWith("reaction-track") ? local(sigs[0].name, "() => 1")
       : api(node.variant === "render" ? "createRenderEffect" : "createEffect", "() => 1, () => {}")),
   },
-  NO_OWNER_BOUNDARY: { recallContexts: ASYNC_CONTROL,
-    variants: ["loading", "errored"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [],
-    call: (node) => api(node.variant === "errored" ? "Errored" : "Loading", "{ fallback: 0, children: 1 }"),
+  // ADR 0869: JSX is legal anywhere: rc.21's dev `createComponent` runs a component under its own transparent root, so the boundary sees an owner.
+  NO_OWNER_BOUNDARY: { recallContexts: ASYNC_CONTROL, recallLegalVariants: ["jsx-loading", "jsx-errored"], legalVariantContexts: { "jsx-loading": [...UNOWNED, ...ASYNC_CONTROL], "jsx-errored": [...UNOWNED, ...ASYNC_CONTROL] },
+    variants: ["loading", "errored"], contexts: UNOWNED, bindings: BINDINGS, setup: () => [], bindingsFor: (variant) => (variant?.startsWith("jsx-") ? ["direct"] : BINDINGS),
+    call: (node) => (node.variant === "jsx-loading" ? member("", () => '<Loading fallback="x"><p /></Loading>', ["Loading"]) : node.variant === "jsx-errored" ? member("", () => '<Errored fallback="x"><p /></Errored>', ["Errored"]) : api(node.variant === "errored" ? "Errored" : "Loading", "{ fallback: 0, children: 1 }")),
   },
   NO_OWNER_CONTEXT: { legal: ["body", "memo", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], contextLine: "const Ctx = createContext(7);", call: () => api("useContext", "Ctx") },
   CONTEXT_NOT_FOUND: { recallVariants: ["default-undefined"], variantContexts: { "default-undefined": ["body", "memo", "render-compute", "root", "jsx", "show", "for"] },
@@ -357,23 +557,26 @@ export const SPEC = {
     contextLine: (variant) => (variant === "default-undefined" ? "const Ctx = createContext<number | undefined>(undefined);" : "const Ctx = createContext<number>();"),
     call: () => api("useContext", "Ctx"),
   },
-  SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("onSettled", "() => () => {}") },
+  // ADR 0867: `any-callee` is a call with no resolved fact: it runs, and Chrome reports it.
+  SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], recallVariants: ["any-callee"], variantContexts: { "any-callee": UNOWNED }, bindingsFor: (variant) => (variant === "any-callee" ? ["direct"] : BINDINGS),
+    call: (node) => (node.variant === "any-callee" ? member("", () => "(onSettled as any)(() => () => {})", ["onSettled"]) : api("onSettled", "() => () => {}")) },
   CLEANUP_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"], recallContexts: ["tracked-rerun"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `signal-fn`, `projection` (API_VARIANTS, measured 2026-11-03): a writable memo and a projection attach an owner like a memo:
   // reported in a leaf and an effect apply, legal in a body and a root.
   PRIMITIVE_IN_FORBIDDEN_SCOPE: { legal: ["body", "root"], recallContexts: ["tracked-rerun"],
-    recallVariants: ["signal-fn", "projection"], recallLegalVariants: ["signal-fn", "projection"], variantContexts: { "signal-fn": [...LEAF, "body", "root"], projection: [...LEAF, "body", "root"] },
+    recallVariants: ["signal-fn", "projection", "render", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"], recallLegalVariants: ["signal-fn", "projection", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component", "jsx-static"],
+    legalVariantContexts: { "jsx-static": [...LEAF] }, contextLine: jsxLine, bindingsFor: (variant) => jsxBindings(variant, BINDINGS), variantContexts: { "signal-fn": [...LEAF, "body", "root"], projection: [...LEAF, "body", "root"], render: LEAF, "jsx-insert": [...LEAF, "body", "root"], "jsx-spread": [...LEAF, "body", "root"], "jsx-fragment": [...LEAF, "body", "root"], "jsx-attr": [...LEAF, "body", "root"], "jsx-component": [...LEAF, "body", "root"] },
     variants: ["memo", "root", "effect"], contexts: LEAF, bindings: BINDINGS, setup: () => [],
-    call: (node) => API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
+    call: (node) => jsxSite(node.variant) ?? API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: {
-    contexts: ["jsx", "show", "for"], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { recallOnly: true, recallContexts: ["jsx", "show", "for"],
+    contexts: [], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
   // rc.17 dev-shared.js: a pending read inside createTrackedEffect or onSettled serves the committed value (and throws while uninitialized).
   // `deferred` (API_VARIANTS, measured 2026-11-03): a `createDeferred(async () => 1)` source read while pending reports both codes
   // where an async memo does.
-  PENDING_ASYNC_FORBIDDEN_SCOPE: { recallContexts: ["tracked-rerun"], recallVariants: ["deferred"], variantContexts: { deferred: LEAF },
+  PENDING_ASYNC_FORBIDDEN_SCOPE: { recallLegal: ["zero-settled-empty", "zero-settled-var"], recallContexts: ["tracked-rerun", ...firesAt("settled")], recallVariants: ["deferred"], variantContexts: { deferred: LEAF },
     contexts: LEAF, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : asyncSignal(name("a"))], call: (node, sigs) => pendingRead(node, sigs),
   },
@@ -386,14 +589,22 @@ export const SPEC = {
   // `legalLoading`: a legal program whose JSX reads the pending value (the `memo` cell's `{m1()}`) sits under `<Loading>`: without
   // one rc.17 reports ASYNC_OUTSIDE_LOADING_BOUNDARY, advisory but placeless, which made the legal judge call a program with a violation
   // at its site `disturbed` instead of judging it (60 lg-recall programs on the 644bd1a81 run, the `cb-*` forms of `memo`).
-  PENDING_ASYNC_UNTRACKED_READ: { legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
-    recallVariants: ["deferred"], variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"] },
-    contexts: ["body", "root", "effect-apply", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
-    setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : asyncSignal(name("a"))], call: (node, sigs) => pendingRead(node, sigs),
+  // `untrack` (ADRs 0619, 0628): rc.21 throws for a source the body running it created, directly or through a hook it calls. A module
+  // source or a parent's is another owner's: the read suspends, so no code (and a body re-run onto a fresh memo never ends).
+  // `labelled`: `untrack(fn, "label")` opens a window of its own, so it throws on any pending source.
+  PENDING_ASYNC_UNTRACKED_READ: { recallLegal: ["prop-unread-cap", "prop-unread-member", "prop-unread-lower"], legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"], untrack: ["module", "module-barrel", "async-prop", "async-value", "async-value-member", "async-context", "async-loading"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+    // ADR 0635: an uninitialized derive refuses key probes.
+    recallVariants: ["deferred", "labelled", "store-keys", "store-in", "store-has-own", "over-async"], recallMountsNotIn: { untrack: ["dynamic"] }, bindingsFor: (variant) => (variant?.startsWith("store-") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"], labelled: ["body", "root"], "store-keys": ["body", "root"], "store-in": ["body", "root"], "store-has-own": ["body", "root"], "over-async": ["body", "root", "untrack"] },
+    contexts: ["body", "root", "effect-apply", "render-apply", "untrack"], bindings: ["direct", "alias", "destructured", "wrapper"],
+    // `over-async`: a sync memo over an async one is pending with it (ADR 0628).
+    setup: (variant, name) => [variant === "deferred" ? apiSignal(name("a"), 0, "deferred", "src") : variant === "over-async" ? apiSignal(name("a"), 0, "over-async", "src") : variant?.startsWith("store-") ? storeAsyncSignal(name("s"), 0) : asyncSignal(name("a"))],
+    call: (node, sigs) => (node.variant === "store-keys" ? member(sigs[0].name, (o) => `Object.keys(${o})`) : node.variant === "store-in" ? member(sigs[0].name, (o) => `"v" in ${o}`) : node.variant === "store-has-own" ? member(sigs[0].name, (o) => `Object.hasOwn(${o}, "v")`) : node.variant === "labelled" ? member(sigs[0].name, (o) => `untrack(() => ${o}(), "scope")`, ["untrack"]) : pendingRead(node, sigs)),
   },
   SYNC_NODE_RECEIVED_ASYNC: {
-    variants: ["memo", "effect"], contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
-    call: (node) => (node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
+    variants: ["memo", "effect"], recallVariants: Object.keys(SYNC_COMPUTES), contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
+    contextLine: (variant) => SYNC_COMPUTE_LINES[variant],
+    call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant]) : node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
   },
   UNTRACKED_READ_AFTER_AWAIT: { recallContexts: ["memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"],
     contexts: ["memo-async", "effect-async"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -402,15 +613,48 @@ export const SPEC = {
   },
   // Defect codes no rule claims (codes.mjs `defect-unclaimed`): measured for "never quieter than Solid"; a silent checker is a false clean.
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
-  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun"],
+  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun", "effect-apply-guard-open"],
     // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
-    recallVariants: ["signal-fn", "projection"], recallLegalVariants: ["signal-fn", "projection"], variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"] },
+    recallVariants: ["signal-fn", "projection", "render", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"], recallLegalVariants: ["signal-fn", "projection", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component", "jsx-static"],
+    legalVariantContexts: { "jsx-static": ["effect-apply"] }, contextLine: jsxLine, bindingsFor: (variant) => jsxBindings(variant, BINDINGS), variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"], render: ["effect-apply"], "jsx-insert": ["effect-apply", "body", "root"], "jsx-spread": ["effect-apply", "body", "root"], "jsx-fragment": ["effect-apply", "body", "root"], "jsx-attr": ["effect-apply", "body", "root"], "jsx-component": ["effect-apply", "body", "root"] },
     variants: ["memo", "root", "effect"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [],
-    call: (node) => API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
+    call: (node) => jsxSite(node.variant) ?? API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
   // rc.17 signals dev.js: a `<Loading on>` re-armed by a write while a source it waits on is also read outside it (the fallback can
   // never show). SC5006 claims it as an obligation only (ADR 0517). The site is the outside read; the diagnostic is raised from the
   // boundary's notification (no authored frame is guaranteed), so it is judged by file. Recall grids only (`recallOnly`).
+  // rc.21 (ADR 0625): `onFlush` under a children-capable owner warns. Measured on the dev build: a body, a compute, a root; silent in an
+  // apply, a leaf and a handler. Recall grids only.
+  ON_FLUSH_IN_OWNED_SCOPE: { recallOnly: true, legal: ["handler", "effect-apply", "settled", "tracked"],
+    contexts: [], recallContexts: ["body", "memo", "effect-compute", "render-compute", "root"], bindings: BINDINGS, setup: () => [], call: () => api("onFlush", "() => {}") },
+  // rc.21 (ADR 0636): an optimistic setter before its async source's first answer. A driven click lands after it: legal, an obligation.
+  // `creates-here`: the creation is on the write's stack, so a handler throws too (ADR 0636); `declared`: a `loadingValue` is an answer.
+  OPTIMISTIC_WRITE_BEFORE_LOAD: { recallOnly: true, variants: ["signal", "store"], recallVariants: ["creates-here"], recallLegalVariants: ["declared", "tuple-plain-slot"], recallLegal: ["handler"],
+    variantContexts: { signal: ["body", "root"], store: ["body", "root"], "creates-here": ["body", "creates-in-handler"] }, legalVariantContexts: { declared: ["handler"], "tuple-plain-slot": ["handler"] },
+    contexts: [], recallContexts: ["body", "root", "creates-in-handler"], bindings: ["direct", "alias", "wrapper"],
+    setup: (variant, name) => (variant === "creates-here" ? [] : [apiSignal(name("o"), 1, variant === "store" ? "optimistic-async-store" : variant === "declared" ? "optimistic-declared" : variant === "tuple-plain-slot" ? "optimistic-tuple-hook" : "optimistic-async", "src")]),
+    call: (node, sigs) => (node.variant === "creates-here" ? member("createOptimistic", () => `createOptimistic(async () => 1)[1](2)`, ["createOptimistic"]) : node.variant === "store" ? local(sigs[0].setter, "(d) => { d.v = 2; }") : node.variant === "tuple-plain-slot" ? local(sigs[0].name) : local(sigs[0].setter, "2")),
+  },
+  // rc.21 (ADR 0637): a compute catches a pending read's throw and completes. `rethrow` lets it continue; a signal never throws.
+  // Per pass (ADR 0637): `store-get`, `store-keys` and `latest` read too; `prior-read` and `later-read` leave a read outside the `try`,
+  // so the throw leaves the pass and nothing reports.
+  CAUGHT_REACTIVE_READ: { recallOnly: true, placeless: true, variants: ["async"], recallVariants: ["store-get", "store-keys", "latest", "hook-call", "get-literal"], legalVariants: ["rethrow", "signal", "prior-read", "later-read", "owned-setter"], recallLegal: ["memo", "effect-compute"], legalLoading: { memo: true }, noCatchLayer: true,
+    contexts: [], recallContexts: ["memo", "effect-compute"], bindings: ["direct"],
+    setup: (variant, name) => [variant === "owned-setter" ? apiSignal(name("w"), 0, "owned") : variant === "signal" ? signal(name("r"), 1, "src") : variant?.startsWith("store-") ? storeAsyncSignal(name("s"), 0) : asyncSignal(name("a"))],
+    // ADR 0640: a setter in a `try` is no read: `ownedWrite` is the one compute a setter call is legal in.
+    call: (node, [sig]) => (node.variant === "owned-setter" ? member(sig.setter, (o) => `try { ${o}(1); } catch { }`) : node.variant === "latest" ? member(sig.name, (o) => `try { latest(${o}); } catch { }`, ["latest"]) : member(sig.name, (o) => ({
+      rethrow: `try { ${o}(); } catch (error) { throw error; }`, "prior-read": `${o}(); try { ${o}(); } catch { }`, "later-read": `try { ${o}(); } catch { } ${o}()`,
+      "store-get": `try { ${o}.v; } catch { }`, "store-keys": `try { Object.keys(${o}); } catch { }`,
+      // ADR 0658: no accessor call the block shows: a value a hook handed over, and a literal's getter.
+      "hook-call": `const useRead = () => ${o}; const read = useRead(); try { read(); } catch { }`,
+      "get-literal": `const held = { get v() { return ${o}(); } }; try { held.v; } catch { }` }[node.variant] ?? `try { ${o}(); } catch { }`))),
+  },
+  // rc.21 (ADR 0624): `<Loading on={fn}>` warns on the boundary's first run. The site is a read under the boundary; the `on` value is
+  // the variant. Judged by file (the diagnostic is raised from the boundary). `on` is typed `any`. Recall grids only.
+  LOADING_ON_ACCESSOR: { recallOnly: true, placeless: true, variants: ["accessor", "memo", "arrow"], legalVariants: ["value"], legal: ["loading-on-accessor"],
+    contexts: [], recallContexts: ["loading-on-accessor"], bindings: ["direct", "alias", "wrapper"],
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("t")) : signal(name("t"), 1, "src")], call: (node, [sig]) => local(sig.name),
+    onAttribute: (variant, sig) => (variant === "arrow" ? `() => ${sig}()` : variant === "value" ? `${sig}()` : sig) },
   LOADING_ON_OUTSIDE_HOLD: { recallOnly: true, placeless: true,
     contexts: [], recallContexts: ["loading-on-outside"], bindings: ["direct", "alias", "wrapper"],
     setup: (variant, name) => loadingSignals(name),
@@ -439,13 +683,33 @@ export const SPEC = {
   RESOLVE_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("resolve", "() => 1") },
   UNTIL_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("until", "() => 1") },
   FLUSH_IN_ACTION: { legal: ["handler", "timer"], recallContexts: ["action-after-yield", "action-shared"], contexts: ["action"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
-  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch", "evt-anchor-apply-listener", ...ANCHOR_MISSES, ...DENIED_FLUSH], recallLegal: ["evt-handler-dispatch", "evt-created-anchor", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
-    contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [],
-    call: () => api("dynamic", '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
+    contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [], recallVariants: Object.keys(STATIC_SOURCES),
+    call: (node) => api("dynamic", STATIC_SOURCES[node.variant] ?? '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
   },
 };
+// The flip's shapes (flip-read.mjs, flip-write.mjs): one file per track, so neither edits this table.
+for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS, FLIP_GEN_CONTEXTS]) {
+  for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
+}
+for (const legal of [FLIP_READ_LEGAL, FLIP_WRITE_LEGAL]) for (const [code, added] of Object.entries(legal)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
+for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
+  const spec = SPEC[code];
+  const setup = spec.setup;
+  spec.setup = (variant, name) => (variants[variant] ? [openSignal(name("a"), variants[variant].kind)] : setup(variant, name));
+  // A variant with `text` writes its own site over the source.
+  const [call, bindingsFor] = [spec.call, spec.bindingsFor];
+  spec.call = (node, sigs, ...rest) => (variants[node.variant]?.text ? member(sigs[0].name, variants[node.variant].text, variants[node.variant].imports, variants[node.variant]) : call(node, sigs, ...rest));
+  spec.bindingsFor = (variant) => (variants[variant]?.text ? variants[variant].bindings ?? ["direct", "alias", "wrapper"] : bindingsFor?.(variant) ?? spec.bindings);
+  const legal = Object.entries(variants).filter(([, { legal }]) => legal);
+  spec.recallLegalVariants = [...(spec.recallLegalVariants ?? []), ...legal.map(([variant]) => variant)];
+  spec.legalVariantContexts = { ...spec.legalVariantContexts, ...Object.fromEntries(legal.map(([variant, { legal }]) => [variant, legal])) };
+  spec.recallVariants = [...(spec.recallVariants ?? []), ...Object.keys(variants)];
+  for (const [variant, { only, contexts, legal = [] }] of Object.entries(variants)) if (only) for (const context of [...contexts, ...legal]) (spec.contextOnly ??= {})[context] = [...(spec.contextOnly?.[context] ?? []), variant];
+  spec.variantContexts = { ...spec.variantContexts, ...Object.fromEntries(Object.entries(variants).map(([variant, { contexts, legal = [] }]) => [variant, [...contexts, ...legal]])) };
+}
 
 /**
  * The rc.17 API variants (recall grids only), per code: each measured on the fast runtime before it got cells (2026-11-03), misuse
@@ -788,6 +1052,14 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 // Under an `<Errored>` mount the `NoOwnerError` an error arm throws escalates to the boundary, which logs the compute's own error
 // instead (fast runtime, 2026-11-01): Solid never names this code there.
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
+// rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
+// `action` is placed, `onFlush` is too, on both sides.
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) {
+  const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
+  if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
+}
+SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
+SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
 for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
@@ -795,6 +1067,15 @@ for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACE
   SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...legal.filter((context) => !hasLegal.has(context))];
 }
 
+// F4: a dynamic JSX insert or attribute is a render effect. Where an unowned effect is NO_OWNER_EFFECT, it reports that code, not
+// the primitive codes: neither cell there.
+for (const code of ["PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE"]) {
+  const spec = SPEC[code];
+  spec.recallVariantsNotIn ??= {};
+  for (const context of new Set([...SPEC.NO_OWNER_EFFECT.contexts, ...SPEC.NO_OWNER_EFFECT.recallContexts])) {
+    spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), "jsx-insert", "jsx-attr", "jsx-spread", "jsx-array", "jsx-and"])];
+  }
+}
 // A legal variant whose legal places include contexts where the code's other variants are misuses (`legalVariantContexts`): those
 // contexts become legal cells (`recallLegal`) that take only such variants (`variantOnlyLegal`, matrix.mjs `recallAxes`).
 for (const [code, spec] of Object.entries(SPEC)) for (const [variant, contexts] of Object.entries(spec.legalVariantContexts ?? {})) for (const context of contexts) {
@@ -807,7 +1088,7 @@ for (const [code, spec] of Object.entries(SPEC)) for (const [variant, contexts] 
  * The codes the matrix measures, in the policy table's order: the defects, claimed by a rule or not ("never quieter than Solid": an
  * unclaimed defect the checker is silent on is a false clean too). An advisory code (Solid documents it as legal) is not measured.
  */
-export const MISUSE_CODES = Object.keys(codePolicy).filter((code) => SPEC[code] && ["defect-claimed", "defect-unclaimed"].includes(policyOf(code)?.disposition));
+export const MISUSE_CODES = Object.keys(codePolicy).filter((code) => SPEC[code] && (SPEC[code].typedAway || SPEC[code].recallOnly || ["defect-claimed", "defect-unclaimed"].includes(policyOf(code)?.disposition)));
 /** The codes that have a template (not typed away). */
 export const TEMPLATE_CODES = MISUSE_CODES.filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly);
 /** The codes with a template only the recall grids measure (never drawn, so no other program moves). */
@@ -843,7 +1124,8 @@ export function gridBindingsOf(code, variant) {
 /** The recall bindings a (code, variant) takes: by its call's kind; a statement on a store (`member`) has no callee to rewrite. */
 export function recallBindingsOf(code, variant) {
   const kind = SPEC[code].call({ code, variant }, SAMPLE_SIGS).kind;
-  return kind === "api" ? [...RECALL_API_BINDINGS, ...CALLEE_FORMS] : kind === "local" ? [...RECALL_VALUE_BINDINGS, ...CALLEE_FORMS] : RECALL_VALUE_BINDINGS;
+  const extra = code === "UNTRACKED_READ_AFTER_AWAIT" && kind === "local" ? AFTER_AWAIT_CALLEE_BINDINGS : [];
+  return kind === "api" ? [...RECALL_API_BINDINGS, ...CALLEE_FORMS] : kind === "local" ? [...RECALL_VALUE_BINDINGS, ...HOOK_SLOT_BINDINGS, ...CALLEE_FORMS, ...extra] : RECALL_VALUE_BINDINGS;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -876,7 +1158,11 @@ export function describeUse(node, signals) {
       case "ns-exported": out.namespaces.push(module); out.moduleLines.push(`export const { ${name}: ${local} } = ${ns};`); out.text = wrap(local); break;
       case "ns-held": out.namespaces.push(module); out.moduleLines.push(`const ${ns}2 = ${ns};`, `const { ${name}: ${local} } = ${ns}2;`); out.text = wrap(local); break;
       case "ns-member": out.namespaces.push(module); out.moduleLines.push(`const ${local} = ${ns}.${name};`); out.text = wrap(local); break;
+      // Review D36: a `const` holding the named import itself (the `alias` binding is an import alias).
+      case "alias-const": importsOf(module).push(name); out.moduleLines.push(`const ${local} = ${name};`); out.text = wrap(local); break;
       case "reexport": out.importLines = [`import { ${name} as ${local} } from "./solid-api";`]; out.files = { "solid-api.ts": `export { ${name} } from "${module}";\n` }; out.text = wrap(local); break;
+      // ADR 0780: the namespace is an export of a module, with no `import * as` of the primitive's module anywhere.
+      case "reexport-ns-as": out.importLines = ['import { Api as R } from "./solid-api";']; out.files = { "solid-api.ts": `export * as Api from "${module}";\n` }; out.text = wrap(`R.${name}`); break;
       case "reexport-ns": out.importLines = ['import * as R from "./solid-api";']; out.files = { "solid-api.ts": `export * from "${module}";\n` }; out.text = wrap(`R.${name}`); break;
       case "bind": importsOf(module).push(name); out.text = `${name}.bind(null)(${args})`; break;
       case "call": importsOf(module).push(name); out.text = `${name}.call${callTypeArguments(name, args)}(null${args ? `, ${args}` : ""})`; break;
@@ -901,6 +1187,20 @@ export function describeUse(node, signals) {
     const { name, args } = target;
     // A value source (`prop-value`): the value is a getter on `props`, so the read is the member itself, not a call.
     const bare = sigs.some((sig) => sig?.read === "value" && sig.name === name);
+    if (HOOK_SLOT_BINDINGS.includes(node.bind)) {
+      const value = bare ? name : `${name}(${args})`;
+      if (node.bind.endsWith("-written")) out.moduleLines.push("export const other = { useIt: () => 0 };", "other.useIt = () => 1;");
+      const form = node.bind.replace(/-written$/, "");
+      out.preludeLines.push({
+        "hook-fn-slot": `const useThing = () => ({ useIt: () => { ${AUX}return ${value}; } });`,
+        "hook-fn-member": `const useThing = () => ({ useIt: () => { ${AUX}return ${value}; } });`,
+        "hook-method-slot": `const useThing = () => ({ useIt() { ${AUX}return ${value}; } });`,
+        "hook-shorthand-fn": `const useThing = () => { const useIt = () => { ${AUX}return ${value}; }; return { useIt }; };`,
+      }[form]);
+      if (form === "hook-fn-member") { out.preludeLines.push("const thing = useThing();"); out.text = "thing.useIt()"; }
+      else { out.preludeLines.push("const { useIt } = useThing();"); out.text = "useIt()"; }
+      return out;
+    }
     switch (node.bind) {
       case "alias": out.preludeLines.push(`const useIt = ${name};`); out.text = `useIt(${args})`; break;
       case "destructured": out.preludeLines.push(`const { useIt } = { useIt: ${name} };`); out.text = `useIt(${args})`; break;
@@ -922,6 +1222,9 @@ export function describeUse(node, signals) {
     return out;
   }
   // member: a statement on a component-scope object
+  out.solid.push(...(target.imports ?? []));
+  if (target.importLines) out.importLines = target.importLines;
+  if (target.files) out.files = target.files;
   switch (node.bind) {
     case "alias": out.preludeLines.push(`const useIt = ${target.object};`); out.text = target.text("useIt"); break;
     case "wrapper": out.preludeLines.push(`const wrapUse = () => { ${AUX}${target.text(target.object)}; };`); out.text = "wrapUse()"; break;
@@ -952,6 +1255,9 @@ function valueBinding(bind, name) {
     case "default-slot": return { prelude: [`const { useIt = ${name} } = {} as { useIt?: typeof ${name} };`], callee: "useIt" };
     case "nested": return { prelude: [`const { a: { useIt } } = { a: { useIt: ${name} } };`], callee: "useIt" };
     case "array-slot": return { prelude: [`const [useIt] = [${name}];`], callee: "useIt" };
+    case "elem-callee": return { prelude: [`const fns = [${name}];`], callee: "fns[0]" };
+    case "result-callee": return { prelude: [`const getIt = () => ${name};`], callee: "getIt()" };
+    case "cond-callee": return { prelude: [], callee: `(Math.random() < 2 ? ${name} : ${name})` };
     default: return null;
   }
 }
@@ -961,7 +1267,7 @@ function valueBinding(bind, name) {
 
 /** Wraps `stmts` in a layer (a closure called in place, a helper taking the callback, an IIFE). */
 function applyLayer(layer, stmts, kit) {
-  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer) || DEPTH_FORMS.includes(layer)) return [ctl(layer, stmts)];
+  if (CONTROL_LAYERS.includes(layer) || HANDOFF_FORMS.includes(layer) || DEPTH_FORMS.includes(layer) || CHAIN_FORMS.includes(layer)) return [ctl(layer, stmts)];
   if (FILE_LAYERS.includes(layer)) return [expr(call(ref(kit.ensureHelper("call", { module: true, via: layer.slice("module-".length) })), [fn(stmts)]))];
   switch (layer) {
     case "closure": { const f = kit.name("f"); return [decl(f, fn(stmts)), expr(call(ref(f)))]; }
@@ -982,7 +1288,251 @@ function loadingSignals(name) {
  * Places `stmts` (which hold the site) in a context. Returns { body, view } (the statements of the component body and its JSX items).
  * Contexts that a layer cannot wrap (an async compute needs its await first) take the layers inside.
  */
+/** The element, the listener and the call of a fire (FIRES), with `handler` the listener's body. */
+function fireParts(fire, handler, kit) {
+  const el = kit.name("el");
+  const base = fire.replace(/-(wrapper|member)$/, "");
+  const made = (tag) => [decl(el, domExpr(`document.createElement("${tag}")`)), expr(domExpr(`document.body.append(${el})`))];
+  const on = (event) => expr(listenExpr(el, event, fn(handler)));
+  const focused = expr(domExpr(`${el}.focus()`));
+  if (fire === "steal") {
+    const other = kit.name("el");
+    return { setup: [...made("input"), decl(other, domExpr('document.createElement("input")')), expr(domExpr(`document.body.append(${other})`)), on("blur"), focused], fire: expr(domExpr(`${other}.focus()`)) };
+  }
+  if (base === "focus") {
+    if (fire === "focus-wrapper") { const go = kit.name("fire"); return { setup: [...made("input"), on("focus"), decl(go, fn([focused]))], fire: expr(call(ref(go))) }; }
+    if (fire === "focus-member") { const box = kit.name("box"); return { setup: [...made("input"), on("focus"), decl(box, domExpr(`{ held: ${el} }`))], fire: expr(domExpr(`${box}.held.focus()`)) }; }
+    return { setup: [...made("input"), on("focus")], fire: focused };
+  }
+  switch (fire) {
+    case "select": return { setup: [...made("input"), on("focus")], fire: expr(domExpr(`${el}.select()`)) };
+    case "blur": case "remove": return { setup: [...made("input"), on("blur"), focused], fire: expr(domExpr(`${el}.${fire}()`)) };
+    case "reset": return { setup: [...made("form"), on("reset")], fire: expr(domExpr(`${el}.reset()`)) };
+    case "submit": return { setup: [...made("form"), on("submit"), expr(domExpr(`${el}.addEventListener("submit", (event) => event.preventDefault())`))], fire: expr(domExpr(`${el}.requestSubmit()`)) };
+    case "validity": return { setup: [...made("input"), expr(domExpr(`${el}.required = true`)), on("invalid")], fire: expr(domExpr(`${el}.checkValidity()`)) };
+    // Closed on the spot: an open modal makes the document inert, and the driver's next click then waits out its timeout (ADR 0679's run).
+    case "modal": return { setup: [...made("dialog"), on("beforetoggle")], fire: expr(domExpr(`(${el}.showModal(), ${el}.close())`)) };
+    case "popover": return { setup: [...made("div"), expr(domExpr(`${el}.popover = "auto"`)), on("beforetoggle")], fire: expr(domExpr(`${el}.showPopover()`)) };
+    default: throw new Error(`no fire ${fire}`);
+  }
+}
+
+/** A fire at a position (`evt-<position>-fire-<fire>`): the stack the delivery runs on. */
+function fireContext(position, fire, stmts, kit) {
+  const v = () => kit.name("v");
+  if (fire === "project") { const lens = kit.name("lens"); return { body: [decl(lens, domExpr("new (class { focus() { return 1; } })()")), expr(domExpr(`${lens}.focus()`))], view: [button(kit.name("b"), stmts)] }; }
+  if (fire === "shadow") { const focus = "focus"; return { body: [decl(focus, fn([ret(num(1))])), expr(call(ref(focus)))], view: [button(kit.name("b"), stmts)] }; }
+  const { setup, fire: call_ } = fireParts(fire, stmts, kit);
+  switch (position) {
+    case "body": return { body: [...setup, call_], view: [] };
+    case "memo": { const m = kit.name("m"); return { body: [...setup, decl(m, prim("memo", fn([call_, ret(num(1))])))], view: [child(v(), call(ref(m)))] }; }
+    case "compute": return { body: [...setup, expr(prim("effect", fn([call_, ret(num(1))]), { apply: fn([]) }))], view: [] };
+    case "settled": return { body: [...setup, expr(prim("settled", fn([call_])))], view: [] };
+    case "untrack": { const m = kit.name("m"); return { body: [...setup, decl(m, prim("memo", fn([expr(prim("untrack", fn([call_]))), ret(num(1))])))], view: [child(v(), call(ref(m)))] }; }
+    case "apply": return { body: [...setup, expr(prim("effect", fn([ret(num(1))]), { apply: fn([call_]) }))], view: [] };
+    case "handler": return { body: setup, view: [button(kit.name("b"), [call_])] };
+    default: throw new Error(`no fire position ${position}`);
+  }
+}
+
+/** A window listener (`lst-<position>-<form>`, ADR 0645): `dispatch` runs it, or nothing does. */
+function listenerContext(position, form, stmts, kit) {
+  const box = kit.name("box");
+  const dispatch = 'window.dispatchEvent(new Event("click"))';
+  const held = decl(box, obj([["handle", fn(stmts)]]));
+  const button_ = () => button(kit.name("b"), position === "handler" ? [expr(domExpr(dispatch))] : []);
+  const at = position === "body" ? [expr(domExpr(dispatch))] : [];
+  const view = position === "handler" ? [button_()] : [];
+  switch (form) {
+    case "method": return { body: [held, expr(listenExpr("window", "click", fn([expr(call(memberOf(ref(box), "handle")))]))), ...at], view };
+    // At module scope nothing placed the method: `const`, listener and signal outside the component that dispatches.
+    case "module": return { hoisted: [held, expr(listenExpr("window", "click", fn([expr(call(memberOf(ref(box), "handle")))])))], body: at, view };
+    case "bind": return { body: [held, expr(domExpr(`window.addEventListener("click", ${box}.handle.bind(${box}))`)), ...at], view };
+    case "object": return { body: [held, expr(domExpr(`window.addEventListener("click", { handleEvent: ${box}.handle })`)), ...at], view };
+    case "shared": { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), expr(domExpr(`window.addEventListener("click", ${h})`)), ...at], view: [...view, namedButton(kit.name("b"), ref(h))] }; }
+    default: throw new Error(`no listener form ${form}`);
+  }
+}
+
+/**
+ * `evt-apply-owned-flush` (`g10`): a later root's body flushes under its owner, the drained apply clicks, and the JSX handler has that owner.
+ * ADR 0639's effect window takes only its event, so a read there is silent; the write throws.
+ */
+function ownedFlushContext(stmts, kit) {
+  const go = apiSignal(kit.name("t"), 0, "owned", "src");
+  const b = kit.name("b"), host = kit.name("el");
+  return {
+    sigs: [go],
+    body: [
+      decl(host, domExpr('document.createElement("div")')),
+      expr(prim("effect", fn([ret(read(go.name))]), { apply: fn([expr(domExpr(`v && document.querySelector<HTMLElement>('[data-act="${b}"]')!.click()`))]) })),
+      decl("Later", domExpr(`() => { ${go.setter}(1); flush(); return <i />; }`, undefined, ["flush"])),
+      expr(prim("timer", fn([expr(domExpr(`render(() => <Later />, ${host})`, ["render"]))]))),
+    ],
+    view: [button(b, stmts)],
+  };
+}
+
+const anyEl = (id) => `(document.querySelector('[data-act="${id}"]') as any)`;
+function laterRoot(kit, prep, trigger, solid, web) {
+  const host = kit.name("el");
+  return [
+    decl(host, domExpr('document.createElement("div")')),
+    decl("Later", domExpr(`() => { ${trigger}; return <i />; }`, web, solid)),
+    expr(prim("timer", fn([...prep.map((text) => expr(domExpr(text))), expr(domExpr(`render(() => <Later />, ${host})`, ["render"]))]))),
+  ];
+}
+/**
+ * The contexts whose own timer disables or removes the driven element before any click: nothing can click it, the fast hosts skip it, and
+ * Playwright waits out its actionability check (12 of 29 sampled `dny-*` programs were `harness-error` in Chrome, every time, so these
+ * contexts had no oracle at all). `undriven` takes it off the click plan; the trigger, not the driver, is what these contexts measure.
+ */
+const TAKEN_AWAY = new Set(["dny-blur-disabled", "dny-blur-replace", "dny-focusout-replace", "dny-change-typed", "dny-blur-select-remove",
+  ...Object.keys(DISPOSALS), "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-shared-fn", "dny-chain-click",
+  "dny-flush-unmount", "dny-blur-spread", "dny-blur-dynamic", "dny-portal-dispose", "dny-blur-lowercase", "dny-legal-keydown", "dny-legal-click", "dny-legal-pointer"]);
+function undriven(tree, id) {
+  if (Array.isArray(tree)) { for (const item of tree) undriven(item, id); return; }
+  if (tree === null || typeof tree !== "object") return;
+  if ((tree.k === "button" || tree.k === "hbutton") && tree.id === id) tree.undriven = true;
+  for (const value of Object.values(tree)) undriven(value, id);
+}
+function deniedContext(context, stmts, kit) {
+  const b = kit.name("b");
+  const built = deniedContextOf(context, stmts, kit, b);
+  if (TAKEN_AWAY.has(context)) undriven(built, b);
+  return built;
+}
+function deniedContextOf(context, stmts, kit, b) {
+  const el = anyEl(b);
+  if (context === "dny-blur-lowercase") { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onblur: ${h} }}` })] }; }
+  if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
+  const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
+  if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
+  const spec = DENIED[context];
+  if (spec) {
+    const fill = (text) => text.replaceAll("EL", el);
+    const declared = spec.declares ? [expr(domExpr('declare module "@solidjs/web" { namespace JSX { interface IntrinsicElements { "x-sc": any } } }')),
+      expr(domExpr('if (!customElements.get("x-sc")) customElements.define("x-sc", class extends HTMLElement { static formAssociated = true; internals = this.attachInternals(); })'))] : [];
+    return { ...(declared.length ? { hoisted: declared } : {}), body: laterRoot(kit, spec.prep.map(fill), fill(spec.trigger)), view: [button(b, stmts, { tag: spec.tag, on: spec.on, attrs: spec.attrs })] };
+  }
+  if (DISPOSALS[context]) {
+    const host = kit.name("el"), d = kit.name("f");
+    const dispose = { body: `${d}()`, memo: `createMemo(() => { ${d}(); return 1; })()`, compute: `createEffect(() => { ${d}(); return 1; }, () => {})`, untrack: `createMemo(() => untrack(() => { ${d}(); return 1; }))()` }[DISPOSALS[context]];
+    const inner = decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "input", on: "onBlur" })))]));
+    return { body: [decl(host, domExpr('document.createElement("div")')), expr(domExpr(`document.body.append(${host})`)), inner,
+      decl(d, domExpr(`render(() => <Inner />, ${host})`, ["render"])),
+      ...laterRoot(kit, [`${el}.focus()`], dispose, ["createEffect", "createMemo", "untrack"])], view: [] };
+  }
+  const gone = apiSignal(kit.name("t"), context === "dny-flush-load" ? 0 : 1, "owned", "src");
+  switch (context) {
+    case "dny-unmount-flush-body": case "dny-unmount-flush-root": {
+      const change = context.endsWith("root") ? `createRoot(() => { ${gone.setter}(0); flush(); })` : `${gone.setter}(0); flush()`;
+      return { sigs: [gone], body: laterRoot(kit, [`${el}.focus()`], change, ["createRoot", "flush"]), view: [show(read(gone.name), [button(b, stmts, { tag: "input", on: "onBlur" })])] };
+    }
+    case "dny-insert-body": {
+      const host = kit.name("el");
+      return { body: [decl(host, domExpr('document.createElement("div")')), expr(domExpr(`document.body.append(${host})`)), decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "input", on: "onBlur" })))])), expr(domExpr(`render(() => <Inner />, ${host})`, ["render"])), ...laterRoot(kit, [`${el}.focus()`], `insert(${host}, "x")`, undefined, ["insert"])], view: [] };
+    }
+    case "dny-renamed-prop": {
+      const field = decl("Field", domExpr(`(props: { save: () => void }) => <button data-act="${b}" onBlur={props.save}>go</button>`));
+      return { body: [field, ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [propEl("Field", fn(stmts), "save")] };
+    }
+    case "dny-shared-fn": { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [namedButton(b, ref(h), { attrs: `onBlur={${h}}` })] }; }
+    case "dny-chain-click": {
+      const u = kit.name("b");
+      return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(u, stmts), button(b, [expr(domExpr(`document.querySelector<HTMLElement>('[data-act="${u}"]')!.click()`))], { on: "onBlur" })] };
+    }
+    case "dny-flush-unmount": return { sigs: [gone], body: laterRoot(kit, [`${el}.focus()`, `${gone.setter}(0)`], "1"), view: [show(read(gone.name), [button(b, stmts, { tag: "input", on: "onBlur" })])] };
+    case "dny-blur-spread": { const hs = kit.name("box"); return { body: [decl(hs, obj([["onBlur", fn(stmts)]])), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...${hs}}` })] }; }
+    // An attribute `onblur` and a typo fail tsc (invariant 1), and rc.21 has no `on:` (the types reject it, the compiler refuses the source).
+    // A spread takes either name. rc.21 binds `onBlurr` and a dispatch delivers it, so it falls to the closed default; it does not bind
+    // `onblur` (LOWERCASE_EVENT_ATTRIBUTE), so that site never runs.
+    case "dny-typo-event": { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [], `${el}.dispatchEvent(new Event("blurr"))`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onBlurr: ${h} }}` })] }; }
+    case "dny-blur-dynamic": return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`, undefined, ["Dynamic"]), view: [button(b, stmts, { tag: "Dynamic", on: "onBlur", attrs: 'component="button"' })] };
+    case "dny-portal-dispose": {
+      const d = kit.name("f"), out = kit.name("el");
+      return { body: [decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "input", on: "onBlur" })))])), decl(d, domExpr("(() => {}) as () => void"), { kw: "let" }),
+        decl(out, domExpr('document.createElement("div")')), expr(domExpr(`document.body.append(${out})`)),
+        expr(domExpr(`queueMicrotask(() => { createRoot((dd) => { ${d} = dd; insert(${out}, () => <Portal><Inner /></Portal>); }); })`, ["insert", "Portal"], ["createRoot"])),
+        ...laterRoot(kit, [`${el}.focus()`], `${d}()`)], view: [] };
+    }
+    // ADR 0780: inline in a control-flow callback, a nested handler keeps the denied arm.
+    case "dny-load-for": case "dny-load-show": {
+      const frame = kit.name("r");
+      return { body: [], view: [flowEl(kit.name("v"), context.slice(9), [decl(frame, jsxExpr(button(b, stmts, { tag: "iframe", on: "onLoad" }))), expr(domExpr(`document.body.append(${frame} as Node)`))])] };
+    }
+    case "dny-load-append": return { body: [decl("Inner", fn([ret(jsxExpr(button(b, stmts, { tag: "iframe", on: "onLoad" })))])), ...laterRoot(kit, [], "document.body.appendChild(Inner() as any)")], view: [] };
+    case "dny-flush-popover": return { sigs: [gone], body: laterRoot(kit, [`${el}.showPopover()`, `${gone.setter}(0)`], "1"), view: [button(b, stmts, { tag: "div", on: "onBeforeToggle", attrs: `popover={${gone.name}() ? "auto" : undefined}` })] };
+    case "dny-flush-load": return { sigs: [gone], body: [expr(prim("timer", fn([expr(domExpr(`${gone.setter}(1)`))])))], view: [show(read(gone.name), [button(b, stmts, { tag: "iframe", on: "onLoad" })])] };
+    default: throw new Error(`no denied context ${context}`);
+  }
+}
+
+/** An apply a nested `render` drains (`rnd-*`, ADR 0644): the site is in the apply, queued before the mount runs. */
+function renderContext(where, stmts, kit) {
+  const mount = domExpr('render(() => null, document.createElement("div"))', ["render"]);
+  const apply = expr(prim("effect", fn([ret(num(1))]), { apply: fn(stmts) }));
+  const v = () => kit.name("v");
+  switch (where) {
+    case "body": return { body: [apply, expr(mount)], view: [] };
+    case "wrapper": { const f = kit.name("f"); return { body: [apply, decl(f, fn([expr(mount)])), expr(call(ref(f)))], view: [] }; }
+    case "root": return { body: [apply, expr(prim("root", fn([expr(mount)])))], view: [] };
+    case "memo": { const m = kit.name("m"); return { body: [apply, decl(m, prim("memo", fn([expr(mount), ret(num(1))])))], view: [child(v(), call(ref(m)))] }; }
+    case "foreach": return { body: [apply, expr(domExpr('[document.createElement("div")].forEach((el) => render(() => null, el))', ["render"]))], view: [] };
+    case "handler": return { body: [apply], view: [button(kit.name("b"), [expr(mount)])] };
+    case "timer": return { body: [apply, expr(prim("timer", fn([expr(mount)])))], view: [] };
+    case "await": { const f = kit.name("f"); return { body: [apply, decl(f, fn([awaitStmt(), expr(mount)], { async: true })), expr(call(ref(f)))], view: [] }; }
+    case "shadow": { const f = "render"; return { body: [apply, decl(f, fn([ret(num(1))])), expr(call(ref(f)))], view: [] }; }
+    default: throw new Error(`no render position ${where}`);
+  }
+}
+
+/** The elements and registrations of ADR 0645's anchor census: each delivers `stmts` on the stack of the apply that clicks. */
+function anchorContext(context, stmts, kit) {
+  const fire = kit.name("fire"), el = kit.name("el"), h = kit.name("f");
+  const clicks = (tag, ...set) => decl(fire, fn([decl(el, domExpr(`document.createElement("${tag}")`)), ...set.map((text) => expr(domExpr(text.replaceAll("EL", el)))), expr(domExpr(`document.body.append(${el})`)), expr(domExpr(`${el}.click()`)), expr(domExpr(`${el}.remove()`))]));
+  const apply = expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(fire)))]) }));
+  const listener = decl(h, fn(stmts));
+  switch (context) {
+    case "evt-anchor-apply-bare": return { body: [listener, expr(domExpr(`addEventListener("click", ${h})`)), clicks("a"), apply], view: [] };
+    case "evt-anchor-apply-alias": { const l = kit.name("box"); return { body: [listener, decl(l, domExpr("window.addEventListener")), expr(domExpr(`(${l} as any).call(window, "click", ${h})`)), clicks("a"), apply], view: [] }; }
+    case "evt-anchor-apply-computed": return { body: [listener, expr(domExpr(`window["addEventListener"]("click", ${h})`)), clicks("a"), apply], view: [] };
+    case "evt-created-checkbox": return { body: [listener, expr(domExpr(`document.addEventListener("change", ${h})`)), clicks("input", 'EL.type = "checkbox"'), apply], view: [] };
+    case "evt-created-label": { const id = kit.name("b"); return { body: [clicks("label", 'EL.htmlFor = "sc-labelled"', `document.querySelector('[data-act="${id}"]')!.id = "sc-labelled"`), apply], view: [button(id, stmts)] }; }
+    default: throw new Error(`no anchor context ${context}`);
+  }
+}
+
+/** `zero-<where>-<form>` (ADRs 0563, 0566, 0580): a site in a carrier that runs it zero times, on a stack that would otherwise be a misuse. */
+const ZERO_RUNS = ["zero-body-empty", "zero-body-var", "zero-settled-empty", "zero-settled-var", "zero-await-empty", "zero-await-var"];
+function zeroRunContext(where, form, stmts, kit) {
+  const held = ctl(`handoff-foreach-${form}`, stmts);
+  switch (where) {
+    case "body": return { body: [held], view: [] };
+    case "settled": return { body: [expr(prim("settled", fn([held])))], view: [] };
+    case "await": { const f = kit.name("f"); return { body: [decl(f, fn([awaitStmt(), held], { async: true })), expr(call(ref(f)))], view: [] }; }
+    default: throw new Error(`no zero-run position ${where}`);
+  }
+}
+
 function inContext(context, stmts, kit) {
+  if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit);
+  if (flipped) return flipped;
+  if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
+  const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
+  if (zero) return zeroRunContext(zero[1], zero[2], stmts, kit);
+  // ADR 0641: a component's prop is a getter nothing reads, whatever spells the tag: a capital, a member, a lowercase member.
+  const tagged = { "prop-unread-cap": "Sink", "prop-unread-member": "Sinks.Sink", "prop-unread-lower": "sinks.sink" }[context];
+  if (tagged) return { body: [decl("Sink", domExpr("(_props: { a: unknown }) => <i />")), decl("Sinks", domExpr("{ Sink }")), decl("sinks", domExpr("{ sink: Sink }"))], view: [propEl(tagged, stmts[0].e)] };
+  // ADR 0542: a component handed to plain code as a function: whether its body is a component's is not proven.
+  if (context === "handed-flush") return { body: [decl("Row", fn([expr(flush(fn(stmts))), ret(jsx())]))], view: [child(kit.name("v"), iife(fn([expr(domExpr("[1].map(Row)")), ret(num(1))])))] };
+  const listener = /^lst-(body|none|handler)-(.+)$/.exec(context);
+  if (listener) return listenerContext(listener[1], listener[2], stmts, kit);
+  if (context.startsWith("rnd-")) return renderContext(context.slice(4), stmts, kit);
+  if (ANCHOR_MISSES.includes(context)) return anchorContext(context, stmts, kit);
+  const fired = /^evt-(body|memo|compute|settled|untrack|apply|handler)-fire-(.+)$/.exec(context);
+  if (fired) return fireContext(fired[1], fired[2], stmts, kit);
   const v = () => kit.name("v");
   const asView = (items) => items;
   switch (context) {
@@ -1008,6 +1558,8 @@ function inContext(context, stmts, kit) {
         sigs: [trigger],
       };
     }
+    // ADR 0641: the guard open, so the site a `-guarded` row never runs is judged once it runs.
+    case "effect-apply-guard-open": return { body: [expr(prim("effect", fn([ret(num(2))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [] };
     case "render-apply-guarded": return { body: [expr(prim("render", fn([ret(num(1))]), { apply: fn([contain("guard-return", 0, stmts)]) }))], view: [] };
     case "tracked": return { body: [expr(prim("tracked", fn(stmts)))], view: [] };
     case "settled": return { body: [expr(prim("settled", fn(stmts)))], view: [] };
@@ -1017,7 +1569,36 @@ function inContext(context, stmts, kit) {
     case "timer": return { body: [expr(prim("timer", fn(stmts)))], view: [] };
     case "then": return { body: [expr(prim("then", fn(stmts)))], view: [] };
     case "micro": return { body: [expr(prim("micro", fn(stmts)))], view: [] };
-    case "handler": return { body: [], view: [button(kit.name("b"), stmts)] };
+    case "handler": case "creates-in-handler": return { body: [], view: [button(kit.name("b"), stmts)] };
+    // EVENT_CONTEXTS: a listener the program dispatches to itself, and work a handler or an apply schedules.
+    case "evt-body-dispatch": case "evt-apply-dispatch": case "evt-handler-dispatch": {
+      const el = kit.name("el");
+      const made = [decl(el, domExpr('document.createElement("button")')), expr(listenExpr(el, "click", fn(stmts)))];
+      const fire = expr(domExpr(`${el}.click()`));
+      if (context === "evt-body-dispatch") return { body: [...made, fire], view: [] };
+      if (context === "evt-apply-dispatch") return { body: [...made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+      return { body: made, view: [button(kit.name("b"), [fire])] };
+    }
+    // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
+    case "evt-apply-helper-dispatch": {
+      const el = kit.name("el"), fire = kit.name("fire");
+      const helper = decl(fire, fn([expr(domExpr(`${el}.click()`))]));
+      return { body: [decl(el, domExpr('document.createElement("button")')), expr(listenExpr(el, "click", fn(stmts))), helper, expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(fire)))]) }))], view: [] };
+    }
+    case "evt-apply-window-dispatch":
+      return { body: [expr(listenExpr("window", "sc-evt", fn(stmts))), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(domExpr('window.dispatchEvent(new Event("sc-evt"))'))]) }))], view: [] };
+    // ADR 0640: an anchor a helper creates and clicks under `document.body` delivers to no listener, so another handler keeps its proof;
+    // with a `click` listener on `window` it delivers there, on the stack of the apply that clicks.
+    case "evt-created-anchor": case "evt-anchor-apply-listener": {
+      const anchor = kit.name("el"), fire = kit.name("fire");
+      const helper = decl(fire, fn([decl(anchor, domExpr('document.createElement("a")')), expr(domExpr(`document.body.append(${anchor})`)), expr(domExpr(`${anchor}.click()`)), expr(domExpr(`${anchor}.remove()`))]));
+      if (context === "evt-created-anchor") return { body: [helper, expr(call(ref(fire)))], view: [button(kit.name("b"), stmts)] };
+      return { body: [helper, expr(listenExpr("window", "click", fn(stmts))), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(fire)))]) }))], view: [] };
+    }
+    case "timer-from-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("timer", fn(stmts)))])] };
+    case "micro-from-handler": return { body: [], view: [button(kit.name("b"), [expr(prim("micro", fn(stmts)))])] };
+    case "timer-from-apply": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(prim("timer", fn(stmts)))]) }))], view: [] };
+    case "micro-from-apply": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(prim("micro", fn(stmts)))]) }))], view: [] };
     case "async": { const f = kit.name("f"); return { body: [decl(f, fn([awaitStmt(), ...stmts], { async: true })), expr(call(ref(f)))], view: [] }; }
     case "jsx": case "show": case "for": {
       const item = child(v(), iife(fn([...stmts, ret(num(1))])));
@@ -1261,6 +1842,8 @@ function recallContext(context, stmts, kit) {
       const item = child(kit.name("v"), iife(fn([...stmts, ret(num(1))])));
       return { body: [], view: [item], loading: true };
     }
+    // LOADING_ON_ACCESSOR: the boundary's `on`, as the variant writes it, around the site.
+    case "loading-on-accessor": return { body: [], view: [child(kit.name("v"), iife(fn([...stmts, ret(num(1))])))], loadingOn: true };
     default: {
       // `cbp-<call>[-<form>]` (CBP_CONTEXTS): the site in a callback prop a same-file child calls.
       const prop = /^cbp-([a-z]+)(?:-([a-z]+))?$/.exec(context);
@@ -1407,10 +1990,14 @@ function buildOne(kit, plan = {}) {
   // A census code with no two values of its own (`--census`) brings none to the boundary: the context makes its trigger and async memo.
   const heldOwn = placed.loading && sigs.length < 2 ? loadingSignals(kit.name) : [];
   const [held, heldAsync] = heldOwn.length ? heldOwn : sigs;
-  const view = placed.loading ? [loadingView(held.name, [child(kit.name("v"), read(heldAsync.name))]), ...placed.view, button(kit.name("b"), [expr(write(held.name, 2))])]
+  // The same for `on`: a code with no `onAttribute` passes a value of the boundary's own.
+  const onOwn = placed.loadingOn && !spec.onAttribute ? [signal(kit.name("t"), 1, "src")] : [];
+  const view = placed.loadingOn ? [loadingView(null, placed.view, onOwn.length ? `${onOwn[0].name}()` : spec.onAttribute(variant, sigs[0].name))]
+    : placed.loading ? [loadingView(held.name, [child(kit.name("v"), read(heldAsync.name))]), ...placed.view, button(kit.name("b"), [expr(write(held.name, 2))])]
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
-    sigs: [...sigs, ...heldOwn, ...(placed.sigs ?? [])], body: placed.body, view,
+    sigs: [...sigs, ...heldOwn, ...onOwn, ...(placed.sigs ?? [])], body: placed.body, view, ...(placed.hoisted ? { hoisted: placed.hoisted } : {}), ...(placed.top ? { top: placed.top } : {}),
+    ...(placed.files ? { files: placed.files, importLines: placed.importLines ?? [] } : {}),
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
     misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}) },
   };

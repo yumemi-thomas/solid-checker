@@ -48,11 +48,27 @@ pub(crate) struct ProgramDraft {
     pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
     pub(crate) event_dispatch_sites: Vec<crate::EventDispatchSite>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    /// ADR 0883: JSX SC6002 places on an apply's stack, and whether its proof
+    /// answers for every run of the site.
+    pub(crate) jsx_phase_sites: Vec<(Location, bool)>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
     /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
     pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
+    /// ADR 0860: obligations no other producer's row may yield to: pushed
+    /// after every producer has run, so a row at the same start keeps its
+    /// place.
+    pub(crate) deferred_defects: Vec<StaticDefect>,
+    /// ADR 0874: the exact spans filed, so an uncertain row at a use nested
+    /// in a withheld call's start (`t.slice(0, i).trim()` in `t.slice`)
+    /// keeps its row.
+    seen_spans: HashSet<(&'static str, Arc<str>, u64, u64)>,
+    /// ADR 0874: where a call the impostor census withholds starts, by path.
+    pub(crate) withheld_starts: HashSet<(Arc<str>, u64)>,
+    /// ADR 0874: each withheld call's callee span, by path. A row there is
+    /// about the call's target, never a Get of the value on its chain.
+    pub(crate) withheld_callees: HashSet<(Arc<str>, u64, u64)>,
 }
 
 impl ProgramDraft {
@@ -64,12 +80,58 @@ impl ProgramDraft {
     /// The identity is derived from the defect kind's family rather than
     /// passed in, so a caller cannot file a defect under another finding
     /// kind's identity and silently suppress it.
+    /// [`Self::push_defect`], where a proven row replaces an obligation at the
+    /// same site (ADR 0871): another walk of the function proved what this one
+    /// could not.
+    pub(crate) fn push_defect_or_strengthen(&mut self, defect: StaticDefect) {
+        if !defect.uncertain
+            && let Some(row) = self.static_defects.iter_mut().find(|row| {
+                row.uncertain
+                    && row.kind.dedup_identity() == defect.kind.dedup_identity()
+                    && row.location.path == defect.location.path
+                    && row.location.start_byte == defect.location.start_byte
+            })
+        {
+            *row = defect;
+            return;
+        }
+        self.push_defect(defect);
+    }
+
     pub(crate) fn push_defect(&mut self, defect: StaticDefect) {
-        if self.seen_diagnostics.insert((
-            defect.kind.dedup_identity(),
+        // ADR 0874: a withheld call's row (`props.items.map`) shares no slot
+        // with a row at a use it starts at (`props`).
+        let identity = if defect
+            .analysis_context
+            .split(':')
+            .next()
+            .is_some_and(|head| head == crate::blockers::STANDARD_MEMBER_IMPOSTOR)
+        {
+            crate::blockers::STANDARD_MEMBER_IMPOSTOR
+        } else {
+            defect.kind.dedup_identity()
+        };
+        let first_at_start = self.seen_diagnostics.insert((
+            identity,
             defect.location.path.clone(),
             defect.location.start_byte,
-        )) {
+        ));
+        let first_at_span = self.seen_spans.insert((
+            identity,
+            defect.location.path.clone(),
+            defect.location.start_byte,
+            defect.location.end_byte,
+        ));
+        // A violation keeps one row per start. At a withheld call's start,
+        // an uncertain row names its own use (the call's row stands beside
+        // the use it starts), so only its exact span deduplicates it.
+        if first_at_start
+            || (defect.uncertain
+                && first_at_span
+                && self
+                    .withheld_starts
+                    .contains(&(defect.location.path.clone(), defect.location.start_byte)))
+        {
             self.static_defects.push(defect);
         }
     }
@@ -131,6 +193,7 @@ impl ProgramDraft {
             apply_compute_reads: self.apply_compute_reads,
             runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
             development_feedback: self.development_feedback,
+            execution_paths: crate::ExecutionPaths::default(),
             reads: self.reads,
             writes: self.writes,
             actions: self.action_invocations,
@@ -475,6 +538,35 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             Vec::new()
         },
         static_defects: boundary_defects,
+        withheld_starts: facts
+            .files
+            .iter()
+            .flat_map(|file| {
+                file.ast
+                    .calls
+                    .iter()
+                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
+                    .map(|call| (file.path.shared(), u64::from(call.span.start)))
+            })
+            .collect(),
+        withheld_callees: facts
+            .files
+            .iter()
+            .flat_map(|file| {
+                file.ast
+                    .calls
+                    .iter()
+                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
+                    .map(|call| {
+                        let callee = file.ast.peel_ts_sugar_span(call.callee);
+                        (
+                            file.path.shared(),
+                            u64::from(callee.start),
+                            u64::from(callee.end),
+                        )
+                    })
+            })
+            .collect(),
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
@@ -647,6 +739,28 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft,
         &mut build_timings,
     );
+    crate::stored_throw::mark_owner_requirements(&analysis, &mut draft);
+    // ADR 0883: where SC6002 proves the throw on every run of a JSX site, rc.21
+    // never reaches NO_OWNER_EFFECT there, as for a creating call (ADR 0483).
+    // Anywhere else that code may still fire, and which run does is not proved.
+    let jsx_phase_sites = std::mem::take(&mut draft.jsx_phase_sites);
+    draft.missing_owners.retain_mut(|requirement| {
+        if requirement.operation != crate::OwnerRequirementOperation::Effect {
+            return true;
+        }
+        match jsx_phase_sites
+            .iter()
+            .find(|(location, _)| *location == requirement.location)
+        {
+            Some((_, true)) => false,
+            Some((_, false)) => {
+                requirement.uncertain = true;
+                requirement.runtime_uncertain = true;
+                true
+            }
+            None => true,
+        }
+    });
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
@@ -660,6 +774,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     for defect in dependency_source_call_error_defects(facts) {
         draft.push_defect(defect);
     }
+    for defect in std::mem::take(&mut draft.deferred_defects) {
+        draft.push_defect(defect);
+    }
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(
@@ -670,7 +787,14 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.static_defects,
     );
     let mut program = draft.into_program(factory_instances);
-    // ADR 0517: a `<Loading on>` whose hold is not proven its own.
+    program.execution_paths = crate::execution_paths::execution_paths(
+        facts,
+        &rule_options.runtime,
+        dialect,
+        semantic_lookup,
+    );
+    // ADR 0517: a `<Loading on>` whose hold is not proven its own; ADR 0624: one
+    // handed a function.
     let holds =
         crate::loading_hold::loading_on_outside_hold_obligations(facts, &program, semantic_lookup);
     program.static_violations.extend(holds);

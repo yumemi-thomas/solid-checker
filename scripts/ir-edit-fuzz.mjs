@@ -17,6 +17,12 @@
 //       Callee body edits that retype a caller whose text is unchanged
 //       (`retype-return`): the retained build must name a caller in its Type
 //       Facts delta (`SOLID_CHECKER_IR_DELTA_LOG`) and answer as a fresh run.
+//   bun scripts/ir-edit-fuzz.mjs --fixtures --family mount [--steps 8]
+//       A value mount or its boundary edited in another file (`value-mount`).
+//   bun scripts/ir-edit-fuzz.mjs --fixtures --family census [--steps 4]
+//       Edits that add a definer or a classic-script declaration of a window
+//       member the census read as absent: the retained build must answer as a
+//       fresh run.
 //   bun scripts/ir-edit-fuzz.mjs --project <tsconfig.json> --steps 30 --seed 7
 //       The long manual budget, on any project (the rc17 corpus: app-game
 //       apps/web, solid-groove, compass-ui apps/ui). Edits happen in place.
@@ -71,12 +77,20 @@ export const FIXTURE_PROJECTS = [
  * files export a function with an inferred return type that another file
  * calls, edited only by `retype-return` (and reverts).
  */
+export const CENSUS_FIXTURE_PROJECTS = ["reactive-ir/iteration-written-slots/variants/handed-window-absent-member"];
+
 export const RETYPE_FIXTURE_PROJECTS = [
   "reactive-ir/returned-closure",
   "reactive-ir/interprocedural",
   "reactive-ir/summary-direct-read",
   "reactive-ir/accessor-provenance"
 ];
+
+/**
+ * The `mount` family (`--fixtures --family mount`): a component mounted as a value from another file, whose throw
+ * `handled_above` (ADR 0893) answers from that file: the edit adds or removes the value mount or the boundary over it.
+ */
+export const MOUNT_FIXTURE_PROJECTS = ["reactive-ir/stored-throw-value-mount"];
 
 /** Mulberry32: a seeded generator, so a failing run replays from its seed. */
 export function seededRandom(seed) {
@@ -155,6 +169,16 @@ export const EDIT_KINDS = {
       ? `${text}\nexport function FzComp${serial}(props: { v: number }) {\n  return <div>{props.v}</div>;\n}\n`
       : `${text}\nexport function fzHelper${serial}(value: number) {\n  return value + 1;\n}\n`;
   },
+  "value-mount"({ text, rand }) {
+    const forms = [
+      ["<Dynamic component={Reported} />", "<Errored fallback={(e) => <i>{String(e())}</i>}><Dynamic component={Reported} /></Errored>"],
+      ["<Errored fallback={(e) => <i>{String(e())}</i>}><Dynamic component={Handled} /></Errored>", "<Dynamic component={Handled} />"],
+      ["<Dynamic component={Handled} />", "<i></i>"],
+    ].filter(([from, to]) => text.includes(from) || text.includes(to));
+    if (!forms.length) return null;
+    const [from, to] = forms[rand(forms.length)];
+    return text.includes(to) ? text.replace(to, from) : text.replace(from, to);
+  },
   "retype-return"({ text, path, others, rand }) {
     // A callee body edit that changes its callers' inferred types, their text
     // unchanged: the first top-level `return` of an exported function with
@@ -179,6 +203,12 @@ export const EDIT_KINDS = {
       expect: { retyped: name, callers }
     };
   },
+  // The `census` family: edits that turn a window member's absence false, with no write of the member. A definer on a prototype; a
+  // module turned classic script, whose top level is the global object.
+  "add-dunder-definer": ({ text, path, serial }) =>
+    /\bwire\.ts$/.test(path) ? `${text}\nObject.defineProperty(Object.prototype, "__log", { value() {}, configurable: true, writable: true }); // ${serial}\n` : null,
+  "add-classic-declaration": ({ text, path, serial }) =>
+    /\bwire\.ts$/.test(path) && /\bexport \{\};/.test(text) ? `${text.replace(/\bexport \{\};/, "")}\nfunction __log() {} // ${serial}\n` : null,
   "add-eval": ({ text, serial }) => `${text}\nexport const __fzEval${serial} = (code: string) => eval(code);\n`,
   "add-prototype-write": ({ text, path, serial }) =>
     `${text}\n${/\.tsx?$/.test(path) ? "(Object.prototype as any)" : "Object.prototype"}.__fz${serial} = 1;\n`
@@ -389,8 +419,8 @@ function parseArguments(argv) {
     else throw new Error(`unknown argument ${flag}`);
   }
   if (options.family !== undefined) {
-    if (options.family !== "retype") throw new Error(`unknown family ${options.family}`);
-    options.kinds = ["retype-return"];
+    if (!["retype", "mount", "census"].includes(options.family)) throw new Error(`unknown family ${options.family}`);
+    options.kinds = { retype: ["retype-return"], mount: ["value-mount"], census: ["add-dunder-definer", "add-classic-declaration"] }[options.family];
   }
   for (const kind of options.kinds) {
     if (!(kind in EDIT_KINDS)) throw new Error(`unknown edit kind ${kind}`);
@@ -662,7 +692,7 @@ async function main() {
   let total = 0;
   let mismatches = 0;
   if (options.fixtures) {
-    const projects = options.family === "retype" ? RETYPE_FIXTURE_PROJECTS : FIXTURE_PROJECTS;
+    const projects = { retype: RETYPE_FIXTURE_PROJECTS, mount: MOUNT_FIXTURE_PROJECTS, census: CENSUS_FIXTURE_PROJECTS }[options.family] ?? FIXTURE_PROJECTS;
     const results = await mapPool(projects, async (id, index) => {
       // A copy: the fixture tree is never edited in place.
       const copy = mkdtempSync(join(tmpdir(), "ir-edit-fuzz-fixture-"));

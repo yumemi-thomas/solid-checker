@@ -58,12 +58,12 @@ pub(super) fn owner_node(
         && lookup.program_closed;
     let mut seed_context = compiler_owner_context(file, function.body);
     let dispatch_uncertain = lookup.synchronous_event_dispatch_present();
-    if dispatch_uncertain
-        && file.compiler.callback_roles.iter().any(|callback| {
-            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && callback.span.contains(function.body)
-        })
-    {
+    if file.compiler.callback_roles.iter().any(|callback| {
+        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            && callback.span.contains(function.body)
+            && (dispatch_uncertain
+                || crate::execution_role::handler_event_denied(file, callback.span))
+    }) {
         seed_context = (seed_context & !OWNER_CONTEXT_PROVEN_UNOWNED)
             | OWNER_CONTEXT_OWNED
             | OWNER_CONTEXT_UNOWNED;
@@ -325,7 +325,6 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) operation_span: Span,
     pub(crate) owner: Option<Span>,
     pub(crate) report_mask: u8,
-    pub(crate) allow_uncertain: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
     /// For call-site-gated leaf owners (2.0 `onSettled`): the owner call's
@@ -498,10 +497,12 @@ pub(super) fn apply_settled_requirement_gates(
 
 #[derive(Clone, Copy)]
 pub(crate) struct OwnerRequirementStatus {
+    pub(crate) flight_error_unobserved: bool,
     pub(crate) uncertain: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) caller_uncertain: bool,
     pub(crate) conditional_owner: bool,
+    pub(crate) owner_varies_by_caller: bool,
     pub(crate) later_run_unowned: bool,
     pub(crate) component_uncertain: bool,
     /// ADR 0534: the operation's callback is written in an owner-providing
@@ -518,6 +519,8 @@ pub(crate) struct OwnerRequirementStatus {
     /// The operation runs after a promise-yielding `yield` of its action body
     /// ([`action_step_resumption`]).
     pub(crate) after_yield: bool,
+    /// ADR 0886: the check-once pass found no row and no named proof.
+    pub(crate) context_unaccounted: bool,
     pub(crate) report: bool,
 }
 

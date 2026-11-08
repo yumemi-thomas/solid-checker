@@ -5,10 +5,33 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "summary-read-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
       "start": 398,
       "end": 411,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
+      "start": 398,
+      "end": 411,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
+      "start": 405,
+      "end": 410,
       "fixes": 0
     }
   ]

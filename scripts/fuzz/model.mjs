@@ -78,6 +78,14 @@ export const nul = () => ({ k: "nul" });
 export const jsx = () => ({ k: "jsx" });
 /** `createOwner()` (the recall axes' bound owner: `const o = createOwner(); runWithOwner(o, ...)`). */
 export const createOwnerExpr = () => ({ k: "createOwner" });
+/** A DOM expression as written (`document.createElement("button")`, `el1.click()`): the event axis (misuse.mjs EVENT_CONTEXTS). */
+/** `<tag a={e} />`: an element of a component that never reads the prop (ADR 0641). */
+export const propEl = (tag, e, prop = "a") => ({ k: "propEl", tag, e, prop });
+/** A JSX view item as an expression (`const Inner = () => <input … />`): a site in a tree a program mounts and disposes itself. */
+export const jsxExpr = (item) => ({ k: "jsxExpr", item });
+export const domExpr = (text, web, solid) => ({ k: "dom", text, ...(web ? { webNames: web } : {}), ...(solid ? { solidNames: solid } : {}) });
+/** `el.addEventListener(type, fn)`: a listener the program dispatches to itself. */
+export const listenExpr = (target, type, fn) => ({ k: "listen", target, type, fn });
 
 /**
  * Control-flow statements (the recall axes, misuse.mjs RECALL_LAYERS and the after-await contexts): `body` runs exactly once, in the
@@ -97,8 +105,23 @@ export const HANDOFF_FORMS = ["handoff-foreach", "handoff-map", "handoff-from", 
   "handoff-assign-param", "handoff-assign-returned", "handoff-assign-this"];
 /** T2 `depth`: the site under N closures each called in place, N at and around the engine's 16-layer climb bound. */
 export const DEPTH_FORMS = ["depth-15", "depth-16", "depth-17"];
-export const CTL_FORMS = ["for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", ...HANDOFF_FORMS, ...DEPTH_FORMS];
-export const CTL_ASYNC_FORMS = new Set(["loop-await", "for-await", "finally-await"]);
+/** ADR 0695: the site in a function reached through N named helpers (`chain-N`), or in a callback N helpers hand on (`forward-N`): the bounds a walk over callers stops at. */
+export const CHAIN_FORMS = ["chain-5", "chain-13", "forward-2", "forward-13"];
+/** A carrier that runs its callback zero times, or for a length nothing states (ADRs 0563, 0566, 0580): a program's site there runs nothing. */
+export const ZERO_RUN_FORMS = ["handoff-foreach-empty", "handoff-foreach-var"];
+/** ADR 0820: the site in a generator's body, the iterator stepped from an async function. `gen-prefix` and `gen-drain` are legal: the site runs on the first stack. */
+export const GENERATOR_FORMS = ["gen-await", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", "gen-prefix", "gen-drain",
+  // Review W2 (ADR 0851): the site in a `forEach` callback past the `yield`, run in place on the step's stack.
+  "gen-yield-each", "gen-sync-each", "gen-yield-alias"];
+/**
+ * ADR 0851: a named generator holding the site (flip-gen.mjs `gstep-*` contexts): `gstep` writes `function* name() { yield 1; … }`,
+ * `mode: "first"` puts the site before the `yield`, and `holder` makes it a generator method of a `const` literal. The context steps it.
+ */
+export const GENERATOR_STEP_FORMS = ["gstep"];
+/** ADR 0866: the site under `if (getOwner())` in an async function, with a suspension in the guarded block. `guard-early` and `guard-probe-loop` are legal: the site runs on the probed stack, or the probe runs again. */
+export const GUARD_FORMS = ["guard-await", "guard-for-await", "guard-loop", "guard-early", "guard-probe-loop"];
+export const CTL_FORMS = [...GUARD_FORMS, "guard-yield", ...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", "aw-else", "aw-else-flip", "dead-random", "run-kept", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS, ...GENERATOR_FORMS, ...GENERATOR_STEP_FORMS];
+export const CTL_ASYNC_FORMS = new Set([...GUARD_FORMS, "loop-await", "for-await", "finally-await", ...GENERATOR_FORMS]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 
 /**
@@ -127,8 +150,11 @@ export const USES = {
 export const contain = (kind, id, body, extra = {}) => ({ k: "contain", kind, id, async: false, use: null, body, ...extra });
 
 export const probe = (sig) => ({ k: "probe", sig });
-export const button = (id, handler) => ({ k: "button", id, handler });
+/** `<button data-act onClick>`, or another element and event (`tag`, `on`, `attrs`: the denied events, ADR 0642). */
+export const button = (id, handler, extra = {}) => ({ k: "button", id, handler, ...extra });
 export const child = (id, e) => ({ k: "child", id, e });
+/** A view item that is a mount of its own, printed bare: `<Portal><K1 /></Portal>` (flip-read.mjs). */
+export const mounted = (id, e) => ({ k: "mounted", id, e });
 export const attr = (id, e) => ({ k: "attr", id, e });
 export const show = (when, children, fallback = []) => ({ k: "show", when, children, fallback });
 export const forEach = (children) => ({ k: "for", children });
@@ -141,7 +167,7 @@ export const refEl = (id, e, form = "inline") => ({ k: "ref", id, e, form });
 /** `<p onClick={(e, () => {})}>`: the handler expression, which the element's setup evaluates (`e` runs once there, in the body). */
 export const handlerExpr = (id, e) => ({ k: "handler-expr", id, e });
 /** `<button data-act={id} onClick={e}>`: a handler passed by name (`e` a reference); `tuple` writes Solid's `[e, 1]` bound form. */
-export const namedButton = (id, e, { tuple = false } = {}) => ({ k: "hbutton", id, e, tuple });
+export const namedButton = (id, e, { tuple = false, attrs } = {}) => ({ k: "hbutton", id, e, tuple, ...(attrs ? { attrs } : {}) });
 /** The flow components whose function child the `flow` item writes a body for (`FLOW_FORMS`, misuse.mjs `FLOW_CONTEXTS`). */
 export const FLOW_FORMS = ["for", "for-unkeyed", "show", "show-keyed", "match", "repeat"];
 /** A flow component whose function child runs `body` and then returns an element: `<For each={[1]}>{() => { …; return <li/>; }}</For>`. */
@@ -158,8 +184,9 @@ export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, bo
 export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached"];
 export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
 export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
-/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`. */
-export const loadingView = (on, children) => ({ k: "loading", on, children });
+/** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`;
+ * `onExpr`: the `on` attribute's expression as written (LOADING_ON_ACCESSOR). */
+export const loadingView = (on, children, onExpr = null) => ({ k: "loading", on, children, onExpr });
 
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
@@ -181,7 +208,23 @@ export const storeListSignal = (name, init) => ({ ...signal(name, init, "probe")
 /** `createStore<{ v: number; a?: { v: number } }>({ v })`: an optional link (`s.a.v = 7` is TS18048: the typed-away templates);
  * `leaf`: `a?: { b?: number }`, open-work.md's form (`s.a.b = 1`). */
 export const storeLinkSignal = (name, init, leaf = false) => ({ ...signal(name, init, "probe"), kind: leaf ? "store-link-leaf" : "store-link" });
+/** `createStore<number[]>([v])`: a store that is an array (an iteration reads `length`). */
+export const storeArraySignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-array" });
+/** `createStore<{ v?: number }>({})`: no key to read yet (rc.21 is silent on `{ ...s }`). */
+export const storeEmptySignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-empty" });
+/** `createStore({ v, a: { v }, items: [v] }, { shallow: true })`: every value is served raw. */
+export const storeShallowSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-shallow" });
 export const asyncSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async" });
+/** A derived store whose first answer has not landed: `createStore(async () => ({ v }), { v })`. */
+export const storeAsyncSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-async" });
+/** A store over a record that entered a shallow store first: raw, no proxy (ADR 0634). */
+export const storeRawSignal = (name, init) => ({ ...signal(name, init, "src"), kind: "store-raw" });
+/** A store holding a class instance whose method writes `this` (ADR 0638). */
+export const storeClassSignal = (name, init) => ({ ...signal(name, init, "probe"), kind: "store-class" });
+/** `createMemo(async () => 1, { loadingValue: 0 })`: served through its first flight (ADR 0632). */
+export const asyncDeclaredSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-declared" });
+/** A compute that may answer without a flight (ADR 0631): typed `number | Promise<number>`, the plain value at run time. */
+export const asyncMaybeSignal = (name) => ({ ...signal(name, 0, "src"), kind: "async-maybe" });
 /**
  * The rc.17 constructors no other template declares (misuse.mjs API_VARIANTS): a signal with `{ ownedWrite: true }` (`owned`),
  * `createOptimistic(init)` (`optimistic`), a writable memo `createSignal(() => init)` (`writable-memo`), `createOptimisticStore`
@@ -345,6 +388,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
           checkBlock(item.handler, scopeOf(scope), "free");
           break;
         }
+        case "propEl": typeOf(item.e, scope); break;
+        case "mounted": typeOf(item.e, scope); break;
         case "child": case "attr": {
           const type = typeOf(item.e, scope);
           if (type && type.t !== "num") fail(`${where}: a JSX ${item.k} must be a number, not ${type.t}`);
@@ -420,7 +465,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
             if (!CTL_FORMS.includes(stmt.form)) fail(`${where}: unknown control form ${stmt.form}`);
             if (CTL_ASYNC_FORMS.has(stmt.form) && !scope.async) fail(`${where}: ${stmt.form} outside an async function`);
             // A generator's body is its own function: no await, and its own return.
-            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || HANDOFF_FORMS.includes(stmt.form) || DEPTH_FORMS.includes(stmt.form) ? false : scope.async }), "free");
+            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || stmt.form === "guard-yield" || GENERATOR_FORMS.includes(stmt.form) || GENERATOR_STEP_FORMS.includes(stmt.form) || HANDOFF_FORMS.includes(stmt.form) || DEPTH_FORMS.includes(stmt.form) || CHAIN_FORMS.includes(stmt.form) ? false : scope.async }), "free");
             break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
@@ -475,6 +520,9 @@ export function validate(program, { maxNodes = 400 } = {}) {
     function typeOf(e, scope) {
       switch (e.k) {
         case "num": return T.num;
+        case "dom": return T.unknown;
+        case "jsxExpr": if (e.item.handler) checkBlock(e.item.handler, scope, "free"); else typeOf(e.item.e, scope); return T.unknown;
+        case "listen": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;
         case "own": return ownType(e, scope);

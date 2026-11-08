@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { GRIDS, hostArgs, parse as parseFocus } from "./focus.mjs";
 import { rowProblem } from "./codes.mjs";
+import { gridStanding, heldLine, manifestIds, readOpenDefects } from "./open-defects.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
@@ -52,7 +53,7 @@ const subdirs = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: tr
 
 /**
  * The oracle jobs one run may take, the account's concurrent runners (20, the most run 41775917761 ran at once), and the part size a
- * grid is not split below (ADR 0617). GitHub starts a matrix's jobs in no fixed order (that run's shard 0 started 29th), so a job past
+ * grid is not split below (ADR 0620). GitHub starts a matrix's jobs in no fixed order (that run's shard 0 started 29th), so a job past
  * the runners waits whatever its size: the split keeps every part a job of its own.
  */
 export const ORACLE_RUNNERS = 20;
@@ -195,7 +196,7 @@ function oracle(options, extra) {
   // The manifest's ids name the programs of the shards' mode: a recall grid regenerates them in it (a manifest from before `recall` is full).
   const recall = options.grid.endsWith("-recall") && manifest.recall !== "lean" ? ["--recall-full"] : [];
   const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, ...recall, "--ids", partManifest, "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
-    "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs(), ...extra];
+    "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs({ allCores: Boolean(process.env.CI) }), ...extra];
   console.log(`${label}: the runtime differential on ${ids.length} of the grid's ${manifest.ids.length} oracle programs`);
   return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
 }
@@ -241,6 +242,8 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
   const grids = {};
   const rows = new Map();
   for (const grid of AUDIT_GRIDS) {
+    const held = [];
+    const knownOpen = readOpenDefects();
     const outcomes = new Map();
     const tally = {};
     let planned = null;
@@ -252,14 +255,20 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
       if (report.gridShard.of !== planned) attention.push(`${shard.name}/${grid}: a grid of ${report.gridShard.of} programs, the other shards' of ${planned}`);
       const shardRows = readJsonl(join(dir, "programs.jsonl"));
       if (shardRows.length !== report.gridShard.kept) attention.push(`${shard.name}/${grid}: ${shardRows.length} rows for ${report.gridShard.kept} programs`);
+      const manifest = manifestIds(grid);
       for (const row of shardRows) {
         if (outcomes.has(row.id)) attention.push(`${grid}: ${row.id} in two shards`);
         outcomes.set(row.id, row.outcome);
         tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
         const problem = rowProblem(row);
-        if (problem) attention.push(`${grid}: ${problem} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
+        const standing = gridStanding(knownOpen, row, problem, { grid, strict: knownOpen.rows?.complete === true || manifest.has(row.id) });
+        if (standing?.kind === "held" || standing?.kind === "unlisted") held.push(standing.entry);
+        else if (standing?.kind === "fixed") attention.push(`${grid}: open-defect-fixed ${row.id}: move ${standing.entry.item} from open-defects.json to rediscovery.json`);
+        else if (standing?.kind === "moved" || standing?.kind === "certified") attention.push(`${grid}: open-defect-${standing.kind} ${row.id}`);
+        else if (problem) attention.push(`${grid}: ${problem} ${row.id} ${JSON.stringify(row.detail ?? {}).slice(0, 200)}`);
       }
     }
+    if (held.length) console.log(heldLine(grid, held));
     if (planned !== null && outcomes.size !== planned) attention.push(`${grid}: ${outcomes.size} programs judged of ${planned}`);
     if (planned !== null && planned > 0 && outcomes.size === 0) attention.push(`${grid}: no program judged`);
     // The oracle grid: its sample compared in Chrome, every program of the manifest, each with the outcome its shard gave it.

@@ -25,6 +25,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "type-only-source",
       "severity": "warning",
       "path": "fixtures/reactive-ir/mapper-untracked-reads/App.tsx",
       "start": 735,
@@ -75,6 +76,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/mapper-untracked-reads/App.tsx",
       "start": 2086,
@@ -85,6 +87,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "computed-call-target-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/mapper-untracked-reads/App.tsx",
       "start": 2111,
@@ -95,6 +98,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/mapper-untracked-reads/Shadowed.tsx",
       "start": 346,
@@ -102,13 +106,36 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mapper-untracked-reads/Shadowed.tsx",
+      "start": 371,
+      "end": 375,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/mapper-untracked-reads/Wrapper.tsx",
       "start": 451,
       "end": 456,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mapper-untracked-reads/Wrapper.tsx",
+      "start": 476,
+      "end": 482,
       "fixes": 0
     }
   ]

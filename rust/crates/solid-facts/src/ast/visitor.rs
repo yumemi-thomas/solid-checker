@@ -74,6 +74,28 @@ fn static_slot_values<'e, 'a>(
     Some(values)
 }
 
+/// Review D36: `object.key` with `object` an identifier and `key` static (an
+/// identifier, or a string-literal computed key, cooked), not optional.
+fn static_member_of_identifier<'e, 'a>(
+    expression: &'e Expression<'a>,
+) -> Option<(&'e IdentifierReference<'a>, &'e str)> {
+    match expression {
+        Expression::StaticMemberExpression(member) if !member.optional => match &member.object {
+            Expression::Identifier(object) => Some((object, member.property.name.as_str())),
+            _ => None,
+        },
+        Expression::ComputedMemberExpression(member) if !member.optional => {
+            match (&member.object, &member.expression) {
+                (Expression::Identifier(object), Expression::StringLiteral(key)) => {
+                    Some((object, key.value.as_str()))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn unwrapped<'e, 'a>(mut expression: &'e Expression<'a>) -> &'e Expression<'a> {
     loop {
         expression = match expression {
@@ -237,6 +259,21 @@ impl Collector<'_, '_> {
         {
             return;
         }
+        // Review D36: `const local = S.key` holds the export `S.key` reads, as
+        // the slot `const { key: local } = S` does: a static, non-optional
+        // member of an identifier the binder resolves (`finish` keeps it when
+        // that is a namespace import binding or a holder of one, ADR 0515).
+        if let BindingPattern::BindingIdentifier(local) = &declaration.id {
+            if let Some(init) = declaration.init.as_ref()
+                && let Some((object, key)) = static_member_of_identifier(unwrapped(init))
+                && let Some(namespace) = self.declaration_of(object)
+                && !(unwritten_let && self.binding_written_or_redeclared(local))
+            {
+                self.namespace_member_candidates
+                    .push((span(local.span), namespace, key.into()));
+            }
+            return;
+        }
         let BindingPattern::ObjectPattern(pattern) = &declaration.id else {
             return;
         };
@@ -285,6 +322,17 @@ impl Collector<'_, '_> {
         self.push_namespace_slots(pattern, namespace, unwritten_let);
     }
 
+    /// ADR 0516: whether a `let` binding is redeclared or written anywhere.
+    fn binding_written_or_redeclared(&self, local: &oxc_ast::ast::BindingIdentifier<'_>) -> bool {
+        local.symbol_id.get().is_none_or(|symbol| {
+            !self.scoping.symbol_redeclarations(symbol).is_empty()
+                || self
+                    .scoping
+                    .get_resolved_references(symbol)
+                    .any(|reference| reference.is_write())
+        })
+    }
+
     /// The static, bare-binding slots of `pattern` as namespace member
     /// candidates of the declaration `namespace` (`finish` keeps those over a
     /// namespace import binding).
@@ -298,25 +346,35 @@ impl Collector<'_, '_> {
             if property.computed {
                 continue;
             }
-            let BindingPattern::BindingIdentifier(local) = &property.value else {
-                continue;
-            };
-            if unwritten
-                && local.symbol_id.get().is_none_or(|symbol| {
-                    !self.scoping.symbol_redeclarations(symbol).is_empty()
-                        || self
-                            .scoping
-                            .get_resolved_references(symbol)
-                            .any(|reference| reference.is_write())
-                })
-            {
-                continue;
-            }
             let key = match &property.key {
                 PropertyKey::StaticIdentifier(identifier) => identifier.name.as_str(),
                 PropertyKey::StringLiteral(literal) => literal.value.as_str(),
                 _ => continue,
             };
+            let local = match &property.value {
+                BindingPattern::BindingIdentifier(local) => local,
+                // Review D36: a default that is exactly this namespace's
+                // `key` (`{ refresh: r = S.refresh } = S`): taken only when
+                // `S.key` is undefined, when it is that same value, so the
+                // slot holds `S.key` either way. Any other default is skipped.
+                BindingPattern::AssignmentPattern(assignment) => {
+                    let BindingPattern::BindingIdentifier(local) = &assignment.left else {
+                        continue;
+                    };
+                    let same = static_member_of_identifier(unwrapped(&assignment.right))
+                        .is_some_and(|(object, default_key)| {
+                            default_key == key && self.declaration_of(object) == Some(namespace)
+                        });
+                    if !same {
+                        continue;
+                    }
+                    local
+                }
+                _ => continue,
+            };
+            if unwritten && self.binding_written_or_redeclared(local) {
+                continue;
+            }
             self.namespace_member_candidates
                 .push((span(local.span), namespace, key.into()));
         }
@@ -750,6 +808,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // different discard, and the outer one has to survive it.
         let expression = statement.expression.span();
         let returned = self.concise_arrow_bodies.last() == Some(&expression);
+        if !returned {
+            self.inert_operands.push(span(expression));
+        }
         let enclosing = if returned {
             self.discarded_expression.take()
         } else {
@@ -906,6 +967,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.ambient_variable |= declaration.declare || self.ambient_module_depth != 0;
         walk::walk_variable_declaration(self, declaration);
         self.ambient_variable = previous;
+    }
+
+    fn visit_with_statement(&mut self, statement: &oxc_ast::ast::WithStatement<'a>) {
+        self.with_statement = true;
+        walk::walk_with_statement(self, statement);
     }
 
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
@@ -1728,6 +1794,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             } else {
                 Vec::new()
             },
+            logical: match expression.operator {
+                AssignmentOperator::LogicalNullish => Some(LogicalAssignmentOperator::Nullish),
+                AssignmentOperator::LogicalOr => Some(LogicalAssignmentOperator::Or),
+                AssignmentOperator::LogicalAnd => Some(LogicalAssignmentOperator::And),
+                _ => None,
+            },
         });
         let logical = matches!(
             expression.operator,
@@ -1799,6 +1871,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             reads_target: true,
             call_initializer: None,
             array_slots: Vec::new(),
+            logical: None,
         });
         // Prefix and postfix `++`/`--` apply ToNumeric to the old value.
         self.coercing_operands
@@ -1925,6 +1998,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'a>) {
+        self.key_probed_operands.push(span(statement.right.span()));
         let whole = span(statement.span);
         self.loop_statements.push(whole);
         self.push_iterated_loop_repeats(
@@ -1999,6 +2073,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_try_statement(&mut self, statement: &oxc_ast::ast::TryStatement<'a>) {
+        if let Some(handler) = &statement.handler {
+            self.try_catches.push(TryCatchFact {
+                block: span(statement.block.span),
+                handler: span(handler.span),
+            });
+        }
         let head = statement.block.body.first().and_then(|first| match first {
             oxc_ast::ast::Statement::ExpressionStatement(expression) => {
                 match &expression.expression {
@@ -2719,9 +2799,19 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
+        if expression.operator == oxc_ast::ast::BinaryOperator::In {
+            self.key_probed_operands.push(span(expression.right.span()));
+        }
         use oxc_syntax::operator::BinaryOperator;
         // Every binary operator yields a number, bigint, string or boolean.
         self.primitive_results.push(span(expression.span));
+        if matches!(
+            expression.operator,
+            BinaryOperator::StrictEquality | BinaryOperator::StrictInequality
+        ) {
+            self.inert_operands.push(span(expression.left.span()));
+            self.inert_operands.push(span(expression.right.span()));
+        }
 
         if matches!(
             expression.operator,
@@ -2783,6 +2873,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .extend([span(expression.left.span()), span(expression.right.span())]);
         }
 
+        if !null_comparison
+            && matches!(
+                expression.operator,
+                BinaryOperator::Equality | BinaryOperator::Inequality
+            )
+        {
+            self.coercive_operands
+                .extend(
+                    [&expression.left, &expression.right].map(|operand| CoerciveOperandFact {
+                        span: span(operand.span()),
+                        kind: CoerciveOperandKind::LooseEquality,
+                    }),
+                );
+        }
+
         // Most binary operators reject function operands themselves, so a
         // checker finding there would duplicate TypeScript. Keep only the
         // syntactically proven string-concatenation subset: `+` with a string
@@ -2814,6 +2919,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         }
         if expression.operator == UnaryOperator::Delete {
             self.deleted_targets.push(span(expression.argument.span()));
+        }
+        if matches!(
+            expression.operator,
+            UnaryOperator::Void | UnaryOperator::Typeof
+        ) {
+            self.inert_operands.push(span(expression.argument.span()));
         }
 
         // Every unary operator here accepts a function operand in TypeScript

@@ -144,12 +144,6 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
             assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
             assert_eq!(rows[0]["id"], code, "{name}");
             assert_eq!(rows[0]["kind"], kind, "{name}");
-            if name == "WrappedImmediate" {
-                let begin = rows[0]["primaryLocation"]["startByte"].as_u64().unwrap() as usize;
-                let end = rows[0]["primaryLocation"]["endByte"].as_u64().unwrap() as usize;
-                assert!(source[begin..end].contains("as () => void"));
-                continue;
-            }
             let callee = match name {
                 "StableTransportFalse" | "StableTransportTrue" | "StableTransportSpread" => {
                     start + source[start..end].find("register(").unwrap()
@@ -157,6 +151,12 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
                 "StableMemberReceiver" => {
                     start + source[start..end].find("target.register(").unwrap()
                 }
+                // A parameterless synchronous IIFE: the row stands on the call
+                // inside it, the line rc.21 raises the code from (d529b7692).
+                "ForbiddenImmediate" | "WrappedImmediate" => {
+                    start + source[start..end].find("onCleanup(").unwrap()
+                }
+                "UnknownImmediate" => start + source[start..end].find("unknown(").unwrap(),
                 _ => {
                     let anchor = source[start..end]
                         .find("    (")
@@ -321,10 +321,20 @@ fn eager_read_summaries_require_exact_fresh_stack_global_bindings() {
                         .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
             })
             .collect::<Vec<_>>();
-        assert_eq!(rows.len(), usize::from(uncertain), "{name}: {rows:#?}");
+        // ADR 0646: a returned function's call beside the read is SC9012's too:
+        // the transport of `const task = scheduledAndReturned()` does not resolve.
+        let handed = usize::from(name == "ScheduledAndReturned");
+        assert_eq!(
+            rows.len(),
+            usize::from(uncertain) + handed,
+            "{name}: {rows:#?}"
+        );
         if uncertain {
             assert_eq!(rows[0]["id"], "SC1001", "{name}");
-            assert_eq!(rows[0]["kind"], "uncertifiable", "{name}");
+            assert!(
+                rows.iter().all(|row| row["kind"] == "uncertifiable"),
+                "{name}: {rows:#?}"
+            );
         }
     }
 }
@@ -341,6 +351,7 @@ fn factory_read_summaries_respect_dialect_callback_boundaries() {
         ("MemoHelper", None),
         ("MemoReturned", None),
         ("NamespaceMemo", None),
+        // ADR 0802: an SC5003 uncertifiable of its own, pinned below.
         ("MemoArray", None),
         ("EffectCompute", None),
         ("SettledRead", None),
@@ -362,6 +373,20 @@ fn factory_read_summaries_respect_dialect_callback_boundaries() {
                         .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
             })
             .collect::<Vec<_>>();
+        // ADR 0802: a memo whose compute calls a value it was handed
+        // (`objects.map(item => item.read())`) is open until the handed net
+        // follows the callback parameter to the literal.
+        let (open, rows): (Vec<_>, Vec<_>) = rows.into_iter().partition(|row| {
+            row["id"] == "SC5003" && row["analysisContext"] == "async-provenance-unproven"
+        });
+        assert_eq!(
+            open.len(),
+            usize::from(name == "MemoArray"),
+            "{name}: {open:#?}"
+        );
+        for row in &open {
+            assert_eq!(row["kind"], "uncertifiable", "{name}");
+        }
         if let Some(kind) = expected {
             assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
             assert_eq!(rows[0]["id"], "SC1001", "{name}");
@@ -687,6 +712,52 @@ fn returned_literal_body_facts_project_reads_only_at_invocation() {
     assert_eq!(rows[0]["kind"], "violation");
 }
 
+/// ADR 0827: every runtime use of an import the compiler did not resolve is
+/// open, `import-unresolved`, and nothing of a resolved import is.
+#[test]
+fn unresolved_import_uses_are_open() {
+    let Some(findings) = diagnostic_fixture("import-unresolved") else {
+        return;
+    };
+    let source = include_str!("../../../../fixtures/reactive-ir/import-unresolved/App.tsx");
+    let resolved = source.find("export function Resolved").unwrap() as u64;
+    let rows = findings
+        .iter()
+        .filter(|row| row["analysisContext"] == "import-unresolved")
+        .collect::<Vec<_>>();
+    let subjects = rows
+        .iter()
+        .map(|row| row["coverageSubject"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    // Body call, effect argument, default import call, write, namespace
+    // member, handler write, JSX call, tag.
+    assert_eq!(
+        subjects,
+        [
+            "helper",
+            "helper",
+            "missingDefault",
+            "store",
+            "Missing",
+            "store",
+            "helper",
+            "Helper"
+        ],
+        "{rows:#?}"
+    );
+    for row in rows {
+        assert_eq!(row["id"], "SC9012");
+        assert_eq!(row["kind"], "uncertifiable");
+        assert!(
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/App.tsx"))
+                && row["primaryLocation"]["startByte"].as_u64() < Some(resolved),
+            "{row:#?}"
+        );
+    }
+}
+
 #[test]
 fn local_declaration_dispatch_rejects_escapes() {
     let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
@@ -704,9 +775,10 @@ fn local_declaration_dispatch_rejects_escapes() {
                 && row["analysisContext"] == "parameter-member-target-unresolved"
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 1, "{rows:#?}");
+    // ADR 0771: `{ slice: setS } as unknown as readonly number[]` writes there.
+    assert_eq!(rows.len(), 2, "{rows:#?}");
     for (marker, expression, unresolved) in [
-        ("function LocalDeclaration", "pageSlice(props.items)", false),
+        ("function LocalDeclaration", "pageSlice(props.items)", true),
         (
             "function EscapedDeclaration",
             "pageSlice(props.items)",
@@ -784,6 +856,32 @@ fn nested_parameter_members_require_closed_values_at_every_level() {
                                 .is_some_and(|message| message.contains("read through")))
             })
             .collect::<Vec<_>>();
+        // ADR 0692: the value-use census holds `count`, the second argument,
+        // open at its own position beside the member-dispatch row. Both rows,
+        // exactly, so a further census row there fails this test.
+        if name == "NestedMethodArguments" {
+            let at = selected
+                .iter()
+                .map(|row| {
+                    (
+                        row["analysisContext"].as_str().unwrap_or_default(),
+                        row["primaryLocation"]["line"].as_u64().unwrap_or_default(),
+                        row["primaryLocation"]["column"]
+                            .as_u64()
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                at,
+                [
+                    ("parameter-member-path-unresolved", 140, 33),
+                    ("value-to-unresolved-callee", 140, 63),
+                ],
+                "{name}: {selected:#?}"
+            );
+            continue;
+        }
         assert_eq!(
             selected.len(),
             usize::from(expected.is_some()),
@@ -824,6 +922,20 @@ fn member_dispatch_keeps_the_source_invocation_context() {
                 .is_some_and(|path| path.ends_with("/MemberContexts.tsx"))
         })
         .collect::<Vec<_>>();
+    // ADR 0802: a memo over a parameter is open while its callers are not
+    // followed: the three helpers that return a memo reading `options.read()`.
+    let (open, rows): (Vec<_>, Vec<_>) = rows.into_iter().partition(|row| {
+        row["id"] == "SC5003" && row["analysisContext"] == "async-provenance-unproven"
+    });
+    let mut open_at = open
+        .iter()
+        .map(|row| {
+            assert_eq!(row["kind"], "uncertifiable", "{row:#?}");
+            row["primaryLocation"]["line"].as_u64().unwrap()
+        })
+        .collect::<Vec<_>>();
+    open_at.sort_unstable();
+    assert_eq!(open_at, [7, 13, 31], "{open:#?}");
     assert_eq!(rows.len(), 3, "{rows:#?}");
     for (name, helper, unresolved) in [
         ("TrackedMember", "trackedMember", false),
@@ -910,17 +1022,55 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
             assert_eq!(row["kind"], "uncertifiable", "{name}: {row:#?}");
         }
     }
-    let eval_rows = findings
+    // The eval case is a project of its own (ADR 0803: its `eval` withdraws
+    // every tuple slot of the project it is in). Its read at `count()`:
+    // SC1001 uncertifiable, and the withdrawal at the accessor.
+    let Some(eval_findings) = diagnostic_fixture("forwarded-event-prop/variants/eval-handler")
+    else {
+        return;
+    };
+    let eval_source = include_str!(
+        "../../../../fixtures/reactive-ir/forwarded-event-prop/variants/eval-handler/EvalHandler.tsx"
+    );
+    let start = eval_source.find("count();").unwrap() as u64;
+    let mut eval_rows = eval_findings
         .iter()
-        .filter(|row| {
-            row["primaryLocation"]["path"]
-                .as_str()
-                .is_some_and(|path| path.ends_with("/EvalHandler.tsx"))
+        .map(|row| {
+            (
+                row["id"].as_str().unwrap_or_default(),
+                row["kind"].as_str().unwrap_or_default(),
+                row["analysisContext"].as_str().unwrap_or_default(),
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/EvalHandler.tsx")),
+                row["primaryLocation"]["startByte"].as_u64(),
+                row["primaryLocation"]["endByte"].as_u64(),
+            )
         })
         .collect::<Vec<_>>();
-    assert_eq!(eval_rows.len(), 1, "{eval_rows:#?}");
-    assert_eq!(eval_rows[0]["id"], "SC1001");
-    assert_eq!(eval_rows[0]["kind"], "uncertifiable");
+    eval_rows.sort();
+    assert_eq!(
+        eval_rows,
+        vec![
+            (
+                "SC1001",
+                "uncertifiable",
+                "callee-callback-timing",
+                true,
+                Some(start),
+                Some(start + 7)
+            ),
+            (
+                "SC9012",
+                "uncertifiable",
+                "tuple-iteration-written",
+                true,
+                Some(start),
+                Some(start + 5)
+            ),
+        ],
+        "{eval_findings:#?}"
+    );
 }
 
 #[test]
@@ -993,23 +1143,26 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
                 && row["analysisContext"] == "parameter-member-target-unresolved"
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 9, "{rows:#?}");
+    // ADR 0771: a tracked position decides reads. A prop's value may write
+    // through the helper (patterns net/prop-std-method-tracked), so every
+    // tracked caller keeps the obligation; an event or a timer does not.
+    assert_eq!(rows.len(), 17, "{rows:#?}");
     for (name, occurrence, unresolved) in [
-        ("DirectTracked", 0, false),
-        ("LocalTracked", 0, false),
-        ("ComponentProperty", 0, false),
-        ("ChainedTracked", 0, false),
+        ("DirectTracked", 0, true),
+        ("LocalTracked", 0, true),
+        ("ComponentProperty", 0, true),
+        ("ChainedTracked", 0, true),
         ("MixedCalls", 0, true),
         ("EscapedHelper", 0, true),
         // ADR 0320: the call follows an await reached on every path.
         ("AsyncHelper", 0, false),
         ("RecursiveHelper", 0, true),
-        ("ClearedTracking", 0, false),
+        ("ClearedTracking", 0, true),
         ("ShadowedHelper", 0, true),
-        ("ShadowedHelper", 1, false),
-        ("WrappedCallee", 0, false),
+        ("ShadowedHelper", 1, true),
+        ("WrappedCallee", 0, true),
         // ADR 0516: a `let` nothing reassigns holds its helper, resolved.
-        ("MutableHelper", 0, false),
+        ("MutableHelper", 0, true),
         ("StoredCaller", 0, true),
         ("GetterDefaultCaller", 0, true),
         ("JsxDefaultCaller", 0, true),
@@ -1107,7 +1260,7 @@ fn local_dispatch_eval_and_depth_limits_keep_obligations() {
             bounded.push_str(&format!("const h{index} = () => h{}();\n", index - 1));
         }
         bounded.push_str(&format!(
-            "return <div>{{h{}().length}}</div>;\n}}\n",
+            "return <button onClick={{() => h{}()}} />;\n}}\n",
             depth - 1
         ));
     }
@@ -1161,7 +1314,23 @@ fn typed_options_wrappers_preserve_source_callback_execution() {
                 .is_some_and(|path| path.ends_with("/QueryOptions.tsx"))
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 3, "{rows:#?}");
+    // Three reads, and ADR 0665's SC5003 of the memo over the handed compute.
+    // ADR 0775: and SC9012 at `options()` of the two wrappers nothing resolves:
+    // what they return may be pending (patterns net/wrapped-later-tracked).
+    // ADR 0860: the escaped return also leaves a row at each options() read
+    // whose execution role is not proven tracked.
+    assert_eq!(rows.len(), 8, "{rows:#?}");
+    for start in [369_u64, 627] {
+        assert!(
+            rows.iter().any(|row| {
+                row["primaryLocation"]["startByte"].as_u64() == Some(start)
+                    && row["id"] == "SC9012"
+                    && row["kind"] == "uncertifiable"
+                    && row["analysisContext"] == "value-forwarded"
+            }),
+            "{rows:#?}"
+        );
+    }
     for (wrapper, expected) in [
         ("wrapped", None),
         ("wrappedSnapshot", None),
@@ -1247,11 +1416,45 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
             .collect::<Vec<_>>();
+        // ADR 0801: gateways.ts exports `Function`, handed on, so an accessor
+        // slot is never exact here, and (ADR 0803) neither is factory.ts's own
+        // `[count]`. A kept case has ADR 0801's SC9012 at AccessorRead's call
+        // and `tuple-iteration-written` at TupleRead's, one each, beside the
+        // two held reads; a vetoed one has ADR 0282's there.
+        let kept = case["veto"] != true;
+        fn held(row: &serde_json::Value, context: &str) -> bool {
+            row["id"] == "SC9012" && row["analysisContext"] == context
+        }
+        // ADR 0838: the accessor's source is not proved synchronous, so its
+        // read carries accounting rows of its own; they claim nothing.
+        let (accounted, read): (Vec<_>, Vec<_>) = read
+            .into_iter()
+            .partition(|row| row["analysisContext"] == "async-read-unaccounted");
+        assert!(
+            accounted.iter().all(|row| row["kind"] == "uncertifiable"),
+            "{}: {accounted:#?}",
+            case["name"]
+        );
+        let (slot, read): (Vec<_>, Vec<_>) = read.into_iter().partition(|row| {
+            kept && (held(row, "returned-callable-outside-source-universe")
+                || held(row, "tuple-iteration-written"))
+        });
+        for context in [
+            "returned-callable-outside-source-universe",
+            "tuple-iteration-written",
+        ] {
+            assert_eq!(
+                slot.iter().filter(|row| held(row, context)).count(),
+                usize::from(kept),
+                "{} {context}: {slot:#?}",
+                case["name"]
+            );
+        }
         assert_eq!(read.len(), 2, "{}: {rows:#?}", case["name"]);
         let (kind, code) = if case["veto"] == true {
             ("uncertifiable", "SC9012")
         } else {
-            ("violation", "SC1001")
+            ("uncertifiable", "SC1001")
         };
         assert_eq!(read[0]["kind"], kind, "{}: {read:#?}", case["name"]);
         assert_eq!(read[0]["id"], code, "{}: {read:#?}", case["name"]);
@@ -1274,19 +1477,18 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
         return;
     };
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for (fixture, expected, kind, code, flags) in [
+    // ADR 0822: `WindowQuery`'s `typeof window` branch is live, so the walk
+    // over dep-query ends at its Proxy: SC9012 U, never silent. `FoldedQuery`
+    // stays the proved SC1001 V.
+    for (fixture, expected, flags) in [
         (
             "returned-store-proxy",
-            4,
-            "uncertifiable",
-            "SC9012",
+            vec![("uncertifiable", "SC9012"); 17],
             Vec::new(),
         ),
         (
             "dependency-source-proxy-store",
-            1,
-            "violation",
-            "SC1001",
+            vec![("uncertifiable", "SC9012"), ("violation", "SC1001")],
             vec![
                 "--runtime-target",
                 "browser",
@@ -1320,13 +1522,23 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
             .collect::<Vec<_>>();
-        assert_eq!(reads.len(), expected, "{fixture}: {rows:#?}");
-        assert!(
-            reads
-                .iter()
-                .all(|row| row["kind"] == kind && row["id"] == code),
-            "{fixture}: {rows:#?}"
-        );
+        let mut found = reads
+            .iter()
+            .map(|row| (row["kind"].as_str().unwrap(), row["id"].as_str().unwrap()))
+            .collect::<Vec<_>>();
+        found.sort_unstable();
+        assert_eq!(found, expected, "{fixture}: {rows:#?}");
+        for row in reads
+            .iter()
+            .filter(|row| fixture == "dependency-source-proxy-store" && row["id"] == "SC9012")
+        {
+            assert!(
+                row["analysisContext"]
+                    .as_str()
+                    .is_some_and(|context| context.starts_with("dependency-value-unfollowed")),
+                "{fixture}: {row:#?}"
+            );
+        }
     }
 }
 
@@ -1449,7 +1661,13 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 ("primitive-in-directive-application", 3),
             ],
         ),
-        ("owner-presence", &[("missing-owner", 14)]),
+        // ADR 0869: the three JSX `<Loading>`/`<Await>` boundaries (App.tsx
+        // lines 5, 6, 38) are no owner site. rc.21's dev `createComponent`
+        // runs every component under its own transparent root, and Chrome is
+        // quiet for each; the call form `Loading(props)` still warns.
+        // ADR 0868: `directRootHelper`'s two operations (lines 23-24) are
+        // uncertifiable: its census is not proven closed.
+        ("owner-presence", &[("missing-owner", 13)]),
         (
             "async-boundary",
             &[
@@ -1749,8 +1967,10 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
         return;
     };
     // Fail-honest policy: SC5001 stays a proven violation when the options
-    // argument is absent or readable, and downgrades to a proof obligation
-    // when an unreadable options argument could declare a loadingValue.
+    // argument is absent, and downgrades to a proof obligation when an
+    // unreadable options argument could declare a loadingValue, or a readable
+    // one does (ADR 0632): a declared source's first flight serves the value,
+    // and only a re-ask nothing here proves throws.
     let untracked = findings_for_rule(&findings, "pending-async-unsuspendable-read")
         .into_iter()
         .filter(|finding| finding["severity"] == "error")
@@ -1761,7 +1981,7 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
         .collect::<Vec<_>>();
     assert_eq!(
         kinds.iter().filter(|kind| **kind == "violation").count(),
-        3,
+        2,
         "{untracked:#?}"
     );
     assert_eq!(
@@ -1769,11 +1989,11 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
             .iter()
             .filter(|kind| **kind == "uncertifiable")
             .count(),
-        1,
+        2,
         "{untracked:#?}"
     );
-    // The declared source keeps SC5001/SC5001 with conditional wording: the
-    // first flight cannot throw, later re-asks can (probed against rc.0).
+    // The declared source keeps SC5001 with conditional wording: the first
+    // flight cannot throw, later re-asks can (probed against rc.0 and rc.21).
     assert!(
         untracked.iter().any(|finding| {
             finding["message"].as_str().is_some_and(|message| {
@@ -2002,9 +2222,19 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     if let Some(findings) = diagnostic_fixture("http-response-flush") {
         let drops = findings_for_rule(&findings, "http-response-after-flush");
         // The two component-body calls below the Loading boundary plus the
-        // lexical call in its children; the shell, fallback, and
-        // event-handler calls stay silent.
-        assert_eq!(drops.len(), 3, "{findings:#?}");
+        // lexical call in its children; since ADR 0703 the shell and
+        // fallback calls are obligations too (no shell-content proof yet),
+        // blocker response-head-position-unproven; the event-handler call
+        // stays silent.
+        assert_eq!(drops.len(), 6, "{findings:#?}");
+        assert_eq!(
+            drops
+                .iter()
+                .filter(|finding| finding["analysisContext"] == "response-head-position-unproven")
+                .count(),
+            3,
+            "{drops:#?}"
+        );
         assert!(
             drops.iter().all(|finding| {
                 finding["severity"] == "warning" && finding["kind"] == "uncertifiable"
@@ -2049,20 +2279,37 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // and every one is pinned: a broad `number` may be non-finite; a
         // getter's body runs on access, so no written value proves what the
         // property yields; a binding referenced twice could be mutated before
-        // the call; and a spread could overwrite the witness.
-        assert_rule_findings(&findings, "server-function-rich-argument", 19);
+        // the call; and a spread could overwrite the witness. ADR 0707 adds a
+        // fifth: `SafeScalar` holds the literal `0`, which may be `-0`, and
+        // rc.21's transport rejects negative zero.
+        assert_rule_findings(&findings, "server-function-rich-argument", 20);
         assert_eq!(
             findings_for_rule(&findings, "server-function-rich-argument")
                 .iter()
                 .filter(|finding| finding["kind"] == "uncertifiable")
                 .count(),
-            4,
+            5,
             "{findings:#?}"
         );
-        if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
+        // ADR 0707: the opt-in is the call. Called first in the client entry,
+        // before its render: the codec is installed, silent everywhere.
+        if let Some(entry) = diagnostic_fixture("server-function-rich-args-entry") {
             assert!(
-                enabled.is_empty(),
-                "enableRichArguments installs the codec and removes the throw everywhere: {enabled:#?}"
+                entry.is_empty(),
+                "enableRichArguments() before the render installs the codec everywhere: {entry:#?}"
+            );
+        }
+        // Called at module scope in a component file with no render: nothing
+        // proves it ran first, so the rich arguments are obligations, never
+        // violations.
+        if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
+            let open = findings_for_rule(&enabled, "server-function-rich-argument");
+            assert!(
+                !open.is_empty()
+                    && open
+                        .iter()
+                        .all(|finding| finding["kind"] == "uncertifiable"),
+                "{enabled:#?}"
             );
         }
     }
@@ -2071,14 +2318,13 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // untrack, component body, event handler, apply, and module scope
         // are observer-free and stay silent (probed, rc.0).
         assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
-        // ADR 0614: `resolve` creates a computation, so the tracked effect's
-        // leaf refuses it too.
-        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 1);
+        // ADR 0641: on rc.21 the tracked effect's throw is the observer guard's,
+        // so the claim is this rule's alone, not the leaf owner's.
+        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 0);
         assert!(
-            findings.iter().all(|finding| {
-                finding["rule"] == "no-await-primitive-in-tracked-scope"
-                    || finding["rule"] == "leaf-owner-forbidden-call"
-            }),
+            findings
+                .iter()
+                .all(|finding| finding["rule"] == "no-await-primitive-in-tracked-scope"),
             "{findings:#?}"
         );
     }
@@ -2113,17 +2359,22 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     }
     if let Some(findings) = diagnostic_fixture("rc9-static-dynamic-async") {
         // rc.9's static dynamic() form throws in dev on a thenable source and
-        // renders nothing in production. Four inline async sources, the
+        // renders nothing in production. Ten proven sources: inline async, the
         // standard library's Promise.resolve and Promise construct signature,
-        // and two identifiers resolved to same-file async functions; the
-        // synchronous, default-form, unknown-form, shadowed, parameter, `let`
-        // and block-bodied sources stay silent.
-        assert_rule_findings(&findings, "static-dynamic-async-source", 8);
+        // same-file async functions, and block bodies typed as a Promise. ADR
+        // 0654: seven open sources or forms are uncertifiable; a synchronous
+        // source and the default form stay silent.
+        let selected = assert_rule_findings(&findings, "static-dynamic-async-source", 17);
+        let proven = selected
+            .iter()
+            .filter(|finding| finding["kind"] == "violation")
+            .count();
+        assert_eq!(proven, 10, "{findings:#?}");
         assert!(
-            findings.iter().all(|finding| {
-                (finding["rule"] == "static-dynamic-async-source" && finding["kind"] == "violation")
-                    || finding["rule"] == "unaudited-solid-release"
-            }),
+            findings
+                .iter()
+                .all(|finding| finding["rule"] == "static-dynamic-async-source"
+                    || finding["rule"] == "unaudited-solid-release"),
             "{findings:#?}"
         );
         // rc.3 has no static form: the same calls are the memo's async
@@ -2189,7 +2440,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // attribute and the called and passed-on accessors were already
         // silent. Binary arithmetic and bitwise operands stay silent because
         // TypeScript rejects a function there (TS2365/TS2362).
-        assert_rule_findings(&findings, "uncalled-accessor", 5);
+        assert_rule_findings(&findings, "uncalled-accessor", 13);
         for position in [
             "string concatenation",
             "logical-not operator",
@@ -2463,6 +2714,11 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
             unplaced.len(),
             if fixture == "interprocedural-methods-v2" {
                 4
+            } else if fixture == "callback-forwarding" {
+                // ADR 0674: `readCount` is handed to a project call in another
+                // file, which no walk follows: an obligation at the read, and
+                // the violation at the calling component stands.
+                1
             } else {
                 0
             },
@@ -2581,4 +2837,151 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
         "{closed}"
     );
     assert!(!closed.contains("SC9005"), "{closed}");
+}
+
+/// The rows `findings` reports at `file:line`, as `(code, kind, analysisContext)`.
+fn rows_at<'a>(
+    findings: &'a [serde_json::Value],
+    file: &str,
+    line: u64,
+) -> Vec<(&'a str, &'a str, &'a str)> {
+    findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with(&format!("/{file}")))
+                && row["primaryLocation"]["line"].as_u64() == Some(line)
+        })
+        .map(|row| {
+            (
+                row["id"].as_str().unwrap_or_default(),
+                row["kind"].as_str().unwrap_or_default(),
+                row["analysisContext"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+/// The 1-based line of the first line of `source` containing `needle`.
+fn line_of(source: &str, needle: &str) -> u64 {
+    let offset = source.find(needle).expect("needle occurs in source");
+    u64::try_from(source[..offset].matches('\n').count() + 1).unwrap()
+}
+
+/// ADR 0750: each walk answers within its limit, and past it the search is
+/// undecided (`search-depth-limit`), never clean: `effect_phase`'s 12 layers
+/// (SC2008, SC6002), the promise chain's 6 (SC1002, SC9012), the handed-read
+/// regions' 3, the unplaced-caller net's 4 helpers (SC2008).
+#[test]
+fn walks_past_their_depth_limit_are_uncertifiable() {
+    let Some(findings) = diagnostic_fixture("bounds-search-depth-limit") else {
+        return;
+    };
+    let app = include_str!("../../../../fixtures/reactive-ir/bounds-search-depth-limit/App.tsx");
+    let stepped =
+        include_str!("../../../../fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx");
+    const LIMIT: &str = "search-depth-limit";
+    let has = |rows: &[(&str, &str, &str)], code: &str, kind: &str, limit: bool| {
+        rows.iter().any(|(id, found, context)| {
+            *id == code && *found == kind && context.starts_with(LIMIT) == limit
+        })
+    };
+    // Twelve helpers: proven. Thirteen: undecided, not certified.
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function fa12("));
+    assert!(has(&at, "SC2008", "violation", false), "{at:?}");
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function fb13("));
+    assert!(has(&at, "SC2008", "uncertifiable", true), "{at:?}");
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function mb13("));
+    assert!(has(&at, "SC6002", "uncertifiable", true), "{at:?}");
+    let at = rows_at(
+        &findings,
+        "App.tsx",
+        line_of(app, "const m = createMemo(async () => Promise"),
+    );
+    assert!(has(&at, "SC1002", "uncertifiable", true), "{at:?}");
+    assert!(has(&at, "SC9012", "uncertifiable", true), "{at:?}");
+    let at = rows_at(&findings, "App.tsx", line_of(app, "function k3("));
+    assert!(has(&at, "SC9012", "uncertifiable", true), "{at:?}");
+    let at = rows_at(&findings, "stepped.tsx", line_of(stepped, "function s15("));
+    assert!(has(&at, "SC2008", "uncertifiable", true), "{at:?}");
+}
+
+/// ADR 0751: a value chain past its limit is unknown. `is_own_setter`'s four
+/// aliases: the sixth-alias setter's callback is a window not proven either
+/// way, so the write in it is uncertifiable, not dropped (Chrome is quiet);
+/// `handed_value`'s six steps: the eighth member's call after an await opens
+/// the handed-read obligation.
+#[test]
+fn value_chains_past_their_limit_are_uncertifiable() {
+    let Some(findings) = diagnostic_fixture("bounds-value-depth-limit") else {
+        return;
+    };
+    let setter =
+        include_str!("../../../../fixtures/reactive-ir/bounds-value-depth-limit/setter.tsx");
+    let handed =
+        include_str!("../../../../fixtures/reactive-ir/bounds-value-depth-limit/handed.tsx");
+    let four = rows_at(&findings, "setter.tsx", line_of(setter, "const bumpFour"));
+    assert!(four.is_empty(), "{four:?}");
+    let six = rows_at(&findings, "setter.tsx", line_of(setter, "const bumpSix"));
+    assert_eq!(six, [("SC2003", "uncertifiable", "search-depth-limit")]);
+    let past = rows_at(&findings, "handed.tsx", line_of(handed, "m6.m7.read()"));
+    assert!(
+        past.iter().any(|(id, kind, context)| {
+            *id == "SC9012" && *kind == "uncertifiable" && *context == "handed-read-after-await"
+        }),
+        "{past:?}"
+    );
+}
+
+/// ADR 0752: a round cap or work budget that runs out leaves the question
+/// open. The forwarding loop's 8 rounds: a member read 12 helpers down from
+/// an apply is the caller's obligation (`parameter-use-unmodeled`), as 3 is
+/// (`parameter-member-targets-diverge`). `calls_reach`'s 512 nodes: a call
+/// whose reach goes on past them may run the optimistic setter (SC2009).
+#[test]
+fn searches_past_their_budget_are_uncertifiable() {
+    let Some(findings) = diagnostic_fixture("bounds-budget-limit") else {
+        return;
+    };
+    let app = include_str!("../../../../fixtures/reactive-ir/bounds-budget-limit/App.tsx");
+    let optimistic =
+        include_str!("../../../../fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx");
+    let short = rows_at(&findings, "App.tsx", line_of(app, "fa1({ read: a })"));
+    // ADR 0692: the value-use census follows `a` through `fa1`'s parameter;
+    // the chain runs past its 8 hops, so the census answers open beside the
+    // forwarding loop's row.
+    assert_eq!(
+        short,
+        [
+            (
+                "SC9012",
+                "uncertifiable",
+                "parameter-member-targets-diverge"
+            ),
+            ("SC9012", "uncertifiable", "value-forwarded"),
+        ]
+    );
+    let long = rows_at(&findings, "App.tsx", line_of(app, "fb1({ read: a })"));
+    // ADR 0692: the census on the same chain, past its 8 hops.
+    assert_eq!(
+        long,
+        [
+            ("SC9012", "uncertifiable", "parameter-use-unmodeled"),
+            ("SC9012", "uncertifiable", "value-forwarded"),
+        ]
+    );
+    let past = rows_at(
+        &findings,
+        "optimistic.tsx",
+        line_of(optimistic, "function g1("),
+    );
+    assert_eq!(past.len(), 1, "{past:?}");
+    assert_eq!((past[0].0, past[0].1), ("SC2009", "uncertifiable"));
+    let within = rows_at(
+        &findings,
+        "optimistic.tsx",
+        line_of(optimistic, "function g3("),
+    );
+    assert!(within.is_empty(), "{within:?}");
 }

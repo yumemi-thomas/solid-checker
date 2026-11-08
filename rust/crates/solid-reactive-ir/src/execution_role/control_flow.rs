@@ -40,13 +40,52 @@ pub(crate) fn assigned_member_function_contains(
     })
 }
 
-pub(crate) fn control_flow_execution_role(
+/// The body of the control-flow children callback around `span`, chosen as
+/// [`control_flow_execution_role`] chooses it: the innermost element that
+/// renders its children through a callback, and the outermost function
+/// written in one of its children with no other element between.
+pub(crate) fn flow_callback_body(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
+) -> Option<Span> {
+    let element = file
+        .ast
+        .jsx_containing(span)
+        .filter(|element| {
+            jsx_primitive_name(file, element, entities, symbol_names, dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
+        })
+        .min_by_key(|element| element.span.end - element.span.start)?;
+    file.ast
+        .functions_body_containing(span)
+        .filter(|function| {
+            element.span.contains(function.span)
+                && element
+                    .children
+                    .iter()
+                    .any(|child| child.contains(function.span))
+                && !file
+                    .ast
+                    .jsx_containing(function.span)
+                    .any(|nested| nested.span != element.span && element.span.contains(nested.span))
+        })
+        .max_by_key(|function| function.body.end - function.body.start)
+        .map(|function| function.body)
+}
+
+pub(crate) fn control_flow_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    let dialect = lookup.dialect;
     let element = file
         .ast
         .jsx_containing(span)
@@ -88,6 +127,14 @@ pub(crate) fn control_flow_execution_role(
             .max_by_key(|function| function.body.end - function.body.start)?;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
+        // A nested handler of an event the DOM also delivers on its own
+        // (`onLoad`), as `execution_role.denied-event` says in a body (ADR 0780).
+        if super::in_denied_handler(file, span) {
+            return Some(role_arm!(
+                "control_flow.control_flow_execution_role.denied-event",
+                ExecutionRole::Unknown
+            ));
+        }
         return Some(role_arm!(
             "control_flow.control_flow_execution_role.deferred-callback",
             ExecutionRole::DeferredCallback
@@ -98,27 +145,27 @@ pub(crate) fn control_flow_execution_role(
     // default on the first) is inserted as an ordinary child and runs in the
     // insert's tracked effect (review round 4). Only the child's own body:
     // a function nested in it keeps its own role (review round 5).
-    let length = callback
-        .parameters
-        .iter()
-        .take_while(|parameter| parameter.initializer.is_none())
-        .count()
-        .min(
-            callback
-                .parameters
-                .len()
-                .saturating_sub(usize::from(callback.rest_parameter)),
-        );
-    if length == 0
+    if super::named_callbacks::function_length(callback) == 0
         && jsx_primitive_name(file, element, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| dialect.children_callback_requires_parameters(primitive))
     {
-        return Some(role_arm!(
-            "control_flow.control_flow_execution_role.tracked-jsx",
-            ExecutionRole::TrackedJsx
-        ));
+        // Reviewer R57: it runs in the insert's tracked effect only where the
+        // element's value is inserted; a value held and called (`shown()()`)
+        // runs where it is called, which the position does not say.
+        let inserted = jsx_value_inserted(file, element.span, lookup, 8);
+        return Some(if inserted {
+            role_arm!(
+                "control_flow.control_flow_execution_role.tracked-jsx",
+                ExecutionRole::TrackedJsx
+            )
+        } else {
+            role_arm!(
+                "control_flow.control_flow_execution_role.value-not-inserted",
+                ExecutionRole::Unknown
+            )
+        });
     }
     // A fragment has no element fact, so its children are consulted through
     // its own span table: `<>{tone()}</>` is as tracked as `<b>{tone()}</b>`.
@@ -153,8 +200,9 @@ pub(crate) fn direct_control_flow_body_role(
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    let dialect = lookup.dialect;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.r#async
         || owner.generator
@@ -189,7 +237,7 @@ pub(crate) fn direct_control_flow_body_role(
     if !exact {
         return None;
     }
-    control_flow_execution_role(file, span, entities, symbol_names, dialect).filter(|role| {
+    control_flow_execution_role(file, span, entities, symbol_names, lookup).filter(|role| {
         matches!(
             role,
             ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx
@@ -307,4 +355,103 @@ pub(super) fn jsx_child_expression(file: &solid_facts::FileFacts, child: Span) -
     let trailing = u32::try_from(inner.len() - inner.trim_end().len()).ok()?;
     let (start, end) = (child.start + 1 + leading, child.end - 1 - trailing);
     (start < end).then(|| file.ast.peel_ts_sugar_span(Span::new(start, end)))
+}
+
+/// Reviewer R57/R59/R62: whether the JSX value at `span` (an element or a
+/// fragment) is itself inserted, so a length-0 function child of it runs in
+/// the insert's tracked effect. It is when it is the inserted value itself,
+/// written as a child or the value of a child expression (or a branch of a
+/// conditional or logical one), of an intrinsic element (whose children
+/// compile to `insert`) or of a fragment that is itself inserted; or a
+/// proven component's return, which the runtime renders. A component
+/// element's children are a prop it may hold and call; a part of a value
+/// (`{(h = <Show/>, null)}`, `return { s: <Show/> }`), a plain function's
+/// return and a held fragment prove nothing.
+fn jsx_value_inserted(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let ast = &file.ast;
+    let value_at = |expression: Span| {
+        let expression = ast.peel_ts_sugar_span(expression);
+        expression == span
+            || ast.conditional_expressions.iter().any(|conditional| {
+                conditional.span == expression
+                    && [conditional.consequent, conditional.alternate]
+                        .into_iter()
+                        .any(|branch| ast.peel_ts_sugar_span(branch) == span)
+            })
+            || ast.logical_expressions.iter().any(|logical| {
+                logical.span == expression
+                    && [logical.left, logical.right]
+                        .into_iter()
+                        .any(|branch| ast.peel_ts_sugar_span(branch) == span)
+            })
+    };
+    // The innermost element or fragment holding `inner`: the element, or
+    // the fragment's span.
+    let container = |inner: Span| -> Option<(Span, Option<&solid_facts::ast::JsxElementFact>)> {
+        let element = ast
+            .jsx_elements
+            .iter()
+            .filter(|element| element.span != inner && element.span.contains(inner))
+            .min_by_key(|element| element.span.end - element.span.start);
+        let fragment = ast
+            .jsx_fragments
+            .iter()
+            .copied()
+            .filter(|fragment| *fragment != inner && fragment.contains(inner))
+            .min_by_key(|fragment| fragment.end - fragment.start);
+        match (element, fragment) {
+            (Some(element), Some(fragment))
+                if fragment.end - fragment.start < element.span.end - element.span.start =>
+            {
+                Some((fragment, None))
+            }
+            (Some(element), _) => Some((element.span, Some(element))),
+            (None, Some(fragment)) => Some((fragment, None)),
+            (None, None) => None,
+        }
+    };
+    let inserted_by =
+        |holder: Option<(Span, Option<&solid_facts::ast::JsxElementFact>)>| match holder {
+            Some((_, Some(element))) => super::events::intrinsic_element(file, element),
+            Some((fragment, None)) => jsx_value_inserted(file, fragment, lookup, depth - 1),
+            None => false,
+        };
+    let holder = container(span);
+    // The child expression in the same holder that contains the value, if any.
+    let expression = ast
+        .jsx_child_expressions
+        .iter()
+        .copied()
+        .find(|expression| {
+            expression.contains(span)
+                && container(*expression).map(|(holder, _)| holder)
+                    == holder.map(|(holder, _)| holder)
+        });
+    let as_child = match expression {
+        None => holder.is_some() && inserted_by(holder),
+        Some(expression) => value_at(expression) && inserted_by(holder),
+    };
+    if as_child {
+        return true;
+    }
+    let owner_of = |at: Span| crate::owners::owning_function(ast, at);
+    ast.returns
+        .iter()
+        .filter_map(|returned| Some((owner_of(returned.span)?, returned.argument?)))
+        .chain(ast.functions.iter().filter_map(|function| {
+            Some((function, function.expression_return.as_ref()?.argument?))
+        }))
+        .any(|(function, argument)| {
+            value_at(argument)
+                && owner_of(span).is_some_and(|owner| owner.span == function.span)
+                && lookup.function_proven_component(file, function)
+        })
 }

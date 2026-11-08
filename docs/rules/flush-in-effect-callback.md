@@ -142,6 +142,20 @@ effect.
   (ADR 0538). One handed to a project helper, written as a member's value or
   an object slot, or a method of a class written in the apply is reported as
   uncertifiable, anchored at the code around it.
+- **A handler a dispatch may reach from an apply.** The guard takes no event, so
+  a flush in a listener an apply's `click()` fires warns. A flush in a function
+  that is no component is uncertifiable while any dispatch of the program has no
+  placed caller (ADR 0639); one after an await, in a timer or in a handler costs
+  nothing.
+- **A function no call edge places.** A flush in a module-level object method
+  or slot, a class member, a bundle's `effect`, a `Map` slot, a tag, or a
+  function handed where nothing follows it (or in a named helper one of those
+  calls) is uncertifiable, blocker `function-run-unplaced` (ADR 0709), when
+  the project names a primitive that defers a callback: an apply may be what
+  runs it, and Chrome warns when one does. A proven apply position stays a
+  violation.
+- **A walk past its bound** (13 helpers, 400 sites, 4 helpers in the net):
+  uncertifiable, `search-depth-limit` (ADR 0750).
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or

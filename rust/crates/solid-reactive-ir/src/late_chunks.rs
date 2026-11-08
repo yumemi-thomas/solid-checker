@@ -166,6 +166,9 @@ pub(crate) enum DiscoveryRead {
     /// The props reactivity of named slots of the object declared at a
     /// location.
     PropsNames(Location, Vec<String>),
+    /// ADR 0823: whether a destructure of named slots (every slot, for
+    /// `None`) may read a pending getter.
+    PropsPending(Location, Option<Vec<String>>),
 }
 
 thread_local! {
@@ -274,6 +277,19 @@ impl<'a> DiscoveryTables<'a> {
         answer
     }
 
+    /// [`crate::source_discovery::PropsReactivityIndex::pending_answer`],
+    /// recorded.
+    pub(crate) fn props_pending(&self, declaration: &Location, names: Option<Vec<String>>) -> u64 {
+        let answer = self
+            .props_reactivity
+            .pending_answer(declaration, names.as_deref());
+        note(
+            DiscoveryRead::PropsPending(declaration.clone(), names),
+            answer,
+        );
+        answer
+    }
+
     pub(crate) fn props_names_use<'n>(
         &self,
         declaration: &Location,
@@ -306,6 +322,9 @@ impl<'a> DiscoveryTables<'a> {
                     self.props_reactivity
                         .names_use(declaration, names.iter().map(String::as_str)),
                 ),
+                DiscoveryRead::PropsPending(declaration, names) => self
+                    .props_reactivity
+                    .pending_answer(declaration, names.as_deref()),
             };
             current == *answer
         })

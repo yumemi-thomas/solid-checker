@@ -12,6 +12,7 @@
 //! `continue`. A `throw` before the call is admitted: a completion that throws
 //! is not a normal one. An `async` function or a generator states nothing.
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::core::Span;
@@ -70,6 +71,112 @@ pub fn first_step_unconditional_calls(
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
     calls_on_every_completion(path, source, function, folds, true, true)
+}
+
+/// ADR 0714: in one parse, every call and `new` expression that runs exactly
+/// once on every normal completion of its innermost function, or of the
+/// module's evaluation when no function contains it, with an earlier `throw`
+/// a way out. An `await` is an ordinary expression here: the continuation of
+/// a completing call runs (the premise the owner pass's after-await arm takes
+/// too). A generator's set is its first step's ([`first_step_unconditional_calls`]).
+/// At module scope a top-level statement admits its calls as a function body
+/// does, and so does a static field initializer of a class declared there.
+/// `None` when the source does not parse.
+#[must_use]
+pub fn every_unconditional_call(path: &Path, source: &str) -> Option<HashSet<Span>> {
+    if source.len() > 4 * 1024 * 1024 {
+        return None;
+    }
+    let source_type = SourceType::from_path(path).ok()?.with_module(true);
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, source, source_type).parse();
+    if parsed.panicked || !parsed.errors.is_empty() {
+        return None;
+    }
+    let built = SemanticBuilder::new().build(&parsed.program);
+    let nodes = built.semantic.nodes();
+    let scope = HostConstantScope::new(&parsed.program, &built.semantic, &[]);
+    let scope = scope.as_ref();
+    // Each generator's first `yield`: a later step runs only if it is asked for.
+    let mut suspension = HashMap::<Option<NodeId>, u32>::new();
+    for node in nodes.iter() {
+        if matches!(node.kind(), AstKind::YieldExpression(_)) {
+            let owner = innermost_function(nodes, node.id());
+            let start = node.kind().span().start;
+            suspension
+                .entry(owner)
+                .and_modify(|first| *first = (*first).min(start))
+                .or_insert(start);
+        }
+    }
+    let calls = nodes
+        .iter()
+        .filter(|node| {
+            matches!(
+                node.kind(),
+                AstKind::CallExpression(_) | AstKind::NewExpression(_)
+            )
+        })
+        .filter(|node| {
+            let owner = innermost_function(nodes, node.id());
+            let span = node.kind().span();
+            suspension
+                .get(&owner)
+                .is_none_or(|suspension| span.end <= *suspension)
+                && match owner {
+                    Some(owner) => runs_on_every_completion(nodes, scope, node.id(), owner, true),
+                    None => runs_on_every_module_evaluation(nodes, scope, node.id()),
+                }
+        })
+        .map(|node| {
+            let span = node.kind().span();
+            Span::new(span.start, span.end)
+        })
+        .collect();
+    Some(calls)
+}
+
+/// A call no function contains, admitted up to its top-level statement.
+fn runs_on_every_module_evaluation(
+    nodes: &AstNodes<'_>,
+    scope: Option<&HostConstantScope<'_, '_>>,
+    call: NodeId,
+) -> bool {
+    if let AstKind::CallExpression(expression) = nodes.kind(call)
+        && expression.optional
+    {
+        return false;
+    }
+    let mut child = call;
+    loop {
+        let parent = nodes.parent_id(child);
+        if parent == child {
+            return false;
+        }
+        match nodes.kind(parent) {
+            AstKind::Program(program) => {
+                return statements_before_exit_free(
+                    scope,
+                    &program.body,
+                    nodes.kind(child).span(),
+                    true,
+                );
+            }
+            AstKind::ExportNamedDeclaration(_)
+            | AstKind::ExportDefaultDeclaration(_)
+            | AstKind::ClassBody(_)
+            | AstKind::Class(_) => {}
+            AstKind::PropertyDefinition(property)
+                if property.r#static
+                    && property
+                        .value
+                        .as_ref()
+                        .is_some_and(|value| value.span() == nodes.kind(child).span()) => {}
+            _ if !evaluates_child_once(nodes, scope, parent, child, true) => return false,
+            _ => {}
+        }
+        child = parent;
+    }
 }
 
 fn calls_on_every_completion(
@@ -278,7 +385,10 @@ fn evaluates_child_once(
         | AstKind::TSAsExpression(_)
         | AstKind::TSSatisfiesExpression(_)
         | AstKind::TSNonNullExpression(_)
-        | AstKind::TSTypeAssertion(_) => true,
+        | AstKind::TSTypeAssertion(_)
+        // Only [`every_unconditional_call`] reaches one: the other walks stop
+        // at an `async` function's first suspension.
+        | AstKind::AwaitExpression(_) => true,
         _ => false,
     }
 }

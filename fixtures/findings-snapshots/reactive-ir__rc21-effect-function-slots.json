@@ -1,0 +1,46 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 311,
+      "end": 329,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 411,
+      "end": 429,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 592,
+      "end": 610,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-returned-function-run-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 873,
+      "end": 887,
+      "fixes": 0
+    }
+  ]
+}

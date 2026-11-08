@@ -40,7 +40,7 @@ export function Tree(props: { depth: number }) {
   return <div>{props.depth > 0 ? <Tree depth={props.depth - 1} /> : null}</div>;
 }
 
-// Rendered only by shell content: silent.
+// Rendered only by shell content — an obligation until a shell-root proof exists (ADR 0703).
 export function ShellDeep() {
   httpHeader("x-shell", "1");
   return <div>shell</div>;
@@ -50,7 +50,7 @@ export function ShellParent() {
   return <div><ShellDeep /></div>;
 }
 
-// Rendered only by the boundary's fallback content: shell content, silent.
+// Rendered only by the boundary's fallback content: shell content — an obligation until a shell-root proof exists (ADR 0703).
 export function FallbackDeep() {
   httpHeader("x-fallback", "1");
   return <div>loading…</div>;

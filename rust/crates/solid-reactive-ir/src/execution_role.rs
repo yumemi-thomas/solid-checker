@@ -171,6 +171,21 @@ fn callback_runs_outside_tracking(
     }
 }
 
+/// ADR 0857: whether the callback at `argument` runs during the call with the
+/// caller's listener: inline, and not one a listener-clearing primitive runs.
+pub(crate) fn callback_inherits_listener(
+    dialect: &dyn Dialect,
+    primitive: Primitive,
+    argument: usize,
+    argument_count: usize,
+) -> bool {
+    dialect
+        .callback_semantics_at(primitive, argument, argument_count)
+        .execution
+        == Some(Execution::Inline)
+        && !callback_runs_outside_tracking(dialect, primitive, argument, argument_count)
+}
+
 /// The argument positions holding a callback that runs outside the
 /// surrounding tracking scope — an effect's apply argument, or a deferred
 /// executor's whole callback.
@@ -290,6 +305,33 @@ fn execution_role_where(
     )
 }
 
+/// Whether the event of the handler the compiler wires at `callback` keeps the
+/// host-delivery proof ([`crate::runtime_semantics::event_keeps_delivery_proof`]),
+/// read at the delivering element. A handler no attribute names (a spread) has
+/// no measured event: denied.
+pub(crate) fn handler_event_denied(file: &solid_facts::FileFacts, callback: Span) -> bool {
+    !file.ast.jsx_containing(callback).any(|element| {
+        element.attributes.iter().any(|attribute| {
+            attribute
+                .expression
+                .or(attribute.value)
+                .is_some_and(|value| value.contains(callback))
+                && file
+                    .source_text(attribute.name)
+                    .is_some_and(crate::runtime_semantics::event_keeps_delivery_proof)
+        })
+    })
+}
+
+/// Whether `span` is inside a handler of a denied event.
+pub(crate) fn in_denied_handler(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.compiler.callback_roles.iter().any(|callback| {
+        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            && callback.span.contains(span)
+            && handler_event_denied(file, callback.span)
+    })
+}
+
 /// Compiler execution role for code that actually runs at `span`.
 ///
 /// A callback-role span covers the complete JSX value expression handed to
@@ -313,7 +355,7 @@ fn source_execution_role(
         .filter(|function| component_child_function(file, function.span))
         .min_by_key(|function| function.span.end - function.span.start)
         .map(|function| function.span);
-    execution_role_where(&file.compiler, span, allowed, within, |callback| {
+    let role = execution_role_where(&file.compiler, span, allowed, within, |callback| {
         // A component's `ref` is a prop, not an ownerless ref application.
         (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
             || crate::owners::ref_application_on_intrinsic(file, callback.span))
@@ -330,7 +372,11 @@ fn source_execution_role(
                 function.body.contains(span)
                     && crate::owners::yielded_value_contains(file, callback.span, function.span)
             }))
-    })
+    });
+    if role == ExecutionRole::EventCallback && in_denied_handler(file, span) {
+        return role_arm!("execution_role.denied-event", ExecutionRole::Unknown);
+    }
+    role
 }
 
 pub(super) fn semantic_execution_role(
@@ -403,7 +449,7 @@ fn read_execution_role_unlogged(
     if let Some(applied) =
         ref_applied_read_role(file, span, allowed, entities, symbol_names, lookup)
     {
-        return applied;
+        return dynamic_read_role(file, span, applied, lookup);
     }
     if role == ExecutionRole::DirectiveApply {
         return role_arm!(
@@ -556,6 +602,78 @@ pub(crate) enum RootBodyGuard {
 #[cfg(test)]
 mod tests;
 
+/// Whether `at` is in the `component` attribute of an exact `<Dynamic>`, and
+/// whether it is that attribute's whole value.
+fn dynamic_component_attribute(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    lookup: &SemanticLookup<'_>,
+) -> (bool, bool) {
+    let ast = &file.ast;
+    let dialect = lookup.dialect;
+    let mut found = (false, false);
+    for (tag, prop) in dialect.component_prop_renderers() {
+        for element in ast.jsx_elements.iter().filter(|element| {
+            crate::execution_paths::named_import(file, dialect, element.name.span, tag)
+        }) {
+            for attribute in &element.attributes {
+                if file.source_text(attribute.name) == Some(*prop)
+                    && let Some(value) = attribute.expression
+                {
+                    found.0 |= value.contains(at);
+                    found.1 |= ast.peel_ts_sugar_span(value) == at;
+                }
+            }
+        }
+    }
+    found
+}
+
+/// `const Z = K` where `at` is `K`: the same answer through `Z`'s references.
+/// One step, on a binding never reassigned: past that the mount is open.
+fn dynamic_alias_mount(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    lookup: &SemanticLookup<'_>,
+) -> (bool, bool) {
+    let Some(alias) = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding
+                .initializer_identifier
+                .as_ref()
+                .is_some_and(|initializer| initializer.span == at)
+    }) else {
+        return (false, false);
+    };
+    let Some(references) = alias
+        .names
+        .first()
+        .and_then(|name| lookup.callee_symbol(file, name.span))
+        .and_then(|symbol| lookup.symbol_references_if_present(symbol))
+    else {
+        return (false, false);
+    };
+    let mut mounts = false;
+    let mut whole = true;
+    for reference in references {
+        let (Some(candidate), Ok(start), Ok(end)) = (
+            lookup.file_by_path(&reference.path),
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return (mounts, false);
+        };
+        let span = Span::new(start, end);
+        if candidate.path == file.path && alias.names.iter().any(|name| name.span == span) {
+            continue;
+        }
+        let (inside, exact) = dynamic_component_attribute(candidate, span, lookup);
+        mounts |= inside;
+        whole &= exact;
+    }
+    (mounts, mounts && whole)
+}
+
 /// A closed reference census for a component returned directly by the source
 /// literal of an exact dynamic factory. Other entries withhold the placement.
 pub(crate) fn dynamic_component_entry(
@@ -564,6 +682,7 @@ pub(crate) fn dynamic_component_entry(
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
     let mut span = span;
+    let mut climbed = false;
     for _ in 0..32 {
         if let Some((climb, generator)) = in_place_run_site(file, span, lookup) {
             if generator || climb.suspended.is_some() || climb.in_list || climb.among_others {
@@ -572,6 +691,11 @@ pub(crate) fn dynamic_component_entry(
             span = climb.at;
         }
         let function = containing_ast_function(&file.ast, span)?;
+        // An intrinsic's `ref` runs during the body that creates the element.
+        if let Some(element) = crate::owners::ref_applied_element(file, function, lookup) {
+            span = element.span;
+            continue;
+        }
         let inherited = file
             .ast
             .arguments_containing(function.span)
@@ -588,9 +712,15 @@ pub(crate) fn dynamic_component_entry(
                 .then_some(call.span)
             });
         let Some(call) = inherited else {
+            climbed = true;
             break;
         };
         span = call;
+    }
+    // ADR 0695: a climb that stopped at its bound names no entry, and `None`
+    // would keep a rendering role, a warning Chrome does not give at 33 levels.
+    if !climbed {
+        return Some(false);
     }
     let function = containing_ast_function(&file.ast, span)?;
     let name = function_binding_name(file, function)?;
@@ -638,8 +768,12 @@ pub(crate) fn dynamic_component_entry(
                             })
                 })
         });
-        dynamic |= mounted;
-        exclusive &= mounted;
+        // ADR 0662: `<Dynamic component={K}>` mounts `K` the same way. A reference
+        // inside that attribute (`on() ? K : J`) mounts it, not exclusively.
+        let (attribute, whole) = dynamic_component_attribute(candidate, at, lookup);
+        let (alias_mounts, alias_whole) = dynamic_alias_mount(candidate, at, lookup);
+        dynamic |= mounted || attribute || alias_mounts;
+        exclusive &= mounted || whole || alias_whole;
     }
     dynamic.then_some(exclusive)
 }

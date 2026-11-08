@@ -5,6 +5,7 @@
       "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",
+      "blocker": "package-source-unavailable",
       "severity": "error",
       "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
       "start": 33,
@@ -25,10 +26,55 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "parameter-use-unmodeled",
       "severity": "warning",
       "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
       "start": 359,
       "end": 374,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 771,
+      "end": 775,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 811,
+      "end": 823,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 819,
+      "end": 823,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 858,
+      "end": 877,
       "fixes": 0
     }
   ]

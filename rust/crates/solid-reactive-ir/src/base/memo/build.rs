@@ -605,6 +605,14 @@ fn declarations_digest(entities: &[typefacts::EntityFact]) -> [u8; 32] {
             }
         }
         digest.update([u8::from(entity.writable_optional_property)]);
+        // ADR 0781: what an assertion's operand is. Demanded at few spans.
+        if let Some(names) = entity.library_types.as_deref() {
+            digest.update(u64::try_from(names.len()).unwrap_or(u64::MAX).to_le_bytes());
+            for name in names {
+                digest.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
+                digest.update(name.as_bytes());
+            }
+        }
     }
     digest.finalize().into()
 }
@@ -1724,7 +1732,28 @@ impl<'w> FileRead<'_, '_, 'w> {
         self.ctx.record_input(Input::File(self.id, Section::Source));
         self.ctx
             .record_input(Input::File(self.id, Section::Signatures));
-        self.view.resolved_callee_call(callee)
+        // ADR 0683, ADR 0781: as `SemanticLookup::resolved_callee_call`.
+        let resolved = self.view.resolved_callee_call(callee)?;
+        let Some(name) = crate::runtime_semantics::standard_call_name(resolved) else {
+            return Some(resolved);
+        };
+        let vetoed = crate::base::contributions::subclass_veto(self.view.file, callee, name)
+            .is_some_and(|hazards| hazards.into_iter().any(|hazard| self.ctx.hazard(hazard)))
+            || crate::base::contributions::patch_vetoed(name, &|hazard| self.ctx.hazard(hazard))
+            || crate::base::contributions::unproven_assertion(
+                self.view.file,
+                callee,
+                name,
+                |span| self.entity_at(span),
+            )
+            || crate::base::contributions::impostor_veto(
+                self.view.file,
+                callee,
+                name,
+                |hazard| self.ctx.hazard(hazard),
+                |member| self.ctx.defined_reflectively(member),
+            );
+        (!vetoed).then_some(resolved)
     }
 
     /// The symbol whose name covers exactly `span` in this file.
@@ -1941,7 +1970,7 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                 crate::base::reads::Section::SynchronousDispatch => {
                     let _ = self.hazard(crate::base::Hazard::SynchronousDispatch);
                 }
-                // A reader of the veto's two answers records the answers
+                // A reader of the veto's answers records the answers
                 // (ADR 0450): the hazard's probe, and while the hazard is
                 // present the memo that holds the classified veto. A cycle
                 // reads the whole program.
@@ -2162,7 +2191,7 @@ pub(crate) struct MemoReport {
 pub(crate) struct LookupMemos<'a> {
     store: StoreRef<'a>,
     table: FileTable,
-    begun: std::sync::OnceLock<BeginReport>,
+    begun: crate::once_guard::Once<BeginReport>,
 }
 
 impl<'a> LookupMemos<'a> {
@@ -2175,7 +2204,7 @@ impl<'a> LookupMemos<'a> {
         Self {
             store: StoreRef::Owned(store),
             table,
-            begun: std::sync::OnceLock::new(),
+            begun: crate::once_guard::Once::new(),
         }
     }
 
@@ -2184,7 +2213,7 @@ impl<'a> LookupMemos<'a> {
         Self {
             table: store.table(table),
             store: StoreRef::Shared(store),
-            begun: std::sync::OnceLock::new(),
+            begun: crate::once_guard::Once::new(),
         }
     }
 

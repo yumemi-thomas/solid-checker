@@ -31,9 +31,9 @@
 //! `createSignal` that is not Solid's is not a source here, and a signal that
 //! arrives through three wrappers still is.
 
-use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole};
 use solid_facts::core::Span;
+use solid_facts::{FileFacts, TscSilence};
 use typefacts::{ArrayShape, Callability, ResolvedCallValidity};
 
 use super::{
@@ -57,6 +57,7 @@ pub(super) fn check_file(
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
     no_store_mutator_call(file, context, defects);
+    no_store_method_write(file, context, defects);
     no_store_standard_library_write(file, context, defects);
     no_store_delete(file, context, defects);
     expected_function_got_expression(file, context, defects);
@@ -929,6 +930,31 @@ fn expected_function_got_expression(
                     continue;
                 }
             }
+            // ADR 0653: a member of a value a caller, a hook or a container
+            // handed over may be a store's, so "installed once" may freeze it.
+            if let Some(member) = file.ast.member_at(expression) {
+                let object = file.ast.peel_ts_sugar_span(member.object);
+                if file.ast.call_at(object).is_some()
+                    || crate::local_access::handed_value(
+                        &handed_tables(context),
+                        file,
+                        object,
+                        crate::local_access::HANDED_DEPTH,
+                    )
+                {
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveHandlerRead {
+                            attribute: name.to_owned(),
+                            expression: text(file, expression).to_owned(),
+                        },
+                        location: location(file.path.shared(), expression),
+                        analysis_context: crate::blockers::HANDLER_ROOT_UNPROVEN.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                    continue;
+                }
+            }
             // The call-result arm was removed on 2026-08-17 under AGENTS.md's
             // absolute rule. It fired for a handler expression that is itself a
             // call, on either of two triggers, and neither survives:
@@ -1081,16 +1107,40 @@ fn uncalled_accessor(
             continue;
         }
         // A call of the accessor is the correct use; so is passing it on,
-        // which hands the callee something it can call later. The exemption
-        // is deliberately unconditional: TypeFacts' resolved-call parameter
-        // callability could in principle prove a callee's slot non-callable,
-        // but a non-callable parameter receiving an accessor is already a
-        // type error TypeScript reports itself, and recovery-signature
-        // resolutions would make the "proof" wrong exactly where it fired.
-        if is_called(file, identifier.span) || is_argument(file, identifier.span) {
+        // which hands the callee something it can call later. A parameter the
+        // compiler proves value-only cannot call it, so that argument is
+        // unproven (ADR 0652); a non-callable parameter receiving an accessor
+        // is a type error TypeScript reports itself.
+        if is_called(file, identifier.span) {
             continue;
         }
-        let Some(position) = value_position(file, identifier.span) else {
+        let coerced = crate::blockers::ACCESSOR_VALUE_COERCED;
+        let (position, proven, blocker) = if is_argument(file, identifier.span) {
+            if !standard_value_argument(file, context, identifier.span) {
+                continue;
+            }
+            ("a standard-library value parameter", false, coerced)
+        } else if let Some(position) = value_position(file, identifier.span) {
+            // `(c as any).toString = …`: stringifying no longer gives the
+            // source, so the position proves nothing.
+            (position, !member_written(file, context, symbol), coerced)
+        } else if let Some(position) = open_position(file, identifier.span) {
+            (position, false, coerced)
+        } else if standard_value_argument(file, context, identifier.span) {
+            ("a standard-library value parameter", false, coerced)
+        } else if erased_loose_equality(file, context, identifier.span) {
+            ("a loose equality", false, coerced)
+        } else if let Some(position) = type_owned_position(file, identifier.span)
+            && file.tsc_may_be_silent_within(identifier.span)
+        {
+            // ADR 0830: a position TypeScript closes, on a line a directive
+            // may silence or in JavaScript: nothing reports it there.
+            (
+                position,
+                false,
+                crate::blockers::SOLID_CALL_REJECTED_UNCHECKED,
+            )
+        } else {
             continue;
         };
         defects.push(StaticDefect {
@@ -1099,11 +1149,245 @@ fn uncalled_accessor(
                 position: position.to_owned(),
             },
             location: location(file.path.shared(), identifier.span),
-            analysis_context: String::new(),
+            analysis_context: if proven {
+                String::new()
+            } else {
+                blocker.to_owned()
+            },
             fixes: vec![],
-            uncertain: false,
+            uncertain: !proven,
         });
     }
+    handed_values_coerced(file, context, defects);
+}
+
+/// Standard-library calls that keep a value as it is: a function stays a
+/// function on the object, so nothing is coerced.
+const VALUE_KEEPERS: [&str; 6] = [
+    "ObjectConstructor.assign",
+    "Object.assign",
+    "ObjectConstructor.defineProperty",
+    "Object.defineProperty",
+    "Reflect.defineProperty",
+    "Reflect.apply",
+];
+
+/// A side of `==` whose type is erased: an alias typed `any` or `unknown`.
+/// With the accessor's own type this is TS2367, so it is TypeScript's.
+fn erased_loose_equality(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    span: Span,
+) -> bool {
+    file.ast.coercive_operands.iter().any(|operand| {
+        operand.kind == solid_facts::ast::CoerciveOperandKind::LooseEquality
+            && file.ast.peel_ts_sugar_span(operand.span) == span
+    }) && context
+        .lookup
+        .entity_at(file.path.as_str(), span)
+        .and_then(|entity| entity.callability)
+        == Some(Callability::Unknown)
+}
+
+/// Whether `span` is an argument, or a value of an object literal argument, of
+/// a standard-library parameter that cannot call it (`String(c)`,
+/// `JSON.stringify({ c })`).
+fn standard_value_argument(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    span: Span,
+) -> bool {
+    file.ast.calls.iter().any(|call| {
+        call.arguments.iter().enumerate().any(|(index, argument)| {
+            (argument.span == span || literal_value_of(file, argument.span, span))
+                && context
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_some_and(|resolved| {
+                        resolved.validity == ResolvedCallValidity::Valid
+                            && resolved.declaration.as_ref().is_some_and(|declaration| {
+                                declaration.standard_library
+                                    && !VALUE_KEEPERS.contains(&declaration.qualified_name.as_ref())
+                            })
+                            && !may_invoke_argument(resolved, index)
+                    })
+        })
+    })
+}
+
+/// Whether `value` is a direct value of the object literal written at `literal`.
+fn literal_value_of(file: &FileFacts, literal: Span, value: Span) -> bool {
+    super::direct_object_literal_properties(file, literal).is_some_and(|properties| {
+        properties.iter().any(|property| {
+            file.ast.peel_ts_sugar_span(property.value) == value || property.key == value
+        })
+    })
+}
+
+/// A write to a member of the accessor, anywhere in this file.
+fn member_written(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+) -> bool {
+    file.ast.assignments.iter().any(|assignment| {
+        file.ast
+            .member_at(file.ast.peel_ts_sugar_span(assignment.target))
+            .is_some_and(|member| {
+                source_symbol_at(context, file, file.ast.peel_ts_sugar_span(member.object))
+                    == Some(symbol)
+            })
+    })
+}
+
+/// A position TypeScript accepts only because the accessor's type was erased or
+/// was never checked against the attribute: unproven, never a violation.
+fn open_position(file: &FileFacts, span: Span) -> Option<&'static str> {
+    let native = |element: &&solid_facts::ast::JsxElementFact| {
+        is_lowercase_led(text(file, element.name.span))
+    };
+    file.ast
+        .jsx_elements
+        .iter()
+        .filter(native)
+        .find_map(|element| {
+            if element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_none()
+                    && attribute.expression.is_some_and(|value| {
+                        value != span && file.ast.peel_ts_sugar_span(value) == span
+                    })
+            }) {
+                return Some("an attribute behind a type assertion");
+            }
+            element
+                .spreads
+                .iter()
+                .any(|spread| literal_value_of(file, spread.argument, span))
+                .then_some("a spread onto a native element")
+        })
+}
+
+fn handed_tables<'a, 'l>(
+    context: &'a UpstreamCompatContext<'l>,
+) -> crate::local_access::HandedTables<'a, 'l> {
+    crate::local_access::HandedTables {
+        lookup: context.lookup,
+        entities: context.entities,
+        prop_sources: context.prop_sources,
+        source_kinds: context.source_kinds,
+        accessors: context.accessors,
+        setters: context.setters,
+        actions: context.actions,
+        props_reactivity: context.props_reactivity,
+        accessors_that_count: None,
+    }
+}
+
+/// ADR 0652: a coerced value no accessor proof reaches: `Callable` beside a
+/// string or in a template, from a caller or a parameter. Uncertain only: a
+/// plain function of the same shape is not this rule's. A shorthand property
+/// (`{ c }`) has the property's symbol at its span, so the walk over references
+/// misses it: its binding names the accessor.
+fn handed_values_coerced(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let tables = handed_tables(context);
+    for property in &file.ast.object_properties {
+        let Some(binding) = property.shorthand_binding else {
+            continue;
+        };
+        let accessor = context
+            .entities
+            .at(file.path.as_str(), binding)
+            .filter(|symbol| {
+                context.accessors.contains_key(*symbol)
+                    && context.source_kinds.get(*symbol) != Some(&ReactiveSourceKind::Store)
+            });
+        let position = if standard_value_argument(file, context, property.value) {
+            Some("a standard-library value parameter")
+        } else {
+            open_position(file, property.value)
+        };
+        if let (Some(_), Some(position)) = (accessor, position) {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::UncalledAccessor {
+                    name: text(file, property.value).to_owned(),
+                    position: position.to_owned(),
+                },
+                location: location(file.path.shared(), property.value),
+                analysis_context: crate::blockers::ACCESSOR_VALUE_COERCED.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+    let coerced_values = file
+        .ast
+        .coercive_operands
+        .iter()
+        .map(|operand| (operand.span, operand.kind))
+        .map(|(span, kind)| (span, Some(kind)))
+        .chain(
+            file.ast
+                .template_literals
+                .iter()
+                .flat_map(|template| template.expressions.iter().map(|span| (*span, None))),
+        );
+    for (span, kind) in coerced_values {
+        let value = file.ast.peel_ts_sugar_span(span);
+        if source_symbol_at(context, file, value).is_some_and(|symbol| {
+            context.accessors.contains_key(symbol)
+                && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+        }) {
+            continue;
+        }
+        let entity = context.lookup.entity_at(file.path.as_str(), value);
+        let callability = entity.and_then(|entity| entity.callability);
+        // `!user` on `Accessor<T> | undefined` is a guard: callability skips
+        // the nullish constituent, the value domain does not.
+        if kind == Some(solid_facts::ast::CoerciveOperandKind::LogicalNot)
+            && entity
+                .and_then(|entity| entity.runtime_value_domain)
+                .is_none_or(|domain| domain.may_be_undefined() || domain.unknown())
+        {
+            continue;
+        }
+        let coerced = kind != Some(solid_facts::ast::CoerciveOperandKind::LooseEquality)
+            && callability == Some(Callability::Callable)
+            && (crate::local_access::handed_value(
+                &tables,
+                file,
+                value,
+                crate::local_access::HANDED_DEPTH,
+            ) || is_parameter(file, value));
+        if coerced {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::UncalledAccessor {
+                    name: text(file, value).to_owned(),
+                    position: "a value that may be an accessor".to_owned(),
+                },
+                location: location(file.path.shared(), value),
+                analysis_context: crate::blockers::ACCESSOR_VALUE_COERCED.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
+}
+
+fn is_parameter(file: &FileFacts, value: Span) -> bool {
+    file.ast
+        .reference_declaration(value)
+        .is_some_and(|declaration| {
+            file.ast.functions_containing(value).any(|function| {
+                function
+                    .parameters
+                    .iter()
+                    .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+            })
+        })
 }
 
 /// `v1/no-direct-mutation` — upstream's `noWrite`.
@@ -1116,14 +1400,60 @@ fn no_direct_mutation(
     context: &UpstreamCompatContext<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
+    direct_mutations(file, context, defects, &mut Vec::new());
+}
+
+/// Open-work [79]/[80]: the member writes [`no_direct_mutation`] decided in
+/// this file, for the census, which runs before this pass: a write it gives a
+/// row, and a plain write it proves legal (the store's own setter, a raw or
+/// shallow value, a `createMutable` proxy) or TypeScript's. A write that also
+/// reads its target (`+=`, `??=`) is decided only where it has a row: the
+/// read is not this rule's. Reports nothing.
+pub(super) fn examined_member_writes(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+) -> Vec<Span> {
+    let mut decided = Vec::new();
+    direct_mutations(file, context, &mut Vec::new(), &mut decided);
+    decided
+}
+
+fn direct_mutations(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+    decided: &mut Vec<Span>,
+) {
     // Every leaf of a destructuring pattern is a written member of its own
-    // (ADR 0526).
+    // (ADR 0526). ADR 0716: so is every leaf of a `for (… of …)` or
+    // `for (… in …)` head, which writes only if the loop iterates: `Some`
+    // with whether a non-empty iterable is proven.
     let written_members = file
         .ast
         .assignments
         .iter()
-        .flat_map(|assignment| assignment_write_targets(file, assignment));
-    for written in written_members {
+        .flat_map(|assignment| {
+            assignment_write_targets(file, assignment)
+                .into_iter()
+                .map(|written| (written, None, assignment.logical, assignment.reads_target))
+        })
+        .chain(file.ast.iteration_targets.iter().flat_map(|head| {
+            let iterates = iteration_head_proven_nonempty(file, *head);
+            file.ast
+                .write_targets
+                .iter()
+                .filter(move |target| head.contains(**target))
+                .map(move |target| (*target, Some(iterates), None, false))
+        }))
+        .collect::<Vec<_>>();
+    for (written, head, logical, reads_target) in written_members {
+        let pushed = defects.len();
+        // A row stands for the write, or the plain write is proven.
+        let mut decide = |defects: &Vec<StaticDefect>, proven: bool| {
+            if defects.len() > pushed || (proven && !reads_target) {
+                decided.push(written);
+            }
+        };
         // The assignment target is either the reactive binding itself or the
         // object of a member chain rooted at one. The root is resolved with
         // the same reference-index fallback `uncalled-accessor` uses: an
@@ -1131,13 +1461,20 @@ fn no_direct_mutation(
         // expression shape entity facts may skip (see the field doc on
         // `source_reference_index`).
         let root = member_root(file, written).unwrap_or(written);
-        let Some(symbol) = source_symbol_at(context, file, root).filter(|symbol| {
+        let Some(symbol) = root_symbol(context, file, root).filter(|symbol| {
             context.accessors.contains_key(*symbol)
                 || context.prop_sources.contains_key(*symbol)
                 || typed_store_name(context, symbol).is_some()
         }) else {
             if root != written {
-                push_unproven_container_write(file, context, written, root, defects);
+                let sink = SinkWrite {
+                    member: written,
+                    may_not_write: head == Some(false) || logical.is_some(),
+                    delete: false,
+                    linked: false,
+                };
+                push_unproven_container_write(file, context, written, root, sink, defects);
+                decide(defects, false);
             }
             continue;
         };
@@ -1199,6 +1536,17 @@ fn no_direct_mutation(
                 .call_at(file.ast.peel_ts_sugar_span(root))
                 .is_some()
         {
+            // ADR 0720: unless a row proves the call returns a store value
+            // (an identity function, a `createMemo` compute, a store
+            // array's `find`).
+            let sink = SinkWrite {
+                member: written,
+                may_not_write: head == Some(false) || logical.is_some(),
+                delete: false,
+                linked: false,
+            };
+            push_unproven_container_write(file, context, written, root, sink, defects);
+            decide(defects, false);
             continue;
         }
         // `createMutable` is the one Solid 1.x source whose proxy is designed
@@ -1211,6 +1559,7 @@ fn no_direct_mutation(
                 .get(symbol)
                 .is_some_and(|primitive| primitive.as_str() == "createMutable")
         {
+            decide(defects, true);
             continue;
         }
         // Rebinding the container itself (`count = 2` on a signal accessor,
@@ -1245,7 +1594,9 @@ fn no_direct_mutation(
                     }))
         {
             // ADR 0509: the caller may have passed a store for the prop.
-            push_unproven_container_write(file, context, written, root, defects);
+            let sink = SinkWrite::writes(written);
+            push_unproven_container_write(file, context, written, root, sink, defects);
+            decide(defects, false);
             continue;
         }
         // A member written on an accessor function (`memo.a = 1`) is not a
@@ -1281,25 +1632,59 @@ fn no_direct_mutation(
             WriteStanding::Dropped
         };
         if standing == WriteStanding::Exempt {
+            // A root write TypeScript rejects is decided only where it reports.
+            let tsc_owned = store
+                && readonly_root_write(
+                    file,
+                    context,
+                    StoreWriteSite {
+                        span: written,
+                        member: written,
+                        root,
+                    },
+                );
+            decide(defects, !tsc_owned || tsc_reports_at(file, written));
             continue;
         }
         // ADR 0465: a store write past the root (`store.a.b = 1`) is
         // TypeScript's where a link may be nullish, and unproven otherwise.
         let past_root = if store {
             let Some(past_root) = chain_links_verdict(file, context, written, root) else {
+                // A shallow store's write lands; a nullish link is TypeScript's.
+                decide(
+                    defects,
+                    shallow_store_root(file, context, root) || tsc_reports_at(file, written),
+                );
                 continue;
             };
             past_root
         } else {
             false
         };
+        // ADR 0718: a logical assignment `Set`s only when its test passes.
+        // Proven not to write, it is clean; not proven to write, open.
+        let writes = match logical {
+            Some(operator) if store => {
+                logical_assignment_writes(file, context, operator, written, root)
+            }
+            _ => Some(true),
+        };
+        if writes == Some(false) {
+            decide(defects, true);
+            continue;
+        }
+        let may_not_write = head == Some(false) || writes.is_none();
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.to_owned(),
                 target,
             },
             location: location(file.path.shared(), written),
-            analysis_context: String::new(),
+            analysis_context: if may_not_write {
+                crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+            } else {
+                standing.blocker().unwrap_or_default().to_owned()
+            },
             fixes: vec![],
             // A write through a 2.0 props object, or a `merge`/`omit` view of
             // it, is not dropped: on rc.13 the assigned value reads back
@@ -1310,9 +1695,31 @@ fn no_direct_mutation(
             uncertain: props
                 || typed_store.is_some()
                 || past_root
-                || standing == WriteStanding::Unproven,
+                || standing.unproven()
+                || may_not_write,
         });
+        decide(defects, false);
     }
+}
+
+/// ADR 0716: whether the loop whose head is `head` is proven to iterate at
+/// least once: its iterable, separated from the head by exactly `of` or `in`,
+/// is an array literal with an element that is a value (an index for
+/// `for … in`, an element for `for … of`, whatever spreads beside it hold).
+/// Anything else (an empty literal, a binding, a call, an object, a comment
+/// between) proves nothing: rc.21 writes only when the loop iterates.
+fn iteration_head_proven_nonempty(file: &FileFacts, head: Span) -> bool {
+    file.ast.array_literal_elements.iter().any(|array| {
+        array.span.start >= head.end
+            && file
+                .source
+                .get(head.end as usize..array.span.start as usize)
+                .is_some_and(|between| matches!(between.trim(), "of" | "in"))
+            && array
+                .elements
+                .iter()
+                .any(|element| element.kind == solid_facts::ast::ArrayElementKind::Value)
+    })
 }
 
 /// The members a plain assignment writes: its target, or, for a destructuring
@@ -1339,12 +1746,14 @@ fn assignment_write_targets(
 /// (`props.s.v = 1`), a binding of a destructured props parameter, a
 /// `useContext` result, or a project function's result (a hook), or a slot
 /// destructured from either. The store, if it is one, is out of view, so the
-/// write is an obligation, never a violation and never silent.
+/// write is an obligation, never a violation and never silent. A root that is
+/// a plain parameter asks its callers instead ([`push_parameter_store_flow`]).
 fn push_unproven_container_write(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     site: Span,
     root: Span,
+    sink: SinkWrite,
     defects: &mut Vec<StaticDefect>,
 ) {
     // `member_root` stops at a wrapped link (`(props.state as T).count`):
@@ -1353,7 +1762,15 @@ fn push_unproven_container_write(
         let peeled = file.ast.peel_ts_sugar_span(root);
         member_root(file, peeled).map_or(peeled, |inner| file.ast.peel_ts_sugar_span(inner))
     };
-    if !bare_root(file, root) || !handed_container(file, context, root, 6) {
+    if !bare_root(file, root) {
+        // ADR 0720: a call's result may be a store value. ADR 0790: so may
+        // any other root (`(c ? s.a : x)`, `[s.a][0]`, `(await p)`): the
+        // flow judges its sub-values.
+        push_parameter_store_flow(file, context, site, root, sink, defects);
+        return;
+    }
+    if !handed_container(file, context, root, 6) {
+        push_parameter_store_flow(file, context, site, root, sink, defects);
         return;
     }
     // Every enumerated caller passes the prop a static value (a plain
@@ -1379,6 +1796,1591 @@ fn push_unproven_container_write(
         fixes: vec![],
         uncertain: true,
     });
+}
+
+/// ADR 0790: the source a write's chain root names, only when the root,
+/// past TypeScript wrappers, is a bare identifier or a `const` member alias.
+/// The entity at any other expression's span names its first token: the `st`
+/// of `(st.a.n > 0 ? x : y)` is no value of the conditional, so its root is
+/// judged by the flow ([`push_unproven_container_write`]).
+fn root_symbol<'a>(
+    context: &'a UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    root: Span,
+) -> Option<&'a crate::SymbolId> {
+    bare_root(file, file.ast.peel_ts_sugar_span(root))
+        .then(|| source_symbol_at(context, file, root))
+        .flatten()
+}
+
+/// The write a sink performs, for [`push_parameter_store_flow`]: the member
+/// whose chain the write reads past its root, whether the operation is
+/// proven to write when it runs (ADRs 0716, 0718), and whether it is a
+/// `delete` (TypeScript owns a delete of a required or readonly property).
+/// `linked`: the operation writes a whole link past the root.
+#[derive(Clone, Copy)]
+struct SinkWrite {
+    member: Span,
+    may_not_write: bool,
+    delete: bool,
+    linked: bool,
+}
+
+impl SinkWrite {
+    fn writes(member: Span) -> Self {
+        Self {
+            member,
+            may_not_write: false,
+            delete: false,
+            linked: false,
+        }
+    }
+}
+
+/// How many parameter hops [`ParameterFlow`] climbs, as [`handed_container`].
+const FLOW_DEPTH: usize = 6;
+/// How many call sites one sink's flow reads before it answers open.
+const FLOW_CALLS: usize = 64;
+/// How many values one sink's flow reads before it answers open (ADR 0790:
+/// the sub-values of a root no row describes branch).
+const FLOW_STEPS: usize = 512;
+
+/// ADR 0719: a write at `site` through the plain parameter `root` asks where
+/// the parameter's value came from, sink-driven: each call site of its
+/// function (argument at its index), or, for a function literal handed to a
+/// project function, each call that function makes of that parameter. A
+/// proven store reaching it from a call outside every setter window, on a
+/// stack every hop runs in place, writes through the read proxy: a violation.
+/// A store reaching it any other way, or a function whose callers are not
+/// all enumerated, or a callee nothing resolves: uncertifiable
+/// (`unproven-container-root`). No flow and every caller seen: silent. A
+/// setter callback's draft is the setter's argument, not a store flow.
+fn push_parameter_store_flow(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    site: Span,
+    root: Span,
+    sink: SinkWrite,
+    defects: &mut Vec<StaticDefect>,
+) {
+    // TypeScript's (a nullish link), or the sink's own links unproven.
+    let mut sink_open = sink.may_not_write;
+    if sink.delete {
+        match context.lookup.entity_at(file.path.as_str(), sink.member) {
+            None => sink_open = true,
+            Some(entity) if !entity.writable_optional_property => return,
+            Some(_) => {}
+        }
+    }
+    let Some(past_root) = chain_links_verdict(file, context, sink.member, root) else {
+        return;
+    };
+    let mut flow = ParameterFlow {
+        context,
+        calls: 0,
+        steps: 0,
+        seen: Vec::new(),
+        store: None,
+        open: false,
+        inside_return: false,
+    };
+    if let Some((function, index)) = plain_parameter_at(file, root) {
+        let in_place = function_runs_in_place(file, function, site);
+        let linked = sink.linked || past_root || parameter_reassigned(file, function, index);
+        flow.parameter(file, function, index, false, in_place, linked, FLOW_DEPTH);
+    } else {
+        // ADR 0720: a local root, a call's result or a loop's element, is
+        // judged at the sink itself.
+        flow.value(
+            file,
+            site,
+            root,
+            None,
+            true,
+            sink.linked || past_root,
+            FLOW_DEPTH,
+        );
+    }
+    let (name, proven) = match (flow.store, flow.open) {
+        (Some(store), _) => (store.name, store.proven && !sink_open),
+        (None, true) => (text(file, root).to_owned(), false),
+        (None, false) => return,
+    };
+    defects.push(StaticDefect {
+        kind: StaticDefectKind::DirectMutation {
+            name,
+            target: DirectMutationTarget::Store,
+        },
+        location: location(file.path.shared(), site),
+        analysis_context: if proven {
+            String::new()
+        } else if sink_open {
+            crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+        } else {
+            "unproven-container-root".to_owned()
+        },
+        fixes: vec![],
+        uncertain: !proven,
+    });
+}
+
+/// The function and index of the plain identifier parameter (no pattern, not
+/// the rest) whose binding the reference `root` names.
+fn plain_parameter_at(
+    file: &FileFacts,
+    root: Span,
+) -> Option<(&solid_facts::ast::FunctionFact, usize)> {
+    let declaration = file.ast.reference_declaration(root).unwrap_or(root);
+    file.ast.functions_containing(root).find_map(|function| {
+        function
+            .parameters
+            .iter()
+            .position(|parameter| {
+                parameter.shape == solid_facts::ast::BindingShape::Identifier
+                    && parameter.names.len() == 1
+                    && parameter.names[0].span == declaration
+            })
+            .map(|index| (function, index))
+    })
+}
+
+/// Whether `site` runs on the stack of every run of `function`'s body: in
+/// the body itself, no function layer between, not after an `await`.
+fn function_runs_in_place(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    site: Span,
+) -> bool {
+    !function.r#async
+        && !function.generator
+        && function.body.contains(site)
+        && crate::owners::owning_function(&file.ast, site)
+            .is_some_and(|owner| owner.span == function.span)
+}
+
+/// Whether parameter `index` of `function` is assigned anywhere: its value
+/// is then not only the argument.
+fn parameter_reassigned(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+) -> bool {
+    let declaration = function.parameters[index].names[0].span;
+    file.ast.write_targets.iter().any(|target| {
+        function.span.contains(*target)
+            && file
+                .ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(*target))
+                == Some(declaration)
+    })
+}
+
+/// A proven store [`ParameterFlow`] found reaching the sink.
+struct FlowStore {
+    name: String,
+    /// Through a static store path to the parameter, from a call outside
+    /// every window, on a stack every hop runs in place, reached.
+    proven: bool,
+}
+
+/// The call a callback literal was handed to, while the walk reads its
+/// callee's body: that callee's parameters hold this call's arguments.
+#[derive(Clone, Copy)]
+struct FlowFrame<'f> {
+    callee_file: &'f FileFacts,
+    callee: &'f solid_facts::ast::FunctionFact,
+    file: &'f FileFacts,
+    call: &'f solid_facts::ast::CallFact,
+}
+
+/// The sink-driven walk of [`push_parameter_store_flow`].
+struct ParameterFlow<'w, 'c> {
+    context: &'w UpstreamCompatContext<'c>,
+    calls: usize,
+    steps: usize,
+    seen: Vec<(String, Span, usize)>,
+    store: Option<FlowStore>,
+    open: bool,
+    /// ADR 0790: the walk reads a callee's returned value, where `at` is in
+    /// the callee, not at the call: a store found there is not proven. A
+    /// value handed by the call's own arguments is read at the call again.
+    inside_return: bool,
+}
+
+impl<'c> ParameterFlow<'_, 'c> {
+    /// Where parameter `index` of `function` (in `file`) gets its value; with
+    /// `rest`, the rest parameter, which holds every argument from `index`.
+    #[allow(clippy::too_many_arguments)]
+    fn parameter<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        function: &'f solid_facts::ast::FunctionFact,
+        index: usize,
+        rest: bool,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) where
+        'c: 'f,
+    {
+        if depth == 0 {
+            self.open = true;
+            return;
+        }
+        let key = (
+            file.path.as_str().to_owned(),
+            function.span,
+            index + usize::from(rest),
+        );
+        if self.seen.contains(&key) {
+            return;
+        }
+        self.seen.push(key);
+        let lookup = self.context.lookup;
+        // A function literal handed to a call: the callee calls it.
+        if let Some((call, position)) =
+            file.ast
+                .arguments_containing(function.span)
+                .find(|(call, position)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[*position].span) == function.span
+                })
+        {
+            self.callback(file, call, position, index, rest, in_place, linked, depth);
+            return;
+        }
+        // ADR 0720: a `For` row's element is an element of its `each`. Its
+        // callback takes no rest parameter this walk follows.
+        if rest && !matches!(for_row(file, self.context, function, 0), ForRow::NotRow) {
+            self.open = true;
+            return;
+        }
+        match if rest {
+            ForRow::NotRow
+        } else {
+            for_row(file, self.context, function, index)
+        } {
+            ForRow::NotRow => {}
+            // The accessor itself is a function: only its call's value is
+            // the element ([`Self::call_value`]).
+            ForRow::Silent | ForRow::Accessor(_) => return,
+            ForRow::Open => {
+                self.open = true;
+                return;
+            }
+            ForRow::Each(each) => {
+                self.value(file, each, each, None, false, true, depth - 1);
+                return;
+            }
+        }
+        let Some(name) = crate::owners::function_binding_name(file, function) else {
+            // A literal written in JSX, an object slot or a return: what
+            // enters it is not a call this walk sees (ADR 0719's limit).
+            if crate::local_access::function_escapes_unfollowed(file, function.body, lookup) {
+                self.open = true;
+            }
+            return;
+        };
+        if !function_callers_closed(file, function, name.span, lookup) {
+            self.open = true;
+        }
+        let path = file.path.as_str();
+        for (caller, callee) in lookup.function_call_sites(path, function.span) {
+            self.calls += 1;
+            if self.calls > FLOW_CALLS {
+                self.open = true;
+                return;
+            }
+            let Some(call) = caller.ast.calls_with_peeled_callee(callee).next() else {
+                // A render: the compiler builds the props object it passes,
+                // unless a spread may hand an object over whole.
+                self.open |=
+                    index == 0
+                        && caller.ast.jsx_elements.iter().any(|element| {
+                            element.name.span == callee && !element.spreads.is_empty()
+                        });
+                continue;
+            };
+            let resolves = |found: Option<(&FileFacts, &solid_facts::ast::FunctionFact)>| {
+                found.is_some_and(|(callee_file, callee_function)| {
+                    callee_file.path == file.path && callee_function.span == function.span
+                })
+            };
+            let exact = match crate::execution_role::project_callee_at_parameter(
+                caller, call, index, lookup,
+            ) {
+                Some((callee_file, callee_function, true)) => {
+                    resolves(Some((callee_file, callee_function)))
+                }
+                // A namespace import's static member names its exported
+                // function exactly (`m4.scaling(…)`).
+                _ => {
+                    resolves(lookup.namespace_member_function(caller, call.callee))
+                        && !call
+                            .arguments
+                            .iter()
+                            .take(index + 1)
+                            .any(|argument| argument.spread)
+                }
+            };
+            if !exact {
+                self.open = true;
+                continue;
+            }
+            for argument in slot_arguments(call, index, rest).unwrap_or_default() {
+                self.value(
+                    caller,
+                    call.span,
+                    argument,
+                    None,
+                    in_place,
+                    linked,
+                    depth - 1,
+                );
+            }
+        }
+    }
+
+    /// Parameter `index` of the literal that is argument `position` of
+    /// `call`: a project callee's own calls of that parameter, or, for any
+    /// other callee, a store handed to the call (an element flow, open).
+    #[allow(clippy::too_many_arguments)]
+    fn callback<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        call: &'f solid_facts::ast::CallFact,
+        position: usize,
+        index: usize,
+        rest: bool,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) where
+        'c: 'f,
+    {
+        let lookup = self.context.lookup;
+        let Some((callee_file, callee, exact)) =
+            crate::execution_role::project_callee_at_parameter(file, call, position, lookup)
+        else {
+            if lookup
+                .resolved_callee_call(file, call.callee)
+                .is_none_or(|resolved| resolved.declaration.is_none())
+            {
+                self.open = true;
+                return;
+            }
+            // What the callee was handed, as an argument or as its receiver,
+            // is all it can pass in: an element of it (step 5) is open here.
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let receiver = file.ast.member_at(callee).map(|member| member.object);
+            for value in call
+                .arguments
+                .iter()
+                .map(|argument| argument.span)
+                .filter(|argument| file.ast.functions_within(*argument).next().is_none())
+                .chain(receiver)
+            {
+                self.value(file, call.span, value, None, false, true, depth - 1);
+            }
+            return;
+        };
+        let Some(parameter) = callee.parameters.get(position).filter(|parameter| {
+            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.names.len() == 1
+        }) else {
+            self.open = true;
+            return;
+        };
+        if !exact {
+            self.open = true;
+            return;
+        }
+        let declaration = parameter.names[0].span;
+        let frame = FlowFrame {
+            callee_file,
+            callee,
+            file,
+            call,
+        };
+        for &(reference, _) in callee_file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(reference, declared)| *declared == declaration && *reference != declaration)
+        {
+            let Some(inner) = callee_file.ast.calls_with_peeled_callee(reference).next() else {
+                // Handed on, aliased or read as a member: not followed.
+                self.open = true;
+                continue;
+            };
+            let Some(arguments) = slot_arguments(inner, index, rest) else {
+                self.open = true;
+                continue;
+            };
+            let in_place = in_place
+                && function_runs_in_place(callee_file, callee, inner.span)
+                && reached(callee_file, inner.span, lookup);
+            for argument in arguments {
+                self.value(
+                    callee_file,
+                    inner.span,
+                    argument,
+                    Some(frame),
+                    in_place,
+                    linked,
+                    depth - 1,
+                );
+            }
+        }
+    }
+
+    /// The value `expression`, in `file`, reaching the sink: `at` is where
+    /// the store would be handed on (the call, or the sink itself), whose
+    /// window and reach decide a proven flow. `linked`: the sink reads past
+    /// this value (a member, an element).
+    #[allow(clippy::too_many_arguments)]
+    fn value<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        at: Span,
+        expression: Span,
+        frame: Option<FlowFrame<'f>>,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) where
+        'c: 'f,
+    {
+        self.steps += 1;
+        if depth == 0 || self.steps > FLOW_STEPS {
+            self.open = true;
+            return;
+        }
+        let context = self.context;
+        let expression = file.ast.peel_ts_sugar_span(expression);
+        let root = member_root(file, expression)
+            .map_or(expression, |inner| file.ast.peel_ts_sugar_span(inner));
+        let linked = linked || root != expression;
+        // ADR 0720: a call whose result is a store value, or an element of one.
+        if let Some(call) = file.ast.call_at(root)
+            && self.call_value(file, at, call, frame, in_place, linked, depth)
+        {
+            return;
+        }
+        if file.ast.call_at(root).is_none() && bare_root(file, root) {
+            if let Some(symbol) = source_symbol_at(context, file, root) {
+                if context.prop_sources.contains_key(symbol) {
+                    self.open = true;
+                    return;
+                }
+                if context.accessors.contains_key(symbol)
+                    || typed_store_name(context, symbol).is_some()
+                {
+                    self.store(file, at, expression, root, symbol, in_place, linked);
+                    return;
+                }
+            }
+            // The literal's callee's own parameter holds the handing call's
+            // argument; any other function's, its callers'. ADR 0790: a
+            // binding of a destructured parameter, or the rest parameter,
+            // holds a part of its arguments: read past, never proven.
+            if let Some((function, index, slot)) = parameter_slot_at(file, root) {
+                let plain = slot == ParameterSlot::Plain;
+                let rest = slot == ParameterSlot::Rest;
+                let in_place = plain
+                    && in_place
+                    && function_runs_in_place(file, function, at)
+                    && reached(file, at, context.lookup);
+                let linked = linked || !plain || parameter_reassigned(file, function, index);
+                match frame {
+                    Some(frame)
+                        if frame.callee_file.path == file.path
+                            && frame.callee.span == function.span =>
+                    {
+                        match slot_arguments(frame.call, index, rest) {
+                            None => self.open = true,
+                            Some(arguments) => {
+                                let in_place = in_place
+                                    && reached(frame.file, frame.call.span, context.lookup);
+                                let inside_return =
+                                    std::mem::replace(&mut self.inside_return, false);
+                                for argument in arguments {
+                                    self.value(
+                                        frame.file,
+                                        frame.call.span,
+                                        argument,
+                                        None,
+                                        in_place,
+                                        linked,
+                                        depth - 1,
+                                    );
+                                }
+                                self.inside_return = inside_return;
+                            }
+                        }
+                    }
+                    _ => self.parameter(file, function, index, rest, in_place, linked, depth - 1),
+                }
+                return;
+            }
+            let declaration = file.ast.reference_declaration(root).unwrap_or(root);
+            // ADR 0720: a `for (const x of e)` binding holds an element of `e`;
+            // ADR 0790: so does a binding of a destructured one, a part of it.
+            if let Some(operand) = for_of_operand(file, declaration) {
+                self.value(file, at, operand, frame, in_place, true, depth - 1);
+                return;
+            }
+            // ADR 0790: a binding of a destructured declarator holds a part of
+            // its initializer, and a mutable one whatever is assigned to it:
+            // read past, or not proven to hold one value, never proven.
+            if let Some(binding) = file.ast.bindings.iter().find(|binding| {
+                binding.names.iter().any(|name| name.span == declaration)
+                    && !(binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.immutable)
+            }) {
+                let pattern = binding.shape != solid_facts::ast::BindingShape::Identifier;
+                let mut values: Vec<(Span, bool)> = binding
+                    .initializer
+                    .map(|initializer| (initializer, pattern))
+                    .into_iter()
+                    .collect();
+                if !binding.immutable {
+                    values.extend(assigned_values(file, declaration));
+                }
+                for (value, part) in values {
+                    self.value(file, at, value, frame, false, linked || part, depth - 1);
+                }
+                return;
+            }
+            // An exact `const` alias: its initializer. A call's result is a
+            // row of [`Self::call_value`]'s, or [`handed_container`]'s (a hook,
+            // `useContext`), below.
+            if let Some(initializer) = file
+                .ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+                .filter(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Identifier && binding.immutable
+                })
+                .and_then(|binding| binding.initializer)
+            {
+                match file.ast.call_at(file.ast.peel_ts_sugar_span(initializer)) {
+                    None => {
+                        self.value(file, at, initializer, frame, in_place, linked, depth - 1);
+                        return;
+                    }
+                    Some(call) => {
+                        if self.call_value(file, at, call, frame, in_place, linked, depth) {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        // ADR 0790: a conditional is one of its branches, a `||` or `??` either
+        // operand, a `&&` its right one (its left, when it is the value, is
+        // falsy: no object). Each is the value itself, at this place.
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == expression)
+        {
+            for branch in [conditional.consequent, conditional.alternate] {
+                self.value(file, at, branch, frame, in_place, linked, depth - 1);
+            }
+            return;
+        }
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == expression)
+        {
+            if logical.operator != solid_facts::ast::LogicalOperatorKind::And {
+                self.value(file, at, logical.left, frame, in_place, linked, depth - 1);
+            }
+            self.value(file, at, logical.right, frame, in_place, linked, depth - 1);
+            return;
+        }
+        // ADR 0790: an object or array literal written at its own property is
+        // a fresh object, whatever it holds.
+        if !linked
+            && (file.ast.array_literal_at(expression).is_some()
+                || file
+                    .source_text(expression)
+                    .is_some_and(|text| text.starts_with('{')))
+        {
+            return;
+        }
+        if handed_container(file, context, expression, 6) {
+            self.open = true;
+            return;
+        }
+        self.sub_values(file, at, expression, root, frame, in_place, linked, depth);
+    }
+
+    /// ADR 0790: a root no row describes (`c ? s.a : x`, `[s.a][0]`, `await
+    /// p`, a call with no row) may be any value its own references and calls
+    /// hold, outside the functions written in it. A store, a parameter or a
+    /// hook there is open, never proven. A call declared in the DOM's library
+    /// returns no store proxy: rc.21 wraps only plain objects and arrays.
+    #[allow(clippy::too_many_arguments)]
+    fn sub_values<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        at: Span,
+        expression: Span,
+        root: Span,
+        frame: Option<FlowFrame<'f>>,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) where
+        'c: 'f,
+    {
+        let lookup = self.context.lookup;
+        if let Some(call) = file.ast.call_at(root) {
+            if lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .is_some_and(|declaration| dom_library(&declaration.source_file))
+            {
+                return;
+            }
+            // `snapshot` returns the unwrapped value: no proxy at any depth.
+            if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Snapshot)
+            {
+                return;
+            }
+            // A context read hands out what a provider passed, as
+            // [`handed_container`] says of a binding of one.
+            if lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    self.context
+                        .dialect
+                        .name_of(primitive)
+                        .and_then(|name| self.context.dialect.context_role(name))
+                        == Some(solid_dialect::ContextRole::Read)
+                })
+            {
+                self.open = true;
+                return;
+            }
+        }
+        // A call no row describes: its callee's returns; a standard call's
+        // result written at its own property is a fresh copy (read past, the
+        // default arm of [`Self::call_value`] answered); any other callee's
+        // result may be what it was handed, as an argument or its receiver.
+        if let Some(call) = file.ast.call_at(root) {
+            // A `new` object written at its own property is fresh.
+            if call.construct && !linked {
+                return;
+            }
+            if self.returned_values(file, call, frame, in_place, linked, depth) {
+                return;
+            }
+            if lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .is_some()
+            {
+                return;
+            }
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let handed: Vec<Span> = call
+                .arguments
+                .iter()
+                .map(|argument| argument.span)
+                .filter(|argument| file.ast.functions_within(*argument).next().is_none())
+                .chain(file.ast.member_at(callee).map(|member| member.object))
+                .collect();
+            self.probe(file, at, &handed, frame, depth - 1);
+            return;
+        }
+        // Any other root: the references and calls it may evaluate to, not
+        // those inside a function, a call (the call counts whole), a
+        // computed key or a conditional's test written in it. Each is the
+        // value itself or a part of it, so it is never proven here: a part
+        // of a literal counts only read past (the literal is fresh), and an
+        // `await`'s operand is read past (the awaited value is what it holds).
+        let calls: Vec<Span> = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| expression.contains(call.span))
+            .map(|call| call.span)
+            .collect();
+        let keys: Vec<Span> = file
+            .ast
+            .members_within(expression)
+            .filter(|member| {
+                file.ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_ok()
+            })
+            .map(|member| member.property)
+            .collect();
+        let inside = |span: Span| {
+            file.ast
+                .functions_within(expression)
+                .any(|function| function.span.contains(span))
+                || calls
+                    .iter()
+                    .any(|call| *call != span && call.contains(span))
+                || keys.iter().any(|key| key.contains(span))
+                || file
+                    .ast
+                    .conditional_tests
+                    .iter()
+                    .any(|test| expression.contains(*test) && test.contains(span))
+        };
+        let in_literal = |span: Span| {
+            file.ast.array_literals.iter().any(|literal| {
+                *literal != expression && expression.contains(*literal) && literal.contains(span)
+            }) || file.ast.object_get_shapes.iter().any(|shape| {
+                shape.span != expression
+                    && expression.contains(shape.span)
+                    && shape.span.contains(span)
+            })
+        };
+        let awaited = |span: Span| {
+            file.ast
+                .await_operands
+                .iter()
+                .any(|operand| expression.contains(*operand) && operand.contains(span))
+        };
+        let parts: Vec<Span> = file
+            .ast
+            .identifiers_within(expression)
+            .filter(|identifier| identifier.role == solid_facts::ast::IdentifierRole::Reference)
+            .map(|identifier| identifier.span)
+            .chain(calls.iter().copied())
+            .filter(|part| *part != expression && !inside(*part))
+            .collect();
+        for part in parts {
+            let (literal, awaited) = (in_literal(part), awaited(part));
+            if literal && !awaited && !linked {
+                continue;
+            }
+            self.value(
+                file,
+                at,
+                part,
+                frame,
+                false,
+                linked || literal || awaited,
+                depth - 1,
+            );
+            if self.open && self.store.is_some() {
+                return;
+            }
+        }
+    }
+
+    /// ADR 0790: the values a project function `call` resolves to may
+    /// return: each own `return` and, for a generator, each `yield`, read
+    /// with this call as the frame. One straight-line return of a function
+    /// with no frame above keeps the stack; anything else (more returns, a
+    /// generator, an async function, a frame already open) is never proven,
+    /// because [`FlowFrame`] holds one call and a walk past it would read
+    /// every caller of the outer function. `false`: no project function.
+    #[allow(clippy::too_many_arguments)]
+    fn returned_values<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        call: &'f solid_facts::ast::CallFact,
+        frame: Option<FlowFrame<'f>>,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) -> bool
+    where
+        'c: 'f,
+    {
+        if call.construct {
+            // A constructor's object is no return this walk reads.
+            return false;
+        }
+        let lookup = self.context.lookup;
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some((callee_file, function, exact)) = called_function(file, call, callee, lookup)
+        else {
+            return false;
+        };
+        if !exact {
+            self.open = true;
+            return true;
+        }
+        let (values, single) = returned_expressions(callee_file, function);
+        let frame_here = FlowFrame {
+            callee_file,
+            callee: function,
+            file,
+            call,
+        };
+        let keeps = in_place && single && frame.is_none();
+        let inside_return = std::mem::replace(&mut self.inside_return, true);
+        for value in values {
+            self.value(
+                callee_file,
+                value,
+                value,
+                Some(frame_here),
+                keeps,
+                linked || !keeps,
+                depth - 1,
+            );
+        }
+        self.inside_return = inside_return;
+        true
+    }
+
+    /// ADR 0790: read `sources` past (a standard-library call no row
+    /// describes, a callback's result): a store there is open.
+    fn probe<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        at: Span,
+        sources: &[Span],
+        frame: Option<FlowFrame<'f>>,
+        depth: usize,
+    ) where
+        'c: 'f,
+    {
+        let mut probe = ParameterFlow {
+            context: self.context,
+            calls: self.calls,
+            steps: self.steps,
+            seen: self.seen.clone(),
+            store: None,
+            open: false,
+            inside_return: self.inside_return,
+        };
+        for source in sources {
+            probe.value(file, at, *source, frame, false, true, depth);
+        }
+        self.calls = probe.calls;
+        self.steps = probe.steps;
+        self.open |= probe.store.is_some() || probe.open;
+    }
+
+    /// ADR 0720: the result of `call` as a value reaching the sink, when a row
+    /// describes it (`false` otherwise): a standard-library method returning
+    /// an element of its receiver (`find`, `findLast`, `at`), or, read past
+    /// (`linked`), a copy whose elements are its source's (`filter`, `slice`,
+    /// `toSorted`, `toReversed`, `concat`, `Object.values`, a one-argument
+    /// `Array.from`), each by its exact declaration; a `map` or `flatMap` of
+    /// a store value whose callback is not proven to return a fresh literal
+    /// (open); a project function that returns its own parameter; a `For`
+    /// row's accessor called under `keyed={false}`; a `createMemo` accessor
+    /// whose compute is an expression. A copy written itself is a plain
+    /// array: no row.
+    #[allow(clippy::too_many_arguments)]
+    fn call_value<'f>(
+        &mut self,
+        file: &'f FileFacts,
+        at: Span,
+        call: &'f solid_facts::ast::CallFact,
+        frame: Option<FlowFrame<'f>>,
+        in_place: bool,
+        linked: bool,
+        depth: usize,
+    ) -> bool
+    where
+        'c: 'f,
+    {
+        if call.construct || depth == 0 {
+            return false;
+        }
+        let context = self.context;
+        let lookup = context.lookup;
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let receiver = file
+            .ast
+            .member_at(callee)
+            .filter(|member| {
+                file.ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+            })
+            .map(|member| member.object);
+        let argument = |index: usize| {
+            call.arguments
+                .get(index)
+                .filter(|_| {
+                    !call
+                        .arguments
+                        .iter()
+                        .take(index + 1)
+                        .any(|argument| argument.spread)
+                })
+                .map(|argument| argument.span)
+        };
+        if let Some(declaration) = lookup.placing_standard_declaration(file, call) {
+            // ADR 0874: the row stays at its site, and a value a withheld
+            // call answers proves no store.
+            self.open |= lookup.standard_call_withheld(file, call.callee);
+            let qualified = declaration.qualified_name.as_ref();
+            let method = qualified
+                .strip_prefix("Array.")
+                .or_else(|| qualified.strip_prefix("ReadonlyArray."));
+            let sources: Vec<Span> = match (method, qualified) {
+                (Some("find" | "findLast" | "at"), _) => receiver.into_iter().collect(),
+                // ADR 0790: an element taken out of the receiver, a `Map`'s or
+                // a `WeakRef`'s value, a property read by reflection, and the
+                // object `seal`, `freeze` and `preventExtensions` hand back.
+                (Some("pop" | "shift"), _)
+                | (_, "Map.get" | "ReadonlyMap.get" | "WeakMap.get" | "WeakRef.deref") => {
+                    receiver.into_iter().collect()
+                }
+                (
+                    _,
+                    "Reflect.get"
+                    | "ObjectConstructor.seal"
+                    | "ObjectConstructor.freeze"
+                    | "ObjectConstructor.preventExtensions",
+                ) => argument(0).into_iter().collect(),
+                (Some("filter" | "slice" | "toSorted" | "toReversed"), _) if linked => {
+                    receiver.into_iter().collect()
+                }
+                (Some("concat"), _) if linked => {
+                    if call.arguments.iter().any(|argument| argument.spread) {
+                        self.open = true;
+                    }
+                    receiver
+                        .into_iter()
+                        .chain(call.arguments.iter().map(|argument| argument.span))
+                        .collect()
+                }
+                (_, "ObjectConstructor.values") if linked => argument(0).into_iter().collect(),
+                // ADR 0790: an entry's value, and a record built from entries,
+                // are their source's values.
+                (_, "ObjectConstructor.entries" | "ObjectConstructor.fromEntries") if linked => {
+                    argument(0).into_iter().collect()
+                }
+                // ADR 0790: `Object.assign` returns its target; read past, the
+                // sources' values too.
+                (_, "ObjectConstructor.assign") => {
+                    if call.arguments.iter().any(|argument| argument.spread) {
+                        self.open = true;
+                    }
+                    let take = if linked { call.arguments.len() } else { 1 };
+                    call.arguments
+                        .iter()
+                        .take(take)
+                        .map(|argument| argument.span)
+                        .collect()
+                }
+                (_, "ArrayConstructor.from") if linked && call.arguments.len() == 1 => {
+                    argument(0).into_iter().collect()
+                }
+                (Some("map" | "flatMap"), _) if linked => {
+                    if !map_returns_fresh(file, argument(0))
+                        && let Some(receiver) = receiver
+                    {
+                        // What the callback returns for a store element is
+                        // not followed: a store there is open.
+                        self.probe(file, at, &[receiver], frame, depth - 1);
+                    }
+                    return true;
+                }
+                // ADR 0790: read past, any other standard call's result may
+                // be what it was handed (`flat`, `sort`, `Array.of`, a `Map`'s
+                // values, a promise's): a store handed to it is open. The
+                // DOM's library returns no store proxy.
+                _ if linked && !dom_library(&declaration.source_file) => {
+                    let handed: Vec<Span> = call
+                        .arguments
+                        .iter()
+                        .map(|argument| argument.span)
+                        .filter(|argument| file.ast.functions_within(*argument).next().is_none())
+                        .chain(receiver)
+                        .collect();
+                    self.probe(file, at, &handed, frame, depth - 1);
+                    return true;
+                }
+                _ => return false,
+            };
+            if sources.is_empty() {
+                return false;
+            }
+            for source in sources {
+                self.value(file, at, source, frame, in_place, true, depth - 1);
+            }
+            return true;
+        }
+        // A project function that returns its own parameter: the argument.
+        if let Some((callee_file, function)) = lookup.function_called_at(file.path.as_str(), callee)
+            && let Some(index) = returned_parameter(callee_file, function)
+        {
+            let exact = matches!(
+                crate::execution_role::project_callee_at_parameter(file, call, index, lookup),
+                Some((exact_file, exact, true))
+                    if exact_file.path == callee_file.path && exact.span == function.span
+            );
+            match argument(index) {
+                Some(argument) if exact => {
+                    self.value(file, at, argument, frame, in_place, linked, depth - 1);
+                }
+                Some(_) => self.open = true,
+                None => self.open |= call.arguments.iter().any(|argument| argument.spread),
+            }
+            return true;
+        }
+        // A `For` row's accessor under `keyed={false}`: an element of `each`.
+        if call.arguments.is_empty()
+            && crate::owners::is_identifier_span(file, callee)
+            && let Some((function, index)) = plain_parameter_at(file, callee)
+            && let ForRow::Accessor(each) = for_row(file, context, function, index)
+        {
+            self.value(file, each, each, None, false, true, depth - 1);
+            return true;
+        }
+        // A `createMemo` accessor read: the value its compute returned.
+        if call.arguments.is_empty()
+            && let Some(compute) = memo_compute_return(file, context, callee)
+        {
+            self.value(file, at, compute, frame, in_place, linked, depth - 1);
+            return true;
+        }
+        false
+    }
+
+    /// A proven store (`symbol`, at `root` of `expression`) handed by `call`.
+    #[allow(clippy::too_many_arguments)]
+    fn store(
+        &mut self,
+        file: &FileFacts,
+        at: Span,
+        expression: Span,
+        root: Span,
+        symbol: &crate::SymbolId,
+        in_place: bool,
+        linked: bool,
+    ) {
+        let context = self.context;
+        let typed_store = typed_store_name(context, symbol);
+        let Some(name) = context
+            .accessors
+            .get(symbol)
+            .filter(|_| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+            .map(|(name, _)| name)
+            .or(typed_store)
+        else {
+            // A signal accessor or another reactive function: no proxy.
+            return;
+        };
+        // `createMutable`'s proxy is written through by design.
+        if context
+            .source_primitives
+            .get(symbol)
+            .is_some_and(|primitive| primitive.as_str() == "createMutable")
+        {
+            return;
+        }
+        // A link TypeScript reports as possibly nullish is its own.
+        if linked
+            && root != expression
+            && chain_links_verdict(file, context, expression, root).is_none()
+        {
+            return;
+        }
+        let standing = store_write_standing(
+            file,
+            context,
+            StoreWriteSite {
+                span: at,
+                member: at,
+                root,
+            },
+            symbol,
+        );
+        if standing == WriteStanding::Exempt && in_place && !self.inside_return {
+            return;
+        }
+        let proven = standing == WriteStanding::Dropped
+            && in_place
+            && !self.inside_return
+            && !linked
+            && typed_store.is_none()
+            && !context.dialect.store_root_properties_are_readonly()
+            && reached(file, at, context.lookup);
+        if self
+            .store
+            .as_ref()
+            .is_none_or(|found| proven && !found.proven)
+        {
+            self.store = Some(FlowStore {
+                name: name.as_str().to_owned(),
+                proven,
+            });
+        }
+    }
+}
+
+/// ADR 0720: the iterated operand of the `for (const x of operand)` whose
+/// binding declares `declaration` (no initializer, `of` exactly between the
+/// binding and the operand). ADR 0790: the binding may be a pattern
+/// (`for (const { p } of operand)`), whose names hold parts of an element.
+fn for_of_operand(file: &FileFacts, declaration: Span) -> Option<Span> {
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.initializer.is_none() && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    file.ast.iterated_operands.iter().copied().find(|operand| {
+        operand.start >= binding.pattern.end
+            && file
+                .source
+                .get(binding.pattern.end as usize..operand.start as usize)
+                .is_some_and(|between| between.trim() == "of")
+            && file.ast.loop_statements.iter().any(|statement| {
+                statement.contains(binding.pattern) && statement.contains(*operand)
+            })
+    })
+}
+
+/// How a parameter binding receives its value ([`parameter_slot_at`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ParameterSlot {
+    /// The plain identifier parameter: the argument itself.
+    Plain,
+    /// A name of a destructured parameter: a part of the argument.
+    Pattern,
+    /// A name of the rest parameter: every argument from its index.
+    Rest,
+}
+
+/// ADR 0790: the function, parameter index and slot of the parameter whose
+/// binding the reference `root` names, any shape: a plain identifier, a name
+/// in a destructuring pattern, or the rest parameter (index: the parameter
+/// count, the first argument it absorbs).
+fn parameter_slot_at(
+    file: &FileFacts,
+    root: Span,
+) -> Option<(&solid_facts::ast::FunctionFact, usize, ParameterSlot)> {
+    let declaration = file.ast.reference_declaration(root).unwrap_or(root);
+    file.ast.functions_containing(root).find_map(|function| {
+        if let Some(index) = function
+            .parameters
+            .iter()
+            .position(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+        {
+            let parameter = &function.parameters[index];
+            let plain = parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.names.len() == 1;
+            return Some((
+                function,
+                index,
+                if plain {
+                    ParameterSlot::Plain
+                } else {
+                    ParameterSlot::Pattern
+                },
+            ));
+        }
+        function
+            .rest_parameter_names
+            .iter()
+            .any(|name| name.span == declaration)
+            .then_some((function, function.parameters.len(), ParameterSlot::Rest))
+    })
+}
+
+/// The arguments of `call` a parameter slot receives: the one at `index`, or,
+/// for a rest parameter, every one from it. `None`: a spread before the slot
+/// (or at it, for a plain slot) moves what lands there.
+fn slot_arguments(
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    rest: bool,
+) -> Option<Vec<Span>> {
+    let fixed = if rest { index } else { index + 1 };
+    if call
+        .arguments
+        .iter()
+        .take(fixed)
+        .any(|argument| argument.spread)
+    {
+        return None;
+    }
+    Some(if rest {
+        call.arguments
+            .iter()
+            .skip(index)
+            .map(|argument| argument.span)
+            .collect()
+    } else {
+        call.arguments
+            .get(index)
+            .map(|argument| argument.span)
+            .into_iter()
+            .collect()
+    })
+}
+
+/// ADR 0790: the values assigned to the mutable binding `declaration`: each
+/// plain assignment's value, a destructuring assignment's source (a part of
+/// it, `true`), and the operand of a `for (x of operand)` head that writes it
+/// (an element, `true`). Every assignment counts, wherever it runs.
+fn assigned_values(file: &FileFacts, declaration: Span) -> Vec<(Span, bool)> {
+    let names = |span: Span| {
+        file.ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(span))
+            == Some(declaration)
+    };
+    let mut values: Vec<(Span, bool)> = file
+        .ast
+        .assignments
+        .iter()
+        .filter_map(|assignment| {
+            if names(assignment.target) {
+                Some((assignment.value_span, false))
+            } else {
+                file.ast
+                    .destructuring_assignment_leaves(assignment)
+                    .into_iter()
+                    .any(names)
+                    .then_some((assignment.value_span, true))
+            }
+        })
+        .collect();
+    for head in &file.ast.iteration_targets {
+        if !file
+            .ast
+            .write_targets
+            .iter()
+            .any(|target| head.contains(*target) && names(*target))
+        {
+            continue;
+        }
+        if let Some(operand) = file.ast.iterated_operands.iter().copied().find(|operand| {
+            operand.start >= head.end
+                && file
+                    .source
+                    .get(head.end as usize..operand.start as usize)
+                    .is_some_and(|between| between.trim() == "of")
+        }) {
+            values.push((operand, true));
+        }
+    }
+    values
+}
+
+/// ADR 0790: what a call of `function` may return: its expression body, each
+/// own `return`'s value and, for a generator, each own `yield`'s operand.
+/// `true` with the values: one straight-line return of a plain function,
+/// the value on every normal completion.
+fn returned_expressions(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> (Vec<Span>, bool) {
+    let plain = !function.r#async && !function.generator;
+    if let Some(returned) = &function.expression_return {
+        return (returned.argument.into_iter().collect(), plain);
+    }
+    let own = |span: Span| {
+        function.body.contains(span)
+            && crate::owners::owning_function(&file.ast, span)
+                .is_some_and(|owner| owner.span == function.span)
+    };
+    let returns: Vec<&solid_facts::ast::ReturnFact> = file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| own(returned.span))
+        .collect();
+    let single = plain && returns.len() == 1 && returns[0].straight_line;
+    let mut values: Vec<Span> = returns
+        .iter()
+        .filter_map(|returned| returned.argument)
+        .collect();
+    if function.generator {
+        values.extend(
+            file.ast
+                .yields
+                .iter()
+                .filter(|yielded| own(yielded.span))
+                .filter_map(|yielded| yielded.operand),
+        );
+    }
+    (values, single)
+}
+
+/// ADR 0790: the project function `call` runs, and whether its arguments
+/// land on its parameters by position (no spread, the exact callee): a
+/// function literal called in place, or the function the callee resolves to.
+fn called_function<'a, 'l: 'a>(
+    file: &'a FileFacts,
+    call: &solid_facts::ast::CallFact,
+    callee: Span,
+    lookup: &crate::indexes::SemanticLookup<'l>,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact, bool)> {
+    let spread = call.arguments.iter().any(|argument| argument.spread);
+    if let Some(function) = file.ast.function_at(callee) {
+        return Some((file, function, !spread));
+    }
+    let (callee_file, function) = lookup.function_called_at(file.path.as_str(), callee)?;
+    let exact = matches!(
+        crate::execution_role::project_callee_at_parameter(file, call, 0, lookup),
+        Some((exact_file, exact, true))
+            if exact_file.path == callee_file.path && exact.span == function.span
+    );
+    Some((callee_file, function, exact && !spread))
+}
+
+/// ADR 0790: whether a standard-library declaration is the DOM's (`lib.dom*`):
+/// its calls return nodes, events and primitives, never a store proxy, which
+/// rc.21 makes only of plain objects and arrays.
+fn dom_library(source_file: &str) -> bool {
+    source_file
+        .rsplit(['/', '\\'])
+        .next()
+        .is_some_and(|name| name.starts_with("lib.dom"))
+}
+
+/// ADR 0720: the index of the plain parameter `function` returns on every
+/// normal completion: its expression body, or its one `return`, in its
+/// straight-line flow, is exactly that parameter, never reassigned.
+fn returned_parameter(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<usize> {
+    if function.r#async || function.generator {
+        return None;
+    }
+    let returned = match &function.expression_return {
+        Some(returned) => returned.argument?,
+        None => {
+            let mut own = file.ast.returns.iter().filter(|returned| {
+                function.body.contains(returned.span)
+                    && crate::owners::owning_function(&file.ast, returned.span)
+                        .is_some_and(|owner| owner.span == function.span)
+            });
+            let only = own.next()?;
+            if own.next().is_some() || !only.straight_line {
+                return None;
+            }
+            only.argument?
+        }
+    };
+    let returned = file.ast.peel_ts_sugar_span(returned);
+    file.ast.reference_declaration(returned)?;
+    let (owner, index) = plain_parameter_at(file, returned)?;
+    (owner.span == function.span && !parameter_reassigned(file, function, index)).then_some(index)
+}
+
+/// ADR 0720: the expression a `createMemo` accessor `callee` (a `const`
+/// binding in this file, by primitive identity) computes, when its compute
+/// is a function literal with an expression body.
+fn memo_compute_return(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    callee: Span,
+) -> Option<Span> {
+    if !crate::owners::is_identifier_span(file, callee) {
+        return None;
+    }
+    let declaration = file.ast.reference_declaration(callee)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    let call = binding
+        .call_initializer
+        .and_then(|initializer| file.ast.call_at(initializer))?;
+    if context.lookup.primitive_at_call(file, call.span)
+        != Some(solid_dialect::Primitive::CreateMemo)
+    {
+        return None;
+    }
+    let compute = file.ast.peel_ts_sugar_span(call.arguments.first()?.span);
+    let function = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == compute)?;
+    if function.r#async || function.generator {
+        return None;
+    }
+    function.expression_return.as_ref()?.argument
+}
+
+/// Whether the `map` callback `callback` returns a fresh object or array
+/// literal (its expression body), so no element of the result is the
+/// receiver's.
+fn map_returns_fresh(file: &FileFacts, callback: Option<Span>) -> bool {
+    callback
+        .and_then(|callback| {
+            let callback = file.ast.peel_ts_sugar_span(callback);
+            file.ast
+                .functions
+                .iter()
+                .find(|function| function.span == callback)
+        })
+        .and_then(|function| function.expression_return.as_ref())
+        .and_then(|returned| returned.argument)
+        .is_some_and(|returned| {
+            let returned = file.ast.peel_ts_sugar_span(returned);
+            file.ast.array_literal_at(returned).is_some()
+                || file
+                    .ast
+                    .object_get_shapes
+                    .iter()
+                    .any(|shape| shape.span == returned)
+        })
+}
+
+/// What a `For` row parameter holds ([`ParameterFlow::parameter`]).
+enum ForRow {
+    /// The function is no `For` children callback.
+    NotRow,
+    /// Not an element: the index accessor.
+    Silent,
+    /// An accessor of an element of the `each` value (`keyed={false}`).
+    Accessor(Span),
+    /// The element's shape is not proven (a dynamic `keyed`, a spread, no `each`).
+    Open,
+    /// An element of the `each` value.
+    Each(Span),
+}
+
+/// ADR 0720: whether `function` is the children callback of an exact `For`
+/// element, and what its parameter `index` holds: rc.21 hands the raw element
+/// as parameter 0 unless `keyed` is `false` or a function (accessors), and the
+/// index accessor as parameter 1.
+fn for_row(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+) -> ForRow {
+    let wraps = |child: &Span| {
+        child.start < function.span.start
+            && function.span.end < child.end
+            && file
+                .source
+                .get(child.start as usize..function.span.start as usize)
+                .is_some_and(|before| before.trim() == "{")
+            && file
+                .source
+                .get(function.span.end as usize..child.end as usize)
+                .is_some_and(|after| after.trim() == "}")
+    };
+    let primitives = context.lookup.primitives(file);
+    let Some((element_index, element)) = file
+        .ast
+        .jsx_elements
+        .iter()
+        .enumerate()
+        .find(|(_, element)| element.children.iter().any(wraps))
+    else {
+        return ForRow::NotRow;
+    };
+    if primitives.jsx.get(element_index).and_then(known_primitive)
+        != Some(solid_dialect::Primitive::For)
+    {
+        return ForRow::NotRow;
+    }
+    if index != 0 {
+        return ForRow::Silent;
+    }
+    let keyed = element
+        .boolean_properties
+        .iter()
+        .find(|property| file.source_text(property.name) == Some("keyed"));
+    if keyed.is_none()
+        && element
+            .properties
+            .iter()
+            .any(|property| file.source_text(*property) == Some("keyed"))
+    {
+        return ForRow::Open;
+    }
+    if !element.spreads.is_empty() {
+        return ForRow::Open;
+    }
+    let Some(each) = element
+        .attributes
+        .iter()
+        .find(|attribute| file.source_text(attribute.name) == Some("each"))
+        .and_then(|attribute| attribute.expression)
+    else {
+        return ForRow::Open;
+    };
+    if keyed.is_some_and(|property| !property.value) {
+        ForRow::Accessor(each)
+    } else {
+        ForRow::Each(each)
+    }
+}
+
+/// Whether any execution may reach `site` (ADR 0458's query).
+fn reached(file: &FileFacts, site: Span, lookup: &crate::indexes::SemanticLookup<'_>) -> bool {
+    crate::execution_role::SiteReach::new(lookup).site(file, site)
+        == crate::execution_role::Reach::MayRun
+}
+
+/// Whether every call of the named `function` is one
+/// [`crate::indexes::SemanticLookup::function_call_sites`] lists: every
+/// compiler reference to its binding `name` is such a site, its declaration
+/// or in a type query; it is no method, not replaced, not handed out by
+/// name, and not exported where modules this build does not see may call it.
+fn function_callers_closed(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    name: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> bool {
+    let path = file.path.as_str();
+    if function.method_name.is_some()
+        || lookup.program_has_eval()
+        || !lookup.function_value_is_current(file, function)
+        || lookup.hands_out_by_name(path, function.span)
+        || (crate::execution_role::module_exports(file, function, lookup)
+            && (!lookup.program_closed || lookup.escapes_unnamed(path)))
+    {
+        return false;
+    }
+    let Some(symbol) = lookup.entities().at(path, name) else {
+        return false;
+    };
+    let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
+        return false;
+    };
+    // A namespace member call (`m4.scaling(…)`) is a site at the whole
+    // member; the compiler's reference is its property.
+    let accounted = lookup
+        .function_call_site_references(path, function.span)
+        .into_iter()
+        .flat_map(|(caller, callee)| {
+            let property = caller.ast.member_at(callee).map(|member| {
+                (
+                    caller.path.as_str(),
+                    member.property.start,
+                    member.property.end,
+                )
+            });
+            std::iter::once((caller.path.as_str(), callee.start, callee.end)).chain(property)
+        })
+        .collect::<HashSet<_>>();
+    references.iter().all(|reference| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        accounted.contains(&(reference.path.as_ref(), start, end))
+            || (reference.path.as_ref() == path
+                && (Span::new(start, end) == name
+                    || file
+                        .ast
+                        .type_queries
+                        .iter()
+                        .any(|query| query.contains(Span::new(start, end)))))
+    })
 }
 
 /// Whether the value at `span` came from a caller ([`push_unproven_container_write`]):
@@ -1593,8 +3595,23 @@ enum WriteStanding {
     Exempt,
     /// The write runs with no window open, at least on one run: dropped.
     Dropped,
-    /// Whether a window is open when it runs is not proven: uncertifiable.
-    Unproven,
+    /// Whether a window is open when it runs is not proven: uncertifiable,
+    /// with the blocker naming why when one does (ADR 0751).
+    Unproven(Option<&'static str>),
+}
+
+impl WriteStanding {
+    fn unproven(self) -> bool {
+        matches!(self, Self::Unproven(_))
+    }
+
+    /// ADR 0751: the blocker an unproven standing names, if any.
+    fn blocker(self) -> Option<&'static str> {
+        match self {
+            Self::Unproven(blocker) => blocker,
+            _ => None,
+        }
+    }
 }
 
 /// Where a write through the proven store `symbol` stands.
@@ -1619,24 +3636,55 @@ fn store_write_standing(
     site: StoreWriteSite,
     symbol: &crate::SymbolId,
 ) -> WriteStanding {
-    if context.dialect.store_root_properties_are_readonly()
-        && file
-            .ast
-            .member_at(site.member)
-            .is_some_and(|member| member.object == site.root)
-        && bare_root(file, site.root)
-    {
+    if readonly_root_write(file, context, site) {
         return WriteStanding::Exempt;
+    }
+    // ADR 0630: a write through a `merge` of several sources meets the view's
+    // own trap, or the last source itself: no store claims it.
+    if merge_view_root(file, context, site.root) {
+        return WriteStanding::Unproven(None);
+    }
+    // ADR 0634: a raw value's write lands: no proxy drops it.
+    if context
+        .lookup
+        .binding_at_reference(file.path.as_str(), site.root)
+        .is_some_and(|(binding_file, binding, _)| {
+            context.lookup.store_value_may_be_raw(binding_file, binding)
+        })
+    {
+        return WriteStanding::Unproven(None);
     }
     if !context.dialect.store_setter_callback_enables_proxy_writes() {
         return WriteStanding::Dropped;
     }
     let stores = store_and_aliases(context, file, site.root, symbol);
     let windows = write_windows(file, context, &stores, symbol);
-    if windows.is_empty() {
-        return WriteStanding::Dropped;
+    let standing = if windows.is_empty() {
+        WriteStanding::Dropped
+    } else {
+        write_window_standing(file, context, &windows, site.span, WINDOW_DEPTH)
+    };
+    match standing {
+        WriteStanding::Dropped if windows.undecided => {
+            WriteStanding::Unproven(Some(crate::blockers::SEARCH_DEPTH_LIMIT))
+        }
+        standing => standing,
     }
-    write_window_standing(file, context, &windows, site.span, WINDOW_DEPTH)
+}
+
+/// A write to the root record's own property where the dialect's store type
+/// is `Readonly` there: TS2540, TypeScript's ([`store_write_standing`]).
+fn readonly_root_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    site: StoreWriteSite,
+) -> bool {
+    context.dialect.store_root_properties_are_readonly()
+        && file
+            .ast
+            .member_at(site.member)
+            .is_some_and(|member| member.object == site.root)
+        && bare_root(file, site.root)
 }
 
 /// How many named functions [`write_window_standing`] follows from a write to
@@ -1666,7 +3714,20 @@ fn write_windows(
 ) -> Windows {
     let mut windows = Windows::default();
     for call in &file.ast.calls {
-        if !is_own_setter(context, file, call.callee, stores, 4) {
+        let cut = std::cell::Cell::new(false);
+        if !is_own_setter(context, file, call.callee, stores, 4, &cut) {
+            // Only an argument that can hold a function can be a window.
+            windows.undecided |= cut.get()
+                && call.arguments.iter().any(|argument| {
+                    argument.spread
+                        || matches!(
+                            argument.value,
+                            solid_facts::ast::ArgumentValueKind::Identifier
+                                | solid_facts::ast::ArgumentValueKind::Function
+                                | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                                | solid_facts::ast::ArgumentValueKind::Other
+                        )
+                });
             continue;
         }
         for argument in &call.arguments {
@@ -1702,6 +3763,10 @@ fn write_windows(
 struct Windows {
     regions: Vec<WriteWindow>,
     arguments: Vec<Span>,
+    /// ADR 0751: a call whose callee's alias chain [`is_own_setter`] stopped
+    /// following at its depth: it may be the store's own setter, so a write
+    /// outside every proven window is unproven, never dropped.
+    undecided: bool,
 }
 
 impl Windows {
@@ -1818,12 +3883,14 @@ fn close_over_local_aliases(
 /// one of `stores` (`const [store, setStore] = createStore(...)`),
 /// directly or through exact `const` aliases of it (`const set = setStore`, at
 /// most `depth` of them). Another store's setter or a same-spelled local is not.
+/// ADR 0751: `cut` is set where an alias went on past `depth`.
 fn is_own_setter(
     context: &UpstreamCompatContext<'_>,
     file: &solid_facts::FileFacts,
     callee: Span,
     stores: &[crate::SymbolId],
     depth: usize,
+    cut: &std::cell::Cell<bool>,
 ) -> bool {
     // ADR 0482: a member read that is exactly a `const` (ADR 0481) calls that
     // `const`: the setter slot of one of `stores`' patterns, or an alias of it.
@@ -1831,7 +3898,7 @@ fn is_own_setter(
         .ast
         .local_alias_member(file.ast.peel_ts_sugar_span(callee))
     {
-        return setter_declaration_is_own(context, file, alias.source, stores, depth);
+        return setter_declaration_is_own(context, file, alias.source, stores, depth, cut);
     }
     let Some((binding_file, binding, callee_symbol)) = context
         .lookup
@@ -1856,14 +3923,31 @@ fn is_own_setter(
                 .initializer_identifier
                 .as_ref()
                 .is_some_and(|source| {
-                    is_own_setter(context, binding_file, source.span, stores, depth - 1)
+                    is_own_setter(context, binding_file, source.span, stores, depth - 1, cut)
                 })
-                || literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+                || literal_alias_is_own_setter(
+                    context,
+                    binding_file,
+                    &callee_symbol,
+                    stores,
+                    depth,
+                    cut,
+                )
         }
         _ if depth > 0 => {
-            literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth)
+            literal_alias_is_own_setter(context, binding_file, &callee_symbol, stores, depth, cut)
         }
-        _ => false,
+        shape => {
+            // ADR 0751: an alias the depth did not follow.
+            if (shape == solid_facts::ast::BindingShape::Identifier
+                && binding.immutable
+                && binding.initializer_identifier.is_some())
+                || literal_alias_of(context, binding_file, &callee_symbol)
+            {
+                cut.set(true);
+            }
+            false
+        }
     }
 }
 
@@ -1876,6 +3960,7 @@ fn literal_alias_is_own_setter(
     symbol: &crate::SymbolId,
     stores: &[crate::SymbolId],
     depth: usize,
+    cut: &std::cell::Cell<bool>,
 ) -> bool {
     let path = file.path.as_str();
     let Some(alias) = file
@@ -1886,7 +3971,21 @@ fn literal_alias_is_own_setter(
     else {
         return false;
     };
-    setter_declaration_is_own(context, file, alias.source, stores, depth)
+    setter_declaration_is_own(context, file, alias.source, stores, depth, cut)
+}
+
+/// Whether `symbol` is an exact local alias (`local_alias_bindings`) of
+/// anything.
+fn literal_alias_of(
+    context: &UpstreamCompatContext<'_>,
+    file: &solid_facts::FileFacts,
+    symbol: &crate::SymbolId,
+) -> bool {
+    let path = file.path.as_str();
+    file.ast
+        .local_alias_bindings
+        .iter()
+        .any(|alias| context.entities.at(path, alias.local) == Some(symbol))
 }
 
 /// Whether the binding declared at `declaration` is the setter slot of one of
@@ -1897,6 +3996,7 @@ fn setter_declaration_is_own(
     declaration: Span,
     stores: &[crate::SymbolId],
     depth: usize,
+    cut: &std::cell::Cell<bool>,
 ) -> bool {
     let path = file.path.as_str();
     if let Some(binding) = file.ast.bindings.iter().find(|binding| {
@@ -1917,7 +4017,11 @@ fn setter_declaration_is_own(
     let Some(source) = context.entities.at(path, declaration) else {
         return false;
     };
-    depth > 0 && literal_alias_is_own_setter(context, file, source, stores, depth - 1)
+    if depth == 0 {
+        cut.set(cut.get() || literal_alias_of(context, file, source));
+        return false;
+    }
+    literal_alias_is_own_setter(context, file, source, stores, depth - 1, cut)
 }
 
 /// Where the site at `span` (a store write, or the call of a function that
@@ -1985,7 +4089,7 @@ fn write_window_standing(
                         })
                     }) =>
             {
-                return WriteStanding::Unproven;
+                return WriteStanding::Unproven(None);
             }
             crate::execution_role::LayerRun::InPlace(call) => {
                 in_list |= !function.body.contains(at);
@@ -1998,11 +4102,17 @@ fn write_window_standing(
                 }
                 at = call;
             }
-            crate::execution_role::LayerRun::InPlaceAmongOthers(_) if inside => {
-                return WriteStanding::Unproven;
+            crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+            | crate::execution_role::LayerRun::Withheld(_)
+                if inside =>
+            {
+                return WriteStanding::Unproven(None);
             }
             crate::execution_role::LayerRun::FreshStack if inside => return WriteStanding::Dropped,
-            _ => break,
+            crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+            | crate::execution_role::LayerRun::FreshStack
+            | crate::execution_role::LayerRun::Elsewhere
+            | crate::execution_role::LayerRun::Withheld(_) => break,
         }
     }
     let Some(owner) = owner else {
@@ -2023,12 +4133,12 @@ fn write_window_standing(
             }
         }
         return if in_list || !owner.body.contains(at) {
-            WriteStanding::Unproven
+            WriteStanding::Unproven(None)
         } else {
             match suspended {
                 None => WriteStanding::Exempt,
                 Some(true) => WriteStanding::Dropped,
-                Some(false) => WriteStanding::Unproven,
+                Some(false) => WriteStanding::Unproven(None),
             }
         };
     }
@@ -2047,7 +4157,7 @@ fn write_window_standing(
     match named_function_standing(file, context, windows, owner, depth) {
         Some(standing) => standing,
         None if in_window || called_in_window(file, context, windows, owner) => {
-            WriteStanding::Unproven
+            WriteStanding::Unproven(None)
         }
         None => WriteStanding::Dropped,
     }
@@ -2120,7 +4230,9 @@ fn named_function_standing(
     }
     // The chain of callers is longer than this follows: unknown, not dropped.
     if depth == 0 {
-        return Some(WriteStanding::Unproven);
+        return Some(WriteStanding::Unproven(Some(
+            crate::blockers::SEARCH_DEPTH_LIMIT,
+        )));
     }
     let name = crate::owners::function_binding_name(file, function)?;
     let path = file.path.as_str();
@@ -2184,7 +4296,7 @@ fn named_function_standing(
         return None;
     }
     Some(if handed || function.r#async || !current {
-        WriteStanding::Unproven
+        WriteStanding::Unproven(None)
     } else if standings.contains(&WriteStanding::Dropped) {
         WriteStanding::Dropped
     } else if standings
@@ -2193,7 +4305,7 @@ fn named_function_standing(
     {
         WriteStanding::Exempt
     } else {
-        WriteStanding::Unproven
+        WriteStanding::Unproven(standings.iter().find_map(|standing| standing.blocker()))
     })
 }
 
@@ -2241,6 +4353,9 @@ fn chain_links_verdict(
     if links.is_empty() {
         return Some(false);
     }
+    if shallow_store_root(file, context, root) {
+        return None;
+    }
     if context.strict_null_checks != Some(true) || !tsc_reports_in(file) {
         return Some(true);
     }
@@ -2267,6 +4382,72 @@ fn chain_links_verdict(
         !(optional_free(ast, member, &links)
             && links_proven_wrappable(file, context, member, root)),
     )
+}
+
+/// ADR 0626: `root` is exactly slot 0 of a `const` array pattern initialized by
+/// `createStore(value, { shallow: true })`. A shallow store serves every value
+/// raw (rc.21 `core-store` R38, R39, measured): a write below the root lands on
+/// the raw object, with no guard and no warning. Inert for the store, and
+/// nothing this rule claims.
+fn shallow_store_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, root: Span) -> bool {
+    let Some((binding_file, binding, _)) = context
+        .lookup
+        .binding_at_reference(file.path.as_str(), root)
+    else {
+        return false;
+    };
+    // A projection's binding is the store itself.
+    let named = binding
+        .array_slots
+        .first()
+        .and_then(Option::as_ref)
+        .or(binding.names.first())
+        .is_some_and(|slot| binding_file.source_text(slot.span) == file.source_text(root));
+    if !binding.immutable || !named {
+        return false;
+    }
+    binding
+        .call_initializer
+        .and_then(|initializer| binding_file.ast.call_at(initializer))
+        .is_some_and(|call| {
+            use solid_dialect::Primitive;
+            // A derive takes a seed before its options; the value form does not.
+            let derived = call.arguments.first().is_some_and(|first| {
+                matches!(
+                    first.value,
+                    solid_facts::ast::ArgumentValueKind::Function
+                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                )
+            });
+            let options = match context.lookup.primitive_at_call(binding_file, call.span) {
+                Some(Primitive::CreateStore | Primitive::CreateOptimisticStore) => {
+                    Some(if derived { 2 } else { 1 })
+                }
+                Some(Primitive::CreateProjection) => Some(2),
+                _ => None,
+            };
+            options.is_some_and(|options| {
+                crate::call_option_literal(binding_file, call, options, "shallow")
+                    == solid_dialect::OptionLiteral::True
+            })
+        })
+}
+
+/// ADR 0630: `root` is a `const` holding a `merge` call of several sources.
+fn merge_view_root(file: &FileFacts, context: &UpstreamCompatContext<'_>, root: Span) -> bool {
+    context
+        .lookup
+        .binding_at_reference(file.path.as_str(), root)
+        .is_some_and(|(binding_file, binding, _)| {
+            binding
+                .call_initializer
+                .and_then(|initializer| binding_file.ast.call_at(initializer))
+                .is_some_and(|call| {
+                    call.arguments.len() > 1
+                        && context.lookup.primitive_at_call(binding_file, call.span)
+                            == Some(solid_dialect::Primitive::Merge)
+                })
+        })
 }
 
 /// No link of the chain, nor the written member, is an optional access.
@@ -2311,20 +4492,53 @@ fn links_proven_wrappable(
     root: Span,
 ) -> bool {
     let ast = &file.ast;
+    let Some(initial) = store_literal_untouched(file, context, root, false) else {
+        return false;
+    };
+    // The written path's links resolve to literals (the use check already
+    // walked it; this pins the links themselves).
+    let member = ast.peel_ts_sugar_span(member);
+    let Some(path) = static_path(file, member, ast.peel_ts_sugar_span(root)) else {
+        return false;
+    };
+    let (last, prefix) = match path.split_last() {
+        Some((last, prefix)) if !prefix.is_empty() => (last, prefix),
+        _ => return false,
+    };
+    let called = ast.calls_with_peeled_callee(member).next().is_some();
+    if called
+        && !file
+            .source_text(*last)
+            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
+    {
+        return false;
+    }
+    holds_object(resolve_literal_path(file, initial, prefix))
+}
+
+/// The first half of [`links_proven_wrappable`]'s proof: the store `root`
+/// names still holds its initializer's closed object literal, returned, since
+/// no setter call, alias or escaping proxy can replace or reach it. With
+/// `module_scope` (ADR 0718) the store may also be a module's `const` that no
+/// export names: every reference is then in this file, checked below.
+fn store_literal_untouched(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    root: Span,
+    module_scope: bool,
+) -> Option<Span> {
+    let ast = &file.ast;
     // A direct `eval` can reach the setter or the store with no reference
     // the binder sees.
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
-        return false;
+        return None;
     }
     // ADR 0500: a member root that is exactly a `const` (ADR 0481,
     // `thing.useIt`) starts the walk at that `const`.
     let root_declaration = ast
         .local_alias_member(ast.peel_ts_sugar_span(root))
         .map(|alias| alias.source)
-        .or_else(|| ast.reference_declaration(ast.peel_ts_sugar_span(root)));
-    let Some(root_declaration) = root_declaration else {
-        return false;
-    };
+        .or_else(|| ast.reference_declaration(ast.peel_ts_sugar_span(root)))?;
     // The store pattern and its exact `const` aliases, by declared name span.
     let mut names = vec![root_declaration];
     let mut store = None;
@@ -2337,63 +4551,53 @@ fn links_proven_wrappable(
             names.push(alias.source);
             continue;
         }
-        let Some(binding) = ast
+        let binding = ast
             .bindings
             .iter()
-            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
-        else {
-            return false;
-        };
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
         if !binding.immutable {
-            return false;
+            return None;
         }
         match binding.shape {
             solid_facts::ast::BindingShape::Identifier => {
-                let Some(source) = binding
+                let source = binding
                     .initializer_identifier
                     .as_ref()
-                    .and_then(|source| ast.reference_declaration(source.span))
-                else {
-                    return false;
-                };
+                    .and_then(|source| ast.reference_declaration(source.span))?;
                 names.push(source);
             }
             solid_facts::ast::BindingShape::Array => {
                 store = Some(binding);
                 break;
             }
-            _ => return false,
+            _ => return None,
         }
     }
-    let Some(store) = store else {
-        return false;
-    };
+    let store = store?;
     let slot = |index: usize| store.array_slots.get(index).and_then(Option::as_ref);
     if slot(0).map(|name| name.span) != names.last().copied()
         || store.array_slots.len() > 2
         || file
             .source_text(store.pattern)
             .is_none_or(|pattern| pattern.contains("..."))
-        || !ast.any_function_body_containing(store.declaration)
+        || !(module_scope || ast.any_function_body_containing(store.declaration))
     {
-        return false;
+        return None;
     }
     let primitive = context
         .entities
         .at(file.path.as_str(), slot(0).expect("slot 0").span)
         .and_then(|symbol| context.source_primitives.get(symbol));
-    let Some(call) = store.call_initializer.and_then(|call| ast.call_at(call)) else {
-        return false;
-    };
+    let call = store.call_initializer.and_then(|call| ast.call_at(call))?;
     let [argument] = call.arguments.as_slice() else {
-        return false;
+        return None;
     };
     let initial = ast.peel_ts_sugar_span(argument.span);
     if primitive.is_none_or(|primitive| primitive.as_str() != "createStore")
         || ast.peel_ts_sugar_span(store.initializer.unwrap_or(call.span)) != call.span
         || closed_literal(ast, initial).is_none()
     {
-        return false;
+        return None;
     }
     let referenced = |declaration: Span| {
         ast.identifiers.iter().any(|identifier| {
@@ -2402,7 +4606,7 @@ fn links_proven_wrappable(
         })
     };
     if slot(1).is_some_and(|setter| referenced(setter.span)) {
-        return false;
+        return None;
     }
     // ADR 0497: every exact alias of the store, not only those on the root's
     // chain, is the store; its references are checked like the store's own.
@@ -2417,6 +4621,26 @@ fn links_proven_wrappable(
             break;
         }
         names.extend(more);
+    }
+    // A module's store reaches other files only through an export.
+    if !ast.any_function_body_containing(store.declaration) {
+        let named = names
+            .iter()
+            .filter_map(|name| file.source_text(*name))
+            .collect::<Vec<_>>();
+        if ast.exports.iter().any(|export| {
+            export
+                .specifiers
+                .iter()
+                .chain(&export.declarations)
+                .chain(&export.declaration_surface_only)
+                .any(|specifier| {
+                    file.source_text(specifier.local.span)
+                        .is_none_or(|local| named.contains(&local))
+                })
+        }) {
+            return None;
+        }
     }
     // Alias initializers are the references the alias walk already took.
     let alias_sources: Vec<Span> = ast
@@ -2445,28 +4669,10 @@ fn links_proven_wrappable(
         if !contained_store_use(file, identifier.span, initial)
             && !consumed_by_alias_slots(file, identifier.span, &names, initial)
         {
-            return false;
+            return None;
         }
     }
-    // The written path's links resolve to literals (the use check above
-    // already walked it; this pins the links themselves).
-    let member = ast.peel_ts_sugar_span(member);
-    let Some(path) = static_path(file, member, ast.peel_ts_sugar_span(root)) else {
-        return false;
-    };
-    let (last, prefix) = match path.split_last() {
-        Some((last, prefix)) if !prefix.is_empty() => (last, prefix),
-        _ => return false,
-    };
-    let called = ast.calls_with_peeled_callee(member).next().is_some();
-    if called
-        && !file
-            .source_text(*last)
-            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
-    {
-        return false;
-    }
-    holds_object(resolve_literal_path(file, initial, prefix))
+    Some(initial)
 }
 
 /// The value is an object or array literal: a primitive (or a regular
@@ -2875,12 +5081,120 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
 /// (`AstFacts::typescript_directive_comment`, from the parser's comments; a
 /// conservative veto: a directive anywhere withholds the premise for the
 /// whole file).
+/// ADR 0811: whether `tsc` reports at `span`: a checked TypeScript file and
+/// no directive that may silence a line of it (ADR 0830).
+fn tsc_reports_at(file: &FileFacts, span: Span) -> bool {
+    tsc_reports_in(file)
+        && file.ast.typescript_check_pragma != Some(false)
+        && !file.tsc_may_be_silent_within(span)
+}
+
 fn tsc_reports_in(file: &FileFacts) -> bool {
     let path = file.path.as_str();
     let javascript = [".js", ".jsx", ".mjs", ".cjs"]
         .iter()
         .any(|extension| path.ends_with(extension));
     !javascript && !file.ast.typescript_directive_comment
+}
+
+/// ADR 0718: whether the logical assignment `operator` to the store member
+/// `written` writes: `Some` only where the value there is the literal the
+/// store's initializer holds ([`store_literal_untouched`]: nothing else can
+/// write the store) and that literal's truthiness is known. `None` where the
+/// value is not proven, so the write may be skipped, and Chrome is silent.
+fn logical_assignment_writes(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    operator: solid_facts::ast::LogicalAssignmentOperator,
+    written: Span,
+    root: Span,
+) -> Option<bool> {
+    use solid_facts::ast::LogicalAssignmentOperator;
+    let mut value = store_literal_untouched(file, context, root, true)?;
+    let path = static_path(
+        file,
+        file.ast.peel_ts_sugar_span(written),
+        file.ast.peel_ts_sugar_span(root),
+    )?;
+    for key in &path {
+        let key = file.source_text(*key)?;
+        value = file
+            .ast
+            .peel_ts_sugar_span(crate::execution_role::closed_literal_slot_value(
+                file, value, key,
+            )?);
+    }
+    let truth = literal_truthiness(file, value)?;
+    Some(match operator {
+        LogicalAssignmentOperator::Nullish => truth == Truthiness::Nullish,
+        LogicalAssignmentOperator::Or => truth != Truthiness::Truthy,
+        LogicalAssignmentOperator::And => truth == Truthiness::Truthy,
+    })
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Truthiness {
+    Nullish,
+    Falsy,
+    Truthy,
+}
+
+/// The truthiness of the literal at `value`, read only where its spelling
+/// fixes it: `null`, an `undefined` no declaration shadows, `true`, `false`,
+/// an unsigned decimal number (falsy only at zero: `0.0` too), a quoted
+/// string with no escape (falsy only when empty). Anything else is `None`.
+fn literal_truthiness(file: &FileFacts, value: Span) -> Option<Truthiness> {
+    let text = file.source_text(value)?;
+    let quoted = text.len() >= 2
+        && matches!(text.as_bytes()[0], b'"' | b'\'')
+        && text.as_bytes()[text.len() - 1] == text.as_bytes()[0]
+        && !text.contains('\\');
+    match text {
+        "null" => Some(Truthiness::Nullish),
+        "undefined"
+            if file.ast.reference_declaration(value).is_none()
+                && file
+                    .ast
+                    .identifiers
+                    .binary_search_by_key(&value, |identifier| identifier.span)
+                    .is_ok() =>
+        {
+            Some(Truthiness::Nullish)
+        }
+        "true" => Some(Truthiness::Truthy),
+        "false" => Some(Truthiness::Falsy),
+        _ if quoted => Some(if text.len() == 2 {
+            Truthiness::Falsy
+        } else {
+            Truthiness::Truthy
+        }),
+        _ if !text.is_empty()
+            && text
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || byte == b'.')
+            && text
+                .bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_digit()) =>
+        {
+            let number = text.parse::<f64>().ok()?;
+            Some(if number == 0.0 {
+                Truthiness::Falsy
+            } else {
+                Truthiness::Truthy
+            })
+        }
+        _ => None,
+    }
+}
+
+/// ADR 0718: `sort`, `reverse`, `fill` and `copyWithin` read the length
+/// first and write nothing on a short array or an empty range (Chrome is
+/// silent). The length is proven by no fact here: ADR 0491's literal proof
+/// covers neither a root array nor a call of these methods, so they may not
+/// write. The other mutators always write `length`.
+fn mutator_always_writes(method: &str) -> bool {
+    !matches!(method, "sort" | "reverse" | "fill" | "copyWithin")
 }
 
 /// The nine in-place `Array.prototype` methods upstream names
@@ -2896,6 +5210,76 @@ const ARRAY_MUTATORS: [&str; 9] = [
     "fill",
     "copyWithin",
 ];
+
+/// ADR 0694: whether the member Get at `get` only serves a write's path: it
+/// is the object of a chain that ends in an assignment target, a delete target
+/// or an in-place array method's receiver, or it is the target a standard
+/// library write takes (`s.a` in `s.a.v = 7`, `s.items.push(1)`,
+/// `Object.assign(s.a, x)`). A value used as anything else is a read, which a
+/// chain through a call (`s.items.find(f).v = 1`) is.
+pub(crate) fn serves_write_path(
+    file: &FileFacts,
+    get: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let mut link = ast.peel_ts_sugar_span(get);
+    let Some(first) = ast.member_at(link) else {
+        return false;
+    };
+    // A method of an in-place call answers at the whole callee, `s.items.push`.
+    let in_place = |member: &solid_facts::ast::MemberFact| {
+        ARRAY_MUTATORS.contains(&text(file, member.property))
+            && ast.calls_with_peeled_callee(member.span).any(|call| {
+                !call.construct
+                    && lookup
+                        .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                        .is_some_and(|declaration| {
+                            declaration.qualified_name.as_ref()
+                                == format!("Array.{}", text(file, member.property))
+                        })
+            })
+    };
+    if in_place(first) {
+        return true;
+    }
+    loop {
+        if ast.calls.iter().any(|call| {
+            !call.construct
+                && call.arguments.first().is_some_and(|argument| {
+                    !argument.spread && ast.peel_ts_sugar_span(argument.span) == link
+                })
+                && lookup
+                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                    .is_some_and(|declaration| {
+                        STANDARD_LIBRARY_WRITES
+                            .iter()
+                            .any(|(_, qualified)| declaration.qualified_name.as_ref() == *qualified)
+                    })
+        }) {
+            return true;
+        }
+        let Some(next) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == link)
+        else {
+            return false;
+        };
+        if ast.assignments.iter().any(|assignment| {
+            assignment_write_targets(file, assignment)
+                .iter()
+                .any(|target| ast.peel_ts_sugar_span(*target) == next.span)
+        }) || ast.deleted_targets.contains(&next.span)
+        {
+            return true;
+        }
+        if in_place(next) {
+            return true;
+        }
+        link = next.span;
+    }
+}
 
 /// A call of an in-place array method on a path of a proven store: the call
 /// resolves, through Type Facts, to the standard library's `Array` method, so
@@ -2921,20 +5305,19 @@ fn no_store_mutator_call(
         {
             continue;
         }
-        let Some(declaration) =
-            context
-                .lookup
-                .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        else {
+        let Some(declaration) = context.lookup.placing_standard_declaration(file, call) else {
             continue;
         };
         if declaration.qualified_name.as_ref() != format!("Array.{}", text(file, member.property)) {
             continue;
         }
+        // ADR 0874: a withheld mutator may be the program's: the row stays
+        // at its site, and nothing proves it writes.
+        let withheld = context.lookup.standard_call_withheld(file, call.callee);
         let Some(root) = member_root(file, callee) else {
             continue;
         };
-        let source = source_symbol_at(context, file, root);
+        let source = root_symbol(context, file, root);
         let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
         let proven = source.and_then(|symbol| {
             context
@@ -2945,21 +5328,29 @@ fn no_store_mutator_call(
                 .or(typed_store)
                 .map(|name| (symbol, name))
         });
-        let Some((symbol, name)) = proven else {
-            if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
-                push_unproven_container_write(file, context, call.span, root, defects);
+        // ADR 0720: a chain rooted at a call writes what the call returned,
+        // which a row of the flow may prove a store value.
+        let call_root = file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(root))
+            .is_some();
+        let Some((symbol, name)) = proven.filter(|_| !call_root && !withheld) else {
+            if withheld
+                || call_root
+                || source.is_none_or(|symbol| !context.accessors.contains_key(symbol))
+            {
+                let sink = SinkWrite {
+                    member: callee,
+                    may_not_write: withheld || !mutator_always_writes(text(file, member.property)),
+                    delete: false,
+                    linked: false,
+                };
+                push_unproven_container_write(file, context, call.span, root, sink, defects);
             }
             continue;
         };
-        // A member chain rooted at a call writes to what the call returned
-        // (`store.items.slice().push(1)` is a plain copy), and a root that is
-        // not a bare identifier is not the proxy.
-        if file
-            .ast
-            .call_at(file.ast.peel_ts_sugar_span(root))
-            .is_some()
-            || !bare_root(file, root)
-        {
+        // A root that is not a bare identifier is not the proxy.
+        if !bare_root(file, root) {
             continue;
         }
         let standing = store_write_standing(
@@ -2980,28 +5371,226 @@ fn no_store_mutator_call(
         let Some(past_root) = chain_links_verdict(file, context, callee, root) else {
             continue;
         };
+        let writes = mutator_always_writes(text(file, member.property));
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
                 target: store_target(context, symbol),
             },
             location: location(file.path.shared(), call.span),
-            analysis_context: String::new(),
+            analysis_context: if writes {
+                standing.blocker().unwrap_or_default().to_owned()
+            } else {
+                crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+            },
             fixes: vec![],
-            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
+            uncertain: typed_store.is_some() || past_root || !writes || standing.unproven(),
         });
     }
+}
+
+/// ADR 0638: a method a store path holds, called on the read proxy, runs with
+/// the proxy as `this`, so a write of `this.x` in its body is dropped with
+/// `STORE_WRITE_OUTSIDE_SETTER` (rc.21 `core-store` R48, measured in Chrome). The
+/// member's value is what the store holds now, so this is an obligation.
+fn no_store_method_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    for call in &file.ast.calls {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if call.construct || file.ast.member_at(callee).is_none() {
+            continue;
+        }
+        // A method no declaration resolves (a class expression, a value the
+        // store was handed) may write `this` as well.
+        let writes_this =
+            match crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup)
+            {
+                Some((method_file, method, _)) => {
+                    method_file.ast.write_targets.iter().any(|target| {
+                        method.body.contains(*target)
+                            && method_file
+                                .source_text(*target)
+                                .is_some_and(|written| written.starts_with("this."))
+                    })
+                }
+                None => context
+                    .lookup
+                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                    .is_none(),
+            };
+        let Some(root) = member_root(file, callee).filter(|_| writes_this) else {
+            continue;
+        };
+        let Some(symbol) = root_symbol(context, file, root) else {
+            continue;
+        };
+        let Some((name, _)) = context
+            .accessors
+            .get(symbol)
+            .filter(|_| context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store))
+        else {
+            continue;
+        };
+        if !bare_root(file, root) {
+            continue;
+        }
+        let standing = store_write_standing(
+            file,
+            context,
+            StoreWriteSite {
+                span: call.span,
+                member: callee,
+                root,
+            },
+            symbol,
+        );
+        if standing != WriteStanding::Exempt {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::DirectMutation {
+                    name: name.as_str().to_owned(),
+                    target: store_target(context, symbol),
+                },
+                location: location(file.path.shared(), call.span),
+                analysis_context: standing.blocker().unwrap_or_default().to_owned(),
+                fixes: vec![],
+                uncertain: standing != WriteStanding::Dropped
+                    || !store_path_holds_writing_method(file, context, symbol, callee),
+            });
+        }
+    }
+}
+
+/// ADR 0640: the path `s.c` of `s.c.m` is, for the life of the store, the instance
+/// of a class written in the store's literal: `createStore({ c: new C() })`, its
+/// setter never named, in a function body so no other module can name it. `C`
+/// has no `extends` and no computed member, so nothing gives it a `toStringTag`
+/// that would keep rc.21 from wrapping it, and its own method `m` writes `this`.
+fn store_path_holds_writing_method(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+    callee: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(method) = ast.member_at(callee) else {
+        return false;
+    };
+    let Some(method_name) = file.source_text(method.property) else {
+        return false;
+    };
+    let mut keys = Vec::new();
+    let mut object = ast.peel_ts_sugar_span(method.object);
+    while let Some(member) = ast.member_at(object) {
+        if ast.computed_members.contains(&member.span)
+            || ast.optional_members.binary_search(&member.span).is_ok()
+        {
+            return false;
+        }
+        let Some(key) = file.source_text(member.property) else {
+            return false;
+        };
+        keys.push(key);
+        object = ast.peel_ts_sugar_span(member.object);
+    }
+    keys.reverse();
+    let Some((_, declaration)) = context.accessors.get(symbol) else {
+        return false;
+    };
+    if declaration.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Array
+            && binding.immutable
+            && binding.names.iter().any(|name| {
+                u64::from(name.span.start) == declaration.start_byte
+                    && u64::from(name.span.end) == declaration.end_byte
+            })
+    }) else {
+        return false;
+    };
+    let declared = Span::new(
+        u32::try_from(declaration.start_byte).unwrap_or(u32::MAX),
+        u32::try_from(declaration.end_byte).unwrap_or(u32::MAX),
+    );
+    if crate::indexes::at_module_scope(ast, declared) {
+        return false;
+    }
+    let setter_named = binding.array_slots.iter().skip(1).flatten().any(|setter| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.span != setter.span
+                && ast.reference_declaration(identifier.span) == Some(setter.span)
+        })
+    });
+    let Some(mut value) = binding
+        .call_initializer
+        .and_then(|initializer| ast.call_at(initializer))
+        .filter(|call| {
+            context.lookup.primitive_at_call(file, call.span)
+                == Some(solid_dialect::Primitive::CreateStore)
+        })
+        .and_then(|call| call.arguments.first())
+        .filter(|argument| !argument.spread)
+        .map(|argument| ast.peel_ts_sugar_span(argument.span))
+    else {
+        return false;
+    };
+    if setter_named {
+        return false;
+    }
+    for key in keys {
+        let Some(next) = crate::execution_role::closed_literal_slot_value(file, value, key) else {
+            return false;
+        };
+        value = ast.peel_ts_sugar_span(next);
+    }
+    let Some(built) = ast.call_at(value).filter(|call| call.construct) else {
+        return false;
+    };
+    let class_at = ast.peel_ts_sugar_span(built.callee);
+    let named = ast.reference_declaration(class_at);
+    let Some(class) = ast.classes.iter().find(|class| {
+        class.span == class_at
+            || class
+                .name
+                .as_ref()
+                .is_some_and(|name| Some(name.span) == named)
+    }) else {
+        return false;
+    };
+    class.heritage.is_none()
+        && !class.elements.iter().any(|element| element.computed)
+        && class.elements.iter().any(|element| {
+            !element.r#static
+                && element.key.and_then(|key| file.source_text(key)) == Some(method_name)
+                && element
+                    .value
+                    .and_then(|value| ast.function_at(ast.peel_ts_sugar_span(value)))
+                    .is_some_and(|function| {
+                        ast.write_targets.iter().any(|target| {
+                            function.body.contains(*target)
+                                && file
+                                    .source_text(*target)
+                                    .is_some_and(|written| written.starts_with("this."))
+                        })
+                    })
+        })
 }
 
 /// The standard-library calls that write properties of their first argument,
 /// by the exact declaration Type Facts resolved the callee to (a project
 /// function named `assign`, a shadowed `Object` and an unresolved callee are
 /// silent): `Object.assign(target, …)`, `Reflect.set(target, key, value)` and
-/// `Object.defineProperty(target, key, descriptor)`.
-const STANDARD_LIBRARY_WRITES: [(&str, &str); 3] = [
+/// `Object.defineProperty(target, key, descriptor)`, or `Reflect`'s.
+const STANDARD_LIBRARY_WRITES: [(&str, &str); 5] = [
     ("assign", "ObjectConstructor.assign"),
     ("set", "Reflect.set"),
     ("defineProperty", "ObjectConstructor.defineProperty"),
+    ("defineProperty", "Reflect.defineProperty"),
+    ("deleteProperty", "Reflect.deleteProperty"),
 ];
 
 /// A standard-library write whose target is a proven store's read proxy (ADR
@@ -3026,22 +5615,19 @@ fn no_store_standard_library_write(
 ) {
     for call in &file.ast.calls {
         let callee = file.ast.peel_ts_sugar_span(call.callee);
-        let Some(member) = file.ast.member_at(callee) else {
-            continue;
-        };
-        if call.construct
-            || file.ast.computed_members.binary_search(&callee).is_ok()
-            || !STANDARD_LIBRARY_WRITES
+        // A member callee is prefiltered by its name; an identifier one
+        // (`const as = Object.assign; as(store, …)`, ADR 0717) is judged by
+        // the declaration alone, as every callee is below.
+        let named = match file.ast.member_at(callee) {
+            Some(member) => STANDARD_LIBRARY_WRITES
                 .iter()
-                .any(|(name, _)| *name == text(file, member.property))
-        {
+                .any(|(name, _)| *name == text(file, member.property)),
+            None => crate::owners::is_identifier_span(file, callee),
+        };
+        if call.construct || file.ast.computed_members.binary_search(&callee).is_ok() || !named {
             continue;
         }
-        let Some(declaration) =
-            context
-                .lookup
-                .standard_library_declaration(file, call, typefacts::CallKind::Call)
-        else {
+        let Some(declaration) = context.lookup.placing_standard_declaration(file, call) else {
             continue;
         };
         if !STANDARD_LIBRARY_WRITES
@@ -3050,12 +5636,14 @@ fn no_store_standard_library_write(
         {
             continue;
         }
+        // ADR 0876: as for a mutator: the row stays, and nothing proves it writes.
+        let withheld = context.lookup.standard_call_withheld(file, call.callee);
         let Some(argument) = call.arguments.first().filter(|argument| !argument.spread) else {
             continue;
         };
         let target = file.ast.peel_ts_sugar_span(argument.span);
         let root = member_root(file, target).unwrap_or(target);
-        let source = source_symbol_at(context, file, root);
+        let source = root_symbol(context, file, root);
         let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
         let proven = source.and_then(|symbol| {
             context
@@ -3066,22 +5654,31 @@ fn no_store_standard_library_write(
                 .or(typed_store)
                 .map(|name| (symbol, name))
         });
-        let Some((symbol, name)) = proven else {
+        // ADR 0720: a target rooted at a call is what the call returned,
+        // which a row of the flow may prove a store value.
+        let call_root = file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(root))
+            .is_some();
+        let Some((symbol, name)) = proven.filter(|_| !call_root && !withheld) else {
             // ADR 0509: a container a caller handed in may hold a store.
-            if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
-                push_unproven_container_write(file, context, call.span, root, defects);
+            if withheld
+                || call_root
+                || source.is_none_or(|symbol| !context.accessors.contains_key(symbol))
+            {
+                let sink = SinkWrite {
+                    member: target,
+                    may_not_write: withheld || !assign_writes(file, declaration, call),
+                    delete: false,
+                    linked: target != root,
+                };
+                push_unproven_container_write(file, context, call.span, root, sink, defects);
             }
             continue;
         };
-        // A target rooted at a call is what the call returned, and a root that
-        // is not a bare identifier is not the proxy (`store.items.slice()`,
-        // `(store as T)`).
-        if file
-            .ast
-            .call_at(file.ast.peel_ts_sugar_span(root))
-            .is_some()
-            || !bare_root(file, root)
-        {
+        // A root that is not a bare identifier is not the proxy
+        // (`(store as T)`).
+        if !bare_root(file, root) {
             continue;
         }
         // Where the dialect's store type is `Readonly` at the root (rc.0-rc.6,
@@ -3117,17 +5714,56 @@ fn no_store_standard_library_write(
             }
             true
         };
+        // ADR 0718: `Object.assign` writes only an own enumerable key of a
+        // source. Proven only when its first source is a closed literal of
+        // data properties with one: no code runs before that first `Set`.
+        let writes = assign_writes(file, declaration, call);
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
                 target: store_target(context, symbol),
             },
             location: location(file.path.shared(), call.span),
-            analysis_context: String::new(),
+            analysis_context: if writes {
+                standing.blocker().unwrap_or_default().to_owned()
+            } else {
+                crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+            },
             fixes: vec![],
-            uncertain: typed_store.is_some() || past_root || standing == WriteStanding::Unproven,
+            uncertain: typed_store.is_some() || past_root || !writes || standing.unproven(),
         });
     }
+}
+
+/// Whether the standard-library write `call` (resolved to `declaration`)
+/// writes when it runs: `Object.assign` writes only an own enumerable key of
+/// a source, proven only when its first source is a closed literal of data
+/// properties with one (ADR 0718); the others always write.
+fn assign_writes(
+    file: &FileFacts,
+    declaration: &typefacts::ResolvedDeclaration,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    declaration.qualified_name.as_ref() != "ObjectConstructor.assign"
+        || call
+            .arguments
+            .get(1)
+            .filter(|source| !source.spread)
+            .and_then(|source| {
+                let source = file.ast.peel_ts_sugar_span(source.span);
+                file.ast
+                    .object_get_shapes
+                    .iter()
+                    .find(|shape| shape.span == source)
+            })
+            .is_some_and(|shape| {
+                shape.closed
+                    && !shape.properties.is_empty()
+                    && shape
+                        .properties
+                        .iter()
+                        .all(|property| property.getter.is_none())
+            })
 }
 
 /// `delete` of a static member path of a proven store (ADR 0461): the proxy's
@@ -3156,12 +5792,24 @@ fn no_store_delete(
     defects: &mut Vec<StaticDefect>,
 ) {
     for &target in &file.ast.deleted_targets {
-        let Some(member) = file.peel_parentheses(target) else {
-            continue;
+        // A type assertion on the operand (`delete store.v!`, `delete (store.v
+        // as T)`) is TS2703 at the operand. ADR 0830: where tsc says nothing
+        // there (a directive, `@ts-nocheck`), the delete runs as `delete
+        // store.v` and reaches the trap: judge the member under it. Where one
+        // compiler may be silent, the operand is unproven.
+        let (member, sugar) = match file.peel_parentheses(target) {
+            Some(member) => (member, TscSilence::Reports),
+            None => {
+                let member = file.ast.peel_ts_sugar_span(target);
+                match file.tsc_silence_at(member.start) {
+                    TscSilence::Reports => continue,
+                    silence => (member, silence),
+                }
+            }
         };
-        if file.ast.member_at(member).is_none()
-            || file.ast.computed_members.binary_search(&member).is_ok()
-        {
+        // A computed key reaches the same trap (ADR 0829): the producer's
+        // rejection proof decides it below, as for a static key.
+        if file.ast.member_at(member).is_none() {
             continue;
         }
         let Some(root) = member_root(file, member) else {
@@ -3171,21 +5819,32 @@ fn no_store_delete(
         // no `?.` (which may skip the delete) and no wrapper between links.
         // The walk ends at the root `member_root` found: a member alias root
         // (ADR 0482) is itself a member, and its own links are not the chain's.
+        // ADR 0791: an optional link (`delete store?.v`, `store.o?.c`) may skip
+        // the delete: an operation that may not write, not silence.
         let mut link = member;
-        let mut plain = true;
+        let mut optional = false;
         while link != root
             && let Some(current) = file.ast.member_at(link)
         {
-            if file.ast.optional_members.binary_search(&link).is_ok() {
-                plain = false;
-                break;
-            }
+            optional |= file.ast.optional_members.binary_search(&link).is_ok();
             link = current.object;
         }
-        if !plain || link != root || !bare_root(file, root) {
+        if link != root {
             continue;
         }
-        let source = source_symbol_at(context, file, root);
+        // ADR 0790: a root that is no bare identifier (a call's result, a
+        // conditional) may hold a store: the flow judges it.
+        if !bare_root(file, root) {
+            let sink = SinkWrite {
+                member,
+                may_not_write: optional,
+                delete: true,
+                linked: false,
+            };
+            push_unproven_container_write(file, context, member, root, sink, defects);
+            continue;
+        }
+        let source = root_symbol(context, file, root);
         let typed_store = source.and_then(|symbol| typed_store_name(context, symbol));
         let proven = source.and_then(|symbol| {
             context
@@ -3198,7 +5857,13 @@ fn no_store_delete(
         });
         let Some((symbol, name)) = proven else {
             if source.is_none_or(|symbol| !context.accessors.contains_key(symbol)) {
-                push_unproven_container_write(file, context, member, root, defects);
+                let sink = SinkWrite {
+                    member,
+                    may_not_write: optional,
+                    delete: true,
+                    linked: false,
+                };
+                push_unproven_container_write(file, context, member, root, sink, defects);
             }
             continue;
         };
@@ -3216,13 +5881,37 @@ fn no_store_delete(
             continue;
         }
         let path = file.path.as_str();
-        let uncertain = match context.lookup.entity_at(path, member) {
-            None => true,
-            Some(entity) if !entity.writable_optional_property => continue,
-            Some(_) => match chain_links_verdict(file, context, member, root) {
+        // ADR 0829: TypeScript rejects the delete (TS18011, TS2704, TS2790,
+        // the producer's proof under this program's options, in a file tsc
+        // checks): the defect is TypeScript's, silent (invariant 1). An
+        // operand not proven writable-optional and not proven rejected (a
+        // computed or index key, a required `T | undefined`, `unknown`) may
+        // well type-check: uncertifiable, never silent.
+        //
+        // ADR 0830: the rejection is reported at the operand. Where both
+        // compilers suppress it there, nothing reports the delete and it
+        // reaches the trap: the operand is a property the producer resolved,
+        // judged as a writable one. Where only one may, it stays unproven.
+        let entity = context.lookup.entity_at(path, member);
+        let rejected = entity.is_some_and(|entity| entity.delete_operand_rejected);
+        let silence = file.tsc_silence_at(member.start);
+        if rejected && silence == TscSilence::Reports && tsc_reports_in(file) {
+            continue;
+        }
+        let operand_unproven = sugar == TscSilence::Maybe
+            || !(entity.is_some_and(|entity| entity.writable_optional_property)
+                || rejected && silence == TscSilence::Silent);
+        let uncertain = operand_unproven
+            || match chain_links_verdict(file, context, member, root) {
                 None => continue,
                 Some(past_root) => past_root,
-            },
+            };
+        let analysis_context = if optional {
+            crate::blockers::STORE_OPERATION_MAY_NOT_WRITE
+        } else if operand_unproven {
+            crate::blockers::DELETE_OPERAND_UNPROVEN
+        } else {
+            standing.blocker().unwrap_or_default()
         };
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
@@ -3230,9 +5919,9 @@ fn no_store_delete(
                 target: store_target(context, symbol),
             },
             location: location(file.path.shared(), member),
-            analysis_context: String::new(),
+            analysis_context: analysis_context.to_owned(),
             fixes: vec![],
-            uncertain: uncertain || typed_store.is_some() || standing == WriteStanding::Unproven,
+            uncertain: uncertain || optional || typed_store.is_some() || standing.unproven(),
         });
     }
 }
@@ -3305,16 +5994,14 @@ fn is_argument(file: &FileFacts, span: Span) -> bool {
 /// property value — passing the accessor on is idiomatic, and reporting it
 /// would be the false positive upstream's issue #193 describes.
 fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
-    if let Some(operand) = file
-        .ast
-        .coercive_operands
-        .iter()
-        .find(|operand| operand.span == span)
-    {
+    if let Some(operand) = file.ast.coercive_operands.iter().find(|operand| {
+        operand.span == span && operand.kind != solid_facts::ast::CoerciveOperandKind::LooseEquality
+    }) {
         return Some(match operand.kind {
             solid_facts::ast::CoerciveOperandKind::StringConcatenation => "a string concatenation",
             solid_facts::ast::CoerciveOperandKind::LogicalNot => "a logical-not operator",
             solid_facts::ast::CoerciveOperandKind::NumericCoercion => "a numeric coercion",
+            solid_facts::ast::CoerciveOperandKind::LooseEquality => unreachable!("filtered above"),
         });
     }
 
@@ -3374,6 +6061,43 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
     // both dialects, so it never reaches this function's callers any more.
     None
+}
+
+/// ADR 0830: the positions [`value_position`]'s narrowing gave to TypeScript
+/// (a type-checked native attribute, a class object's value, a computed key)
+/// and the operators that reject a function (arithmetic, bitwise, relational).
+fn type_owned_position(file: &FileFacts, span: Span) -> Option<&'static str> {
+    let ast = &file.ast;
+    for element in &ast.jsx_elements {
+        if !is_lowercase_led(text(file, element.name.span)) {
+            continue;
+        }
+        for attribute in element.attributes.iter().filter(|a| a.namespace.is_none()) {
+            if attribute.expression == Some(span)
+                && super::jsx_name_is_type_checked(text(file, attribute.name))
+            {
+                return Some("a native JSX attribute");
+            }
+            if text(file, attribute.name) == "class"
+                && let Some(object) = attribute.expression
+                && ast
+                    .object_properties
+                    .iter()
+                    .any(|property| property.value == span && object.contains(property.span))
+            {
+                return Some("a class object value");
+            }
+        }
+    }
+    if ast.computed_members.iter().any(|member| {
+        ast.member_at(*member)
+            .is_some_and(|member| member.property == span)
+    }) {
+        return Some("a computed member key");
+    }
+    ast.coercing_operands
+        .contains(&span)
+        .then_some("an arithmetic or bitwise operand")
 }
 
 /// A key written as a plain identifier: ASCII letters, digits, `_` or `$`, not

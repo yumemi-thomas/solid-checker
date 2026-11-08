@@ -21,6 +21,10 @@
 //                     every file's rows, which a cache filling from it must
 //                     record as a section, probe or memo for its readers
 //   symbol_names-scan iterating the symbol-name table, every file's names
+//   placing-call      SemanticLookup::placing_callee_call(): a call as if the
+//                     impostor census had not withheld it (ADR 0874). It places
+//                     a row and proves nothing: a caller that reaches a proof
+//                     or a violation path is a defect, so each is reviewed.
 //   hashmap-iteration iterating a HashMap/HashSet in non-test code, whose order
 //                     is the insertion history (so a patched map and a fresh
 //                     one can answer differently). A lexical heuristic: it
@@ -134,6 +138,7 @@ export function countReads(text) {
     file_by_path: 0,
     symbols_by_id: 0,
     "typescript-table": 0,
+    "placing-call": 0,
     "symbol_names-scan": 0,
     "hashmap-iteration": 0
   };
@@ -167,10 +172,10 @@ export function readSites(text) {
     const add = (kind, count) => {
       for (let n = 0; n < count; n += 1) sites.push({ line: index + 1, kind });
     };
-    add("facts.files", (line.match(/\bfacts\s*\.\s*files\b/g) ?? []).length);
     add("files()", (line.match(/\.\s*files\s*\(\s*\)/g) ?? []).length);
     add("file_by_path", (line.match(/\bfile_by_path\b/g) ?? []).length);
     add("symbols_by_id", (line.match(/\bsymbols_by_id\s*\(\s*\)/g) ?? []).length);
+    add("placing-call", (line.match(/\.placing_callee_call\s*\(/g) ?? []).length);
     if (iterated.some((pattern) => pattern.test(line))) add("hashmap-iteration", 1);
   });
   // Method chains span lines (`self.facts\n.typescript\n.entities()`): the
@@ -181,6 +186,8 @@ export function readSites(text) {
       sites.push({ line: code.slice(0, found.index).split("\n").length, kind });
     }
   };
+  // rustfmt splits `facts\n.files` as often as it keeps it on one line.
+  joined("facts.files", /\bfacts\s*\.\s*files\b/g);
   joined("typescript-table", /\b(?:typescript|table)\s*\.\s*(?:entities|symbols|files)\s*\(\s*\)/g);
   joined(
     "symbol_names-scan",

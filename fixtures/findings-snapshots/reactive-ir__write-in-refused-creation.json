@@ -5,6 +5,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 322,
@@ -15,6 +16,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 478,
@@ -25,6 +27,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 584,
@@ -35,6 +38,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 812,
@@ -45,6 +49,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 953,
@@ -52,9 +57,20 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 1037,
+      "end": 1053,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 1113,
@@ -62,9 +78,20 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 1207,
+      "end": 1221,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 1283,
@@ -72,13 +99,34 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 1383,
+      "end": 1399,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 1497,
       "end": 1504,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 1545,
+      "end": 1554,
       "fixes": 0
     },
     {
@@ -99,6 +147,16 @@
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 1776,
       "end": 1784,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
+      "start": 1868,
+      "end": 1882,
       "fixes": 0
     },
     {
@@ -125,6 +183,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 2525,
@@ -135,6 +194,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 2714,
@@ -145,6 +205,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "refused-creation-unrun",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-in-refused-creation/App.tsx",
       "start": 2866,

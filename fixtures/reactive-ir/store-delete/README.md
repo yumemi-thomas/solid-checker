@@ -26,9 +26,16 @@ through a projection result, through a `const` alias of the store (ADR
 `STORE_WRITE_OUTSIDE_SETTER` for all three).
 
 Silent: inside the store's own setter callback (commits, rc.17 probe), on the
-setter's draft, on a plain object, through a shadowing parameter. Refused, also
-silent: a non-optional property whose type includes `undefined`, a computed
-key, an optional chain and a cast root.
+setter's draft, on a plain object, through a shadowing parameter. Uncertifiable since
+ADR 0829 (Chrome warns, `tsc` accepts; the producer proves the operand neither
+optional and writable nor rejected): a non-optional property whose type
+includes `undefined` and a computed key here, and in `Unproven.tsx` a literal
+computed key, an open record key, an index-signature member, an array index, a
+nested computed key, `unknown` and a literal-typed variable key. Its
+`RejectedKeys` (TS2790: a required static key, the same as a literal computed
+key, a tuple element) stays silent. Uncertifiable since ADR 0791: an optional
+chain, which may skip the delete. A cast root (`delete (store as { v?: number }).v`) is
+reported since ADR 0790: the flow reads it as the store (Chrome, rc.21, warns).
 
 `Rejected.tsx` is TypeScript's and silent: `delete store.v!` and `delete
 (store.v as T)` (TS2703), and a link that may be `undefined` or `null`

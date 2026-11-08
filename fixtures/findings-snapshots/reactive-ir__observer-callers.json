@@ -1,10 +1,11 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/observer-callers/App.tsx",
       "start": 227,
@@ -14,7 +15,7 @@
     {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/observer-callers/App.tsx",
       "start": 907,
@@ -25,6 +26,7 @@
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/observer-callers/node_modules/solid-js/package.json",
       "start": 0,

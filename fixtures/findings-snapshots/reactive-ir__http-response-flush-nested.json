@@ -5,6 +5,7 @@
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
+      "blocker": "boundary-settle-order-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
       "start": 687,
@@ -15,6 +16,7 @@
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
+      "blocker": "boundary-settle-order-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
       "start": 860,
@@ -25,6 +27,7 @@
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
+      "blocker": "boundary-settle-order-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
       "start": 1158,
@@ -32,13 +35,36 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "prefer-show",
+      "code": "SC8015",
       "kind": "uncertifiable",
+      "blocker": "preference-read-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
-      "start": 1186,
-      "end": 1197,
+      "start": 1216,
+      "end": 1273,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1413,
+      "end": 1423,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1705,
+      "end": 1715,
       "fixes": 0
     }
   ]

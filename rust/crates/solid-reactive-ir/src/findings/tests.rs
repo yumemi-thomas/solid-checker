@@ -12,6 +12,8 @@ fn location(start: u64) -> Location {
 
 fn read(missing_jsx_census: bool) -> ReactiveRead {
     ReactiveRead {
+        pending_open: false,
+        withdrawn_slot: false,
         summary_attributed: false,
         transported: false,
         kind: "accessor".into(),
@@ -238,17 +240,21 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         presets: &[],
     };
     let requirement = || OwnerRequirement {
+        flight_error_unobserved: false,
+        computation_error_unobserved: false,
         operation: crate::OwnerRequirementOperation::Cleanup,
         location: location(20),
         uncertain: false,
         runtime_uncertain: false,
         caller_uncertain: false,
         conditional_owner: false,
+        owner_varies_by_caller: false,
         later_run_unowned: false,
         component_uncertain: false,
         unplaced_callback: false,
         after_await: false,
         after_yield: false,
+        context_unaccounted: false,
         missing_jsx_census: false,
         provider_open: false,
         default_unproven: false,

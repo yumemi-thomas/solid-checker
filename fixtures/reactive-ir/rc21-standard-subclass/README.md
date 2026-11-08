@@ -1,0 +1,1 @@
+A project class extending a standard container may replace a method a value's type still calls the standard one (ADR 0683). `held.forEach` is not proven in place: uncertifiable, `callee-callback-timing`. An array literal is no instance of a subclass, so `[1].forEach` keeps its violation.

@@ -18,7 +18,7 @@ describe("the recall axes are opt-in", () => {
   it("adds no base cell and draws no recall-only code at random", () => {
     expect(cellList().every((cell) => TEMPLATE_CODES.includes(cell.code))).toBe(true);
     expect(TEMPLATE_CODES).not.toContain("LOADING_ON_OUTSIDE_HOLD");
-    expect(RECALL_TEMPLATE_CODES).toEqual(["MISSING_EFFECT_FN", "LOADING_ON_OUTSIDE_HOLD"]);
+    expect(RECALL_TEMPLATE_CODES).toEqual(["ASYNC_OUTSIDE_LOADING_BOUNDARY", "MISSING_EFFECT_FN", "LOADING_ON_OUTSIDE_HOLD", "LOADING_ON_ACCESSOR", "ON_FLUSH_IN_OWNED_SCOPE", "OPTIMISTIC_WRITE_BEFORE_LOAD", "CAUGHT_REACTIVE_READ"]);
     const recall = cellList({ recall: true });
     expect(recall.length).toBeGreaterThan(cellList().length);
     expect(recall.filter((cell) => recallContextsOf(cell.code).includes(cell.context)).length).toBe(recall.length - cellList().length);
@@ -114,6 +114,11 @@ describe("printed forms", () => {
   it("a later mount puts the parent's button first in the plan", () => {
     const program = generateShape({ seed: 1 }, { code: "FLUSH_IN_EFFECT_CALLBACK", context: "effect-apply" }, { variant: null, binding: "direct", layer: "none", mount: "show-later" }, 0).program;
     expect(drivingPlan(program).clicks[0]).toBe("pm1");
+  });
+  it("an element the program's own trigger takes away is not on the click plan; one it keeps stays", () => {
+    const plan = (context) => drivingPlan(generateShape({ seed: 1 }, { code: "STRICT_READ_UNTRACKED", context }, { variant: null, binding: "direct", layer: "none", mount: "root" }, 0).program).clicks;
+    expect(plan("dny-blur-disabled")).toEqual([]);
+    expect(plan("dny-blur-move")).toHaveLength(1);
   });
   it("each recall mount has its parent lines; dynamic and Portal import from @solidjs/web", () => {
     for (const mount of RECALL_MOUNTS) {
@@ -297,7 +302,8 @@ describe("the effect windows (recall only)", () => {
   });
   it("an unowned effect out of the window is not a legal PRIMITIVE_IN_EFFECT_CALLBACK program", () => {
     const variants = new Set(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-error-arm").map((shape) => shape.variant));
-    expect([...variants].sort()).toEqual(["memo", "root"]);
+    // ADR 0883: JSX creates here with no window: legal as a memo or a root is.
+    expect([...variants].sort()).toEqual(["jsx-static", "memo", "root"]);
     expect(recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", "effect-cleanup-rerun").some((shape) => shape.variant === "effect")).toBe(true);
   });
   it("prints each window", () => {

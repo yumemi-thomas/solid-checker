@@ -214,9 +214,9 @@ pub(super) const OWNERS: &[ReleaseOwner] = &[
 /// unread owner's consequence, SC9014's pin) is derived from this list, and
 /// [`Solid2::AUDITED`] is tested to be the vocabulary it reviews to.
 pub(super) const AUDITED_INSTALLATION: &[(&str, &str)] = &[
-    (SOLID_JS, "2.0.0-rc.17"),
-    (SIGNALS, "2.0.0-rc.17"),
-    (WEB, "2.0.0-rc.17"),
+    (SOLID_JS, "2.0.0-rc.21"),
+    (SIGNALS, "2.0.0-rc.21"),
+    (WEB, "2.0.0-rc.21"),
 ];
 
 /// The audited release of one owner, from [`AUDITED_INSTALLATION`].
@@ -344,6 +344,21 @@ pub(super) enum SpreadEventKeys {
     OnUppercase,
 }
 
+/// Which whole triple a project installs, of those with modelled callback
+/// exports: every answer here needs `solid-js`, `@solidjs/signals` and
+/// `@solidjs/web` at one release.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum TripleExports {
+    /// Any other installation: mixed, older, or nobody read it.
+    #[default]
+    None,
+    /// The rc.17 triple: `dynamicComponent`, `dispatchAsInteraction`,
+    /// `createDeferred`, `lazyModule` and `onHydrationEnd`.
+    Rc17,
+    /// The rc.21 triple: those, and `onFlush`.
+    Rc21,
+}
+
 /// Three vocabularies that coincide today and are kept apart by name, so that
 /// moving the audited release is a change of which release [`Solid2::AUDITED`]
 /// and [`Solid2::DEFAULTED`] name and of [`AUDITED_INSTALLATION`], and nothing
@@ -381,13 +396,13 @@ impl Solid2 {
         optimistic_signal_setter_guarded: true,
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
-        rc17_callback_exports: false,
+        triple_exports: TripleExports::None,
         disposal_write_guard: WriteGuardInDisposal::Rejects,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
     /// the review answers for exactly that installation, with no gap.
-    pub const AUDITED: Self = Self::RC17;
+    pub const AUDITED: Self = Self::RC21;
 
     /// The vocabulary a project is analyzed under when no `solid-js`
     /// resolves at all, so no owner was reviewed (the backend's `Defaulted`
@@ -416,7 +431,7 @@ impl Solid2 {
         optimistic_signal_setter_guarded: true,
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
-        rc17_callback_exports: false,
+        triple_exports: TripleExports::None,
         disposal_write_guard: WriteGuardInDisposal::Rejects,
     };
 
@@ -440,7 +455,7 @@ impl Solid2 {
     /// Every other answer is rc.13's, re-measured on rc.17's bytes.
     pub const RC17: Self = Self {
         spread_event_keys: SpreadEventKeys::OnUppercase,
-        rc17_callback_exports: true,
+        triple_exports: TripleExports::Rc17,
         disposal_write_guard: WriteGuardInDisposal::StandsDown,
         optimistic_signal_setter_guarded: false,
         latest_rejects_pending_read: false,
@@ -448,10 +463,18 @@ impl Solid2 {
         ..Self::RC13
     };
 
+    /// rc.21 (the 2026-11-04 review): every rc.17 answer, re-measured on
+    /// rc.21's bytes. It exports `onFlush`, and `untrack` keeps the pending
+    /// throw for a source its own strict window's owner made.
+    pub const RC21: Self = Self {
+        triple_exports: TripleExports::Rc21,
+        ..Self::RC17
+    };
+
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 3;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2 * 3 * 3;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -471,8 +494,12 @@ impl Solid2 {
             optimistic_signal_setter_guarded: (index / 9216) % 2 == 1,
             latest_rejects_pending_read: (index / 18432) % 2 == 1,
             hydrate_code_inline: (index / 36864) % 2 == 1,
-            rc17_callback_exports: (index / 73728) % 2 == 1,
-            disposal_write_guard: match (index / 147456) % 3 {
+            triple_exports: match (index / 73728) % 3 {
+                0 => TripleExports::None,
+                1 => TripleExports::Rc17,
+                _ => TripleExports::Rc21,
+            },
+            disposal_write_guard: match (index / 221184) % 3 {
                 0 => WriteGuardInDisposal::Unknown,
                 1 => WriteGuardInDisposal::Rejects,
                 _ => WriteGuardInDisposal::StandsDown,
@@ -554,8 +581,13 @@ impl Solid2 {
                     0
                 })
             + 36864 * (if self.hydrate_code_inline { 1 } else { 0 })
-            + 73728 * (if self.rc17_callback_exports { 1 } else { 0 })
-            + 147456
+            + 73728
+                * match self.triple_exports {
+                    TripleExports::None => 0,
+                    TripleExports::Rc17 => 1,
+                    TripleExports::Rc21 => 2,
+                }
+            + 221184
                 * match self.disposal_write_guard {
                     WriteGuardInDisposal::Unknown => 0,
                     WriteGuardInDisposal::Rejects => 1,
@@ -615,7 +647,8 @@ impl Solid2 {
                 "optimistic-setter-guarded" => vocabulary.optimistic_signal_setter_guarded = true,
                 "latest-rejects-pending" => vocabulary.latest_rejects_pending_read = true,
                 "hydrate-inline" => vocabulary.hydrate_code_inline = true,
-                "rc17-callback-exports" => vocabulary.rc17_callback_exports = true,
+                "rc17-callback-exports" => vocabulary.triple_exports = TripleExports::Rc17,
+                "rc21-callback-exports" => vocabulary.triple_exports = TripleExports::Rc21,
                 "disposal-rejects-writes" => {
                     vocabulary.disposal_write_guard = WriteGuardInDisposal::Rejects;
                 }
@@ -629,6 +662,11 @@ impl Solid2 {
         (vocabulary.key() == Some(key)).then_some(vocabulary)
     }
 
+    /// Whether a whole read triple exports what rc.17 added.
+    pub(super) fn rc17_callback_exports(self) -> bool {
+        self.triple_exports != TripleExports::None
+    }
+
     /// Whether this installation exports `primitive` at all. `until`, and
     /// rc.17's callback-taking exports, depend on the release; every other
     /// `TABLE` row is exported by every release the reviews read.
@@ -639,7 +677,8 @@ impl Solid2 {
             | Primitive::DispatchAsInteraction
             | Primitive::CreateDeferred
             | Primitive::LazyModule
-            | Primitive::OnHydrationEnd => self.rc17_callback_exports,
+            | Primitive::OnHydrationEnd => self.rc17_callback_exports(),
+            Primitive::OnFlush | Primitive::From => self.triple_exports == TripleExports::Rc21,
             _ => true,
         }
     }
@@ -715,8 +754,10 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     if vocabulary.hydrate_code_inline {
         tokens.push("hydrate-inline");
     }
-    if vocabulary.rc17_callback_exports {
-        tokens.push("rc17-callback-exports");
+    match vocabulary.triple_exports {
+        TripleExports::None => {}
+        TripleExports::Rc17 => tokens.push("rc17-callback-exports"),
+        TripleExports::Rc21 => tokens.push("rc21-callback-exports"),
     }
     match vocabulary.disposal_write_guard {
         WriteGuardInDisposal::Unknown => {}
@@ -753,12 +794,18 @@ const RC13_REVIEW: &str = "docs/release-audits/2026-10-05-solid-2-rc13-vocabular
 /// The review of the rc.17 triple (ADR 0194).
 const RC17_REVIEW: &str = "docs/release-audits/2026-10-22-solid-2-rc17-release-review.md";
 
-/// Every `2.0.0-rc.N` some review read. rc.10, rc.11 and rc.14-rc.16 were
-/// published and never read; rc.12 was never published.
-const READ_RELEASES: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 17];
+/// The review of the rc.21 triple (ADR 0194).
+const RC21_REVIEW: &str = "docs/release-audits/2026-11-04-solid-2-rc21-release-review.md";
+
+/// Every `2.0.0-rc.N` some review read. rc.10, rc.11, rc.14-rc.16 and
+/// rc.18-rc.20 were published and never read; rc.12 was never published.
+const READ_RELEASES: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 17, 21];
 
 /// The first read release whose answers rc.17 changed (the rc.17 review).
 const RC17: u8 = 17;
+
+/// The audited release (the rc.21 review).
+const RC21: u8 = 21;
 
 /// The first release on which the answers rc.9 introduced (B2, B3, N3) hold.
 /// Every read release from it on gives them: the rc.13 review measured each
@@ -787,7 +834,13 @@ struct KnownGap {
 /// The rc.17 review: its callback-taking exports other than `setLinkClaim`
 /// are modelled only when all three packages are rc.17.
 fn models_rc17_callback_exports(vocabulary: Solid2) -> bool {
-    vocabulary.rc17_callback_exports
+    vocabulary.rc17_callback_exports()
+}
+
+/// The rc.21 review: `onFlush` is modelled only when all three packages are
+/// rc.21.
+fn models_rc21_callback_exports(vocabulary: Solid2) -> bool {
+    vocabulary.triple_exports == TripleExports::Rc21
 }
 
 /// Every open gap a review measured, by owner and release. A gap leaves this
@@ -862,8 +915,8 @@ const KNOWN_GAPS: &[KnownGap] = &[
     // runs in. No answer is true of both targets, and none is per target.
     KnownGap {
         package: WEB,
-        from: 17,
-        through: 17,
+        from: RC17,
+        through: RC21,
         gap: "exports setLinkClaim, whose handler the server build calls while serializing \
               links and the client build ignores, so code inside one is not classified unless \
               the project declares client-only rendering",
@@ -876,15 +929,15 @@ const KNOWN_GAPS: &[KnownGap] = &[
         // never do (probed). Under declared CSR no render context exists.
         server_rendering_only: true,
     },
-    // Modelled on the rc.17 triple (`Solid2::rc17_callback_exports`); a mixed
+    // Modelled on a whole read triple (`Solid2::triple_exports`); a mixed
     // installation keeps them unread.
     KnownGap {
         package: SOLID_JS,
-        from: 17,
-        through: 17,
+        from: RC17,
+        through: RC21,
         gap: "exports createDeferred, dynamicComponent, lazyModule and onHydrationEnd, which \
-              this vocabulary models only when @solidjs/signals and @solidjs/web are rc.17 too, \
-              so code inside one is not classified",
+              this vocabulary models only when @solidjs/signals and @solidjs/web are the same \
+              release, so code inside one is not classified",
         review: RC17_REVIEW,
         exports: Some(&[
             "createDeferred",
@@ -897,14 +950,28 @@ const KNOWN_GAPS: &[KnownGap] = &[
     },
     KnownGap {
         package: WEB,
-        from: 17,
-        through: 17,
+        from: RC17,
+        through: RC21,
         gap: "exports dispatchAsInteraction and dynamicComponent, which this vocabulary models \
-              only when solid-js and @solidjs/signals are rc.17 too, so code inside one is not \
-              classified",
+              only when solid-js and @solidjs/signals are the same release, so code inside one \
+              is not classified",
         review: RC17_REVIEW,
         exports: Some(&["dispatchAsInteraction", "dynamicComponent"]),
         closed_by: Some(models_rc17_callback_exports),
+        server_rendering_only: false,
+    },
+    // `onFlush` and `from` are signals' (`solid-js` wraps or re-exports them):
+    // modelled on a whole rc.21 triple, as the rc.17 exports are.
+    KnownGap {
+        package: SOLID_JS,
+        from: RC21,
+        through: RC21,
+        gap: "exports from and onFlush, which this vocabulary models only when \
+              @solidjs/signals and @solidjs/web are the same release, so code inside one is \
+              not classified",
+        review: RC21_REVIEW,
+        exports: Some(&["from", "onFlush"]),
+        closed_by: Some(models_rc21_callback_exports),
         server_rendering_only: false,
     },
 ];
@@ -982,17 +1049,17 @@ fn is_pre_beta_experiment(version: &str) -> bool {
 fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Solid2 {
     Solid2 {
         // The new premise was read only on exact rc.13 signals bytes.
-        store_strict_keys_audited: matches!(signals, Release::Read(13 | 17)),
+        store_strict_keys_audited: matches!(signals, Release::Read(13 | RC17 | RC21)),
         // ADR 0292. `lazy` is `solid-js`'s own, and rc.13 is the one read
         // release whose wrapper renders through `createComponent`; rc.3 and
         // rc.9 call the loaded member themselves without a strict-read label.
-        lazy_renders_component: matches!(solid_js, Release::Read(13 | 17)),
+        lazy_renders_component: matches!(solid_js, Release::Read(13 | RC17 | RC21)),
         // ADR 0353. `render` and `hydrate` are `@solidjs/web`'s, so only its
         // version decides; rc.13 is the one release whose `render` was read.
-        render_creates_root: matches!(web, Release::Read(13 | 17)),
+        render_creates_root: matches!(web, Release::Read(13 | RC17 | RC21)),
         spread_event_keys: match web {
             Release::Read(13) => SpreadEventKeys::AnyOn,
-            Release::Read(RC17) => SpreadEventKeys::OnUppercase,
+            Release::Read(RC17 | RC21) => SpreadEventKeys::OnUppercase,
             _ => SpreadEventKeys::Unaudited,
         },
         // rc.17 signals changed both (the rc.17 review C1, C2).
@@ -1005,7 +1072,7 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // digit too (rc.17's `onCleanup` returns its callback): a newly read
         // release that stands down must re-read `onCleanup`'s return.
         disposal_write_guard: match signals {
-            Release::Read(RC17) => WriteGuardInDisposal::StandsDown,
+            Release::Read(RC17 | RC21) => WriteGuardInDisposal::StandsDown,
             Release::Read(_) => WriteGuardInDisposal::Rejects,
             Release::Unread(_) | Release::Unresolved => WriteGuardInDisposal::Unknown,
         },
@@ -1016,15 +1083,12 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // (`dist/dev-shared.js:335-347`); `solid-js`'s client
         // `createDeferred` wraps signals' (`dist/solid.dev.js:975-976`), and
         // `onHydrationEnd`'s drain is reached from web's `hydrate`
-        // (`dist/web.dev.js:1732-1735`). Read on the rc.17 triple only.
-        rc17_callback_exports: matches!(
-            (solid_js, signals, web),
-            (
-                Release::Read(RC17),
-                Release::Read(RC17),
-                Release::Read(RC17)
-            )
-        ),
+        // (`dist/web.dev.js:1732-1735`). Read on each whole triple only.
+        triple_exports: match (solid_js, signals, web) {
+            (Release::Read(RC17), Release::Read(RC17), Release::Read(RC17)) => TripleExports::Rc17,
+            (Release::Read(RC21), Release::Read(RC21), Release::Read(RC21)) => TripleExports::Rc21,
+            _ => TripleExports::None,
+        },
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {
             Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
@@ -1048,8 +1112,8 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // (`dist/web.dev.js:2466-2467`), which tests `options?.static`
         // (`solid-js` `dist/solid.dev.js:1445`): both must be read.
         dynamic_options: match web {
-            Release::Read(RC17) => match solid_js {
-                Release::Read(RC17) => DynamicOptions::StaticForm,
+            Release::Read(RC17 | RC21) => match solid_js {
+                Release::Read(RC17 | RC21) => DynamicOptions::StaticForm,
                 _ => DynamicOptions::Unread,
             },
             Release::Read(number) if number >= RC9 => DynamicOptions::StaticForm,

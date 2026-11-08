@@ -84,6 +84,43 @@ pub(super) fn add_solid_import_names(
                 names.insert(symbol.clone(), (*primitive).into());
             }
         }
+        // Review D36: a `const` holding a named import of a primitive exactly
+        // (`const r = refresh`, or `box.key` of a closed holder) names it.
+        for binding in &file.ast.bindings {
+            let [name] = binding.names.as_slice() else {
+                continue;
+            };
+            if !binding.immutable {
+                continue;
+            }
+            let Some(source) = import_alias_source(file, name.span) else {
+                continue;
+            };
+            let Some((import, imported)) = file.ast.imports.iter().find_map(|import| {
+                import
+                    .bindings
+                    .iter()
+                    .find(|binding| binding.local.span == source)
+                    .map(|binding| (import, binding))
+            }) else {
+                continue;
+            };
+            let primitives = dialect.namespace_import_primitives(import.module.as_str());
+            let Some(primitive) = imported
+                .imported
+                .as_deref()
+                .or_else(|| file.source_text(imported.local.span))
+                .and_then(|imported| primitives.iter().find(|primitive| **primitive == imported))
+            else {
+                continue;
+            };
+            let location = location(file.path.shared(), name.span);
+            if let Some(symbol) = entities.get(&location)
+                && !undeclared(facts, symbol)
+            {
+                names.insert(symbol.clone(), (*primitive).into());
+            }
+        }
         for export in &file.ast.exports {
             let Some(module) = export.module.as_deref() else {
                 continue;
@@ -91,6 +128,21 @@ pub(super) fn add_solid_import_names(
             let primitives = dialect.namespace_import_primitives(module);
             if primitives.is_empty() {
                 continue;
+            }
+            // `export * as Solid from "solid-js"` (ADR 0780): the binding is
+            // the namespace, as `import * as Solid` is.
+            if let Some(binding) = &export.namespace_binding {
+                let location = location(file.path.shared(), binding.span);
+                if let Some(symbol) = entities.get(&location)
+                    && !undeclared(facts, symbol)
+                {
+                    for primitive in primitives {
+                        names.insert(
+                            symbol_id(&format!("{symbol}::{primitive}")),
+                            (*primitive).into(),
+                        );
+                    }
+                }
             }
             for specifier in &export.specifiers {
                 let Some(primitive) = file.source_text(specifier.local.span) else {
@@ -110,14 +162,202 @@ pub(super) fn add_solid_import_names(
     }
 }
 
+/// A non-exported `const` of one name declared at `declaration`.
+fn alias_const(
+    file: &solid_facts::FileFacts,
+    declaration: solid_facts::core::Span,
+) -> Option<&solid_facts::ast::BindingFact> {
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && matches!(binding.names.as_slice(), [name] if name.span == declaration)
+        })
+        .filter(|binding| !crate::argument_values::binding_is_exported(file, binding, declaration))
+}
+
+/// `holder.key` at `span` (non-optional; a static key, or a literal computed
+/// one): the holder's declaration and the key.
+fn boxed_member(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> Option<(solid_facts::core::Span, String)> {
+    let ast = &file.ast;
+    let member = ast.member_at(span)?;
+    if ast.optional_members.contains(&member.span) {
+        return None;
+    }
+    let key = if ast.computed_members.contains(&member.span) {
+        ast.literal_computed_members
+            .iter()
+            .find(|literal| literal.span == member.span)?
+            .key
+            .to_string()
+    } else {
+        file.source_text(member.property)?.to_owned()
+    };
+    let holder = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))?;
+    Some((holder, key))
+}
+
+/// Review D36: the value a closed holder `const box = { key: value }` holds
+/// under `key`, when nothing else can reach the object: `box` is a
+/// non-exported `const` bound to a closed literal of data properties, the file
+/// has no direct `eval` (`eval("box.key = f")` names no reference), and every
+/// reference to `box` is the whole initializer `box.key` of a non-exported
+/// `const` (so no read hands the value on unseen). A file holding the ES import
+/// this is asked for is a module, which rejects `with`.
+fn holder_value(
+    file: &solid_facts::FileFacts,
+    holder: solid_facts::core::Span,
+    key: &str,
+) -> Option<solid_facts::core::Span> {
+    let ast = &file.ast;
+    let binding = alias_const(file, holder)?;
+    let literal = ast.peel_ts_sugar_span(binding.initializer?);
+    if crate::interproc::property_gets::direct_eval_in(
+        file,
+        solid_facts::core::Span::new(0, u32::MAX),
+    ) {
+        return None;
+    }
+    let every_read_is_an_alias = ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && identifier.span != holder
+                && ast.reference_declaration(identifier.span) == Some(holder)
+        })
+        .all(|identifier| {
+            let Some(member) = ast
+                .members
+                .iter()
+                .find(|member| ast.peel_ts_sugar_span(member.object) == identifier.span)
+            else {
+                return false;
+            };
+            !ast.optional_members.contains(&member.span)
+                && ast.bindings.iter().any(|alias| {
+                    alias.immutable
+                        && alias.shape == solid_facts::ast::BindingShape::Identifier
+                        && alias.initializer.map(|init| ast.peel_ts_sugar_span(init))
+                            == Some(member.span)
+                        && matches!(alias.names.as_slice(), [name]
+                            if !crate::argument_values::binding_is_exported(file, alias, name.span))
+                })
+        });
+    if !every_read_is_an_alias {
+        return None;
+    }
+    crate::execution_role::closed_literal_slot_value(file, literal, key)
+}
+
+/// Review D36: the named runtime import binding the `const` declared at
+/// `declaration` holds exactly from its declarator on: `const local = imp`,
+/// or `const local = box.key` over a closed holder ([`holder_value`]).
+/// `local` is not exported, so every mention is in this file.
+pub(crate) fn import_alias_source(
+    file: &solid_facts::FileFacts,
+    declaration: solid_facts::core::Span,
+) -> Option<solid_facts::core::Span> {
+    let ast = &file.ast;
+    let initializer = ast.peel_ts_sugar_span(alias_const(file, declaration)?.initializer?);
+    let value = if crate::source_discovery::named_runtime_import(file, initializer) {
+        initializer
+    } else {
+        let (holder, key) = boxed_member(file, initializer)?;
+        let value = ast.peel_ts_sugar_span(holder_value(file, holder, &key)?);
+        if !crate::source_discovery::named_runtime_import(file, value) {
+            return None;
+        }
+        value
+    };
+    ast.reference_declaration(value)
+}
+
+/// Review D36: whether `span`, a census candidate, is only the source a
+/// recognized primitive binding copies, which that binding's own references
+/// stand for: the member property of `const local = S.key` or of a slot's
+/// default `= S.key` (ADR 0459), the import in `const local = imp`, the value
+/// of a closed holder every read of which is such a `const`.
+pub(crate) fn copied_into_primitive_binding(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    let ast = &file.ast;
+    // `S.key` (the census asks at the property).
+    if let Some(member) = ast.members.iter().find(|member| member.property == span) {
+        let object = ast.reference_declaration(ast.peel_ts_sugar_span(member.object));
+        return ast.namespace_member_bindings.iter().any(|slot| {
+            let Some(binding) = ast
+                .bindings
+                .iter()
+                // `binding.names` is the fact's `Vec`, not the `names` map above.
+                .find(|binding| {
+                    binding
+                        .names
+                        .as_slice()
+                        .iter()
+                        .any(|name| name.span == slot.local)
+                })
+            else {
+                return false;
+            };
+            // An exported slot (ADR 0516) is exact here, but an importing
+            // module's mention stays unresolved: the value use keeps its row.
+            if crate::argument_values::binding_is_exported(file, binding, slot.local) {
+                return false;
+            }
+            let Some(initializer) = binding.initializer.map(|init| ast.peel_ts_sugar_span(init))
+            else {
+                return false;
+            };
+            match binding.shape {
+                solid_facts::ast::BindingShape::Identifier => initializer == member.span,
+                solid_facts::ast::BindingShape::Object => {
+                    binding.pattern.contains(member.span)
+                        && object.is_some()
+                        && object == ast.reference_declaration(initializer)
+                        && file.source_text(member.property) == Some(slot.key.as_str())
+                }
+                solid_facts::ast::BindingShape::Array => false,
+            }
+        });
+    }
+    ast.bindings.iter().any(|binding| {
+        let [name] = binding.names.as_slice() else {
+            return false;
+        };
+        if !binding.immutable || import_alias_source(file, name.span).is_none() {
+            return false;
+        }
+        let Some(initializer) = binding.initializer.map(|init| ast.peel_ts_sugar_span(init)) else {
+            return false;
+        };
+        if initializer == span {
+            return true;
+        }
+        boxed_member(file, initializer)
+            .and_then(|(holder, key)| holder_value(file, holder, &key))
+            .is_some_and(|value| ast.peel_ts_sugar_span(value) == span)
+    })
+}
+
 /// Whether `symbol` is no declaration's identity: the fact table has no
 /// declaration for it. Every import of a missing package resolves to the
 /// checker's one unknown symbol, which declares nothing; naming it after a
 /// primitive would make every unresolved import in the project that
 /// primitive.
 fn undeclared(facts: &ProjectFacts, symbol: &SymbolId) -> bool {
-    facts
-        .typescript
+    undeclared_in(&facts.typescript, symbol)
+}
+
+/// [`undeclared`] against the table alone.
+fn undeclared_in(table: &TypeScriptTable, symbol: &SymbolId) -> bool {
+    table
         .symbol(symbol.as_str())
         .is_none_or(|fact| fact.declarations().is_empty())
 }
@@ -453,6 +693,8 @@ pub(super) fn patch_typescript_indexes(
     for root in &affected_roots {
         cache.source_declarations.remove(root);
         cache.symbol_names.remove(root);
+        // ADR 0826, as in [`symbol_names`].
+        let unnamed = undeclared_in(table, root);
         for id in cache.symbols_by_root.get(root).into_iter().flatten() {
             let Some(symbol) = symbols_by_id.get(id.as_str()) else {
                 continue;
@@ -467,7 +709,7 @@ pub(super) fn patch_typescript_indexes(
                     .source_declarations
                     .insert(root.clone(), declaration.clone());
             }
-            for declaration in symbol.declarations() {
+            for declaration in symbol.declarations().iter().filter(|_| !unnamed) {
                 if solid_primitive_declaration(declaration, dialect) {
                     cache
                         .symbol_names
@@ -641,6 +883,15 @@ pub(super) fn symbol_names(
             .get(symbol.id())
             .cloned()
             .unwrap_or_else(|| interner.intern(symbol.id()));
+        // ADR 0826: an import inside a Solid package that its target does
+        // not export (`@solidjs/web`'s `import { createOwner } from
+        // "solid-js"` against rc.21's typings) aliases the checker's one
+        // unknown symbol, the root of every unresolved import in the
+        // project. Its declaration names no root: naming that one would make
+        // every unresolved import the primitive.
+        if undeclared_in(table, &root) {
+            continue;
+        }
         for declaration in symbol.declarations() {
             if solid_primitive_declaration(declaration, dialect) {
                 names.insert(root.clone(), symbol_name(declaration.name.as_ref()));

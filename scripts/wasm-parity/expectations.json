@@ -421,7 +421,7 @@
   },
   "w7BadHandshake": {
     "status": 1,
-    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 88, schema sha256:3a373545fd152a6b98bb36d7f04980075f55a606e67583f0e762c41837ff673d, build \"dev\"; got protocol 88, schema sha256:3a373545fd152a6b98bb36d7f04980075f55a606e67583f0e762c41837ff673e, build \"dev\"",
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 90, schema sha256:3a373545fd152a6b98bb36d7f04980075f55a606e67583f0e762c41837ff673d, build \"dev\"; got protocol 90, schema sha256:3a373545fd152a6b98bb36d7f04980075f55a606e67583f0e762c41837ff673e, build \"dev\"",
     "host": {
       "opened": [
         1
@@ -494,12 +494,13 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 3,
+        "proofObligations": 4,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,
@@ -553,7 +554,8 @@
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,
@@ -611,12 +613,13 @@
       "metrics": {
         "filesAnalyzed": 1,
         "functionsAnalyzed": 1,
-        "proofObligations": 1,
+        "proofObligations": 2,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ]
     },
     "w3-dependency-source-program": {
@@ -687,12 +690,13 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 7,
-        "proofObligations": 4,
+        "proofObligations": 10,
         "cachedSummaries": 0,
-        "unresolvedObligations": 1
+        "unresolvedObligations": 3
       },
       "premises": [
         "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner",
         "package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create"
       ]
     },
@@ -764,12 +768,13 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 5,
+        "proofObligations": 8,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
       "premises": [
         "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner",
         "package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create"
       ]
     },
@@ -832,12 +837,13 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 4,
-        "proofObligations": 3,
+        "proofObligations": 4,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,
@@ -890,17 +896,26 @@
           "path": "<root>/Row.tsx",
           "startByte": 55,
           "endByte": 63
+        },
+        {
+          "id": "SC9012",
+          "rule": "reactive-dispatch-unresolved",
+          "kind": "uncertifiable",
+          "path": "<root>/Use.tsx",
+          "startByte": 65,
+          "endByte": 69
         }
       ],
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 1,
+        "proofObligations": 3,
         "cachedSummaries": 0,
-        "unresolvedObligations": 0
+        "unresolvedObligations": 1
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 2,
@@ -958,12 +973,13 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 2,
+        "proofObligations": 3,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },
       "premises": [
-        "standard runtime configuration (ADRs 0266/0268)"
+        "standard runtime configuration (ADRs 0266/0268)",
+        "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
       ],
       "tsc": {
         "status": 0,

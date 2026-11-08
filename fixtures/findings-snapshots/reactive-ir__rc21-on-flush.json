@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
+      "start": 679,
+      "end": 691,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
+      "start": 905,
+      "end": 912,
+      "fixes": 0
+    }
+  ]
+}

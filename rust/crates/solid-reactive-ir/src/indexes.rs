@@ -3,8 +3,9 @@
 //! This module hides AST and TypeScript table layout from rule discovery. The
 //! builder asks semantic questions here instead of repeatedly scanning facts.
 
+use crate::once_guard::Once as OnceLock;
 use crate::{HashMap, HashSet};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
 use solid_facts::core::Span;
@@ -33,9 +34,10 @@ mod class_prototype;
 mod closed_members;
 mod completion;
 mod components;
-pub(crate) use components::unproven_component_status;
+pub(crate) use components::{binding_exported, unproven_component_status};
 mod compound;
 mod event_delivery;
+pub(crate) use event_delivery::spelled_dispatch;
 mod flush_census;
 mod hand_outs;
 pub(crate) use hand_outs::{
@@ -66,8 +68,9 @@ mod project_memos;
 mod test_runner;
 pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
-    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, FlushVetoAnswer, PROJECT_TABLES_FROM,
-    ProjectTables, RouterParams, SourceTexts, StringCodeVeto, TupleIterationVeto,
+    DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, FlushVetoAnswer,
+    IntrinsicHandedToUnseen, PROJECT_TABLES_FROM, ProjectTables, RouterParams, SourceTexts,
+    StringCodeVeto, TupleIterationVeto,
 };
 pub(crate) use test_runner::TestRunnerCallback;
 
@@ -88,6 +91,19 @@ pub(super) type ReturnedInvocationSites = std::sync::Mutex<
         (String, Span),
         (
             std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>>,
+            crate::base::reads::Reads,
+        ),
+    >,
+>;
+
+/// Per-build cache of a disposal reach by span and depth, with the reads each
+/// answer took ([`SemanticLookup::component_mount_reach_memo`],
+/// [`SemanticLookup::disposal_reach_memo`]).
+pub(super) type DisposalReachMemo = std::sync::Mutex<
+    HashMap<
+        (String, Span, usize),
+        (
+            crate::execution_role::DisposalReach,
             crate::base::reads::Reads,
         ),
     >,
@@ -864,9 +880,12 @@ pub(super) struct SemanticLookup<'a> {
     synchronous_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
     /// ADR 0613: every reference to the flush primitive, classified.
     synchronous_flush: OnceLock<Vec<flush_census::FlushSite>>,
+    /// Whether any analyzed registration or method read reaches project code.
+    listener_project_reach: OnceLock<bool>,
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
+    raw_store_values: crate::base::reads::Recorded<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: crate::base::reads::Recorded<bool>,
     router_params: crate::base::reads::Recorded<crate::router_params::RouterParamsStatus>,
@@ -881,6 +900,11 @@ pub(super) struct SemanticLookup<'a> {
     /// The invocation sites of each factory call's returned function, by
     /// file path and call span. Several passes ask the same factory call.
     returned_invocation_sites: ReturnedInvocationSites,
+    /// ADR 0782: where each proven component's mounts run, relative to a
+    /// disposal. Every write in the component asks.
+    component_mount_reach: DisposalReachMemo,
+    /// ADR 0782: where each site runs relative to a disposal.
+    disposal_reach: DisposalReachMemo,
     /// This build's views of the returned-invocation and returned-source memos.
     invocation_answers: returned_invocations::State,
     /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
@@ -909,7 +933,7 @@ pub(super) struct SemanticLookup<'a> {
     /// L0: the analyzed files by interned id ([`crate::base`]).
     file_table: crate::base::FileTable,
     /// Each path's TypeFacts references, read by the references index.
-    reference_rows: OnceLock<crate::base::file_table::ReferenceRows>,
+    reference_rows: std::sync::OnceLock<crate::base::file_table::ReferenceRows>,
     /// Each path's import resolutions, digested into its Entities section.
     resolution_digests: OnceLock<crate::base::file_table::ResolutionDigests>,
     /// L1: the base indexes, each folded on first read ([`crate::base`]).
@@ -921,6 +945,9 @@ pub(super) struct SemanticLookup<'a> {
     /// the accessors): plain caches, so a hot flag read replays nothing.
     project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
     callback_capabilities: OnceLock<DialectCallbackCapabilities>,
+    /// [`Self::project_may_dispose`], part of `Section::ProjectPrimitives`'
+    /// value, because any file's call moves it.
+    project_may_dispose: OnceLock<bool>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: crate::base::reads::Recorded<bool>,
     /// Proven components, then functions whose only missing proof is an
@@ -932,6 +959,7 @@ pub(super) struct SemanticLookup<'a> {
     section_fingerprints: [OnceLock<[u8; 32]>; crate::base::reads::Section::ALL.len()],
     tuple_iteration_veto: crate::base::reads::Recorded<bool>,
     string_code_veto: crate::base::reads::Recorded<bool>,
+    intrinsic_handed_to_unseen: crate::base::reads::Recorded<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
     /// a synchronous project function calls on its every-completion path.
     parameter_completion_calls: crate::base::reads::Recorded<HashSet<(&'a str, Span, usize)>>,
@@ -1242,13 +1270,17 @@ impl<'a> SemanticLookup<'a> {
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
             synchronous_flush: OnceLock::new(),
+            listener_project_reach: OnceLock::new(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
+            raw_store_values: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
             router_params: crate::base::reads::Recorded::new(),
             route_component_values: crate::base::reads::Recorded::new(),
             assigned_member_names: crate::base::reads::Recorded::new(),
             reflective_definition_names: crate::base::reads::Recorded::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
+            component_mount_reach: DisposalReachMemo::default(),
+            disposal_reach: DisposalReachMemo::default(),
             invocation_answers: returned_invocations::State::default(),
             intrinsics: crate::base::reads::Recorded::new(),
             closed_members: crate::base::reads::Recorded::new(),
@@ -1266,11 +1298,12 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_reference: crate::base::reads::Recorded::new(),
             file_table,
             resolution_digests: OnceLock::new(),
-            reference_rows: OnceLock::new(),
+            reference_rows: std::sync::OnceLock::new(),
             base: crate::base::BaseIndexes::default(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
             project_primitives: OnceLock::new(),
+            project_may_dispose: OnceLock::new(),
             callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: crate::base::reads::Recorded::new(),
@@ -1279,6 +1312,7 @@ impl<'a> SemanticLookup<'a> {
             section_fingerprints: std::array::from_fn(|_| OnceLock::new()),
             tuple_iteration_veto: crate::base::reads::Recorded::new(),
             string_code_veto: crate::base::reads::Recorded::new(),
+            intrinsic_handed_to_unseen: crate::base::reads::Recorded::new(),
             parameter_completion_calls: crate::base::reads::Recorded::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: crate::base::reads::Recorded::new(),
@@ -1401,6 +1435,89 @@ impl<'a> SemanticLookup<'a> {
                 .values()
                 .filter_map(|name| self.dialect.primitive(name.as_str()))
                 .collect()
+        })
+    }
+
+    /// ADR 0695: whether code anywhere in the project can dispose an owner on a
+    /// stack it chooses, which runs a cleanup there: a `getOwner` or
+    /// `createOwner`, a `createRoot` callback that takes its `dispose` or is not
+    /// a literal, or a `render`, `hydrate` or `onCleanup` whose result is kept
+    /// (`onCleanup` returns a handle). File by file it would miss a cleanup in
+    /// a helper and an unrelated `getOwner` would answer for it (`b1`, `b4`,
+    /// `b2`).
+    pub(crate) fn project_may_dispose(&self) -> bool {
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
+        self.may_dispose()
+    }
+
+    fn may_dispose(&self) -> bool {
+        use solid_dialect::Primitive;
+        *self.project_may_dispose.get_or_init(|| {
+            let primitives = self.project_primitives();
+            if primitives.contains(&Primitive::GetOwner)
+                || primitives.contains(&Primitive::CreateOwner)
+            {
+                return true;
+            }
+            [
+                Primitive::CreateRoot,
+                Primitive::Render,
+                Primitive::Hydrate,
+                Primitive::OnCleanup,
+            ]
+            .iter()
+            .any(|primitive| primitives.contains(primitive))
+                && self.files().iter().any(|file| {
+                    file.ast.calls.iter().any(|call| {
+                        match self.primitive_at_call(file, call.span) {
+                            Some(Primitive::Render | Primitive::Hydrate | Primitive::OnCleanup) => {
+                                !call.result_discarded
+                            }
+                            Some(Primitive::CreateRoot) => {
+                                call.arguments.first().is_none_or(|callback| {
+                                    file.ast
+                                        .function_at(file.ast.peel_ts_sugar_span(callback.span))
+                                        .is_none_or(|function| !function.parameters.is_empty())
+                                })
+                            }
+                            _ => false,
+                        }
+                    })
+                })
+        })
+    }
+
+    /// Whether the project names `primitive` anywhere.
+    pub(crate) fn project_names_primitive(&self, primitive: solid_dialect::Primitive) -> bool {
+        self.project_primitives().contains(&primitive)
+    }
+
+    /// ADR 0708: whether a primitive the project names runs one of its
+    /// callbacks as an action's steps
+    /// ([`solid_dialect::Dialect::callback_runs_as_action_steps`]).
+    pub(crate) fn project_steps_action_callbacks(&self) -> bool {
+        let primitives = self.project_primitives();
+        primitives.iter().any(|primitive| {
+            (0..PROBED_ARGUMENTS).any(|argument| {
+                self.dialect
+                    .callback_runs_as_action_steps(*primitive, argument)
+            })
+        })
+    }
+
+    /// ADR 0709: whether a primitive the project names defers one of its
+    /// callbacks to a later flush (an effect's apply among them).
+    pub(crate) fn project_defers_callbacks(&self) -> bool {
+        let primitives = self.project_primitives();
+        primitives.iter().any(|primitive| {
+            (1..=PROBED_ARGUMENTS).any(|count| {
+                (0..count).any(|argument| {
+                    self.dialect
+                        .callback_semantics_at(*primitive, argument, count)
+                        .execution
+                        == Some(solid_dialect::Execution::Deferred)
+                })
+            })
         })
     }
 
@@ -1812,15 +1929,27 @@ impl<'a> SemanticLookup<'a> {
                 )]);
             }
             Section::DispatchVeto => {
-                // The hazard, then the two answers the classified sites give.
+                // The hazard, then the answers the classified sites give.
                 hasher.update([u8::from(
                     self.hazard_present(crate::base::Hazard::SynchronousDispatch),
                 )]);
-                let (owner, read) = self.dispatch_veto();
-                hasher.update([u8::from(owner), u8::from(read)]);
+                let (owner, read, flush, listener, apply) = self.dispatch_veto();
+                hasher.update([
+                    u8::from(owner),
+                    u8::from(read),
+                    u8::from(flush),
+                    u8::from(listener),
+                    u8::from(apply),
+                ]);
             }
             Section::FlushVeto => {
                 hasher.update([u8::from(self.flush_veto())]);
+            }
+            Section::ListenerProjectReach => {
+                hasher.update([u8::from(self.listener_project_reach())]);
+            }
+            Section::RawStoreValues => {
+                hasher.update([u8::from(self.raw_store_values_present())]);
             }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);
@@ -1873,6 +2002,7 @@ impl<'a> SemanticLookup<'a> {
                 for primitive in primitives {
                     text(&mut hasher, &primitive);
                 }
+                hasher.update([u8::from(self.may_dispose())]);
             }
             Section::ReflectiveDefinition => {
                 hasher.update([u8::from(
@@ -2149,6 +2279,15 @@ impl<'a> SemanticLookup<'a> {
         self.entities
     }
 
+    /// The symbol that names `function`: its own name or its binding's.
+    pub(crate) fn symbol_of_function(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> Option<&'a SymbolId> {
+        crate::execution_role::function_symbol(file, function, self.entities)
+    }
+
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
         crate::base::reads::note(crate::base::reads::Section::MemberTargets);
         self.object_member_target_map()
@@ -2281,6 +2420,11 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| self.whole_program_answer::<TupleIterationVeto>())
     }
 
+    /// ADR 0801: two hazard probes, no project scan of its own.
+    pub(super) fn tuple_slot_iteration_may_be_mutated(&self) -> bool {
+        crate::interproc::accessor_provenance::tuple_slot_iteration_write(self)
+    }
+
     /// Facts are immutable for this lookup's lifetime. Proxy and invocation
     /// guards consume the same project census as tuple identity, without
     /// repeating it at every source-call site. A new generation has a new lock.
@@ -2288,6 +2432,14 @@ impl<'a> SemanticLookup<'a> {
         *self
             .string_code_veto
             .get_or_init(|| self.whole_program_answer::<StringCodeVeto>())
+    }
+
+    /// ADR 0803 (review a9fc #1, step 2): some call hands an obtained value to
+    /// code the checker does not see.
+    pub(crate) fn intrinsic_handed_to_unseen_code(&self) -> bool {
+        *self
+            .intrinsic_handed_to_unseen
+            .get_or_init(|| self.whole_program_answer::<IntrinsicHandedToUnseen>())
     }
 
     /// ADR 0292: whether `property` holding `function` is the `default` of a
@@ -2393,6 +2545,19 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// L1: member uses by name.
+    /// Whether some assignment writes a member named `name`: the names
+    /// [`crate::object_members::AssignedMembersAnswer`] holds, read from the
+    /// base index as its probe reads them, so a memo probe may ask it (one
+    /// that reads that memo begins the build from inside itself).
+    pub(crate) fn member_name_assigned_in_base(&self, name: &str) -> bool {
+        self.note_probe_read(crate::base::memo::probes::Probe::AssignedNames, || {
+            crate::base::memo::probes::PolledKey::Unit
+        });
+        self.base_members()
+            .values(&crate::base::MemberName::Named(Arc::from(name)))
+            .any(|(_, used)| used.role == crate::base::MemberRole::Assigned)
+    }
+
     pub(crate) fn base_members(
         &self,
     ) -> &crate::base::BaseIndex<crate::base::MemberName, crate::base::MemberUse> {
@@ -2429,7 +2594,7 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
+    pub(crate) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
         let facts: &'a ProjectFacts = self.facts;
         // A hand-out (`hand_outs`): the slot a path names, and its file.
         let slot = self.file_table.last_slot(path);
@@ -2513,6 +2678,12 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// ADR 0284: whether the file at `path` belongs to a package analyzed as
+    /// source.
+    pub(super) fn in_dependency_source(&self, path: &str) -> bool {
+        self.facts.dependency_source_root(path).is_some()
+    }
+
     /// The compiler's attested resolution of the project's import specifiers,
     /// when the analysis carries it.
     pub(super) fn resolved_imports(&self) -> Option<&'a solid_facts::AttestedImportIndex> {
@@ -2579,6 +2750,62 @@ impl<'a> SemanticLookup<'a> {
             .or_insert((computed, reads))
             .0
             .clone()
+    }
+
+    /// The memoised disposal reach of the component at `span` of `path`, asked
+    /// `depth` mounts deep. As [`Self::returned_invocation_sites_memo`]: a later
+    /// reader replays the reads the answer took, and an answer computed inside
+    /// a probe, whose reads are incomplete, is not kept.
+    pub(crate) fn component_mount_reach_memo(
+        &self,
+        path: &str,
+        span: Span,
+        depth: usize,
+        compute: impl FnOnce() -> crate::execution_role::DisposalReach,
+    ) -> crate::execution_role::DisposalReach {
+        Self::reach_memo(&self.component_mount_reach, path, span, depth, compute)
+    }
+
+    /// The memoised disposal reach of the site at `span` of `path`, asked `depth`
+    /// handles or mounts deep, as [`Self::component_mount_reach_memo`].
+    pub(crate) fn disposal_reach_memo(
+        &self,
+        path: &str,
+        span: Span,
+        depth: usize,
+        compute: impl FnOnce() -> crate::execution_role::DisposalReach,
+    ) -> crate::execution_role::DisposalReach {
+        Self::reach_memo(&self.disposal_reach, path, span, depth, compute)
+    }
+
+    fn reach_memo(
+        table: &DisposalReachMemo,
+        path: &str,
+        span: Span,
+        depth: usize,
+        compute: impl FnOnce() -> crate::execution_role::DisposalReach,
+    ) -> crate::execution_role::DisposalReach {
+        let key = (path.to_owned(), span, depth);
+        let found = table
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key)
+            .cloned();
+        if let Some((reach, reads)) = found {
+            crate::base::reads::replay(&reads);
+            return reach;
+        }
+        if probing() {
+            return compute();
+        }
+        // Computed outside the lock: the computation re-enters the lookup.
+        let (computed, reads) = crate::base::reads::record(compute);
+        table
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(key)
+            .or_insert((computed, reads))
+            .0
     }
 
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {

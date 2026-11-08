@@ -95,18 +95,29 @@ change, resolve it before calling `dynamic()` and pass a synchronous source.
   `fixtures/reactive-ir/release-triple-static-dynamic-async-rc3` pins it
   silent. On a web release nobody compared, an option-bearing call is the form
   that states nothing.
-- **An unproven option.** `{ static: flag }`, a spread, or an options variable
-  may take either runtime, so no claim is made.
-- **An unproven source.** A block-bodied non-async function (even one whose
-  every `return` is `Promise.resolve(...)`), a parameter, an import, a `let`
-  binding, a call chained off a Promise (`Promise.resolve(x).then(f)`), and a
-  `Promise` that is not the standard library's all stay silent. This is an
-  approximation, not a claim that they are synchronous.
+- **A synchronous source.** A function whose closed return type holds no Promise
+  (ADR 0654). A source with no such proof is not silent, see below.
+
+## Uncertifiable
+
+A static source not proven synchronous, blocker `static-source-unproven` (ADR 0654): a
+parameter, an import, a `let`, a return typed `any`, `unknown` or a type parameter
+(Type Facts `returnOpen`), or a return that may be a Promise or not. An unproven option
+(`{ static: flag }`, a spread, an options variable) may take either runtime, so a source
+not proven synchronous is uncertifiable there too, and a proven Promise as well. A
+block body or a `.then` chain whose return type is a Promise on every path is a violation.
+
 - **A site that never runs.** A call in a function only a `defer: true` apply
   with no compute source calls is silent (ADR 0590).
+
+A throw inside a generator stepped by an async caller rejects that caller's flight. The thenable source proves the runtime guard, but no proof follows the rejected flight to an observed read or error boundary. These sites retain a named `async-flight-error-unobserved` obligation (ADR 0852), including in-place callback layers.
 
 ## Related
 
 - [sync-computation-received-async](sync-computation-received-async.md) — the
   same "asserted synchronous, given a Promise" defect on `sync: true`
   computations
+
+## A stored throw needs a read that reports it
+
+`resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893).

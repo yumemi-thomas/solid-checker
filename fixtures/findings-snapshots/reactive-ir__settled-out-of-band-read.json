@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
+      "start": 282,
+      "end": 289,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -22,9 +33,21 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
+      "start": 777,
+      "end": 784,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
       "start": 839,
@@ -35,6 +58,7 @@
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
       "start": 991,
@@ -45,7 +69,19 @@
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
       "severity": "error",
+      "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
+      "start": 1292,
+      "end": 1299,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
       "start": 1292,
       "end": 1299,
@@ -55,6 +91,7 @@
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
       "start": 1324,
@@ -65,6 +102,7 @@
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
       "start": 1494,
@@ -72,9 +110,32 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
+      "start": 1494,
+      "end": 1501,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
+      "start": 1747,
+      "end": 1754,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/settled-out-of-band-read/App.tsx",
       "start": 1811,

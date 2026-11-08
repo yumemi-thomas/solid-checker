@@ -15,17 +15,43 @@ const settings = { eventPasses: 2, pauseMs: Number(params.get('pause') ?? 60), f
 let clock: ReturnType<typeof installVirtualClock> | null = null;
 const pause = (ms: number) => (clock ? clock.advance(ms) : new Promise<void>(resolve => setTimeout(resolve, ms)));
 const describeError = (e: any) => ({
+  name: String(e?.constructor?.name ?? ''),
   message: String(e?.message ?? e),
   stack: String(e?.stack ?? ''),
   cause: e?.cause ? { message: String(e.cause?.message ?? e.cause), stack: String(e.cause?.stack ?? '') } : null,
 });
 
-/** The App.tsx frames of a stack as served (transformed) positions, innermost first; chrome-host.mjs maps them. */
+/** A logged value's stack and its cause's message and stack, kept apart (the judge decides when the cause places it); none for a value that is no error. */
+const isError = (value: any) => value instanceof Error || (value && typeof value === 'object' && typeof value.stack === 'string');
+const loggedError = (value: any): { stack: string, cause: { message: string, stack: string } | null } | null => isError(value)
+  ? { stack: String(value.stack ?? ''), cause: isError(value.cause) ? { message: String(value.cause.message ?? value.cause), stack: String(value.cause.stack ?? '') } : null }
+  : null;
+
+/** The case's frames of a stack as served (transformed) positions, innermost first; chrome-host.mjs maps them. */
 function servedFrames(stack: string) {
   const rows: { file: string, line: number, column: number }[] = [];
   for (const text of String(stack ?? '').split('\n')) {
-    const match = new RegExp(`/cases/${id}/App\\.tsx(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)`).exec(text);
-    if (match) rows.push({ file: 'App.tsx', line: Number(match[1]), column: Number(match[2]) });
+    const match = new RegExp(`/cases/${id}/([^/:?\\s)]+\\.tsx?)(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)`).exec(text);
+    // Another of the case's modules: no position (only App.tsx is mapped), but the frame counts for depth (R20).
+    if (match) rows.push({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
+  }
+  return rows;
+}
+
+/**
+ * Review R66 follow-up (ADR 0907): a logged error's frames of the program under test: any file under the case's own `/cases/<id>/` but
+ * its `node_modules`, at any depth and extension (App.tsx with its served position, which chrome-host.mjs maps; any other by path only).
+ * Only the logged errors read this; diagnostics and thrown errors keep `servedFrames` (their stack depths, R20).
+ */
+function caseFrames(stack: string) {
+  const rows: ({ file: string, line: number, column: number } | { file: string })[] = [];
+  const prefix = `/cases/${id}/`;
+  for (const text of String(stack ?? '').split('\n')) {
+    const at = text.indexOf(prefix);
+    if (at < 0) continue;
+    const match = /^([^:?\s)]+?)(?:\?[^:\s)]*)?:(\d+):(\d+)/.exec(text.slice(at + prefix.length));
+    if (!match || match[1].startsWith('node_modules/')) continue;
+    rows.push(match[1] === 'App.tsx' ? { file: 'App.tsx', line: Number(match[2]), column: Number(match[3]) } : { file: match[1] });
   }
   return rows;
 }
@@ -61,7 +87,11 @@ function settle() {
 
 async function runCase() {
   const started = performance.now();
-  const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
+  const diagnostics: any[] = [], errors: any[] = [], disposers: (() => void)[] = [];
+  // Each logged line, with the stacks of the errors it logged (ADR 0907): a user effect logs the throw of its compute or of a computation
+  // it read (`NoOwnerError: …`) and an `<Errored>` boundary logs what it caught; the error's own frames place it as a thrown one is placed.
+  const consoleErrors: { text: string, error: ReturnType<typeof loggedError> }[] = [];
+  const logged = (text: string, error: ReturnType<typeof loggedError> = null) => { consoleErrors.push({ text, error }); };
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
   const halted: string[] = [];
   // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED or an error-severity diagnostic (thrown at its
@@ -77,9 +107,34 @@ async function runCase() {
   Error.stackTraceLimit = 41;
   const onError = (event: ErrorEvent) => {
     // Chrome's ErrorEvent.message reads "Uncaught Error: <message>"; the error's own message is what Happy DOM and the oracle record.
-    errors.push({ phase, kind: 'window-error', message: String(event.error?.message ?? event.message), stack: String(event.error?.stack ?? '') });
+    // Its `cause` too (Part 16, B1): rc.21 wraps a compute's throw in a StatusError made at the read, and the throw's own frame (the
+    // `resolve` line) is only in `cause.stack`.
+    errors.push({ phase, kind: 'window-error', ...describeError(event.error ?? { message: event.message, stack: '' }) });
     event.preventDefault();
   };
+  // A throw inside a window `error` listener is never dispatched to the error listeners (Part 16, B2: the program's own report-error
+  // listener called dynamic(), which threw; only Playwright's pageerror saw it). The program's listeners are wrapped: what one throws is
+  // recorded, then rethrown, so the page sees what it would have.
+  const wrapped = new WeakMap<object, EventListener>();
+  const addListener = window.addEventListener, removeListener = window.removeEventListener;
+  const wrapFor = (listener: any): any => {
+    if (!listener || listener === onError) return listener;
+    let wrap = wrapped.get(listener);
+    if (!wrap) {
+      wrap = function (this: any, event: Event) {
+        try { return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event); }
+        catch (e) { errors.push({ phase, kind: 'error-listener', ...describeError(e) }); throw e; }
+      };
+      wrapped.set(listener, wrap);
+    }
+    return wrap;
+  };
+  window.addEventListener = function (this: any, type: string, listener: any, options?: any) {
+    return addListener.call(this, type, type === 'error' ? wrapFor(listener) : listener, options);
+  } as typeof window.addEventListener;
+  window.removeEventListener = function (this: any, type: string, listener: any, options?: any) {
+    return removeListener.call(this, type, type === 'error' && listener ? (wrapped.get(listener) ?? listener) : listener, options);
+  } as typeof window.removeEventListener;
   const onRejection = (event: PromiseRejectionEvent) => {
     errors.push({ phase, kind: 'unhandledrejection', ...describeError(event.reason) });
     event.preventDefault();
@@ -87,7 +142,7 @@ async function runCase() {
   // A timer callback that throws reaches the window in a browser; on the virtual clock it is reported the same way.
   if (params.get('clock') === 'virtual') clock = installVirtualClock({ onError: (e: any) => errors.push({ phase, kind: 'window-error', ...describeError(e) }) });
   const oldError = console.error, oldWarn = console.warn;
-  console.error = (...args) => { consoleErrors.push(args.map(x => String(x)).join(' ')); };
+  console.error = (...args) => { logged(args.map(x => String(x)).join(' '), args.map(loggedError).find(Boolean) ?? null); };
   console.warn = () => {};
   window.addEventListener('error', onError);
   window.addEventListener('unhandledrejection', onRejection);
@@ -96,14 +151,19 @@ async function runCase() {
     Error.stackTraceLimit = 41;
     try { return new Error(`diagnostic ${code}`).stack; } finally { Error.stackTraceLimit = limit; }
   };
+  // Where the hit order log stood when Solid reported the diagnostic (hits.mjs `__h`): a halt's place among the counters that ran, the
+  // ordering evidence a halted claim needs (classify.mjs `haltPlace`; a log already full, hits.mjs ORDER_LIMIT, places nothing).
+  const orderAt = () => ((globalThis as any).__scOrder ?? []).length;
   const stop = OBSERVE!.diagnostics.subscribe((event: any) => {
     diagnostics.push({ code: event.code, message: event.message ?? null, loc: event.loc ?? null, siteKind: event.siteKind ?? null,
-      severity: event.severity ?? null, phase, stack: diagnosticStack(event.code) });
+      severity: event.severity ?? null, phase, stack: diagnosticStack(event.code), orderAt: orderAt() });
   });
   try {
     const plan = await (await fetch(`/cases/${id}/sites.json`)).json();
     const captured = await captureArtifact(async () => {
-      const mod = await import(/* @vite-ignore */ `/cases/${id}/App.tsx`);
+      // Rendered from the entry module, in the task that evaluates App.tsx, as a page's own entry does (the oracle's `mainSource`). A
+      // dynamic import's continuation is a microtask later: a module-scope async source had answered by then, where Chrome's has not.
+      (globalThis as any).__scMount = (mod: Record<string, unknown>) => {
       const root = document.createElement('div'); root.id = 'root'; document.body.append(root);
       phase = 'render';
       for (const [name, value] of Object.entries(mod).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
@@ -113,15 +173,18 @@ async function runCase() {
         // As the oracle's entry (checker.mjs oracleMainSource): a render that throws is logged and rethrown from a timer, so it
         // reaches the page as an uncaught error, which is how the oracle records it (a runtime exception at its throwing site).
         try { disposers.push(render(() => <Component />, host)); }
-        catch (e) { consoleErrors.push(`render failed ${name} ${String((e as any)?.message ?? e)}`); setTimeout(() => { throw e; }); }
+        catch (e) { logged(`render failed ${name} ${String((e as any)?.message ?? e)}`); setTimeout(() => { throw e; }); }
       }
+      };
+      await import(/* @vite-ignore */ `/cases/${id}/sc-entry.ts`);
+      const root = document.getElementById('root') as HTMLElement;
       phase = 'exercise';
       await pause(settings.pauseMs);
       for (let pass = 0; pass < settings.eventPasses; pass++) {
         for (const element of Array.from(root.querySelectorAll('*'))) {
           for (const [type, make] of events()) {
             // As the oracle's entry: a dispatch that throws is logged, never an uncaught error (the oracle records none).
-            try { element.dispatchEvent(make()); } catch (e) { consoleErrors.push(`handler threw ${type} ${String((e as any)?.message ?? e)}`); }
+            try { element.dispatchEvent(make()); } catch (e) { logged(`handler threw ${type} ${String((e as any)?.message ?? e)}`); }
           }
         }
         await pause(settings.pauseMs);
@@ -162,13 +225,16 @@ async function runCase() {
     for (const dispose of disposers) try { dispose(); } catch (e) { errors.push({ phase: 'dispose', kind: 'dispose', ...describeError(e) }); }
     window.removeEventListener('error', onError);
     window.removeEventListener('unhandledrejection', onRejection);
+    window.addEventListener = addListener; window.removeEventListener = removeListener;
     console.error = oldError; console.warn = oldWarn;
     (window as any).__scResolve({
       id, wallMs: Math.round(performance.now() - started), failure, witnesses, hits, order, hitsDom, quiescent,
-      diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, positions: servedFrames(d.stack) })),
+      diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, orderAt: d.orderAt, positions: servedFrames(d.stack) })),
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...servedFrames(e.stack), ...servedFrames(e.cause?.stack)] })),
-      consoleErrors: consoleErrors.slice(0, 20), artifactCount,
+      consoleErrors: consoleErrors.slice(0, 20).map(row => row.text),
+      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => caseFrames(row.error?.stack ?? '')),
+      consoleErrorCauses: consoleErrors.slice(0, 20).map(row => row.error?.cause ? { message: row.error.cause.message, positions: caseFrames(row.error.cause.stack) } : null), artifactCount,
     });
   }
 }

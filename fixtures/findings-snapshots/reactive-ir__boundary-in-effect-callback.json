@@ -75,6 +75,7 @@
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/boundary-in-effect-callback/App.tsx",
       "start": 1572,

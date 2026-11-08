@@ -21,9 +21,13 @@ has three outcomes, and only this one is a refusal:
   findings;
 - **the installed major has no dialect in this build — this finding, and no
   others**;
-- nothing resolves, or the version names no released major (`workspace:*`,
-  a prerelease of an unreleased major) — the default dialect applies, and the
-  project is analyzed normally.
+- nothing resolves — the default dialect applies, and the project is analyzed
+  normally;
+- a manifest resolves and its version names no release (`nightly`,
+  `workspace:*`) — the default dialect applies, and the analysis carries the
+  [unaudited-solid-release](unaudited-solid-release.md) notice with the
+  blocker `solid-version-unclassified` (ADR 0700): which release it runs is
+  unknown, so it cannot certify.
 
 The finding names the exact `package.json` that decided it and the version it
 read. It is the only identity in the catalog the rules engine never produces:
@@ -83,7 +87,8 @@ retired no-op (`RETIRED_RULES` in `rust/crates/solid-facts-backend/src/dialect.r
 
 If the version is a deliberate placeholder (`workspace:*`, a monorepo link),
 nothing resolves to a released major and the project is analyzed under the
-default dialect instead — this finding does not appear.
+default dialect instead — this finding does not appear, and the
+unaudited-solid-release notice does (ADR 0700).
 
 ## Suppression
 

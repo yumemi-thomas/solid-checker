@@ -1,0 +1,114 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 433,
+      "end": 440,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 825,
+      "end": 834,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 825,
+      "end": 834,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 950,
+      "end": 959,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 996,
+      "end": 1001,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 1038,
+      "end": 1043,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 1080,
+      "end": 1085,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 1122,
+      "end": 1127,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/App.tsx",
+      "start": 1144,
+      "end": 1149,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flow-iife-tracked/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

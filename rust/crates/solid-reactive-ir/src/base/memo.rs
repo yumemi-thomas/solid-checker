@@ -106,6 +106,10 @@ impl<K: Canonical + Ord, V: Canonical> Canonical for BTreeMap<K, V> {}
 impl<A: Canonical, B: Canonical> Canonical for (A, B) {}
 impl<A: Canonical, B: Canonical, C: Canonical> Canonical for (A, B, C) {}
 impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical> Canonical for (A, B, C, D) {}
+impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical, E: Canonical> Canonical
+    for (A, B, C, D, E)
+{
+}
 
 /// The world a family of memo tables reads: its recorded inputs, its tables,
 /// and the per-build world their computations read through a [`Ctx`].

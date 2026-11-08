@@ -7,6 +7,10 @@ Solid 2.0 leaf owner. The rule covers `onCleanup`, owner-attaching reactive
 primitives, and `flush()` inside `createTrackedEffect` or an owner-backed
 `onSettled` callback.
 
+Written JSX counts as a creating call (ADR 0883): an intrinsic's dynamic child, attribute
+or spread, a fragment's dynamic child and a component element, in the callback, its
+parameterless IIFEs or a helper it calls.
+
 ## What it does
 
 Leaf owners manage work through their callback's return value and cannot own
@@ -14,7 +18,8 @@ children. Consequently, `onCleanup` must be returned, derived primitives such
 as `createMemo`, `createRoot`, and function-form `createSignal` cannot attach,
 and `flush()` cannot re-enter the flush cycle. `Loading`/`Errored` called as
 functions and `resolve`/`until` create an owner too (rc.17 only, measured; ADR
-0614). Solid throws for all three
+0614; on rc.21 their throw under `createTrackedEffect` is the observer guard's, so there they are
+[no-await-primitive-in-tracked-scope](no-await-primitive-in-tracked-scope.md)'s, ADR 0641). Solid throws for all three
 operation variants in its development build only: the `@solidjs/signals`
 rc.17 production bundle (`dist/prod`) carries no such guard, so there the
 call does not throw (ADR 0434). Value-form state such as `createSignal(0)` and
@@ -50,8 +55,11 @@ optional (`el?.scrollIntoView()`) or not (ADR 0439). An inline callback
 provably runs it: over an empty or unknown-length receiver (`items().forEach`,
 a `NodeList`) the finding is uncertifiable (ADR 0563). One that dispatches an
 event synchronously (`focus`, `click`, `dispatchEvent`, dialog and popover
-toggles, `AbortController.abort`) keeps the obligation, since a listener it
-reaches may call `onCleanup`; so does an optional `getContext`.
+toggles, `AbortController.abort`, and since ADR 0705 `form.submit`,
+`reportError`, `replaceWith`, `replaceChild`, `replaceChildren`,
+`History.go`, `Location.assign`/`reload`/`replace`) keeps the obligation,
+since a listener it reaches may call `onCleanup`; so does an optional
+`getContext`.
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an
@@ -68,6 +76,11 @@ this rule's claim even when the effect itself has no owner. The same site is not
 also reported as `missing-owner` (SC4001), which claims only a cleanup that never
 runs: one in an `onSettled` callback queued with no owner, or with an owner that
 may be absent (ADR 0347).
+
+The operation's identity is proven from the binder (ADR 0711): a named import
+whose imported name is the primitive's, or a member of a namespace import of a
+Solid module. Any other attribution (a renamed re-export through a project
+barrel, an import whose target the producer could not read) is uncertifiable.
 
 A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
 tracked-effect body whose every creation is inside an owned leaf body, where

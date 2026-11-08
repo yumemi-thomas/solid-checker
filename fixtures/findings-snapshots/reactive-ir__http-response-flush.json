@@ -5,30 +5,66 @@
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
+      "blocker": "boundary-settle-order-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
-      "start": 735,
-      "end": 745,
+      "start": 778,
+      "end": 788,
       "fixes": 0
     },
     {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
+      "blocker": "boundary-settle-order-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
-      "start": 754,
-      "end": 764,
+      "start": 797,
+      "end": 807,
       "fixes": 0
     },
     {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
-      "start": 1780,
-      "end": 1790,
+      "start": 1033,
+      "end": 1043,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 1052,
+      "end": 1062,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 1362,
+      "end": 1372,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "boundary-settle-order-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 1923,
+      "end": 1933,
       "fixes": 0
     }
   ]

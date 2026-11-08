@@ -60,21 +60,37 @@ pub(super) fn forwarded_event_prop_role(
     // literal that runs only on dispatch runs only after it, exactly as code
     // nested in a handler written on the element does. Nested primitives and
     // inline callbacks were classified by the arms ahead of this one.
-    file.ast
-        .functions_body_containing(span)
-        .any(|literal| {
+    let reaches = |denied_counts: bool| {
+        file.ast.functions_body_containing(span).any(|literal| {
             component_prop_literal(file, literal.span).is_some_and(|(element, prop)| {
-                component_prop_reaches_only_events(
-                    file,
-                    element,
-                    prop,
-                    &[],
-                    lookup,
-                    &mut HashSet::default(),
-                )
+                let mut visiting = HashSet::default();
+                if denied_counts {
+                    visiting.insert(denied_counts_marker());
+                }
+                component_prop_reaches_only_events(file, element, prop, &[], lookup, &mut visiting)
             })
         })
-        .then_some(ExecutionRole::EventCallback)
+    };
+    if reaches(false) {
+        return Some(ExecutionRole::EventCallback);
+    }
+    // Delivered only by events, one of them denied: a known delivery with no
+    // proof of its stack, never code with no role.
+    reaches(true).then_some(ExecutionRole::Unknown)
+}
+
+/// In a walk's visiting set: a denied event counts as an event. The walk's
+/// question is then "only events", without the stack each one has.
+fn denied_counts_marker() -> (String, Span, String) {
+    (
+        "\0denied-counts".to_owned(),
+        Span { start: 0, end: 0 },
+        String::new(),
+    )
+}
+
+fn denied_counts(visiting: &HashSet<(String, Span, String)>) -> bool {
+    visiting.contains(&denied_counts_marker())
 }
 
 /// ADR 0204: whether a function literal written as a project component's prop
@@ -482,11 +498,12 @@ pub(super) fn member_reaches_only_events(
     visiting: &mut HashSet<(String, Span, String)>,
 ) -> bool {
     use solid_facts::compiler::CallbackRoleKind;
+    let denied_all = denied_counts(visiting);
     let event_handlers = || {
-        file.compiler
-            .callback_roles
-            .iter()
-            .filter(|callback| callback.role == CallbackRoleKind::EventHandler)
+        file.compiler.callback_roles.iter().filter(|callback| {
+            callback.role == CallbackRoleKind::EventHandler
+                && (denied_all || !super::handler_event_denied(file, callback.span))
+        })
     };
     // The value of an attribute on some element, peeled exactly.
     let attribute_on = file.ast.jsx_containing(member).find_map(|element| {
@@ -625,6 +642,8 @@ pub(super) fn member_in_exclusive_named_event_handler(
                 callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                     && intrinsic_attribute_value(file, callback.span)
                     && file.ast.peel_ts_sugar_span(callback.span) == *reference
+                    && (denied_counts(visiting)
+                        || !crate::execution_role::handler_event_denied(file, callback.span))
             }) || component_prop_literal(file, *reference).is_some_and(|(element, prop)| {
                 component_prop_reaches_only_events(file, element, prop, views, lookup, visiting)
             })
@@ -657,7 +676,9 @@ pub(super) fn spread_reaches_only_events(
 ) -> bool {
     if intrinsic_element(file, element) {
         // The runtime's spread decides (ADR 0358); unaudited proves nothing.
-        return lookup.dialect.spread_key_is_event(prop) == Some(true);
+        return lookup.dialect.spread_key_is_event(prop) == Some(true)
+            && (denied_counts(visiting)
+                || crate::runtime_semantics::event_keeps_delivery_proof(prop));
     }
     component_prop_reaches_only_events(file, element, prop, views, lookup, visiting)
 }
@@ -680,6 +701,8 @@ pub(super) fn component_prop_reaches_only_events(
     if let Some(tag) = lookup.intrinsic_tag_prop(file, element.name.span) {
         return prop != tag
             && lookup.dialect.spread_key_is_event(prop) == Some(true)
+            && (denied_counts(visiting)
+                || crate::runtime_semantics::event_keeps_delivery_proof(prop))
             && element_prop_is_string(file, element, tag, views);
     }
     if let Some((next_file, next_function)) =

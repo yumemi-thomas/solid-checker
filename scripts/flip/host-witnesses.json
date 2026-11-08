@@ -1,0 +1,337 @@
+{
+ "HOST/a01-arm-store-write": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const [st]=createStore({a:1});if(isServer){st.a=2;__l(\"sw\",st.a);}return <p>{st.a}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/a02-arm-store-read": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const [st]=createStore({a:1});if(isServer){const v=st.a;__l(\"sr\",v);}return <p>{st.a}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/a03-arm-pending": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nfunction I(){const m=createMemo(async()=>await wait());if(isServer){const v=m();__l(\"v\",v);return <p>{v}</p>;}return <p>{m()}</p>;}\nexport function App(){return <Loading fallback=\"f\"><I/></Loading>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/a05-arm-action": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const [a,setA]=createSignal(0);const go=action(function*(){setA(1);});if(isServer){go();__l(\"ac\");}return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/a06-arm-write": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const [a,setA]=createSignal(0);if(isServer){setA(1);__l(\"w\");}return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": [
+    "SERVER_WRITE"
+   ]
+  }
+ },
+ "HOST/b01-apply-flush": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const [a]=createSignal(0);createEffect(()=>a(),()=>{flush();__l(\"fl\");});return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [
+    "FLUSH_IN_EFFECT_CALLBACK"
+   ],
+   "server": []
+  }
+ },
+ "HOST/b02-apply-root": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const [a]=createSignal(0);createEffect(()=>a(),()=>{createRoot(()=>{__l(\"rt\");});});return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [
+    "PRIMITIVE_IN_EFFECT_CALLBACK",
+    "REACTIVITY_HALTED"
+   ],
+   "server": []
+  }
+ },
+ "HOST/c01-async-jsx": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const m=createMemo(async()=><b>x</b>);return <Loading fallback=\"f\"><p>{m()}</p></Loading>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [
+    "REACTIVITY_HALTED"
+   ],
+   "server": [
+    "ASYNC_MEMO_ELEMENT",
+    "SSR_RENDER_ERROR_CONTAINED"
+   ]
+  }
+ },
+ "HOST/c03-resolve-body": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, action, onCleanup, Loading, resolve, untrack, getOwner, runWithOwner } from \"solid-js\";\nimport { isServer, render } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nexport function App(){const m=createMemo(()=>1);void resolve(()=>m());__l(\"r\");return <p>{m()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/co-read": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, onCleanup, onSettled, Show, Loading, lazy, flush, getOwner, createContext, useContext } from \"solid-js\";\nimport { clientOnly, isServer } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst X=clientOnly(()=>import(\"./X\"));\nexport function App(){return <X fallback={<i>f</i>} n={1}/>;}\n\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "X.tsx": "import { createSignal, createMemo, createEffect, onCleanup, getOwner, useContext, createContext } from \"solid-js\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport default function X(p:{n?:number}){const [a]=createSignal(0);const v=a();__l(\"x\",v);return <b>{v}</b>;}\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/lz-pending": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { Loading, lazy } from \"solid-js\";\nconst L = lazy(() => import(\"./X\"));\nexport const App = () => <main><Loading fallback=\"f\"><L /></Loading></main>;\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "X.tsx": "import { createMemo } from \"solid-js\";\nexport default function X() {\n  const m = createMemo(async () => { await new Promise((r) => setTimeout(r, 5)); return 5; });\n  const v = m();\n  return <i>xp {v}</i>;\n}\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [
+    "STRICT_READ_UNTRACKED"
+   ],
+   "server": []
+  }
+ },
+ "HOST/co-write": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, onCleanup, onSettled, Show, Loading, lazy, flush, getOwner, createContext, useContext } from \"solid-js\";\nimport { clientOnly, isServer } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst X=clientOnly(()=>import(\"./X\"));\nexport function App(){return <X fallback={<i>f</i>} n={1}/>;}\n\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "X.tsx": "import { createSignal, createMemo, createEffect, onCleanup, getOwner, useContext, createContext } from \"solid-js\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport default function X(p:{n?:number}){const [a,setA]=createSignal(0);setA(1);__l(\"xw\");return <b>{a()}</b>;}\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [
+    "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "REACTIVITY_HALTED"
+   ],
+   "server": []
+  }
+ },
+ "HOST/g01-isserver": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createStore, isHydrating } from \"solid-js\";\nimport { isServer, isDev } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const [a]=createSignal(0);if(isServer){const v=a();__l(\"ran\",v);}return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/g06-typeof-window": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createStore, isHydrating } from \"solid-js\";\nimport { isServer, isDev } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const [a]=createSignal(0);if(typeof window===\"undefined\"){const v=a();__l(\"ran\",v);}return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/g14-ternary": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createStore, isHydrating } from \"solid-js\";\nimport { isServer, isDev } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const [a]=createSignal(0);const v=isServer?a():0;__l(\"ran\",v);return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/g16-early-return": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createStore, isHydrating } from \"solid-js\";\nimport { isServer, isDev } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const [a]=createSignal(0);if(!isServer)return <p>{a()}</p>;const v=a();__l(\"ran\",v);return <p>{v}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/h10-nohydr-read": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createProjection, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, Errored, NoHydration, Hydration, isHydrating, onHydrationEnd, lazy, refresh, action, createContext, useContext, getOwner, isPending, latest } from \"solid-js\";\nimport { isServer, clientOnly } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nfunction I(){const [a]=createSignal(0);const v=a();__l(\"v\",v);return <i>{v}</i>;}\nexport function App(){return <main><NoHydration><I/></NoHydration></main>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/h11-nohydr-write": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createProjection, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, Errored, NoHydration, Hydration, isHydrating, onHydrationEnd, lazy, refresh, action, createContext, useContext, getOwner, isPending, latest } from \"solid-js\";\nimport { isServer, clientOnly } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nfunction I(){const [a,setA]=createSignal(0);setA(1);__l(\"w\");return <i>{a()}</i>;}\nexport function App(){return <main><NoHydration><I/></NoHydration></main>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": [
+    "SERVER_WRITE"
+   ]
+  }
+ },
+ "HOST/h12-nohydr-then-hydration": {
+  "rule": "HOST",
+  "host": "hydrated",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createProjection, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, Errored, NoHydration, Hydration, isHydrating, onHydrationEnd, lazy, refresh, action, createContext, useContext, getOwner, isPending, latest } from \"solid-js\";\nimport { isServer, clientOnly } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nconst wait=(n=5):Promise<number>=>new Promise((r)=>setTimeout(()=>r(n),5));\nfunction I(){const [a]=createSignal(0);const v=a();__l(\"v\",v);return <i>{v}</i>;}\nexport function App(){return <main><NoHydration><div><Hydration><I/></Hydration></div></NoHydration></main>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const serve = () => renderToStream(() => <App />);\n",
+   "main.tsx": "import { hydrate } from \"@solidjs/web\";\nimport { App } from \"./App\";\nhydrate(() => <App />, document.getElementById(\"root\")!);\n"
+  },
+  "runtime": {
+   "client": [],
+   "server": []
+  }
+ },
+ "HOST/s02-body-read": {
+  "rule": "HOST",
+  "host": "server",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, resolve, until, createContext, useContext, getOwner, runWithOwner, action, isPending, latest, refresh, createOptimistic, createProjection, Errored, createTrackedEffect, createReaction, children } from \"solid-js\";\nimport { isServer, isDev, getRequestEvent, render, hydrate } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const [a]=createSignal(0);const v=a();__l(\"r\",v);return <p>{v}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const out = () => renderToStream(() => <App />);\n"
+  },
+  "runtime": {
+   "server": []
+  }
+ },
+ "HOST/s10-resolve-body": {
+  "rule": "HOST",
+  "host": "server",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, resolve, until, createContext, useContext, getOwner, runWithOwner, action, isPending, latest, refresh, createOptimistic, createProjection, Errored, createTrackedEffect, createReaction, children } from \"solid-js\";\nimport { isServer, isDev, getRequestEvent, render, hydrate } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const p=resolve(()=>1);__l(\"x\",String(p));return <p>x</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const out = () => renderToStream(() => <App />);\n"
+  },
+  "runtime": {
+   "server": []
+  }
+ },
+ "HOST/s11-store-write": {
+  "rule": "HOST",
+  "host": "server",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, resolve, until, createContext, useContext, getOwner, runWithOwner, action, isPending, latest, refresh, createOptimistic, createProjection, Errored, createTrackedEffect, createReaction, children } from \"solid-js\";\nimport { isServer, isDev, getRequestEvent, render, hydrate } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const [st]=createStore({a:1});st.a=2;__l(\"sw\",st.a);return <p>{st.a}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const out = () => renderToStream(() => <App />);\n"
+  },
+  "runtime": {
+   "server": []
+  }
+ },
+ "HOST/s15-pending-body-loading": {
+  "rule": "HOST",
+  "host": "server",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, resolve, until, createContext, useContext, getOwner, runWithOwner, action, isPending, latest, refresh, createOptimistic, createProjection, Errored, createTrackedEffect, createReaction, children } from \"solid-js\";\nimport { isServer, isDev, getRequestEvent, render, hydrate } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nfunction I(){const m=createMemo(async()=>{await new Promise(r=>setTimeout(r,5));return 1;});__l(\"body\");const v=m();__l(\"v\",v);return <p>{v}</p>;}\nexport function App(){return <Loading fallback=\"f\"><I/></Loading>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const out = () => renderToStream(() => <App />);\n"
+  },
+  "runtime": {
+   "server": []
+  }
+ },
+ "HOST/s24-action-body": {
+  "rule": "HOST",
+  "host": "server",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, resolve, until, createContext, useContext, getOwner, runWithOwner, action, isPending, latest, refresh, createOptimistic, createProjection, Errored, createTrackedEffect, createReaction, children } from \"solid-js\";\nimport { isServer, isDev, getRequestEvent, render, hydrate } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const [a,setA]=createSignal(0);const go=action(function*(){setA(3);__l(\"act\");});go();return <p>{a()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const out = () => renderToStream(() => <App />);\n"
+  },
+  "runtime": {
+   "server": []
+  }
+ },
+ "HOST/s31-refresh-body": {
+  "rule": "HOST",
+  "host": "server",
+  "files": {
+   "App.tsx": "import { createSignal, createMemo, createEffect, createRenderEffect, createStore, createRoot, flush, onCleanup, onSettled, untrack, Loading, Show, For, resolve, until, createContext, useContext, getOwner, runWithOwner, action, isPending, latest, refresh, createOptimistic, createProjection, Errored, createTrackedEffect, createReaction, children } from \"solid-js\";\nimport { isServer, isDev, getRequestEvent, render, hydrate } from \"@solidjs/web\";\ndeclare const __log:(...a:unknown[])=>void;const __l=(...a:unknown[])=>{if(typeof __log===\"function\")__log(...a);};\nexport function App(){const m=createMemo(()=>1);refresh(m);__l(\"rf\");return <p>{m()}</p>;}\n",
+   "server.tsx": "import { renderToStream } from \"@solidjs/web\";\nimport { App } from \"./App\";\nexport const out = () => renderToStream(() => <App />);\n"
+  },
+  "runtime": {
+   "server": []
+  }
+ }
+}

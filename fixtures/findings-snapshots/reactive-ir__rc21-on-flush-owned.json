@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-on-flush-owned/App.tsx",
+      "start": 242,
+      "end": 249,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-on-flush-owned/App.tsx",
+      "start": 295,
+      "end": 302,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-on-flush-owned/App.tsx",
+      "start": 364,
+      "end": 371,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-on-flush-owned/App.tsx",
+      "start": 446,
+      "end": 453,
+      "fixes": 0
+    }
+  ]
+}

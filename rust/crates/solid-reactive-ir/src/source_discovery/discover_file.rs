@@ -42,6 +42,17 @@ pub(crate) struct ReturnedSourceFacts {
     pub(crate) async_source: bool,
 }
 
+/// ADR 0665: a source is read as async unless its first argument proves it is
+/// not. An open one carries `opaque`, so nothing it projects is a violation.
+pub(crate) fn source_may_be_async(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> bool {
+    crate::owners::computation_provenance(lookup, file, argument)
+        != crate::owners::ComputationProvenance::Sync
+}
+
 pub(crate) fn returned_source_facts(
     lookup: &SemanticLookup<'_>,
     origin: &FileFacts,
@@ -51,11 +62,11 @@ pub(crate) fn returned_source_facts(
     ReturnedSourceFacts {
         owned_write: crate::owned_write_option(origin, created, Some(primitive), lookup.dialect),
         value_form: store_is_value_form(created, Some(primitive)),
-        async_options: async_source_options(origin, created, Some(primitive), lookup.dialect),
+        async_options: first_answer_options(lookup, origin, created, Some(primitive)),
         async_source: created
             .arguments
             .first()
-            .is_some_and(|argument| computation_is_async(lookup, origin, argument.span)),
+            .is_some_and(|argument| source_may_be_async(lookup, origin, argument)),
     }
 }
 
@@ -121,6 +132,11 @@ pub(crate) fn discover_file_sources(
                 },
             ));
             result.source_phases.push((symbol.clone(), 1));
+            // ADR 0628: read through a function like a direct creation's
+            // accessor (ADR 0486): the summaries carry it.
+            if !lookup.dialect.returns_store(primitive) {
+                result.summary_source_symbols.push(symbol.clone());
+            }
             if let Some(spelling) = lookup.dialect.name_of(primitive) {
                 result
                     .source_primitives
@@ -158,6 +174,20 @@ pub(crate) fn discover_file_sources(
             }
             continue;
         }
+        // ADR 0666: a `lazy` component is pending while its module loads, and no
+        // fact says the module has not loaded (`L.preload()`): its tag is open.
+        if resolved == Some(Primitive::Lazy) {
+            if let Some(name) = binding.names.first() {
+                let declaration = location(file.path.shared(), name.span);
+                if let Some(symbol) = entities.get(&declaration) {
+                    result
+                        .source_primitives
+                        .push((symbol.clone(), "lazy".into()));
+                    result.async_sources.push(symbol.clone());
+                }
+            }
+            continue;
+        }
         if resolved == Some(Primitive::Dynamic) {
             if let Some(name) = binding.names.first() {
                 let declaration = location(file.path.shared(), name.span);
@@ -165,10 +195,16 @@ pub(crate) fn discover_file_sources(
                     result
                         .source_primitives
                         .push((symbol.clone(), "dynamic".into()));
+                    // ADR 0665: an open source has its options' flag, as the
+                    // other three discovery sites do.
+                    let options = first_answer_options(lookup, file, call, resolved);
+                    if options != AsyncSourceOptions::default() {
+                        result.source_async_options.push((symbol.clone(), options));
+                    }
                     if call
                         .arguments
                         .first()
-                        .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                        .is_some_and(|argument| source_may_be_async(lookup, file, argument))
                     {
                         result.async_sources.push(symbol.clone());
                     }
@@ -198,6 +234,9 @@ pub(crate) fn discover_file_sources(
         if let Some(name) = source_name {
             let declaration = location(file.path.shared(), name.span);
             if let Some(symbol) = entities.get(&declaration) {
+                if binding.shape == solid_facts::ast::BindingShape::Array {
+                    result.array_slot_sources.push(symbol.clone());
+                }
                 result.accessors.push((
                     symbol.clone(),
                     (
@@ -252,28 +291,66 @@ pub(crate) fn discover_file_sources(
                     symbol.clone(),
                     crate::owned_write_option(file, call, resolved, lookup.dialect),
                 ));
-                let options = async_source_options(file, call, resolved, lookup.dialect);
+                let mut options = first_answer_options(lookup, file, call, resolved);
+                // ADR 0628: a sync memo over an async source is pending with it,
+                // and answers once it settled: its reads are open.
+                // ADR 0690: `mapArray` and `repeat` take a list or a count, so a
+                // value handed by name is no compute of theirs: it is pending
+                // only as what it names.
+                let by_value = matches!(resolved, Some(Primitive::MapArray | Primitive::RepeatMap));
+                let over_async = matches!(
+                    resolved,
+                    Some(
+                        Primitive::CreateMemo
+                            | Primitive::Children
+                            | Primitive::MapArray
+                            | Primitive::RepeatMap
+                    )
+                ) && call.arguments.first().is_some_and(|argument| {
+                    (by_value || argument.value == solid_facts::ast::ArgumentValueKind::Function)
+                        && file
+                            .ast
+                            .identifiers
+                            .iter()
+                            .filter(|identifier| argument.span.contains(identifier.span))
+                            .filter_map(|identifier| {
+                                super::reference_symbol(file, identifier.span, entities, lookup)
+                            })
+                            .any(|read| result.async_sources.contains(&read))
+                });
+                options.opaque |= over_async;
                 if options != AsyncSourceOptions::default() {
                     result.source_async_options.push((symbol.clone(), options));
                 }
-                if call
-                    .arguments
-                    .first()
-                    .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                if over_async
+                    || call.arguments.first().is_some_and(|argument| {
+                        (!by_value
+                            || argument.value == solid_facts::ast::ArgumentValueKind::Function)
+                            && source_may_be_async(lookup, file, argument)
+                    })
                 {
                     result.async_sources.push(symbol.clone());
                 }
             }
         }
-        if resolved != Some(Primitive::CreateMemo)
-            && let Some(name) = if binding.shape == solid_facts::ast::BindingShape::Array {
-                binding.array_slots.get(1).and_then(Option::as_ref)
-            } else {
-                binding.names.get(1)
-            }
-        {
+        if !matches!(
+            resolved,
+            Some(
+                Primitive::CreateMemo
+                    | Primitive::Children
+                    | Primitive::MapArray
+                    | Primitive::RepeatMap
+            )
+        ) && let Some(name) = if binding.shape == solid_facts::ast::BindingShape::Array {
+            binding.array_slots.get(1).and_then(Option::as_ref)
+        } else {
+            binding.names.get(1)
+        } {
             let declaration = location(file.path.shared(), name.span);
             if let Some(symbol) = entities.get(&declaration) {
+                if binding.shape == solid_facts::ast::BindingShape::Array {
+                    result.array_slot_sources.push(symbol.clone());
+                }
                 result.setters.push((
                     symbol.clone(),
                     (
@@ -287,6 +364,19 @@ pub(crate) fn discover_file_sources(
                     result
                         .source_primitives
                         .push((symbol.clone(), primitive.into()));
+                }
+                // ADR 0636: the setter of an optimistic async source refuses a
+                // write before the first answer; a declared value is an answer.
+                if matches!(
+                    resolved,
+                    Some(Primitive::CreateOptimistic | Primitive::CreateOptimisticStore)
+                ) && call.arguments.first().is_some_and(|argument| {
+                    // A sync compute may read a pending source: only a data
+                    // value has its answer.
+                    !argument.runtime_value_kind.is_data_literal()
+                }) && !first_answer_options(lookup, file, call, resolved).declared_loading
+                {
+                    result.async_sources.push(symbol.clone());
                 }
             }
         }
@@ -399,6 +489,7 @@ pub(crate) struct SourceDiscoveryMergeTarget<'a> {
     pub(crate) async_sources: &'a mut HashSet<SymbolId>,
     pub(crate) source_async_options: &'a mut HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) value_form_stores: &'a mut HashSet<SymbolId>,
+    pub(crate) array_slot_sources: &'a mut Vec<SymbolId>,
 }
 
 #[derive(Default)]
@@ -424,6 +515,7 @@ pub(crate) struct SourceDiscoveryAggregate {
     pub(crate) async_sources: HashSet<SymbolId>,
     pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) value_form_stores: HashSet<SymbolId>,
+    pub(crate) array_slot_sources: Vec<SymbolId>,
 }
 
 impl SourceDiscoveryAggregate {
@@ -444,6 +536,7 @@ impl SourceDiscoveryAggregate {
                 async_sources: &mut self.async_sources,
                 source_async_options: &mut self.source_async_options,
                 value_form_stores: &mut self.value_form_stores,
+                array_slot_sources: &mut self.array_slot_sources,
             },
         );
     }
@@ -468,6 +561,7 @@ impl SourceDiscoveryAggregate {
             .source_async_options
             .extend(self.source_async_options);
         target.value_form_stores.extend(self.value_form_stores);
+        target.array_slot_sources.extend(self.array_slot_sources);
     }
 }
 
@@ -510,6 +604,9 @@ pub(crate) fn merge_source_discovery(
     target
         .value_form_stores
         .extend(contribution.value_form_stores.iter().cloned());
+    target
+        .array_slot_sources
+        .extend(contribution.array_slot_sources.iter().cloned());
 }
 
 /// Owned reactive-source facts produced by the source-discovery stage and
@@ -559,6 +656,9 @@ pub(crate) struct SourceDiscovery {
     /// `Reactive` everywhere) for dialects that keep the upstream
     /// over-approximation.
     pub(crate) props_reactivity: PropsReactivityIndex,
+    /// ADR 0803: a primitive's array-pattern slots, withdrawn because the
+    /// program writes the array iterator visibly.
+    pub(crate) withdrawn_array_slots: HashSet<SymbolId>,
     /// The files whose own facts (source, Type Facts rows and the symbols
     /// they name) are the last build's: a later stage's chunk of one of them
     /// is reused only if its recorded reads still answer as they did.

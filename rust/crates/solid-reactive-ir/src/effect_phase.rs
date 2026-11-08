@@ -55,6 +55,8 @@ const MAX_LAYERS: usize = 12;
 /// How many function declarations one question may expand before it gives up:
 /// a project with thousands of call sites of one helper stays bounded.
 const BUDGET: usize = 400;
+/// The nesting of one walk's layers, helper calls or not.
+const MAX_WALK_DEPTH: usize = 64;
 
 /// How far an export chain gets.
 enum Chain {
@@ -88,6 +90,11 @@ pub(crate) struct EffectPhaseOrigin {
     /// ADR 0541: the primitive whose callback the walk ended at, for the
     /// wording (`createEffect`, `createRenderEffect`, `createReaction`).
     pub(crate) primitive: solid_dialect::Primitive,
+    /// ADR 0750: no origin was found, but the walk stopped at a bound
+    /// ([`MAX_LAYERS`], [`BUDGET`], the re-export depth) before it decided:
+    /// an apply may run the code. `mixed` is set, `apply` is the span itself;
+    /// the value is the blocker naming the bound.
+    pub(crate) undecided: Option<&'static str>,
 }
 
 impl EffectPhaseOrigin {
@@ -130,6 +137,53 @@ pub(crate) fn ownerless_effect_phase_origin(
     walk_to_effect_phase(file, span, package_root, instances, lookup, true)
 }
 
+/// ADR 0883: [`ownerless_effect_phase_origin`] for written JSX, which has no
+/// call to name its package: the program's one `solid-js` copy, as for
+/// `render` (ADR 0644). With none or two, which is rendered to is not attested:
+/// the walk still places the site, and its origin is an obligation.
+pub(crate) fn ownerless_jsx_effect_phase_origin(
+    file: &FileFacts,
+    span: Span,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+) -> Option<EffectPhaseOrigin> {
+    let mut copies = instances.solid_js_by_file.values().map(String::as_str);
+    let first = copies.next().unwrap_or_default();
+    let attested = !first.is_empty() && copies.all(|copy| copy == first);
+    let mut walk = Walk {
+        owner_preserving: true,
+        lookup,
+        package_root: "",
+        // Every copy the program holds, so no effect call is ruled out here.
+        flush_instance: "",
+        instances,
+        files: std::cell::OnceCell::new(),
+        visiting: HashSet::default(),
+        budget: BUDGET,
+        limited: std::cell::Cell::new(None),
+        depth: 0,
+        earlier: false,
+        from: None,
+        stepped: false,
+    };
+    walk.layer(file, span, 0)
+        .map(|origin| EffectPhaseOrigin {
+            mixed: origin.mixed || !attested,
+            ..origin
+        })
+        .or_else(|| {
+            walk.limited.get().map(|blocker| EffectPhaseOrigin {
+                path: file.path.to_string(),
+                helper_calls: 0,
+                apply: span,
+                earlier_call: true,
+                mixed: true,
+                primitive: solid_dialect::Primitive::CreateEffect,
+                undecided: Some(blocker),
+            })
+        })
+}
+
 fn walk_to_effect_phase(
     file: &FileFacts,
     span: Span,
@@ -147,6 +201,8 @@ fn walk_to_effect_phase(
         files: std::cell::OnceCell::new(),
         visiting: HashSet::default(),
         budget: BUDGET,
+        limited: std::cell::Cell::new(None),
+        depth: 0,
         earlier: false,
         from: None,
         stepped: false,
@@ -154,9 +210,22 @@ fn walk_to_effect_phase(
     // The instance the flush call's own import loads, followed through
     // re-exports to the file that imports the package; unresolved is no proof.
     let flush_call = file.ast.calls.iter().find(|call| call.span == span)?;
-    let flush_instance = walk.instance_of(file, flush_call.callee)?;
+    let undecided = |walk: &Walk<'_, '_>| {
+        walk.limited.get().map(|blocker| EffectPhaseOrigin {
+            path: file.path.to_string(),
+            helper_calls: 0,
+            apply: span,
+            earlier_call: true,
+            mixed: true,
+            primitive: solid_dialect::Primitive::CreateEffect,
+            undecided: Some(blocker),
+        })
+    };
+    let Some(flush_instance) = walk.instance_of(file, flush_call.callee) else {
+        return undecided(&walk);
+    };
     walk.flush_instance = flush_instance;
-    walk.layer(file, span, 0)
+    walk.layer(file, span, 0).or_else(|| undecided(&walk))
 }
 
 struct Walk<'l, 'a> {
@@ -175,6 +244,10 @@ struct Walk<'l, 'a> {
     /// Functions the walk is inside through a call, so a call cycle ends.
     visiting: HashSet<(String, Span)>,
     budget: usize,
+    /// ADR 0750: a bound stopped some branch of the walk.
+    limited: std::cell::Cell<Option<&'static str>>,
+    /// How deep [`Self::layer`] is.
+    depth: usize,
     /// A call that may run before the path ([`EffectPhaseOrigin::earlier_call`]).
     earlier: bool,
     /// The layer the walk just left, whose own calls are the path's.
@@ -185,13 +258,35 @@ struct Walk<'l, 'a> {
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
+    /// [`Self::layer_at`] under a bound on the whole walk's depth: not every
+    /// step counts as a helper call, and call cycles reach JSX sites (ADR 0883).
     fn layer(
         &mut self,
         file: &FileFacts,
         span: Span,
         helper_calls: usize,
     ) -> Option<EffectPhaseOrigin> {
-        if helper_calls > MAX_LAYERS || inside_instance_field(file, span) {
+        if self.depth >= MAX_WALK_DEPTH {
+            self.limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
+            return None;
+        }
+        self.depth += 1;
+        let origin = self.layer_at(file, span, helper_calls);
+        self.depth -= 1;
+        origin
+    }
+
+    fn layer_at(
+        &mut self,
+        file: &FileFacts,
+        span: Span,
+        helper_calls: usize,
+    ) -> Option<EffectPhaseOrigin> {
+        if helper_calls > MAX_LAYERS {
+            self.limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
+            return None;
+        }
+        if inside_instance_field(file, span) {
             return None;
         }
         // Module scope: nothing around the span runs it.
@@ -299,7 +394,23 @@ impl<'l, 'a> Walk<'l, 'a> {
                     );
                     self.layer(file, at, helper_calls + 1)
                 }
-                _ => None,
+                crate::execution_role::LayerRun::FreshStack => None,
+                // ADR 0695: a callback a project or unknown callee may run here,
+                // on this stack, among whatever else it does with it (a
+                // forwarded callback): any origin is an obligation.
+                crate::execution_role::LayerRun::InPlace(_)
+                | crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+                | crate::execution_role::LayerRun::Elsewhere
+                | crate::execution_role::LayerRun::Withheld(_)
+                    if self.lookup.primitive_at_call(file, call.span).is_none() =>
+                {
+                    self.stepped = true;
+                    self.layer(file, call.span, helper_calls + 1)
+                }
+                crate::execution_role::LayerRun::InPlace(_)
+                | crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+                | crate::execution_role::LayerRun::Elsewhere
+                | crate::execution_role::LayerRun::Withheld(_) => None,
             };
         }
         if let Some(call) = iife_call(file, literal) {
@@ -332,6 +443,8 @@ impl<'l, 'a> Walk<'l, 'a> {
         let mut every = true;
         for call in calls {
             if self.budget == 0 {
+                self.limited
+                    .set(Some(crate::blockers::SEARCH_BUDGET_EXHAUSTED));
                 every = false;
                 break;
             }
@@ -386,6 +499,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                         earlier_call: self.earlier,
                         mixed: self.stepped,
                         primitive,
+                        undecided: None,
                     });
             }
             // ADR 0541: a callback only whose later runs are in the phase
@@ -401,6 +515,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                         earlier_call: self.earlier,
                         mixed: true,
                         primitive,
+                        undecided: None,
                     });
             }
             if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
@@ -445,7 +560,8 @@ impl<'l, 'a> Walk<'l, 'a> {
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> bool {
-        self.instance_of(file, call.callee) == Some(self.flush_instance)
+        self.flush_instance.is_empty()
+            || self.instance_of(file, call.callee) == Some(self.flush_instance)
             // ADR 0483: in the owner-preserving walk the creating call and the
             // effect may be declared in different files of one installation
             // (rc.17's `createMemo` is `solid-js`'s own overload object, its
@@ -465,6 +581,13 @@ impl<'l, 'a> Walk<'l, 'a> {
     /// that package's `exports` conditions, which this does not select.
     fn instance_of(&self, file: &FileFacts, callee: Span) -> Option<&'l str> {
         let (path, module) = self.declaring_file(file, callee)?;
+        // ADR 0644: `render` runs on the queue of the one `solid-js` copy the
+        // program holds; with two, which it is is not attested.
+        if module == "@solidjs/web" {
+            let mut copies = self.instances.solid_js_by_file.values().map(String::as_str);
+            let first = copies.next()?;
+            return copies.all(|copy| copy == first).then_some(first);
+        }
         if module != "solid-js" && !module.starts_with("solid-js/") {
             return None;
         }
@@ -482,6 +605,10 @@ impl<'l, 'a> Walk<'l, 'a> {
                 .map(|file| (file.path.as_str(), file))
                 .collect()
         })
+    }
+
+    fn analyzed(&self, path: &str) -> Option<&'a FileFacts> {
+        self.files().get(path).copied()
     }
 
     /// The analyzed file a module specifier written at `span` in `file` lands
@@ -534,6 +661,12 @@ impl<'l, 'a> Walk<'l, 'a> {
             }
             declaration = member.namespace;
             name = Some(member.key.to_string());
+        } else if name.is_none()
+            && let Some(source) = crate::symbols::import_alias_source(file, declaration)
+        {
+            // Review D36: `const drain = flush` or a closed holder's `box.m`
+            // calls the import it holds exactly.
+            declaration = source;
         }
         let (import, binding) = file.ast.imports.iter().find_map(|import| {
             import
@@ -547,7 +680,28 @@ impl<'l, 'a> Walk<'l, 'a> {
         }
         let name = match (binding.kind, name) {
             (solid_facts::ast::ImportKind::Namespace, Some(name)) => name,
-            (solid_facts::ast::ImportKind::Namespace, None) | (_, Some(_)) => return None,
+            (solid_facts::ast::ImportKind::Namespace, None) => return None,
+            // `import { Api } from "./m"`, `export * as Api from "solid-js"`
+            // (ADR 0780): `Api.flush()` is the namespace's member.
+            (solid_facts::ast::ImportKind::Default, Some(_)) => return None,
+            (_, Some(name)) => {
+                let exported = binding.imported.as_deref()?;
+                let landing = self.landing(file, import.span, &import.module)?;
+                let target = self.analyzed(landing.as_str())?;
+                let export = target.ast.module_level_exports().find(|export| {
+                    !export.type_only && export.namespace.as_deref() == Some(exported)
+                })?;
+                return match self.follow_export(
+                    target,
+                    export.span,
+                    export.module.as_deref()?,
+                    &name,
+                    0,
+                ) {
+                    Chain::Found(path, module) => Some((path, module)),
+                    Chain::Missing | Chain::Unknown => None,
+                };
+            }
             (solid_facts::ast::ImportKind::Default, None) => "default".to_owned(),
             (_, None) => binding.imported.as_deref()?.to_owned(),
         };
@@ -568,12 +722,13 @@ impl<'l, 'a> Walk<'l, 'a> {
         depth: usize,
     ) -> Chain {
         if depth > 8 {
+            self.limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
             return Chain::Unknown;
         }
         let Some(landing) = self.landing(file, span, module) else {
             return Chain::Unknown;
         };
-        let Some(target) = self.files().get(landing.as_str()).copied() else {
+        let Some(target) = self.analyzed(landing.as_str()) else {
             // Outside the project: this file's import is the package's.
             return Chain::Found(file.path.to_string(), module.to_owned());
         };
@@ -736,6 +891,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                 earlier_call: walk.earlier,
                 mixed: reruns,
                 primitive,
+                undecided: None,
             })
         };
         let references_of = |symbol: &str| -> Vec<(String, Span)> {
@@ -936,6 +1092,8 @@ impl<'l, 'a> Walk<'l, 'a> {
         let mut every = !escapes;
         for (caller, callee) in sites {
             if self.budget == 0 {
+                self.limited
+                    .set(Some(crate::blockers::SEARCH_BUDGET_EXHAUSTED));
                 every = false;
                 break;
             }

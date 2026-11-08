@@ -59,8 +59,11 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V23: u64 = 23;
 /// v24 adds the writable-optional-property entity flag (ADR 0461): row flag
 /// bit 17, with no payload.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V24: u64 = 24;
+/// v25 adds the delete-operand-rejected entity flag (ADR 0829): row flag bit
+/// 18, with no payload, answered under the writable-optional-property demand.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V25: u64 = 25;
 /// Every Wire table schema a transition may carry (v10 is retired).
-pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 21] = [
+pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 22] = [
     TYPE_FACTS_TABLE_SCHEMA_V3,
     TYPE_FACTS_TABLE_SCHEMA_V4,
     TYPE_FACTS_TABLE_SCHEMA_V5,
@@ -82,6 +85,7 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 21] = [
     TYPE_FACTS_TABLE_SCHEMA_V22,
     TYPE_FACTS_TABLE_SCHEMA_V23,
     TYPE_FACTS_TABLE_SCHEMA_V24,
+    TYPE_FACTS_TABLE_SCHEMA_V25,
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
@@ -507,7 +511,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // flag, carried by Wire table schema v24.
 // Protocol 88 (ADR 0465) adds the analyze answer's `strictNullChecks`, the
 // program's effective option, which the retained table keeps.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 88;
+// Protocol 89 (ADR 0654) adds the async function flag `returnOpen`; a
+// protocol-88 consumer would refuse the new bit.
+// Protocol 90 (ADR 0829) adds the entity flag `deleteOperandRejected`, carried
+// by Wire table schema v25; a protocol-89 consumer would refuse the new bit.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 90;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -862,6 +870,8 @@ pub const FUNCTION_FLAG_EXPORTED: u64 = 1 << 0;
 pub const FUNCTION_FLAG_ASYNC: u64 = 1 << 1;
 pub const FUNCTION_FLAG_ARROW: u64 = 1 << 2;
 pub const ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC: u64 = 1 << 0;
+pub const ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC: u64 = 1 << 1;
+pub const ASYNC_FUNCTION_FLAG_RETURN_OPEN: u64 = 1 << 2;
 
 pub(crate) const TABLE_TRANSITION_VERSION: u64 = 1;
 const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
@@ -898,6 +908,7 @@ pub(crate) mod rows {
     pub(crate) const ENTITY_RUNTIME_BINDING_KIND: u64 = 1 << 15;
     pub(crate) const ENTITY_DECLARED_KEYS: u64 = 1 << 16;
     pub(crate) const ENTITY_WRITABLE_OPTIONAL_PROPERTY: u64 = 1 << 17;
+    pub(crate) const ENTITY_DELETE_OPERAND_REJECTED: u64 = 1 << 18;
 
     pub(crate) const PARAMETER_DECLARATION: u64 = 1 << 0;
     pub(crate) const PARAMETER_REST: u64 = 1 << 1;
@@ -1409,6 +1420,7 @@ fn decode_entity_run(
             | TYPE_FACTS_TABLE_SCHEMA_V22 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V23 => 131071,
             TYPE_FACTS_TABLE_SCHEMA_V24 => 262143,
+            TYPE_FACTS_TABLE_SCHEMA_V25 => 524287,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1643,6 +1655,7 @@ fn decode_entity_run(
             library_types,
             declared_keys,
             writable_optional_property: flags & rows::ENTITY_WRITABLE_OPTIONAL_PROPERTY != 0,
+            delete_operand_rejected: flags & rows::ENTITY_DELETE_OPERAND_REJECTED != 0,
             primitive_value_domain,
             primitive_literal_candidates,
             reference_space,
@@ -1834,7 +1847,12 @@ fn decode_file_fact(
         let symbol = cursor.string_index(strings, "async symbol")?;
         let target = cursor.string_index(strings, "async target")?;
         let flags = cursor.u64()?;
-        if flags & !ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0 {
+        if flags
+            & !(ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC
+                | ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC
+                | ASYNC_FUNCTION_FLAG_RETURN_OPEN)
+            != 0
+        {
             return Err(format!("packed async function has unknown flags {flags}"));
         }
         async_functions.push(AsyncFunctionFact {
@@ -1842,6 +1860,8 @@ fn decode_file_fact(
             symbol,
             target,
             can_return_async: flags & ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0,
+            may_answer_sync: flags & ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC != 0,
+            return_open: flags & ASYNC_FUNCTION_FLAG_RETURN_OPEN != 0,
             calls_after_await: cursor.locations(strings)?,
         });
     }

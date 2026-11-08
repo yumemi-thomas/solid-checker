@@ -198,6 +198,8 @@ fn getter_reads(
         // the statically-present-code premise; `entry_call` is no longer
         // the only guaranteed read.
         reads.push(ReactiveRead {
+            withdrawn_slot: false,
+            pending_open: false,
             kind: "accessor".into(),
             accessor: display.to_string().into(),
             location: location(context.file.path.shared(), context.call.span),

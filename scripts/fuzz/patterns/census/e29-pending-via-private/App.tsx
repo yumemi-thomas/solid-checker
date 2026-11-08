@@ -1,0 +1,16 @@
+import { createSignal, createMemo, createEffect, createRoot, getOwner, onCleanup, Show, For, lazy, dynamicComponent, mapArray, reconcile, createStore, untrack, NotReadyError, Loading } from "solid-js";
+import { Dynamic, clientOnly, dynamic } from "@solidjs/web";
+const log = (...a: any[]) => { (window as any).__log?.(...a); };
+const own = () => (getOwner() ? "owner" : "no-owner");
+const [c, setC] = createSignal(1);
+const [c2, setC2] = createSignal(1);
+const [w, setW] = createSignal(0);
+const [on, setOn] = createSignal(true);
+let runs = 0;
+export function App() {
+  const a = createMemo(async () => { await new Promise<void>(() => {}); return 1; });
+  class K { #a = a; read() { return this.#a(); } }
+  const k = new K();
+  createEffect(() => c2(), () => { log("apply", own()); try { const v = k.read(); log("apply", "read " + v); } catch (e) { log("apply", "threw " + (e as Error).name); } });
+  return <Loading fallback="f"><i>x</i></Loading>;
+}

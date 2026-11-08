@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "client-root-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-server-entry-only/App.tsx",
+      "start": 164,
+      "end": 171,
+      "fixes": 0
+    }
+  ]
+}

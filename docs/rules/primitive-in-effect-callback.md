@@ -41,7 +41,13 @@ owner (a handler, a timer, past an await, module scope, `runWithOwner(null,
 to `flush` that is not a call, makes it uncertifiable program-wide. A flush in
 dependency code is outside the facts (premise, docs/open-work.md).
 
+Written JSX creates too (ADR 0883): an intrinsic's dynamic child, attribute or spread, a
+fragment's dynamic child and a component element, on an apply's stack with no owner set.
+Static JSX creates nothing.
+
 ## When it is uncertifiable
+
+A walk past its bound (13 helpers, ADR 0750) is uncertifiable, `search-depth-limit`.
 
 The marker is one global: an effect run synchronously inside the callback
 (a render effect created under `runWithOwner`) lowers it when it returns. So the
@@ -54,6 +60,16 @@ substitutions is (ADR 0586). A `createRenderEffect` apply (its first run is owne
 runs are not) and a cleanup an apply returns (a rerun runs it in the phase, a
 disposal outside it) are uncertifiable, never violations (ADR 0541). Only
 rc.17's bytes were read: other releases are not claimed.
+
+A creating call in a function no call edge places (a module-level object or
+class method, a getter, a slot, a tag, a function handed where nothing follows
+it, or a named helper one of those calls) is uncertifiable too, blocker
+`function-run-unplaced` (ADR 0710), when the project names a primitive that
+defers a callback: an apply may be what runs it (Chrome throws for each, and a
+custom element's `connectedCallback` is one). Not asked: a creation inside
+`runWithOwner` or another primitive's synchronous callback, a body that may be a
+component's, and a role that runs off every apply (a handler with no
+synchronous dispatch in the program, a timer, rendering, module code).
 
 ## Examples
 

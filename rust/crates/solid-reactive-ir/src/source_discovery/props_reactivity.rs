@@ -50,6 +50,10 @@ pub(crate) enum PropsReactivity {
         /// that value performs a reactive read and must stay distinguishable
         /// from ordinary prop backing.
         accessor_values: BTreeSet<String>,
+        /// ADR 0803: prop names some call site passes a slot a write to array
+        /// iteration withdrew, as the whole value: whether calling it reads
+        /// an accessor is unproven either way.
+        accessor_unresolved: BTreeSet<String>,
         /// What the call sites pass for each prop a call of the prop's value
         /// may act through ([`PassedSources`]).
         passed: PassedSources,
@@ -85,11 +89,35 @@ pub(crate) enum PropsReactivity {
 /// keeps every call of the prop an obligation.
 pub(crate) type PassedSources = BTreeMap<String, PassedSource>;
 
+/// A closed object literal whose own values are functions or primitives.
+fn closed_plain_literal(file: &solid_facts::FileFacts, expression: Span) -> bool {
+    use solid_facts::ast::RuntimeValueKind;
+    let ast = &file.ast;
+    let literal = ast.peel_ts_sugar_span(expression);
+    ast.object_get_shapes
+        .iter()
+        .any(|shape| shape.span == literal && shape.closed)
+        && ast
+            .object_properties
+            .iter()
+            .filter(|property| literal.contains(property.span))
+            .all(|property| {
+                matches!(
+                    property.value_kind,
+                    RuntimeValueKind::Function
+                        | RuntimeValueKind::Primitive
+                        | RuntimeValueKind::Nullish
+                )
+            })
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct PassedSource {
     pub(crate) sources: BTreeSet<SymbolId>,
     /// Some visible site passes a value that is not an exact source.
     pub(crate) other: bool,
+    /// Some visible site passes a value that may hold a store proxy.
+    pub(crate) may_hold_proxy: bool,
     /// Some visible site passes a getter that calls an async source
     /// (`a={data()}`): reading the prop reads it, pending or not.
     pub(crate) async_getter: bool,
@@ -170,6 +198,10 @@ impl PropsReactivityIndex {
                     accessor_values, ..
                 },
             ) if accessor_values.contains(name) => PropUse::Reactive,
+            Some(PropsReactivity::Enumerated {
+                accessor_unresolved,
+                ..
+            }) if accessor_unresolved.contains(name) => PropUse::Unknown,
             // Only a complete caller set can prove the value is *not* an
             // accessor; an escaping component keeps the obligation.
             Some(PropsReactivity::Enumerated { .. }) => PropUse::Static,
@@ -202,6 +234,71 @@ impl PropsReactivityIndex {
                 false,
             ),
             None => (Vec::new(), false),
+        }
+    }
+
+    /// ADR 0629: every visible call site passes `name` a value that holds no
+    /// store proxy: nothing, or a plain literal.
+    pub(crate) fn holds_no_proxy(&self, declaration: &Location, name: &str) -> bool {
+        match self.by_declaration.get(declaration) {
+            Some(PropsReactivity::Enumerated { passed, .. }) if self.caller_proof => passed
+                .get(name)
+                .is_none_or(|passed| passed.sources.is_empty() && !passed.may_hold_proxy),
+            _ => false,
+        }
+    }
+
+    /// ADR 0823: every caller is enumerated, and none passes `name` a value
+    /// that may be a pending async getter: no getter of an async source, and
+    /// no value the classification leaves unresolved.
+    pub(crate) fn pending_excluded(&self, declaration: &Location, name: &str) -> bool {
+        match self.by_declaration.get(declaration) {
+            Some(PropsReactivity::Enumerated {
+                unresolved, passed, ..
+            }) if self.caller_proof => {
+                !unresolved.contains(name)
+                    && passed.get(name).is_none_or(|passed| !passed.async_getter)
+            }
+            _ => false,
+        }
+    }
+
+    /// ADR 0823, for a destructure: 1 when some visible caller passes one of
+    /// `names` (every prop, for `None`) a getter of an async source, 0 when
+    /// every caller is enumerated and none may pass a pending getter for
+    /// them, 2 otherwise.
+    pub(crate) fn pending_answer(&self, declaration: &Location, names: Option<&[String]>) -> u64 {
+        let passed = match self.by_declaration.get(declaration) {
+            Some(
+                PropsReactivity::Enumerated { passed, .. }
+                | PropsReactivity::Escaping { passed, .. },
+            ) => passed,
+            None => return 2,
+        };
+        let asked = |name: &str| names.is_none_or(|names| names.iter().any(|n| n == name));
+        if passed
+            .iter()
+            .any(|(name, passed)| asked(name) && passed.async_getter)
+        {
+            return 1;
+        }
+        match (names, self.by_declaration.get(declaration)) {
+            (Some(names), _) => {
+                if names
+                    .iter()
+                    .all(|name| self.pending_excluded(declaration, name))
+                {
+                    0
+                } else {
+                    2
+                }
+            }
+            (None, Some(PropsReactivity::Enumerated { unresolved, .. }))
+                if self.caller_proof && unresolved.is_empty() =>
+            {
+                0
+            }
+            (None, _) => 2,
         }
     }
 
@@ -278,6 +375,10 @@ pub(super) struct ComponentInputs<'s> {
     pub(super) slots: &'s HashMap<crate::base::FileId, usize>,
     /// The symbols some analyzed file exports.
     pub(super) exported: &'s BTreeMap<SymbolId, ()>,
+    /// ADR 0803: a primitive's array-pattern slots, when a visible write to
+    /// array iteration withdrew them. They stay sources (each use is held),
+    /// but a value passed from one proves nothing about the prop.
+    pub(super) withdrawn: &'s HashSet<SymbolId>,
     /// The prop sources attached to each declaration, sorted, built on first
     /// use.
     pub(super) attached: std::sync::OnceLock<HashMap<DeclarationAt, Vec<SymbolId>>>,
@@ -318,6 +419,7 @@ impl ComponentInputs<'_> {
             StateKey::Runtime(symbol) => u64::from(self.runtime_sources.contains(symbol)),
             StateKey::Uses(path, span) => fingerprint(&self.uses.get(&(Arc::clone(path), *span))),
             StateKey::Exported(symbol) => u64::from(self.exported.contains_key(symbol)),
+            StateKey::Withdrawn(symbol) => u64::from(self.withdrawn.contains(symbol)),
             StateKey::Attached(path, start, end) => {
                 fingerprint(&self.attached_index().get(&(Arc::clone(path), *start, *end)))
             }
@@ -365,6 +467,11 @@ impl ComponentInputs<'_> {
     fn is_runtime(&self, symbol: &SymbolId) -> bool {
         self.note(super::trace::StateKey::Runtime(symbol.clone()));
         self.runtime_sources.contains(symbol)
+    }
+
+    fn is_withdrawn(&self, symbol: &SymbolId) -> bool {
+        self.note(super::trace::StateKey::Withdrawn(symbol.clone()));
+        self.withdrawn.contains(symbol)
     }
 
     fn exported(&self, symbol: &SymbolId) -> bool {
@@ -672,9 +779,6 @@ pub(super) fn classify_one_component(
     if references.is_empty() {
         escapes = true;
     }
-    let name_text = name
-        .and_then(|name| file.source_text(name.span))
-        .unwrap_or_default();
     for reference in &references {
         let (Ok(start), Ok(end)) = (
             u32::try_from(reference.start_byte),
@@ -684,17 +788,35 @@ pub(super) fn classify_one_component(
             continue;
         };
         let span = Span::new(start, end);
-        let own_declaration = *reference.path == *file.path.as_str()
-            && (function.span.contains(span) || name.is_some_and(|name| name.span == span));
+        // Exact (ADR 0684): a reference written in the component's own body, or
+        // in its element's children, is a use like any other: `saved = C`,
+        // `<C>{C({ run: setN })}</C>` and `me={C}` hand the component on.
+        let own_declaration =
+            *reference.path == *file.path.as_str() && name.is_some_and(|name| name.span == span);
         if own_declaration {
             continue;
         }
         let jsx_use = component_uses.iter().any(|(use_file, element)| {
             *reference.path == *use_file.path.as_str()
-                && (element.name.span == span
-                    || (element.span.contains(span)
-                        && use_file.source_text(span) == Some(name_text)))
+                && (element.name.span == span || element.closing_name == Some(span))
         });
+        // ADR 0823: stored in a compound holder whose every tag pass 10
+        // resolved, the reference is how those tags render it.
+        if !jsx_use
+            && compound_render_reference(
+                facts,
+                lookup,
+                entities,
+                inputs,
+                closed,
+                reference,
+                span,
+                (file, function.span),
+                &component_uses,
+            )
+        {
+            continue;
+        }
         if !jsx_use {
             // Passed as a value, aliased, or re-exported: this hands the
             // component to callers that cannot be seen. It does not unwrite
@@ -718,6 +840,7 @@ pub(super) fn classify_one_component(
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
     let mut accessor_values = BTreeSet::new();
+    let mut accessor_unresolved = BTreeSet::new();
     let mut passed = PassedSources::new();
     let mut spreads = Vec::new();
     for (use_file, element) in component_uses {
@@ -769,11 +892,18 @@ pub(super) fn classify_one_component(
             };
             if attribute.namespace.is_none()
                 && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
-                && attribute.expression.is_some_and(|expression| {
-                    passed_expression_is_accessor(lookup, entities, inputs, use_file, expression)
-                })
+                && let Some(expression) = attribute.expression
             {
-                accessor_values.insert(attribute_name.to_owned());
+                match passed_expression_is_accessor(lookup, entities, inputs, use_file, expression)
+                {
+                    Some(true) => {
+                        accessor_values.insert(attribute_name.to_owned());
+                    }
+                    None => {
+                        accessor_unresolved.insert(attribute_name.to_owned());
+                    }
+                    Some(false) => {}
+                }
             }
             let entry = passed.entry(attribute_name.to_owned()).or_default();
             match attribute
@@ -798,7 +928,12 @@ pub(super) fn classify_one_component(
                         .function_at(use_file.ast.peel_ts_sugar_span(expression))
                         .is_some()
                 }) => {}
-                None => entry.other = true,
+                None => {
+                    entry.other = true;
+                    entry.may_hold_proxy |= !attribute
+                        .expression
+                        .is_some_and(|expression| closed_plain_literal(use_file, expression));
+                }
             }
             if attribute.namespace.is_none()
                 && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
@@ -882,6 +1017,7 @@ pub(super) fn classify_one_component(
             reactive,
             unresolved,
             accessor_values,
+            accessor_unresolved,
             passed,
         },
         forwarded,
@@ -1052,19 +1188,27 @@ fn lone_spread_receiver_is_inert(
     }
 }
 
+/// Whether the attribute's whole value is a proven accessor; `None` for a
+/// slot ADR 0803 withdrew, which is neither proven.
 fn passed_expression_is_accessor(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
     inputs: &ComponentInputs<'_>,
     file: &FileFacts,
     expression: solid_facts::core::Span,
-) -> bool {
+) -> Option<bool> {
     let expression = file.ast.peel_ts_sugar_span(expression);
-    entities
+    let Some(symbol) = entities
         .get(&location(file.path.shared(), expression))
         .cloned()
         .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), expression))
-        .is_some_and(|symbol| inputs.is_accessor(&symbol))
+    else {
+        return Some(false);
+    };
+    if inputs.is_withdrawn(&symbol) {
+        return None;
+    }
+    Some(inputs.is_accessor(&symbol))
 }
 
 /// ADR 0509: whether an attribute's expression calls an async source
@@ -1112,8 +1256,10 @@ fn passed_source(
         .get(&location(file.path.shared(), expression))
         .cloned()
         .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), expression))?;
-    (inputs.is_setter(&symbol) || inputs.is_action(&symbol) || inputs.is_accessor(&symbol))
-        .then_some(symbol)
+    // ADR 0803: a withdrawn slot is no exact source; the site passes `other`.
+    (!inputs.is_withdrawn(&symbol)
+        && (inputs.is_setter(&symbol) || inputs.is_action(&symbol) || inputs.is_accessor(&symbol)))
+    .then_some(symbol)
 }
 
 /// Whether a reference span is an export specifier's local name in the file it
@@ -1124,20 +1270,114 @@ pub(super) fn reference_is_export_specifier(
     span: solid_facts::core::Span,
     path: &str,
 ) -> bool {
+    files_at(facts, path).any(|file| {
+        file.ast.exports.iter().any(|export| {
+            export.module.is_none()
+                && export
+                    .specifiers
+                    .iter()
+                    .chain(export.declarations.iter())
+                    .any(|specifier| specifier.local.span == span)
+        })
+    })
+}
+
+/// The analyzed files at `path`; a caller records the read
+/// ([`super::trace::read_path`]).
+fn files_at<'f>(facts: &'f ProjectFacts, path: &str) -> impl Iterator<Item = &'f FileFacts> {
     facts
         .files
         .iter()
-        .filter(|file| file.path.as_str() == path)
-        .any(|file| {
-            file.ast.exports.iter().any(|export| {
-                export.module.is_none()
-                    && export
-                        .specifiers
-                        .iter()
-                        .chain(export.declarations.iter())
-                        .any(|specifier| specifier.local.span == span)
-            })
-        })
+        .filter(move |file| file.path.as_str() == path)
+}
+
+/// ADR 0823: whether `span`, a reference to the component at `target`, is a
+/// value an ADR 0342 holder of `reference.path` stores, the holder's every
+/// other reference a tag of that file that pass 10 resolved (so each tag
+/// naming this value is among `uses`), and no caller outside the program can
+/// reach the holder.
+#[allow(clippy::too_many_arguments)]
+fn compound_render_reference(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    inputs: &ComponentInputs<'_>,
+    closed: bool,
+    reference: &Location,
+    span: solid_facts::core::Span,
+    target: (&FileFacts, solid_facts::core::Span),
+    uses: &[(&FileFacts, &solid_facts::ast::JsxElementFact)],
+) -> bool {
+    super::trace::read_path(lookup, reference.path.as_ref());
+    let Some(holder_file) = files_at(facts, reference.path.as_ref()).next() else {
+        return false;
+    };
+    if !lookup.compound_value(holder_file.path.as_str(), span) {
+        return false;
+    }
+    let Some(binding) = holder_file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|value| value.contains(span))
+    }) else {
+        return false;
+    };
+    let declaration = binding.names[0].span;
+    let Some(holder) = entities.get(&location(holder_file.path.shared(), declaration)) else {
+        return false;
+    };
+    if !closed && inputs.exported(holder) {
+        return false;
+    }
+    let references = super::trace::references(lookup, holder.as_str());
+    if references.is_empty() {
+        return false;
+    }
+    for other in &references {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(other.start_byte),
+            u32::try_from(other.end_byte),
+        ) else {
+            return false;
+        };
+        let other_span = solid_facts::core::Span::new(start, end);
+        if *other.path != *holder_file.path.as_str() {
+            return false;
+        }
+        if other_span == declaration
+            || reference_is_export_specifier(facts, other_span, holder_file.path.as_str())
+        {
+            continue;
+        }
+        let Some(element) = holder_file.ast.jsx_elements.iter().find(|element| {
+            element.name.span.start == start
+                || element.closing_name.is_some_and(|name| name.start == start)
+        }) else {
+            return false;
+        };
+        let Some((tagged, value)) =
+            super::post_rows::compound_member_value(lookup, holder_file, element)
+        else {
+            return false;
+        };
+        if tagged.declaration != binding.declaration {
+            return false;
+        }
+        if value == span
+            && (super::post_rows::compound_member_target(lookup, holder_file, element)
+                != Some((target.0.path.shared(), target.1))
+                || !uses.iter().any(|(use_file, used)| {
+                    use_file.path.as_str() == holder_file.path.as_str()
+                        && used.name.span == element.name.span
+                }))
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// Classifies one expression a call site passes for a prop (or renders as a
@@ -1222,6 +1462,8 @@ fn classify_passed_expression(
             // The binder fallback covers plain locals entity facts skip.
             .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), root));
         match symbol {
+            // ADR 0803: a withdrawn slot proves nothing either way.
+            Some(symbol) if inputs.is_withdrawn(&symbol) => result = PropUse::Unknown,
             Some(symbol) if inputs.kind(&symbol) == Some(ReactiveSourceKind::Store) => {
                 let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
                     file.ast
@@ -1286,7 +1528,9 @@ fn classify_passed_expression(
             continue;
         }
         let callee = entities.get(&location(file.path.shared(), call.callee));
-        if callee.is_some_and(|symbol| inputs.is_accessor(symbol) && inputs.is_runtime(symbol)) {
+        if callee.is_some_and(|symbol| {
+            !inputs.is_withdrawn(symbol) && inputs.is_accessor(symbol) && inputs.is_runtime(symbol)
+        }) {
             return PropUse::Reactive;
         }
         // Any other call may read reactive state each time the compiled
@@ -1317,6 +1561,8 @@ fn classify_passed_expression(
             .cloned()
             .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), identifier.span));
         match symbol {
+            // ADR 0803: a withdrawn slot may hold anything, a store included.
+            Some(symbol) if inputs.is_withdrawn(&symbol) => result = PropUse::Unknown,
             // A store passed whole is a reference: reading the prop hands over
             // the proxy and reads no key. The receiver's own key reads are
             // what is reactive, and this classification does not follow them.

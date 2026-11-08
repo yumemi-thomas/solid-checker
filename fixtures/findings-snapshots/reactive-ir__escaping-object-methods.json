@@ -5,6 +5,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/escaping-object-methods/App.tsx",
       "start": 352,
@@ -15,6 +16,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/escaping-object-methods/App.tsx",
       "start": 513,
@@ -25,10 +27,22 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/escaping-object-methods/App.tsx",
       "start": 688,
       "end": 695,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/escaping-object-methods/App.tsx",
+      "start": 1009,
+      "end": 1016,
       "fixes": 0
     },
     {

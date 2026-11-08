@@ -1,0 +1,80 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
+      "start": 269,
+      "end": 272,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-slot.tsx",
+      "start": 235,
+      "end": 240,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/body-read.tsx",
+      "start": 178,
+      "end": 181,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
+      "start": 206,
+      "end": 207,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
+      "start": 297,
+      "end": 298,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/helper-read.tsx",
+      "start": 216,
+      "end": 224,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/two-returns.tsx",
+      "start": 313,
+      "end": 314,
+      "fixes": 0
+    }
+  ]
+}

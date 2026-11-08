@@ -1,0 +1,1 @@
+`render(Local, el)` calls `Local` under a root, with no strict window, as `render(() => ..., el)` does (ADR 0678). `Quiet`'s read is proved silent, `Pending`'s throws (SC5001), `Writes` keeps SC2001. `Child` and `Both` are rendered as tags and keep SC1001. `Aliased` is not an exact mount and stays open.

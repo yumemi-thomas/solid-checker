@@ -5,6 +5,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/component-alias-entries-closed/Exported.tsx",
       "start": 410,
@@ -12,13 +13,36 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "component-identity-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-alias-entries-closed/Exported.tsx",
+      "start": 432,
+      "end": 437,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/component-alias-entries-closed/Views.tsx",
       "start": 262,
       "end": 269,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "component-identity-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-alias-entries-closed/Views.tsx",
+      "start": 284,
+      "end": 289,
       "fixes": 0
     }
   ]

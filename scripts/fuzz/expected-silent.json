@@ -1,0 +1,17 @@
+{
+ "note": "Violations the runtime will not show on this run, by ruling (ADR 0696): a branch whose condition the checker cannot evaluate counts as reachable, for every rule, because a violation means this code is wrong if it runs; and an exported component in an open program may have a caller that passes the guard. `make fuzz-patterns` needs each still reported, and passes it. Do not list these as false positives.",
+ "patterns": {
+  "returns/premise-branch-direct": [
+   "no-store-mutation-outside-setter"
+  ],
+  "returns/premise-branch-helper": [
+   "no-store-mutation-outside-setter"
+  ],
+  "returns/premise-branch-read": [
+   "strict-read-untracked"
+  ],
+  "returns/h17-guard-exported": [
+   "strict-read-untracked"
+  ]
+ }
+}

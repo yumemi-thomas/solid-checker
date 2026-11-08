@@ -2007,6 +2007,58 @@ impl<'a> PrimitiveImports<'a> {
                 named.insert(local, primitive);
             }
         }
+        // Review D36: a `const` holding a named import of a primitive
+        // (`const r = refresh`) or a literal holder's value of one
+        // (`const box = { m: refresh }; const r = box.m`) is demanded under
+        // its own spelling too. Over-demanding asks the producer one more
+        // question; whether the alias is exact stays the semantic lookup's.
+        let ast = &file.ast;
+        let mut aliases = Vec::new();
+        for binding in &ast.bindings {
+            let ([name], Some(initializer)) = (binding.names.as_slice(), binding.initializer)
+            else {
+                continue;
+            };
+            if !binding.immutable {
+                continue;
+            }
+            let initializer = ast.peel_ts_sugar_span(initializer);
+            let held = if let Some(text) = file.source_text(initializer)
+                && let Some(primitive) = named.get(text)
+            {
+                Some(*primitive)
+            } else if let Some(member) = ast.member_at(initializer)
+                && let Some(holder) =
+                    ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+                && let Some(key) = file.source_text(member.property)
+                && let Some(literal) = ast
+                    .bindings
+                    .iter()
+                    .find(|holding| holding.names.iter().any(|name| name.span == holder))
+                    .and_then(|holding| holding.initializer)
+            {
+                ast.object_properties
+                    .iter()
+                    .filter(|property| literal.contains(property.span))
+                    .find(|property| {
+                        file.source_text(property.key)
+                            .map(|text| text.trim_matches(['\'', '"']))
+                            == Some(key)
+                    })
+                    .and_then(|property| {
+                        file.source_text(property.shorthand_binding.unwrap_or(property.value))
+                    })
+                    .and_then(|value| named.get(value).copied())
+            } else {
+                None
+            };
+            if let Some(primitive) = held
+                && let Some(local) = file.source_text(name.span)
+            {
+                aliases.push((local, primitive));
+            }
+        }
+        named.extend(aliases);
         Self {
             vocabulary,
             named,

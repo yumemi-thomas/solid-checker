@@ -158,7 +158,7 @@ pub(super) fn literal_invocation_unproven(
         literal.body,
         lookup.entities(),
         lookup.symbol_names(),
-        lookup.dialect,
+        lookup,
     )
     .is_some()
     {
@@ -357,6 +357,36 @@ pub(crate) fn project_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>
                 .any(|argument| argument.spread),
         ));
     }
+    declared_callee_in(world, file, call, index)
+}
+
+/// [`project_callee_at_parameter`] without the object-member index, for a
+/// question that index's own census depends on (ADR 0803 step 2:
+/// `handed_to_unseen_code` under member stability under the targets). A
+/// literal's method is exact here only by [`member_runs_declared_method`].
+pub(crate) fn declared_callee_at_parameter<'a>(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
+    declared_callee_in(lookup, file, call, index)
+}
+
+fn declared_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
     let declared = world
         .callee_symbol(file, call.callee)
         .and_then(|symbol| world.function_for_symbol(symbol));
@@ -1084,6 +1114,76 @@ pub(super) fn result_access_callback_contains(
 /// caller's execution role. This covers wrappers such as `batch`,
 /// `catchError`'s protected body, and `modifyMutable`; `untrack` and other
 /// explicit untracked callbacks are classified by the later dialect branch.
+/// ADR 0678: `render(Local, el)` calls `Local` as `code()` under `createRoot`,
+/// where `render(() => <Local />, el)` goes through `createComponent`: no strict
+/// window, so `Local`'s body runs like `render`'s inline callback, at the role of
+/// the call. Only when every reference of `Local` is such a call in its own
+/// file: a `<Local />` elsewhere has the window, and an export may have one.
+pub(super) fn named_mount_root_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    let function = crate::owners::containing_ast_function(&file.ast, span)?;
+    if !function.body.contains(span) {
+        return None;
+    }
+    let symbol = lookup.symbol_of_function(file, function)?;
+    let name = function
+        .name
+        .as_ref()
+        .or_else(|| crate::owners::function_binding_name(file, function))?;
+    if crate::indexes::binding_exported(file, name.span) {
+        return None;
+    }
+    let mut mounts = Vec::new();
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return None;
+        }
+        let at = Span::new(
+            u32::try_from(reference.start_byte).ok()?,
+            u32::try_from(reference.end_byte).ok()?,
+        );
+        if function.span.contains(at) || name.span == at {
+            continue;
+        }
+        let (call, index) = file.ast.arguments_containing(at).next()?;
+        let mounts_here = index == 0
+            && file.ast.peel_ts_sugar_span(call.arguments[0].span) == at
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup.dialect.mount_runs_component_synchronously(primitive)
+                });
+        if !mounts_here {
+            return None;
+        }
+        mounts.push(call.span);
+    }
+    let mut roles = Vec::new();
+    for call in mounts {
+        let key = (file.path.to_string(), call);
+        if !classifying.insert(key.clone()) {
+            return None;
+        }
+        roles.push(semantic_execution_role_within(
+            file,
+            call,
+            allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+            classifying,
+        ));
+        classifying.remove(&key);
+    }
+    let first = *roles.first()?;
+    (roles.iter().all(|role| *role == first) && first != ExecutionRole::Unknown).then_some(first)
+}
+
 pub(super) fn inline_callback_execution_role(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -1091,58 +1191,78 @@ pub(super) fn inline_callback_execution_role(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> Option<ExecutionRole> {
-    file.ast
-        .arguments_containing(span)
-        .find_map(|(call, index)| {
-            if !direct_callback_contains(file, call.arguments[index].span, span) {
-                return None;
-            }
-            let primitive = lookup.primitive_at_call(file, call.span)?;
-            if callback_execution_at_call(file, call, primitive, index, lookup)?
-                != Execution::Inline
-                || callback_runs_outside_tracking(
-                    lookup.dialect,
-                    primitive,
-                    index,
-                    call.arguments.len(),
-                )
-            {
-                return None;
-            }
-            let key = (file.path.to_string(), call.span);
-            if !classifying.insert(key.clone()) {
-                return None;
-            }
-            let role = semantic_execution_role_within(
+    // ADR 0859: a site in layers that run in place inside the callback (an
+    // IIFE) runs on the stack of the outermost layer's call, so that call is
+    // what the callback holds; past an await on the way it is no such run.
+    // A named function's reads are placed by its calls, so the climb stays
+    // inside it.
+    let named = file
+        .ast
+        .functions_body_containing(span)
+        .filter(|function| crate::owners::function_binding_name(file, function).is_some())
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span);
+    let climb = super::write_roles::climb_in_place_layers_within(file, span, lookup, named)
+        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none());
+    let among_others = climb.as_ref().is_some_and(|climb| climb.among_others);
+    let at = climb.map_or(span, |climb| climb.at);
+    file.ast.arguments_containing(at).find_map(|(call, index)| {
+        if !direct_callback_contains(file, call.arguments[index].span, at) {
+            return None;
+        }
+        let primitive = lookup.primitive_at_call(file, call.span)?;
+        if callback_execution_at_call(file, call, primitive, index, lookup)? != Execution::Inline
+            || callback_runs_outside_tracking(
+                lookup.dialect,
+                primitive,
+                index,
+                call.arguments.len(),
+            )
+        {
+            return None;
+        }
+        let key = (file.path.to_string(), call.span);
+        if !classifying.insert(key.clone()) {
+            return None;
+        }
+        let role = semantic_execution_role_within(
+            file,
+            call.span,
+            allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+            classifying,
+        );
+        classifying.remove(&key);
+        // The callback runs where the call runs. The lexical rendering
+        // role of the call is proven only when the call itself runs during
+        // the body; a call written in a nested helper that runs later
+        // (`const isCurrent = id => id === latest(() => draft())`) is not.
+        if role == ExecutionRole::UntrackedRendering
+            && !nested_literal_runs_during_body(
                 file,
                 call.span,
-                allowed,
                 lookup.entities(),
                 lookup.symbol_names(),
                 lookup,
-                classifying,
-            );
-            classifying.remove(&key);
-            // The callback runs where the call runs. The lexical rendering
-            // role of the call is proven only when the call itself runs during
-            // the body; a call written in a nested helper that runs later
-            // (`const isCurrent = id => id === latest(() => draft())`) is not.
-            if role == ExecutionRole::UntrackedRendering
-                && !nested_literal_runs_during_body(
-                    file,
-                    call.span,
-                    lookup.entities(),
-                    lookup.symbol_names(),
-                    lookup,
-                )
-            {
-                return Some(role_arm!(
-                    "callback_standing.inline_callback_execution_role.unknown",
-                    ExecutionRole::Unknown
-                ));
-            }
-            Some(role)
-        })
+            )
+        {
+            return Some(role_arm!(
+                "callback_standing.inline_callback_execution_role.unknown",
+                ExecutionRole::Unknown
+            ));
+        }
+        // A helper that also keeps the literal runs it elsewhere too: the
+        // in-place run proves a violation, never that every run is legal.
+        if among_others && !role.reports_untracked_read() {
+            return Some(role_arm!(
+                "callback_standing.inline_callback_execution_role.among-others",
+                ExecutionRole::Unknown
+            ));
+        }
+        Some(role)
+    })
 }
 
 /// Compose an inline callback of a higher-order factory with the proven use of

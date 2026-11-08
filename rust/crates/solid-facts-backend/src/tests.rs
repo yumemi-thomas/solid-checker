@@ -469,7 +469,7 @@ fn array_shape_demands_are_limited_to_compiler_proven_jsx_maps() {
 }
 
 #[test]
-fn declared_key_demands_are_limited_to_intrinsic_element_spreads() {
+fn declared_key_demands_cover_element_spreads() {
     let file = test_file_facts(
         "src/spreads.tsx",
         "const a = <div {...props} />; const b = <Card {...props} />; const c = <ui.Box {...props} />;",
@@ -496,9 +496,11 @@ fn declared_key_demands_are_limited_to_intrinsic_element_spreads() {
             .any(|demand| demand.location == location && demand.declared_keys)
     };
     assert!(declared_keys("div"), "an intrinsic element's spread asks");
+    // ADR 0650: `loading-on-accessor` asks whether a spread may carry `on`.
+    assert!(declared_keys("Card"), "a component's spread may carry `on`");
     assert!(
-        !declared_keys("Card"),
-        "a component's spread is not a handler site"
+        !declared_keys("ui.Box"),
+        "a lowercase member tag is neither form: its spread stays open"
     );
     assert!(
         demands
@@ -547,7 +549,7 @@ fn store_write_chain_links_ask_for_their_primitive_value_domain() {
 }
 
 #[test]
-fn writable_optional_property_demands_are_static_delete_operands() {
+fn writable_optional_property_demands_are_member_delete_operands() {
     let source = "delete store.a.b; delete (store.v); delete store[key]; delete value; store.w; \
                   delete store.x!; delete (store.y as T);";
     let file = test_file_facts("src/deletes.ts", source);
@@ -570,12 +572,10 @@ fn writable_optional_property_demands_are_static_delete_operands() {
         .map(|demand| demand.location.clone())
         .collect();
     let location = |needle: &str| typefacts_location(file.path.as_str(), span_of(needle));
-    assert_eq!(
-        asked.len(),
-        2,
-        "only the static member operands ask: {asked:?}"
-    );
+    // ADR 0829: a computed operand asks too, for the rejection proof.
+    assert_eq!(asked.len(), 3, "only the member operands ask: {asked:?}");
     assert!(asked.contains(&location("store.a.b")));
+    assert!(asked.contains(&location("store[key]")));
     assert!(
         asked.contains(&location("store.v")),
         "the parenthesized operand asks at its member"

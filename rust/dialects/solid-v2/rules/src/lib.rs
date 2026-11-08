@@ -82,6 +82,15 @@ impl CatalogWording for Catalog {
         CATALOG_CAPABILITIES
     }
 
+    /// ADR 0659: each of these claims a client window or guard, which the
+    /// server build lacks (`docs/open-work.md`, the server build table).
+    fn claims_client_runtime(&self, code: &str) -> bool {
+        matches!(
+            code,
+            "SC1001" | "SC2001" | "SC2002" | "SC2003" | "SC2008" | "SC5001" | "SC6002"
+        )
+    }
+
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
             FindingSeed::StrictRead {
@@ -130,9 +139,8 @@ impl CatalogWording for Catalog {
                 Rule::ActionCalledInOwnedScope.metadata(),
                 if action.is_uncertifiable() {
                     format!(
-                        "action {:?} is called in {}, but no compiler or semantic fact places where this code runs, so whether it starts a write transaction under a children-capable owner cannot be proven either way",
-                        action.action,
-                        unplaced_context(&action.context)
+                        "{}, but no compiler or semantic fact places where this code runs, so whether it starts a write transaction under a children-capable owner cannot be proven either way",
+                        unplaced_call(&format!("action {:?}", action.action), &action.context)
                     )
                 } else {
                     format!(
@@ -218,12 +226,15 @@ impl CatalogWording for Catalog {
     }
 }
 
-/// Where an unplaced site is written, for a message that claims no role.
-fn unplaced_context(context: &str) -> &str {
+/// The opening clause of an unplaced call's message: where it is written,
+/// when the row names a function, and no place otherwise. The clause after
+/// it already says that no fact places the code, so an empty context adds
+/// nothing (ADR 0792).
+fn unplaced_call(call: &str, context: &str) -> String {
     if context.is_empty() {
-        "code the analysis cannot place"
+        format!("{call} is called")
     } else {
-        context
+        format!("{call} is called in {context}")
     }
 }
 
@@ -278,8 +289,8 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
             ReactiveWriteOperation::Setter => format!("setter {:?}", write.setter),
         };
         message = format!(
-            "{call} is called in {}, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
-            unplaced_context(&write.context)
+            "{}, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+            unplaced_call(&call, &write.context)
         );
         "no compiler or semantic fact places where this write runs".into()
     } else {
@@ -336,7 +347,10 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
-        LeafOwnerOperationKind::Primitive(primitive) => (
+        LeafOwnerOperationKind::Primitive(primitive)
+        | LeafOwnerOperationKind::ObserverGuarded(primitive)
+            if !operation.observer_guarded() =>
+        (
             Rule::LeafOwnerForbiddenCall,
             format!(
                 "reactive primitive {primitive} is created inside {}; {} is a leaf owner with no children, so nested primitives are never tracked or disposed, and Solid throws in dev",
@@ -344,6 +358,22 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
             format!(
                 "Create the primitive in the component body (or another owning scope) and read its accessor inside {}.",
+                operation.owner
+            ),
+        ),
+        LeafOwnerOperationKind::Primitive(primitive)
+        | LeafOwnerOperationKind::ObserverGuarded(primitive) => (
+            if primitive == "until" {
+                Rule::UntilInTrackedScope
+            } else {
+                Rule::ResolveInTrackedScope
+            },
+            format!(
+                "{primitive}() runs inside {}, under an active observer; Solid throws \"Cannot call {primitive} inside a reactive scope\"",
+                operation.owner
+            ),
+            format!(
+                "Call {primitive}() from imperative code, such as an event handler, not from {}.",
                 operation.owner
             ),
         ),
@@ -360,7 +390,9 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
     if let Some(via) = &operation.via
         && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
     {
-        message.push_str(&if operation.possible {
+        message.push_str(&if operation.identity_unproven {
+            format!(" — reached through {via}()")
+        } else if operation.possible {
             // ADR 0275: behind a branch, an early return or a loop in the
             // helper, on a path this call's arguments may or may not take.
             format!(
@@ -377,7 +409,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
         } else {
             match &operation.via {
-                Some(via) if operation.possible => format!(
+                Some(via) if operation.possible && !operation.identity_unproven => format!(
                     "the exactly resolved helper {via}() runs the operation synchronously on some completions only, and this call site is inside the {} callback",
                     operation.owner
                 ),
@@ -393,7 +425,15 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
         },
         location: Some(operation.location.clone()),
     }];
-    if operation.uncertain
+    if operation.identity_unproven {
+        message.push_str(
+            "; the binder does not confirm this callee is that primitive, so the finding is a proof obligation",
+        );
+        evidence.push(EvidenceStep {
+            message: "the callee is not bound to the Solid export the attribution names".into(),
+            location: Some(operation.location.clone()),
+        });
+    } else if operation.uncertain
         && (!matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
             || operation.call_site_gate.is_some())
     {
@@ -541,7 +581,9 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                     "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
                 )
             },
-            ExecutionRole::TrackedJsx if !read.under_loading => (
+            ExecutionRole::TrackedJsx | ExecutionRole::UntrackedUnwindowed
+                if !read.under_loading =>
+            (
                 Rule::AsyncOutsideLoadingBoundary,
                 if read.options_opaque {
                     format!(
@@ -582,7 +624,9 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     } else {
         "the accessor is returned by an async computation".to_owned()
     };
-    if read.options_opaque
+    if read.provenance_open {
+        provenance = "no fact proves whether the accessor's computation is async".to_owned();
+    } else if read.options_opaque
         && rule == Rule::PendingAsyncUnsuspendableRead
         && read.leaf_owner.is_none()
     {
@@ -642,6 +686,18 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::FlushInEffectCallback => {
             "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)"
         }
+        Rule::LoadingOnAccessor => {
+            "the value passed to `on` is proven to be a function, which the boundary never calls"
+        }
+        Rule::OnFlushInOwnedScope => {
+            "the onFlush() call runs under a children-capable owner, a component body or a computation"
+        }
+        Rule::OptimisticWriteBeforeLoad => {
+            "the setter runs in the pass that creates its async source, or where nothing proves the source has answered"
+        }
+        Rule::CaughtReactiveRead => {
+            "the read sits in a try with a catch in a computation that completes with a value"
+        }
         Rule::LoadingOnOutsideHold => {
             "a Loading boundary with `on` holds an async source the analysis cannot prove only it reads, so whether the frame waits on an outside read of the same flight is not decided"
         }
@@ -657,6 +713,10 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::JsxNoDuplicateProps => {
             "the intrinsic element uses more than one competing source of DOM child content"
         }
+        // ADR 0713: an open context's read (always uncertain on this channel).
+        Rule::MissingContextProvider => {
+            "the read runs under an owner, and neither a default for its context nor a provider above every render of its function is proven"
+        }
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
         Rule::StrictReadUntracked
@@ -671,7 +731,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
-        | Rule::MissingContextProvider
         | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
@@ -791,6 +850,7 @@ fn after_await_obligation(reason: Option<&solid_reactive_ir::AfterAwaitObligatio
         Some(Why::HandOffNotFollowed { via: Some(via) }) => format!("the function holding this read runs through a hand-off the checker does not follow ({via}), so whether and when it runs after the await is not proven"),
         Some(Why::HandOffNotFollowed { via: None }) => "the function holding this read is handed on as a member, an object slot, a method or a copy the checker does not follow, so whether and when it runs after the await is not proven".to_owned(),
         Some(Why::CarrierMayNotRun { carrier }) => format!("the function holding this read is run by {carrier}, which may run it zero times (an empty or unknown receiver, too few elements for a comparator or a reducer, no match for a replacer), so whether the read runs at all is not proven"),
+        Some(Why::HandedParameter) => "the callee is a parameter, and whether a caller hands an accessor is not followed; if one does: ".to_owned(),
         Some(Why::HandlerMayNotRun) => "the promise handler holding this read runs only if its promise settles that way, or on a promise not proven to be the computation's pending one, so whether it runs on this computation's flight is not proven".to_owned(),
         Some(Why::ContinuationMayRunFirst) => "the async function holding this read is returned without being awaited and its first await is not proven to be on a pending promise, so its continuation may run before the computation holds its promise".to_owned(),
         Some(Why::IntrinsicMayBeReplaced) => "the promise chain runs on a built-in a visible write may have replaced, so the native-promise premise is withdrawn".to_owned(),
@@ -810,7 +870,7 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
     solid_reactive_ir::StaticDefectTerms {
         props_destructure_hint: "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use omit(props, ...keys) and merge(defaults, props) instead of destructuring.",
         reactive_object_destructure_hint: "Keep the reactive object intact and read object.<name> inside JSX or a tracked computation. A property access made there remains subscribed; a setup-time destructuring binding does not.",
-        missing_effect_message: "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+        missing_effect_message: "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         store_mutation_hint: v2_store_mutation_hint,
         removed_export_hint: v2_removed_export_hint,
@@ -901,7 +961,6 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
         "produce",
         "draft-first mutation is now the default store setter behavior; drop the wrapper",
     ),
-    ("from", "use async iterators as computation results"),
     (
         "observable",
         "push signal changes to external subscribers with createEffect",

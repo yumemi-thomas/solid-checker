@@ -76,6 +76,9 @@ pub(crate) enum Section {
     ReflectiveDefinition,
     /// A reflective write through a `prototype` (ADR 0292).
     ReflectivePrototypeWrite,
+    /// Whether a value may be raw-marked: a `markRaw`, or a shallow store
+    /// that marks what enters it (ADR 0634).
+    RawStoreValues,
     /// The route component values (ADR 0334), whose router configurations
     /// may sit in another file than the value (ADR 0408).
     RouteComponents,
@@ -87,10 +90,12 @@ pub(crate) enum Section {
     ProjectPrimitives,
     /// The classified flush veto (ADR 0613), read through its one answer.
     FlushVeto,
+    /// Project-wide registration/read reachability, fingerprinted as a boolean.
+    ListenerProjectReach,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 17] = [
+    pub(crate) const ALL: [Self; 19] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -104,10 +109,12 @@ impl Section {
         Self::DispatchVeto,
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
+        Self::RawStoreValues,
         Self::RouteComponents,
         Self::ContextSymbols,
         Self::ProjectPrimitives,
         Self::FlushVeto,
+        Self::ListenerProjectReach,
     ];
 
     const fn bit(self) -> u32 {
@@ -653,10 +660,10 @@ pub(crate) fn suppress<R>(f: impl FnOnce() -> R) -> R {
 /// R2, finding 7). So a fill made while probing goes to a cell only probes
 /// read, and the cache readers replay is filled outside every probe.
 pub(crate) struct Recorded<T> {
-    cell: OnceLock<(T, Arc<Reads>)>,
+    cell: crate::once_guard::Once<(T, Arc<Reads>)>,
     /// The value as a probe computed it, for probes asked before the cache
     /// is filled.
-    probed: OnceLock<T>,
+    probed: crate::once_guard::Once<T>,
 }
 
 impl<T> Default for Recorded<T> {
@@ -668,8 +675,8 @@ impl<T> Default for Recorded<T> {
 impl<T> Recorded<T> {
     pub(crate) const fn new() -> Self {
         Self {
-            cell: OnceLock::new(),
-            probed: OnceLock::new(),
+            cell: crate::once_guard::Once::new(),
+            probed: crate::once_guard::Once::new(),
         }
     }
 

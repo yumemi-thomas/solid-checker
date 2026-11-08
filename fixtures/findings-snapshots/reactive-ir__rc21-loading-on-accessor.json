@@ -1,0 +1,282 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 285,
+      "end": 290,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 340,
+      "end": 344,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 394,
+      "end": 407,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 400,
+      "end": 407,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 457,
+      "end": 488,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 478,
+      "end": 485,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 721,
+      "end": 729,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 779,
+      "end": 788,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 838,
+      "end": 843,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 1023,
+      "end": 1031,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 1214,
+      "end": 1221,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 1383,
+      "end": 1391,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 1651,
+      "end": 1665,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 1957,
+      "end": 1966,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2016,
+      "end": 2026,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2076,
+      "end": 2087,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2137,
+      "end": 2143,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2205,
+      "end": 2224,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2804,
+      "end": 2811,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2812,
+      "end": 2855,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2818,
+      "end": 2823,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2818,
+      "end": 2823,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2862,
+      "end": 2869,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2922,
+      "end": 2929,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2969,
+      "end": 2976,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-accessor",
+      "code": "SC5007",
+      "kind": "uncertifiable",
+      "blocker": "loading-on-value-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2977,
+      "end": 2986,
+      "fixes": 0
+    }
+  ]
+}

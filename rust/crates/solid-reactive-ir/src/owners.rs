@@ -36,6 +36,9 @@ use owner_state::{HandOuts, OwnerGraph, PathId};
 mod owner_emission;
 pub(crate) use owner_emission::Emission;
 use owner_emission::{EmissionInputs, emit_file};
+mod jsx_sites;
+pub(crate) use jsx_sites::{JsxSiteKind, aliased_primitive, jsx_sites};
+use jsx_sites::{control_flow_child, is_control_flow_child, runs_as_child};
 mod owner_discovery;
 pub(crate) use owner_discovery::*;
 mod owner_context;
@@ -43,7 +46,7 @@ pub(crate) use owner_context::*;
 mod async_context;
 mod creation_pass;
 pub(crate) use async_context::*;
-pub(crate) use creation_pass::read_in_creation_pass;
+pub(crate) use creation_pass::{read_in_creation_pass, read_in_root_pass};
 mod callback_owners;
 pub(crate) use callback_owners::*;
 mod bindings;
@@ -60,15 +63,18 @@ pub(crate) fn collect_project(
     timings: &mut BuildTimings,
 ) {
     if let Some(cache) = cache {
-        let (requirements, gates, owner_timings) = find_missing_owners_incremental(
-            ctx.facts,
-            ctx.semantic_lookup,
-            project_indexes,
-            ctx.symbol_names,
-            unchanged_paths,
-            &mut cache.owners,
-        );
+        let (requirements, gates, owner_timings, static_violations) =
+            find_missing_owners_incremental(
+                ctx.facts,
+                ctx.semantic_lookup,
+                project_indexes,
+                ctx.symbol_names,
+                unchanged_paths,
+                &mut cache.owners,
+            );
         draft.missing_owners.extend(requirements);
+        // ADR 0713: open context reads.
+        draft.static_violations.extend(static_violations);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
@@ -77,15 +83,18 @@ pub(crate) fn collect_project(
         // A build with no retained cache runs the same pass over a scratch
         // state: one owner analysis, so a fresh and a retained build cannot
         // disagree (the duplicate batch pass drifted, S7f-0).
-        let (requirements, gates, owner_timings) = find_missing_owners_incremental(
-            ctx.facts,
-            ctx.semantic_lookup,
-            project_indexes,
-            ctx.symbol_names,
-            unchanged_paths,
-            &mut OwnerState::default(),
-        );
+        let (requirements, gates, owner_timings, static_violations) =
+            find_missing_owners_incremental(
+                ctx.facts,
+                ctx.semantic_lookup,
+                project_indexes,
+                ctx.symbol_names,
+                unchanged_paths,
+                &mut OwnerState::default(),
+            );
         draft.missing_owners.extend(requirements);
+        // ADR 0713: open context reads.
+        draft.static_violations.extend(static_violations);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
@@ -204,6 +213,166 @@ pub(crate) fn component_props_parameter_fix(
         applicability: "safe".into(),
         edits,
     })
+}
+
+/// ADR 0851: where the iterator a generator call creates is stepped. Calling
+/// a generator runs none of its body; each step (`next`, `return`, `throw`, an
+/// iteration) runs the next segment on the stack of the code that makes it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum IteratorSteps {
+    /// The call's own position steps it: a `for…of` or `for await` operand, a
+    /// spread, a `yield*` operand, an array pattern's initializer, or a step
+    /// member called on the call itself (`g().next()`).
+    InPlace,
+    /// A `const` binding holds the iterator and every reference to it steps it
+    /// or iterates it in place: these positions (a step call's callee, or the
+    /// iterated reference) are where the body runs. None: never stepped.
+    Held(Vec<Span>),
+    /// The iterator escapes what is followed (returned, handed on, stored, a
+    /// `let`, a reference in another file): its steps are not placed.
+    Unplaced,
+}
+
+const STEP_METHODS: &[&str] = &["next", "return", "throw"];
+
+/// Review W1: whether `generator`'s binding is exported, so its iterators may
+/// be created and stepped by code no reference here shows.
+pub(crate) fn generator_exported(
+    file: &solid_facts::FileFacts,
+    generator: &solid_facts::ast::FunctionFact,
+) -> bool {
+    function_binding_name(file, generator)
+        .is_some_and(|name| crate::indexes::binding_exported(file, name.span))
+}
+
+/// ADR 0851: every call that creates `generator`'s iterator, when every
+/// reference to its binding is such a call (none in another file); `None`
+/// for a method, a generator with no binding, or one handed on as a value
+/// (an action's stepped generator, a callback), whose other placements answer.
+pub(crate) fn generator_creations<'f>(
+    file: &'f solid_facts::FileFacts,
+    generator: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<&'f solid_facts::ast::CallFact>> {
+    if !generator.generator || own_method_name(file, generator).is_some() {
+        return None;
+    }
+    let references = crate::local_access::function_reference_hand_offs(file, generator, lookup)?;
+    if !crate::local_access::foreign_reference_hand_offs(file, generator, lookup).is_empty() {
+        return None;
+    }
+    references
+        .into_iter()
+        .map(|(at, hand_off)| {
+            (hand_off == crate::local_access::HandOff::Call)
+                .then(|| {
+                    file.ast.calls.iter().find(|call| {
+                        !call.construct && file.ast.peel_ts_sugar_span(call.callee) == at
+                    })
+                })
+                .flatten()
+        })
+        .collect()
+}
+
+/// The step member call written on `object` (`object.next(…)`): its callee.
+fn step_member_callee(file: &solid_facts::FileFacts, object: Span) -> Option<Span> {
+    let ast = &file.ast;
+    ast.calls.iter().find_map(|step| {
+        let callee = ast.peel_ts_sugar_span(step.callee);
+        let member = ast.member_at(callee)?;
+        (ast.peel_ts_sugar_span(member.object) == object
+            && ast.computed_members.binary_search(&member.span).is_err()
+            && file
+                .source_text(member.property)
+                .is_some_and(|property| STEP_METHODS.contains(&property)))
+        .then_some(callee)
+    })
+}
+
+/// Whether `span` is the first argument of a call the compiler resolves to the
+/// standard library's `Array.from`, which iterates it to the end in the call.
+pub(crate) fn array_from_source(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.calls.iter().any(|call| {
+        !call.construct
+            && call.arguments.first().is_some_and(|argument| {
+                !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == span
+            })
+            && lookup
+                .resolved_callee_call(file, call.callee)
+                .is_some_and(|resolved| {
+                    resolved.validity == typefacts::ResolvedCallValidity::Valid
+                        && resolved.declaration.as_ref().is_some_and(|declaration| {
+                            declaration.standard_library
+                                && declaration.qualified_name.as_ref() == "ArrayConstructor.from"
+                        })
+                })
+    })
+}
+
+/// [`IteratorSteps`] of the iterator the generator call `call` creates.
+pub(crate) fn iterator_steps(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> IteratorSteps {
+    let ast = &file.ast;
+    if ast.iterated_operands.contains(&call.span)
+        || step_member_callee(file, call.span).is_some()
+        || array_from_source(file, call.span, lookup)
+    {
+        return IteratorSteps::InPlace;
+    }
+    // `const it = g()`: an identifier binding initialized by the call itself.
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    }) else {
+        return IteratorSteps::Unplaced;
+    };
+    let [name] = binding.names.as_slice() else {
+        return IteratorSteps::Unplaced;
+    };
+    if crate::indexes::binding_exported(file, name.span) {
+        return IteratorSteps::Unplaced;
+    }
+    let Some(symbol) = lookup
+        .entities()
+        .exact(&crate::location(file.path.shared(), name.span))
+    else {
+        return IteratorSteps::Unplaced;
+    };
+    let mut steps = Vec::new();
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return IteratorSteps::Unplaced;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return IteratorSteps::Unplaced;
+        };
+        let at = Span::new(start, end);
+        if at == name.span {
+            continue;
+        }
+        if ast.iterated_operands.contains(&at) {
+            steps.push(at);
+        } else if let Some(callee) = step_member_callee(file, at) {
+            steps.push(callee);
+        } else {
+            return IteratorSteps::Unplaced;
+        }
+    }
+    IteratorSteps::Held(steps)
 }
 
 /// ADR 0516: the call that creates `generator`'s iterator in place

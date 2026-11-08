@@ -24,10 +24,15 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // pinned as incidental below.
         ("strict-read-untracked", 21),
         // ADR 0516: one is the uncertifiable read after `loopAwait`'s loop,
-        // pinned below.
-        ("reactive-read-after-await", 20),
+        // pinned below. ADR 0870: two more, the reads after
+        // `conditionalAwait`'s and `shortCircuitAwait`'s skippable awaits.
+        ("reactive-read-after-await", 22),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
-        ("reactive-dispatch-unresolved", 3),
+        // ADR 0646: two more, `owned-scope-valid.tsx:28`, a tuple's function
+        // slots from a local hook: its transport does not resolve.
+        // ADR 0692: eight more, the census's internal uncertifiables, pinned
+        // exactly below (`census_rows`).
+        ("reactive-dispatch-unresolved", 13),
         ("no-destructure", 1),
         ("components-return-once", 3),
         ("leaf-owner-forbidden-call", 7),
@@ -56,7 +61,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "effect-apply-extended-invalid.tsx",
             [
                 ("strict-read-untracked", 4),
-                ("reactive-dispatch-unresolved", 1),
+                ("reactive-dispatch-unresolved", 2),
             ]
             .as_slice(),
         ),
@@ -64,7 +69,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "after-await-invalid.tsx",
             [
                 ("reactive-read-after-await", 2),
-                ("reactive-dispatch-unresolved", 1),
+                ("reactive-dispatch-unresolved", 2),
             ]
             .as_slice(),
         ),
@@ -94,7 +99,11 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "leaf-invalid.tsx",
-            [("leaf-owner-forbidden-call", 5)].as_slice(),
+            [
+                ("leaf-owner-forbidden-call", 5),
+                ("reactive-dispatch-unresolved", 2),
+            ]
+            .as_slice(),
         ),
         (
             "owned-leaf-extended-invalid.tsx",
@@ -102,6 +111,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 ("no-write-in-pure-computation", 3),
                 ("action-called-in-owned-scope", 1),
                 ("leaf-owner-forbidden-call", 2),
+                ("reactive-dispatch-unresolved", 1),
             ]
             .as_slice(),
         ),
@@ -110,6 +120,54 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             [("no-write-in-pure-computation", 2)].as_slice(),
         ),
     ]);
+
+    // ADR 0692: the census's rows, exactly (file, line, blocker). Each is an
+    // internal uncertifiable; no violation moved.
+    let mut census_rows = findings_for_rule(&findings, "reactive-dispatch-unresolved")
+        .into_iter()
+        .filter(|finding| {
+            finding["analysisContext"]
+                .as_str()
+                .is_some_and(|context| context.starts_with("value-"))
+        })
+        .map(|finding| {
+            assert_eq!(finding["kind"], "uncertifiable", "{finding:#?}");
+            let path = finding["primaryLocation"]["path"]
+                .as_str()
+                .unwrap_or_default();
+            (
+                std::path::Path::new(path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default()
+                    .to_owned(),
+                finding["primaryLocation"]["line"]
+                    .as_u64()
+                    .unwrap_or_default(),
+                finding["analysisContext"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+            )
+        })
+        .collect::<Vec<_>>();
+    census_rows.sort();
+    let pinned = [
+        ("after-await-invalid.tsx", 22, "value-forwarded"),
+        (
+            "effect-apply-extended-invalid.tsx",
+            17,
+            "value-from-primitive-callback",
+        ),
+        ("leaf-invalid.tsx", 12, "value-from-primitive-callback"),
+        ("leaf-invalid.tsx", 14, "value-from-primitive-callback"),
+        ("leaf-valid.tsx", 9, "value-to-unresolved-callee"),
+        ("owned-leaf-extended-invalid.tsx", 14, "value-in-carrier"),
+        ("owned-leaf-extended-valid.tsx", 19, "value-in-carrier"),
+        ("owned-leaf-extended-valid.tsx", 31, "value-in-carrier"),
+    ]
+    .map(|(file, line, context)| (file.to_owned(), line, context.to_owned()));
+    assert_eq!(census_rows, pinned, "census rows: {findings:#?}");
 
     for (file, rules) in expected {
         for (rule, count) in rules {
@@ -155,12 +213,14 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             [("strict-read-untracked", 1)].as_slice(),
         ),
         // ADR 0516: the read after `loopAwait`'s `while` loop may follow an
-        // await the loop ran (an uncertifiable result, no violation).
+        // await the loop ran (an uncertifiable result, no violation). ADR
+        // 0870: so may the reads after `conditionalAwait`'s `if` and
+        // `shortCircuitAwait`'s `&&` await: wrong when the branch awaits.
         (
             "await-control-flow-valid.tsx",
             [
                 ("strict-read-untracked", 1),
-                ("reactive-read-after-await", 1),
+                ("reactive-read-after-await", 3),
             ]
             .as_slice(),
         ),
@@ -190,13 +250,18 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             ]
             .as_slice(),
         ),
-        ("leaf-valid.tsx", [("missing-owner", 2)].as_slice()),
+        (
+            "leaf-valid.tsx",
+            [("missing-owner", 2), ("reactive-dispatch-unresolved", 1)].as_slice(),
+        ),
         (
             "owned-leaf-extended-valid.tsx",
             [
                 // One unowned settled cleanup plus the module-scope
                 // createTrackedEffect that pins leaf-scope write legality.
                 ("missing-owner", 2),
+                // ADR 0692: `refresh(value)` twice, census rows.
+                ("reactive-dispatch-unresolved", 2),
             ]
             .as_slice(),
         ),

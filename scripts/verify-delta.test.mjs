@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { test } from "vitest";
 
 import {
+  FINDING_GATES,
+  ROOT,
   BASIS_CAVEATS,
   CHECKS,
   LANES,
@@ -43,19 +45,19 @@ test("every check a row or the universal set names actually exists", () => {
 
 test("each table row claims its own owner's paths", () => {
   const expected = [
-    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "wasm-compile"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "write-walk-strategies", "coverage", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
-    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "wasm-compile"]],
-    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process"]],
+    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "backend-process", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
+    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "wasm-compile"]],
+    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses"]],
     [
       "rust/crates/solid-facts-backend/src/diagnostics.rs",
-      ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "ir-edit-fuzz"],
+      ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz"],
     ],
-    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
-    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
+    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate", "guard-count", "backend-process"]],
+    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate", "guard-count", "backend-process"]],
     [
       "apps/solid-typefacts/src/session.rs",
-      ["typefacts", "backend-staleness", "coverage", "ownership-gate", "ir-edit-fuzz", "wasm-parity"],
+      ["typefacts", "backend-staleness", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "ir-edit-fuzz", "wasm-parity"],
     ],
     ["apps/solid-typefacts/tests/process.rs", ["typefacts"]],
     ["apps/solid-typefacts/testdata/forms/tsconfig.json", ["typefacts"]],
@@ -77,10 +79,10 @@ test("the longest matching prefix wins, so no row swallows another's directory",
     "backend-process",
     "backend-staleness",
     "write-walk-strategies",
-    "coverage",
+    ...FINDING_GATES,
     "ir-edit-fuzz",
   ]);
-  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib", "wasm-compile"]);
+  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib", ...FINDING_GATES, "wasm-compile"]);
 });
 
 test("a mapped change set runs preflight checks before building and testing", () => {
@@ -96,11 +98,17 @@ test("a mapped change set runs preflight checks before building and testing", ()
     // binary would hide the source change under test.
     "build-typefacts",
     ...UNIVERSAL,
+    "guard-count",
     "build-debug",
     "ir-lib",
+    "backend-process",
     "write-walk-strategies",
     "coverage",
+    "repro-causes",
     "ownership-gate",
+    "tsc-oracle-gate",
+    "obligation-audit",
+    "witnesses",
     "ir-read-lint",
     "ir-edit-fuzz",
     "wasm-compile",
@@ -109,9 +117,38 @@ test("a mapped change set runs preflight checks before building and testing", ()
   assert.equal(plan.checks.filter((check) => check === "coverage").length, 1);
 });
 
+test("a path that can move a finding selects every gate that reads findings", () => {
+  // `8833e6bfa`: a merge moved an SC2003 finding, verify-delta selected no gate that read that case, and a red
+  // gate was pushed. Each of these paths changes what the checker answers, so none may select a subset.
+  for (const path of [
+    "rust/crates/solid-facts/src/ast.rs",
+    "rust/crates/solid-reactive-ir/src/local_access.rs",
+    "rust/crates/solid-facts-backend/src/diagnostics.rs",
+    "rust/dialects/solid-v2/rules/src/lib.rs",
+    "rust/dialects/solid-v2/compiler/src/lib.rs",
+    "apps/solid-typefacts/src/session.rs",
+    "fixtures/tsc-oracle/rule-cases.json",
+    "fixtures/obligation-cases/cases.json",
+  ]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    for (const gate of FINDING_GATES) assert.ok(plan.checks.includes(gate), `${path} must select ${gate}`);
+    assert.ok(plan.checks.includes("build-debug"), `${path} must rebuild the checker the gates run`);
+  }
+  // scripts/verify.sh's gates lane is the authority: a gate it runs on findings is listed here too.
+  const lane = readFileSync(join(ROOT, "scripts/verify.sh"), "utf8");
+  for (const script of ["coverage.mjs", "uncertifiable-causes.mjs", "ownership-gate.mjs", "tsc-oracle-gate.mjs", "obligation-audit.mjs"]) {
+    assert.ok(lane.includes(script), script);
+  }
+  // Read from the lane, not listed: `repro-causes` reached a push because a list like the one above left it out.
+  const gatesLane = lane.slice(lane.indexOf("gates_lane() {"), lane.indexOf("\n}\n", lane.indexOf("gates_lane() {")));
+  const laneSteps = [...gatesLane.matchAll(/lane_step ([a-z-]+)/g)].map((match) => match[1]);
+  assert.deepEqual(laneSteps, FINDING_GATES);
+});
+
 test("a change that needs no checker skips the debug build", () => {
-  const plan = planFor(["rust/crates/solid-facts/src/ast.rs"]);
-  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "facts-lib", "wasm-compile"]);
+  const plan = planFor(["packages/cli/launcher.mjs"]);
+  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "bun-test-cli"]);
   assert.ok(!plan.checks.includes("build-debug"));
 });
 
@@ -171,7 +208,6 @@ test("a path no row claims escalates to the full verify, and says which path did
     "schema/typefacts-v1.schema.json",
     "rust/Cargo.toml",
     "rust/Cargo.lock",
-    "docs/rules/no-destructure.md",
     "docs/package-contract-v2/compiler-bootstrap/compiler.json",
     "docs/precision-backlog.md.orig",
     "AGENTS.mdx",
@@ -184,6 +220,31 @@ test("a path no row claims escalates to the full verify, and says which path did
     assert.equal(plan.full, true, `${path} must fail closed`);
     assert.deepEqual(plan.checks, ["verify"]);
     assert.deepEqual(plan.unmapped, [path]);
+  }
+});
+
+test("a rule page reaches what reads it, and `.gitignore` what asks git", () => {
+  const page = planFor(["docs/rules/no-destructure.md"]);
+  assert.equal(page.full, false);
+  assert.deepEqual(withoutUniversal(page.checks), ["build-typefacts", "doc-budget", "rule-pages"]);
+  const ignored = planFor([".gitignore"]);
+  assert.equal(ignored.full, false);
+  assert.ok(["doc-budget", "coverage", "repro-budget"].every((check) => ignored.checks.includes(check)));
+  // One exact file, and a name inside docs/rules/ only.
+  assert.equal(planFor([".gitignore.bak"]).full, true);
+  assert.equal(planFor(["docs/rules.md"]).full, true);
+});
+
+test("the flip's notes are prose, and its tools reach their own check", () => {
+  for (const path of ["scripts/flip/notes/track-r-progress.md", "scripts/flip/PLAN.md"]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts"]);
+  }
+  for (const path of ["scripts/flip/check.mjs", "scripts/flip/witnesses.json"]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "flip-tools", "build-debug", "witnesses"]);
   }
 });
 
@@ -325,7 +386,7 @@ test("a real non-ASCII path git has to escape is read, not thrown on", () => {
     }
     // ...and every one of them lands on the fixtures row rather than escalating.
     for (const name of names) {
-      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate"], name);
+      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate", "guard-count", "backend-process"], name);
     }
   });
 });

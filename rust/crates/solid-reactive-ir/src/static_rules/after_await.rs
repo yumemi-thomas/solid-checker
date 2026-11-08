@@ -36,7 +36,8 @@
 //! (ADR 0195).
 
 use super::native_promise::{
-    async_helper, is_global_promise, is_global_promise_static, native_promise, native_promise_claim,
+    async_helper, is_global_promise, is_global_promise_static, native_promise,
+    native_promise_claim, native_promise_undecided,
 };
 use super::pre_await::{PreAwait, Tracking};
 use super::{
@@ -70,6 +71,11 @@ const MAX_DEPTH: usize = 6;
 /// silent clean.
 const MAX_REGION_DEPTH: usize = MAX_DEPTH + 16;
 
+/// ADR 0871: how many distinct window sets one function is walked under. Each
+/// path to a helper may hold another set; past the bound a last walk with no
+/// window reports every read as an obligation, so nothing is lost.
+const MAX_WALKS_PER_FUNCTION: usize = 16;
+
 /// One function whose continuation is part of a tracked async computation:
 /// the computation itself, or a helper its returned promise awaits.
 #[derive(Clone)]
@@ -85,7 +91,29 @@ struct Member {
     /// reads of everything it continues into, are proof obligations, for
     /// the reason held here (ADR 0595).
     conditional: Option<AfterAwaitObligation>,
+    /// The blocker of this member's obligations: `search-depth-limit` past
+    /// [`MAX_WALKS_PER_FUNCTION`] (ADR 0871), `function-run-unplaced` for a
+    /// compute no call proves (ADR 0873).
+    blocker: Option<&'static str>,
 }
+
+/// ADR 0871: what decides a member's rows: the function, the windows its
+/// reads may be dependencies of, and how it is conditional.
+type WalkKey = (
+    (String, u64, u64),
+    Vec<(String, u64, u64)>,
+    Option<std::mem::Discriminant<AfterAwaitObligation>>,
+);
+
+/// A generator's call: the file and function it is written in, the call, and
+/// the generator's file and function.
+type GeneratorCall<'f> = (
+    &'f FileFacts,
+    &'f FunctionFact,
+    &'f CallFact,
+    &'f FileFacts,
+    &'f FunctionFact,
+);
 
 /// What one member's walk has recorded so far.
 struct Walk<'m> {
@@ -99,6 +127,9 @@ struct Walk<'m> {
     placed: HashSet<(String, Span)>,
     /// Helpers whose member reads this walk has reported (ADR 0614).
     member_helpers: HashSet<(String, u64, u64)>,
+    /// ADR 0695: helpers whose straight-line reads this walk reached: a chain
+    /// is followed to its end, each helper once.
+    stack_helpers: HashSet<(String, u64, u64)>,
     /// How the promise chain being followed reaches the flight.
     carried: Carried,
     /// The chain being followed runs inside `untrack`: a helper it reaches
@@ -107,6 +138,12 @@ struct Walk<'m> {
     /// The chain being followed runs on an intrinsic a visible write may have
     /// changed (ADR 0349): every member it queues is conditional.
     unproven: bool,
+    /// ADR 0872: the chain being followed runs past the member's first
+    /// suspension, so a helper it reaches adds no tracking window.
+    past_suspension: bool,
+    /// ADR 0870: past one only on some path (a conditional await): every
+    /// member it queues is an obligation.
+    past_on_some_path: bool,
 }
 
 struct Reach<'f, 'a> {
@@ -115,8 +152,13 @@ struct Reach<'f, 'a> {
     facts: HashMap<(&'f str, u64, u64), &'f AsyncFunctionFact>,
     /// The producer's facts by end offset: an object method's span ends where its function does (ADR 0351).
     facts_by_end: HashMap<(&'f str, u64), Vec<&'f AsyncFunctionFact>>,
-    done: HashSet<(String, u64, u64)>,
+    done: HashSet<WalkKey>,
+    /// ADR 0871: how many walks each function has had.
+    walks: HashMap<(String, u64, u64), usize>,
     pre: PreAwait<'f, 'a>,
+    /// Whether any function of the project is a generator: only then may a
+    /// computation step one (ADR 0820).
+    has_generators: bool,
 }
 
 pub(super) fn run<'a>(
@@ -167,7 +209,13 @@ pub(super) fn run<'a>(
             by_end
         },
         done: HashSet::default(),
+        walks: HashMap::new(),
         pre: PreAwait::new(ctx),
+        has_generators: ctx
+            .facts
+            .files
+            .iter()
+            .any(|file| file.ast.functions.iter().any(|function| function.generator)),
     };
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
@@ -180,35 +228,125 @@ pub(super) fn run<'a>(
                 && member_site.is_none()
                 && !reach.has_promise_seed(function)
                 && !reach.has_implicit_suspension(function)
+                && !reach.has_own_await(function)
                 && !reach.has_try_handler(function)
+                && !reach.steps_generator(function)
             {
                 continue;
             }
             // Built on first use, once per build: only a function with
             // something to report needs it.
-            let Some(context) =
-                tracked_async_computation_context(ctx, function, computations.get(ctx))
-            else {
-                continue;
-            };
+            // ADR 0873: a compute a project wrapper's parameter hands on.
+            let (context, handed) =
+                match tracked_async_computation_context(ctx, function, computations.get(ctx)) {
+                    Some(context) => (context, None),
+                    None => {
+                        match ast_function(&reach.files, function).and_then(|(file, function)| {
+                            super::handed_compute::handed_compute(ctx, file, function)
+                        }) {
+                            Some(super::handed_compute::HandedCompute::Tracked(context)) => {
+                                (context, None)
+                            }
+                            Some(super::handed_compute::HandedCompute::Unplaced { via }) => (
+                                "handed async function".to_owned(),
+                                Some(AfterAwaitObligation::HandOffNotFollowed { via }),
+                            ),
+                            None => continue,
+                        }
+                    }
+                };
+            let blocker = handed
+                .is_some()
+                .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
             let function = Rc::new(function.clone());
             // An owner a `dispose` function can reach may be gone when the
             // continuation resumes: the runtime then reads in a disposed
             // computation and stays silent, so every read is an obligation.
             let conditional = owner_may_be_disposed(ctx, &reach.files, &function)
-                .then_some(AfterAwaitObligation::OwnerMayBeDisposed);
+                .then_some(AfterAwaitObligation::OwnerMayBeDisposed)
+                .or(handed);
+            // ADR 0820: past a generator's leading `yield` nothing is tracked.
+            let windows = if ast_function(&reach.files, &function)
+                .is_some_and(|(file, function)| leading_yield(file, function))
+            {
+                Vec::new()
+            } else {
+                vec![Rc::clone(&function)]
+            };
             let mut queue = vec![Member {
-                function: Rc::clone(&function),
+                function,
                 context,
-                windows: vec![function],
+                windows,
                 conditional,
+                blocker,
             }];
             while let Some(member) = queue.pop() {
-                reach.report(draft, &member, &mut queue);
+                reach.report_member(draft, &member, &mut queue);
             }
         }
     }
     unlisted_async_computations(ctx, &reach, draft);
+}
+
+/// ADR 0879 (B5): a callee that names no exact symbol (`fns[0]()`,
+/// `get()()`, `(c ? a : b)()`, a member of an untyped value) and resolves to
+/// no declaration and no project function: nothing proves the value called
+/// is not an accessor. An exact standard or package declaration
+/// (`res.json()`) and a `new` are not this.
+fn inexact_callee(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact) -> bool {
+    let lookup = ctx.semantic_lookup;
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    !call.construct
+        && !crate::owners::is_identifier_span(file, callee)
+        // A function literal called in place is exact: the layer walk reads it.
+        && file.ast.function_at(callee).is_none()
+        && file
+            .source_text(callee)
+            .is_some_and(|text| !matches!(text, "super" | "import"))
+        && lookup.resolved_callee_call(file, call.callee).is_none()
+        && lookup
+            .function_called_at(file.path.as_str(), callee)
+            .is_none()
+}
+
+fn inexact_callee_obligation(file: &FileFacts, call: &CallFact, context: &str) -> StaticDefect {
+    StaticDefect {
+        kind: StaticDefectKind::ReactiveReadAfterAwait {
+            accessor: file
+                .source_text(file.ast.peel_ts_sugar_span(call.callee))
+                .unwrap_or("this callee")
+                .chars()
+                .take(60)
+                .collect(),
+            obligation: Some(AfterAwaitObligation::CalleeInexact),
+        },
+        location: location(file.path.shared(), call.callee),
+        analysis_context: context.to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    }
+}
+
+/// A parameter of a callback a primitive runs (`createRoot((dispose) => …)`): the
+/// primitive supplies it, so no caller hands it an accessor.
+fn primitive_parameter(ctx: &AnalysisContext<'_>, file: &FileFacts, declaration: Span) -> bool {
+    file.ast.functions.iter().any(|function| {
+        function
+            .parameters
+            .iter()
+            .flat_map(|parameter| &parameter.names)
+            .any(|name| name.span == declaration)
+            && file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && ctx
+                            .semantic_lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some()
+                })
+    })
 }
 
 /// ADR 0517: an async compute the producer lists no fact for (an object
@@ -261,7 +399,7 @@ fn unlisted_async_computations(
             let Some(function) = file.ast.function_at(span) else {
                 continue;
             };
-            if !function.r#async || function.generator {
+            if !function.r#async {
                 continue;
             }
             let Some(boundary) = file
@@ -274,6 +412,7 @@ fn unlisted_async_computations(
                         && written_directly_in(&file.ast, function, **point)
                 })
                 .map(|point| point.start)
+                .chain(first_yield_end(file, function))
                 .min()
             else {
                 continue;
@@ -358,6 +497,9 @@ fn ast_function<'f>(
         .then_some((file, found))
 }
 
+/// Whole-argument hand-ons followed from a call: past it, an obligation.
+const MAX_FORWARDS: usize = 32;
+
 /// Text a method's producer span may hold before its parameter list and no
 /// other function: `async`, `*`, a key name, whitespace; and (ADR 0517) an
 /// object literal property's `key:` before the function it holds
@@ -392,6 +534,63 @@ fn synchronous_prefix(file: &FileFacts, function: &FunctionFact) -> Span {
         .min()
         .unwrap_or(function.body.end);
     Span::new(function.body.start, end)
+}
+
+/// ADR 0820: where a generator's body stops running on the stack that stepped
+/// it first: the end of its first `yield` written in it, the operand included.
+fn first_yield_end(file: &FileFacts, function: &FunctionFact) -> Option<u32> {
+    if !function.generator {
+        return None;
+    }
+    file.ast
+        .yields
+        .iter()
+        .filter(|point| {
+            function.body.contains(point.span)
+                && written_directly_in(&file.ast, function, point.span)
+        })
+        .map(|point| point.span.end)
+        .min()
+}
+
+/// A generator that may give up the stack at a `yield` before anything else
+/// suspends it: its straight-line reads are no window of the computation.
+fn leading_yield(file: &FileFacts, function: &FunctionFact) -> bool {
+    first_yield_end(file, function).is_some_and(|end| synchronous_prefix(file, function).end >= end)
+}
+
+/// A call that is the operand of a `for await` written in the function: the
+/// loop's first `next()` is on the spot, and every later step is the loop's.
+fn for_await_operand(file: &FileFacts, call: &CallFact) -> bool {
+    file.ast.iterated_operands.contains(&call.span)
+        && !file
+            .ast
+            .yields
+            .iter()
+            .any(|point| point.delegate && point.span.contains(call.span))
+        && file
+            .ast
+            .implicit_suspensions
+            .iter()
+            .any(|suspension| suspension.end == call.span.end && suspension.start < call.span.start)
+}
+
+/// A sync generator's call that is a `for…of` operand with no suspension of
+/// `function` in the loop: the loop drains it on one stack.
+fn drained_in_place(file: &FileFacts, function: &FunctionFact, call: &CallFact) -> bool {
+    file.ast.iterated_operands.contains(&call.span)
+        && file.ast.loop_statements.iter().any(|lp| {
+            lp.contains(call.span)
+                && written_directly_in(&file.ast, function, *lp)
+                && !file
+                    .ast
+                    .awaits
+                    .iter()
+                    .chain(&file.ast.implicit_suspensions)
+                    .any(|point| {
+                        lp.contains(*point) && written_directly_in(&file.ast, function, *point)
+                    })
+        })
 }
 
 /// The operand span of an `await`. Of nested awaits that share an end
@@ -556,6 +755,14 @@ fn mark_uncertain(draft: &mut ProgramDraft, mark: usize, reason: &AfterAwaitObli
         if let StaticDefectKind::ReactiveReadAfterAwait { obligation, .. } = &mut defect.kind {
             defect.uncertain = true;
             obligation.get_or_insert_with(|| reason.clone());
+            if *reason == AfterAwaitObligation::GeneratorStepped
+                && !crate::blockers::named(&defect.analysis_context)
+            {
+                defect.analysis_context = crate::blockers::with_detail(
+                    crate::blockers::GENERATOR_STEPPED,
+                    &defect.analysis_context,
+                );
+            }
         }
     }
 }
@@ -660,6 +867,22 @@ impl<'f, 'a> Reach<'f, 'a> {
         )
     }
 
+    /// ADR 0871: the windows as a set, so a recursive helper ends.
+    fn walk_key(member: &Member) -> WalkKey {
+        let mut windows = member
+            .windows
+            .iter()
+            .map(|window| Self::key(window))
+            .collect::<Vec<_>>();
+        windows.sort_unstable();
+        windows.dedup();
+        (
+            Self::key(&member.function),
+            windows,
+            member.conditional.as_ref().map(std::mem::discriminant),
+        )
+    }
+
     /// Whether the function returns or awaits a call that could put a
     /// promise on a computation's flight. Cheap and syntactic-plus-exact: the
     /// computation proof, which scans the project, runs only when it holds.
@@ -671,6 +894,14 @@ impl<'f, 'a> Reach<'f, 'a> {
             .into_iter()
             .any(|(call, _)| {
                 async_helper(self.ctx, file, call).is_some()
+                    || self
+                        .ctx
+                        .semantic_lookup
+                        .function_called_at(
+                            file.path.as_str(),
+                            file.ast.peel_ts_sugar_span(call.callee),
+                        )
+                        .is_some()
                     || self
                         .ctx
                         .semantic_lookup
@@ -700,6 +931,17 @@ impl<'f, 'a> Reach<'f, 'a> {
 
     /// Whether the function itself suspends in a way the producer's facts do
     /// not model (`for await`, `await using`).
+    /// ADR 0870: whether the function holds an `await` of its own: one a
+    /// branch may skip dominates nothing, so the producer lists no call for it.
+    fn has_own_await(&self, function: &'f AsyncFunctionFact) -> bool {
+        ast_function(&self.files, function).is_some_and(|(file, ast_function)| {
+            file.ast.awaits.iter().any(|awaited| {
+                ast_function.body.contains(*awaited)
+                    && written_directly_in(&file.ast, ast_function, *awaited)
+            })
+        })
+    }
+
     fn has_implicit_suspension(&self, function: &'f AsyncFunctionFact) -> bool {
         ast_function(&self.files, function).is_some_and(|(file, ast_function)| {
             file.ast.implicit_suspensions.iter().any(|suspension| {
@@ -716,10 +958,33 @@ impl<'f, 'a> Reach<'f, 'a> {
         self.pre.accessor(&member.windows, symbol)
     }
 
-    fn report(&mut self, draft: &mut ProgramDraft, member: &Member, queue: &mut Vec<Member>) {
-        if !self.done.insert(Self::key(&member.function)) {
+    /// ADR 0871: [`Self::report`] on rows of its own, merged once its marks
+    /// are done: a read another walk reported, under other windows, is decided
+    /// by the stronger row, and marking this walk's rows touches no other's.
+    fn report_member(
+        &mut self,
+        draft: &mut ProgramDraft,
+        member: &Member,
+        queue: &mut Vec<Member>,
+    ) {
+        if !self.done.insert(Self::walk_key(member)) {
             return;
         }
+        *self.walks.entry(Self::key(&member.function)).or_default() += 1;
+        let earlier = std::mem::take(&mut draft.static_defects);
+        let seen = std::mem::take(&mut draft.seen_diagnostics);
+        self.report(draft, member, queue);
+        draft.seen_diagnostics = seen;
+        let rows = std::mem::replace(&mut draft.static_defects, earlier);
+        for mut row in rows {
+            if let Some(blocker) = member.blocker.filter(|_| row.uncertain) {
+                row.analysis_context = blocker.into();
+            }
+            draft.push_defect_or_strengthen(row);
+        }
+    }
+
+    fn report(&mut self, draft: &mut ProgramDraft, member: &Member, queue: &mut Vec<Member>) {
         let ctx = self.ctx;
         let function = &*member.function;
         let member_site = ctx
@@ -734,9 +999,12 @@ impl<'f, 'a> Reach<'f, 'a> {
             queued: HashSet::default(),
             placed: HashSet::default(),
             member_helpers: HashSet::default(),
+            stack_helpers: HashSet::default(),
             carried: Carried::Held,
             untracked: false,
             unproven: false,
+            past_suspension: false,
+            past_on_some_path: false,
         };
         let mark = draft.static_defects.len();
         // The producer's dominance facts: accessor calls after the first
@@ -806,6 +1074,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                             setters: ctx.setters,
                             actions: ctx.actions,
                             props_reactivity: ctx.props_reactivity,
+                            accessors_that_count: None,
                         },
                         file,
                         candidate.callee,
@@ -820,6 +1089,43 @@ impl<'f, 'a> Reach<'f, 'a> {
                     let mut obligation = typed_after_await_obligation(file, candidate.callee);
                     obligation.analysis_context = "handed-read-after-await".to_owned();
                     draft.push_defect(obligation);
+                } else if let Some((file, candidate)) = ast_call
+                    && symbol.is_none_or(|symbol| {
+                        !ctx.setters.contains_key(symbol) && !ctx.actions.contains_key(symbol)
+                    })
+                    && file
+                        .ast
+                        .reference_declaration(file.ast.peel_ts_sugar_span(candidate.callee))
+                        .is_some_and(|declaration| {
+                            super::declared_as_parameter(file, declaration)
+                                && !primitive_parameter(ctx, file, declaration)
+                        })
+                    && walk
+                        .reported
+                        .insert((call.path.to_string(), call.start_byte, call.end_byte))
+                {
+                    // ADR 0669: a parameter is a value a caller supplied too.
+                    draft.push_defect(StaticDefect {
+                        kind: StaticDefectKind::ReactiveReadAfterAwait {
+                            accessor: file
+                                .source_text(candidate.callee)
+                                .unwrap_or("this parameter")
+                                .to_owned(),
+                            obligation: Some(AfterAwaitObligation::HandedParameter),
+                        },
+                        location: location(file.path.shared(), candidate.callee),
+                        analysis_context: crate::blockers::HANDED_READ_AFTER_AWAIT.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                } else if let Some((file, candidate)) = ast_call
+                    && symbol.is_none()
+                    && inexact_callee(ctx, file, candidate)
+                    && walk
+                        .reported
+                        .insert((call.path.to_string(), call.start_byte, call.end_byte))
+                {
+                    draft.push_defect(inexact_callee_obligation(file, candidate, &member.context));
                 }
                 continue;
             };
@@ -896,6 +1202,8 @@ impl<'f, 'a> Reach<'f, 'a> {
                         )
                         || loop_suspension_start(file, ast_function)
                             .is_some_and(|start| candidate.span.start >= start)
+                        || first_yield_end(file, ast_function)
+                            .is_some_and(|end| candidate.span.start >= end)
                         || file.ast.awaits.iter().any(|awaited| {
                             awaited.end <= candidate.span.start
                                 && written_directly_in(&file.ast, ast_function, *awaited)
@@ -903,16 +1211,19 @@ impl<'f, 'a> Reach<'f, 'a> {
                 if !dominated && !may_follow {
                     continue;
                 }
-                let tracking = self.tracking(member, symbol);
-                if tracking == Tracking::Tracked {
-                    continue;
-                }
-                let exact = dominated
-                    && accessors.len() == references.len()
+                // ADR 0897 (review D31): silent only when every operand is a
+                // reference to the one tracked accessor and the callee total;
+                // a tracked first operand beside another is an obligation.
+                let same = accessors.len() == references.len()
                     && references.len()
                         == file.ast.composite_callee_operands(candidate.callee).len()
                     && accessors.iter().all(|other| *other == symbol)
                     && file.ast.composite_callee_total(candidate.callee);
+                let tracking = self.tracking(member, symbol);
+                if same && tracking == Tracking::Tracked {
+                    continue;
+                }
+                let exact = dominated && same;
                 let callee = location(file.path.shared(), candidate.callee);
                 if !walk.reported.insert((
                     callee.path.to_string(),
@@ -932,7 +1243,13 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .then_some(AfterAwaitObligation::CalleeInexact)
                             .or_else(|| tracking_obligation(tracking)),
                     },
-                    location: callee,
+                    // ADR 0897: one accessor read is at its reference; V8's
+                    // frame for the call names the callee's last token.
+                    location: if same {
+                        location(file.path.shared(), references[references.len() - 1])
+                    } else {
+                        callee
+                    },
                     analysis_context: member.context.clone(),
                     fixes: vec![],
                     uncertain: !exact || tracking == Tracking::Possible,
@@ -944,8 +1261,18 @@ impl<'f, 'a> Reach<'f, 'a> {
         if let Some((file, ast_function)) = ast_function(&self.files, function) {
             for (call, carried) in chain_calls(file, ast_function) {
                 walk.carried = carried;
+                // ADR 0872: a helper called past the member's first suspension
+                // ran its prefix with no observer.
+                let dominated = crate::execution_role::follows_unconditional_await(file, call.span)
+                    || crate::execution_role::follows_dominating_await(file, call.span);
+                let may_follow = crate::execution_role::may_follow_own_await(file, call.span)
+                    || crate::execution_role::follows_any_suspension(file, call.span);
+                walk.past_suspension = dominated || may_follow;
+                walk.past_on_some_path = may_follow && !dominated;
                 self.expand(draft, &mut walk, queue, file, call, 0);
             }
+            walk.past_suspension = false;
+            walk.past_on_some_path = false;
         }
         if let Some(site) = member_site {
             member_reads_after_await(ctx, draft, site, &member.context, &|symbol, text| {
@@ -1020,7 +1347,9 @@ impl<'f, 'a> Reach<'f, 'a> {
                 }
             }
             self.after_implicit_suspension(draft, &mut walk, mark, file, ast_function);
+            self.after_conditional_await(draft, &mut walk, file, ast_function);
             self.report_unplaced_functions(draft, &mut walk, file, ast_function);
+            self.follow_generators(draft, &mut walk, queue, file, ast_function);
         }
         if let Some(reason) = &member.conditional {
             mark_uncertain(draft, mark, reason);
@@ -1069,9 +1398,12 @@ impl<'f, 'a> Reach<'f, 'a> {
         // a suspension on a later pass, as may everything after the loop: from
         // the loop's start every read is an obligation (the first pass's reads
         // before the `await` are dependencies, ADR 0195, never violations).
+        // ADR 0820: a generator's body past its first `yield` runs when its
+        // iterator is stepped again: off this stack, on whoever steps it.
         let Some(boundary) = implicit
             .into_iter()
             .chain(loop_suspension_start(file, function))
+            .chain(first_yield_end(file, function))
             .min()
         else {
             return;
@@ -1119,7 +1451,246 @@ impl<'f, 'a> Reach<'f, 'a> {
                 self.visit_template(draft, walk, file, template, 0);
             }
         }
+        let reason = if function.generator {
+            AfterAwaitObligation::GeneratorStepped
+        } else {
+            AfterAwaitObligation::SuspensionUnplaced
+        };
+        mark_uncertain(draft, mark, &reason);
+    }
+
+    /// ADR 0870: an `await` a branch may skip dominates nothing, so no fact
+    /// lists what follows it (`if (f) await x; n();`, `f && (await x)`, a
+    /// `switch` case, a destructuring default). What may follow an own await
+    /// on some path and has no row yet is an obligation: position cannot tell
+    /// an arm that leaves from one that falls through, and two conditions may
+    /// correlate, so a run past the await is not proven.
+    fn after_conditional_await(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) {
+        let Some(boundary) = file
+            .ast
+            .awaits
+            .iter()
+            .filter(|awaited| {
+                function.body.contains(**awaited)
+                    && written_directly_in(&file.ast, function, **awaited)
+            })
+            .map(|awaited| awaited.end)
+            .min()
+        else {
+            return;
+        };
+        let mark = draft.static_defects.len();
+        walk.past_suspension = true;
+        walk.past_on_some_path = true;
+        if self.ctx.dialect.reports_member_reads_after_await() {
+            member_reads_after_await(
+                self.ctx,
+                draft,
+                (file, function, boundary),
+                &walk.member.context,
+                &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
+            );
+            // Past the boundary by position only: the other arm of the await's
+            // `if` runs with no await before it.
+            let mut index = mark;
+            while index < draft.static_defects.len() {
+                let site = &draft.static_defects[index].location;
+                let may_follow = u32::try_from(site.start_byte)
+                    .ok()
+                    .zip(u32::try_from(site.end_byte).ok())
+                    .is_none_or(|(start, end)| {
+                        self.site_may_follow(file, function, Span::new(start, end))
+                    });
+                if may_follow {
+                    index += 1;
+                } else {
+                    draft.static_defects.remove(index);
+                }
+            }
+        }
+        for call in file.ast.calls_within(function.body) {
+            if written_directly_in(&file.ast, function, call.span)
+                && crate::execution_role::may_follow_own_await(file, call.span)
+            {
+                self.report_call_read(draft, walk, file, call);
+                self.visit_call(draft, walk, file, call, 0);
+            }
+        }
+        for template in &file.ast.tagged_templates {
+            if function.body.contains(template.span)
+                && written_directly_in(&file.ast, function, template.span)
+                && crate::execution_role::may_follow_own_await(file, template.span)
+            {
+                self.visit_template(draft, walk, file, template, 0);
+            }
+        }
+        walk.past_suspension = false;
+        walk.past_on_some_path = false;
         mark_uncertain(draft, mark, &AfterAwaitObligation::SuspensionUnplaced);
+    }
+
+    /// Whether a member read reported in `function`'s body may run after one
+    /// of its own awaits. A read in a layer run in place (a closure, an IIFE,
+    /// a helper) is placed by the call in `function`'s body that runs the
+    /// layer; a site whose call cannot be named stays (fail closed).
+    fn site_may_follow(&self, file: &FileFacts, function: &FunctionFact, site: Span) -> bool {
+        if crate::execution_role::may_follow_own_await(file, site) {
+            return true;
+        }
+        if crate::owners::containing_ast_function(&file.ast, site)
+            .is_some_and(|owner| owner.span == function.span)
+        {
+            return false;
+        }
+        crate::execution_role::climb_in_place_layers_within(
+            file,
+            site,
+            self.ctx.semantic_lookup,
+            Some(function.span),
+        )
+        .is_none_or(|climb| crate::execution_role::may_follow_own_await(file, climb.at))
+    }
+
+    /// ADR 0820: the project function a call runs, exactly: a literal callee,
+    /// an exact function, or a closed object's member.
+    fn called_function(
+        &self,
+        file: &'f FileFacts,
+        call: &CallFact,
+    ) -> Option<(&'f FileFacts, &'f FunctionFact)> {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if let Some(function) = file.ast.function_at(callee) {
+            return Some((file, function));
+        }
+        let lookup = self.ctx.semantic_lookup;
+        let (target, function) = if let Some(member) = file.ast.member_at(callee) {
+            if file.ast.computed_members.contains(&member.span) {
+                return None;
+            }
+            lookup.closed_member_function(file, member)?
+        } else {
+            lookup.function_called_at(file.path.as_str(), callee)?
+        };
+        let target = *self.files.get(target.path.as_str())?;
+        target
+            .ast
+            .functions
+            .iter()
+            .find(|candidate| candidate.span == function.span)
+            .map(|function| (target, function))
+    }
+
+    /// ADR 0820: a generator a member calls, there or in a function it calls.
+    /// `for await` steps its iterator from the member's continuation, so an
+    /// async generator is a member of the flight: reads after its first
+    /// `await` follow the proof that holds for an `async` helper (a `for
+    /// await` written in the member) and reads after its first `yield` are
+    /// obligations. Any other stepping (`it.next()`, a value handed on, a loop
+    /// in a helper) makes the whole member an obligation. A sync generator
+    /// stepped across one of the member's suspensions runs past its first
+    /// `yield` on the continuation; a loop that drains it on one stack does not.
+    fn follow_generators(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) {
+        if !self.has_generators {
+            return;
+        }
+        walk.carried = Carried::Held;
+        let calls = self.generator_calls(file, function);
+        let suspends = file
+            .ast
+            .awaits
+            .iter()
+            .chain(&file.ast.implicit_suspensions)
+            .any(|point| {
+                function.body.contains(*point) && written_directly_in(&file.ast, function, *point)
+            });
+        for (in_file, holder, call, target_file, target) in calls {
+            let direct = holder.span == function.span
+                && written_directly_in(&in_file.ast, holder, call.span);
+            if target.r#async {
+                let leading = leading_yield(target_file, target);
+                let exact = direct
+                    && !leading
+                    && for_await_operand(in_file, call)
+                    && self
+                        .ctx
+                        .semantic_lookup
+                        .function_value_is_current(target_file, target);
+                let tracking = std::mem::replace(&mut walk.untracked, leading);
+                self.enqueue(
+                    walk,
+                    queue,
+                    target_file,
+                    target,
+                    (!exact).then_some(AfterAwaitObligation::GeneratorStepped),
+                );
+                walk.untracked = tracking;
+            } else if suspends
+                && !(direct && drained_in_place(in_file, holder, call))
+                && let Some(boundary) = first_yield_end(target_file, target)
+            {
+                let mark = draft.static_defects.len();
+                let mut past = target.clone();
+                past.body = Span::new(boundary, target.body.end);
+                self.report_region(draft, walk, target_file, &past, 0);
+                // ADR 0850: a function the body hands on (a member's value, a
+                // slot, a forwarded callback) may run past the `yield` too.
+                self.report_unplaced_functions(draft, walk, target_file, target);
+                mark_uncertain(draft, mark, &AfterAwaitObligation::GeneratorStepped);
+            }
+        }
+    }
+
+    /// The generators `function` calls and keeps the iterator of, there or in
+    /// a function it calls exactly, each call with the function it is in.
+    fn generator_calls(
+        &self,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) -> Vec<GeneratorCall<'f>> {
+        let mut calls = Vec::new();
+        let mut seen = HashSet::default();
+        let mut stack = vec![(file, function)];
+        while let Some((in_file, holder)) = stack.pop() {
+            for call in in_file.ast.calls_within(holder.body) {
+                if call.construct {
+                    continue;
+                }
+                let Some((target_file, target)) = self.called_function(in_file, call) else {
+                    continue;
+                };
+                if !target.generator {
+                    if seen.insert((target_file.path.as_str(), target.span)) {
+                        stack.push((target_file, target));
+                    }
+                } else if !call.result_discarded {
+                    calls.push((in_file, holder, call, target_file, target));
+                }
+            }
+        }
+        calls
+    }
+
+    /// Whether a member's walk has a generator to follow: it is one with a
+    /// `yield`, or it reaches a call of one.
+    fn steps_generator(&self, function: &AsyncFunctionFact) -> bool {
+        self.has_generators
+            && ast_function(&self.files, function).is_some_and(|(file, function)| {
+                first_yield_end(file, function).is_some()
+                    || !self.generator_calls(file, function).is_empty()
+            })
     }
 
     /// The callbacks a call runs inline: an immediately invoked function
@@ -1137,7 +1708,15 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         }
         if depth > MAX_REGION_DEPTH {
+            // ADR 0750: past the depth the walk follows.
+            let mark = draft.static_defects.len();
             self.push_unfollowed(draft, walk, file, call, call.callee);
+            for defect in &mut draft.static_defects[mark..] {
+                defect.analysis_context = crate::blockers::with_detail(
+                    crate::blockers::SEARCH_DEPTH_LIMIT,
+                    &defect.analysis_context,
+                );
+            }
             return;
         }
         let ctx = self.ctx;
@@ -1228,6 +1807,32 @@ impl<'f, 'a> Reach<'f, 'a> {
             {
                 self.report_prefix(draft, walk, file, callback, depth);
                 in_place = true;
+                continue;
+            }
+            // A literal handed on through wrappers (`hc1(() => read())` over
+            // `const hc1 = (g) => { hc0(g); }`): an exact chain that ends in a
+            // direct call of the parameter runs it here. Anything else may run
+            // it: an obligation, at its reads, never silence and never a name.
+            if self.handed_to_project_code(file, call) {
+                if self.forward_runs(
+                    file,
+                    call,
+                    argument.span,
+                    MAX_FORWARDS,
+                    &mut HashSet::default(),
+                ) {
+                    self.report_prefix(draft, walk, file, callback, depth);
+                } else {
+                    self.report_conditional_region(
+                        draft,
+                        walk,
+                        file,
+                        callback,
+                        depth,
+                        &AfterAwaitObligation::HandOffNotFollowed { via: None },
+                    );
+                }
+                in_place = true;
             }
         }
         // ADR 0565: a function named whole at an argument that an exact
@@ -1261,14 +1866,22 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .is_some_and(|(callee_file, callee, exact)| {
                     exact && callee_file.path == file.path && callee.method_name.is_none()
                 });
-                if same_file_wrapper
-                    && crate::execution_role::helper_argument_run(
-                        file,
-                        call,
-                        index,
-                        ctx.semantic_lookup,
-                    )
-                    .is_some_and(|run| run.every_completion)
+                let forwarded = self.forward_runs(
+                    file,
+                    call,
+                    argument.span,
+                    MAX_FORWARDS,
+                    &mut HashSet::default(),
+                );
+                if forwarded
+                    || (same_file_wrapper
+                        && crate::execution_role::helper_argument_run(
+                            file,
+                            call,
+                            index,
+                            ctx.semantic_lookup,
+                        )
+                        .is_some_and(|run| run.every_completion))
                 {
                     self.report_prefix(draft, walk, function_file, function, depth);
                     in_place = true;
@@ -1396,7 +2009,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .to_owned(),
                     },
                     location: location(file.path.shared(), argument.span),
-                    analysis_context: walk.member.context.clone(),
+                    // A callee whose body cannot be read.
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::FUNCTION_CALL_TARGET_UNRESOLVED,
+                        &walk.member.context,
+                    ),
                     fixes: vec![],
                     uncertain: false,
                 }),
@@ -1419,7 +2036,12 @@ impl<'f, 'a> Reach<'f, 'a> {
         depth: usize,
     ) {
         let ctx = self.ctx;
-        if call.construct || depth > 3 {
+        if call.construct {
+            return;
+        }
+        // ADR 0695: past the bound the chain is unread, and no silence.
+        if depth > MAX_REGION_DEPTH {
+            self.push_search_limit(draft, walk, file, call);
             return;
         }
         let callee = file.ast.peel_ts_sugar_span(call.callee);
@@ -1436,9 +2058,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             if file.ast.computed_members.contains(&member.span) {
                 return;
             }
-            let Some((helper_file, helper)) =
-                ctx.semantic_lookup.closed_member_function(file, member)
-            else {
+            let Some((helper_file, helper)) = self.closed_member(file, member) else {
                 return;
             };
             (helper_file, helper, true)
@@ -1451,13 +2071,36 @@ impl<'f, 'a> Reach<'f, 'a> {
             };
             (helper_file, helper, false)
         };
-        if helper.generator
-            || (!member
-                && (helper.method_name.is_some()
-                    || !ctx
-                        .semantic_lookup
-                        .function_value_is_current(helper_file, helper)))
+        // ADR 0820: an iterator stepped past this suspension runs the
+        // generator's first segment here, and nothing places the stepping.
+        if helper.generator {
+            if !call.result_discarded
+                && let Some(helper_file) = self.files.get(helper_file.path.as_str()).copied()
+                && walk.stack_helpers.insert((
+                    helper_file.path.to_string(),
+                    u64::from(helper.span.start),
+                    u64::from(helper.span.end),
+                ))
+            {
+                let mark = draft.static_defects.len();
+                self.report_prefix(draft, walk, helper_file, helper, depth);
+                mark_uncertain(draft, mark, &AfterAwaitObligation::GeneratorStepped);
+            }
+            return;
+        }
+        if !member
+            && (helper.method_name.is_some()
+                || !ctx
+                    .semantic_lookup
+                    .function_value_is_current(helper_file, helper))
         {
+            return;
+        }
+        if !walk.stack_helpers.insert((
+            helper_file.path.to_string(),
+            u64::from(helper.span.start),
+            u64::from(helper.span.end),
+        )) {
             return;
         }
         // ADR 0614: the helper's store and prop reads run on this stack too.
@@ -1478,25 +2121,13 @@ impl<'f, 'a> Reach<'f, 'a> {
                 &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
             );
         }
-        for read in helper_file
-            .ast
-            .calls_within(synchronous_prefix(helper_file, helper))
-        {
-            if !written_directly_in(&helper_file.ast, helper, read.span)
-                || !crate::interproc::site_on_every_completion(
-                    ctx.semantic_lookup,
-                    helper_file,
-                    helper.span,
-                    read.span,
-                )
-            {
-                continue;
-            }
-            self.report_call_read(draft, walk, helper_file, read);
-            // A helper the helper calls on every completion runs on the same
-            // stack, so its straight-line reads are reached the same way.
-            self.report_helper_reads(draft, walk, helper_file, read, depth + 1);
-        }
+        // A read in the helper's prefix, behind a branch or a loop too, runs on
+        // this stack, past the suspension, if it runs at all: "wrong if it
+        // runs", as a read written in the member's own continuation is.
+        let Some(helper_file) = self.files.get(helper_file.path.as_str()).copied() else {
+            return;
+        };
+        self.report_prefix(draft, walk, helper_file, helper, depth + 1);
     }
 
     /// Async functions execute their prefix immediately too. Their tail is
@@ -1506,7 +2137,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         draft: &mut ProgramDraft,
         walk: &mut Walk<'_>,
         file: &'f FileFacts,
-        function: &'f FunctionFact,
+        function: &FunctionFact,
         depth: usize,
     ) {
         walk.placed.insert((file.path.to_string(), function.span));
@@ -1546,15 +2177,22 @@ impl<'f, 'a> Reach<'f, 'a> {
             .filter(|suspension| written_directly_in(ast, function, **suspension))
             .copied()
             .collect::<Vec<_>>();
-        if suspensions.is_empty() && loop_start.is_none() {
+        // ADR 0850: a generator gives up the stack at its first `yield`, and
+        // its body past it runs on whoever steps the iterator next, as an
+        // `async` function's tail runs past an `await`.
+        let yield_end = first_yield_end(file, function);
+        if suspensions.is_empty() && loop_start.is_none() && yield_end.is_none() {
             return;
         }
         let suspended_before = |at: u32| {
             loop_start.is_some_and(|start| at >= start)
+                || yield_end.is_some_and(|end| end <= at)
                 || suspensions.iter().any(|suspension| suspension.end <= at)
         };
         let suspends_after = |at: u32| {
-            loop_start.is_some() || suspensions.iter().any(|suspension| suspension.end > at)
+            loop_start.is_some()
+                || yield_end.is_some_and(|end| end > at)
+                || suspensions.iter().any(|suspension| suspension.end > at)
         };
         // A binding the member returns (`return later`) resolves the
         // computation: it runs, if ever, after the continuation has ended.
@@ -1714,7 +2352,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                     callee: file.source_text(tag).unwrap_or("this tag").to_owned(),
                 },
                 location: location(file.path.shared(), tag),
-                analysis_context: walk.member.context.clone(),
+                // ADR 0750: past the depth the walk follows.
+                analysis_context: crate::blockers::with_detail(
+                    crate::blockers::SEARCH_DEPTH_LIMIT,
+                    &walk.member.context,
+                ),
                 fixes: vec![],
                 uncertain: false,
             });
@@ -1726,6 +2368,112 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// ADR 0537: the exact, current project function the identifier at
     /// `span` names (a carrier's argument, a `call`/`apply` receiver, a
     /// template's tag), through the exact reference resolution.
+    /// A call whose callee is no primitive and no standard declaration: what
+    /// it does with a function is the project's, or a dependency's.
+    fn handed_to_project_code(&self, file: &FileFacts, call: &CallFact) -> bool {
+        let lookup = self.ctx.semantic_lookup;
+        lookup.primitive_at_call(file, call.span).is_none()
+            && crate::indexes::standard_library_declaration_of(
+                lookup.resolved_callee_call(file, call.callee),
+                typefacts::CallKind::Call,
+            )
+            .is_none()
+    }
+
+    /// The whole argument at `argument` of an exact project function ends, at
+    /// the end of a chain of whole-argument hand-ons each on every completion,
+    /// in a direct call of the parameter holding it, on every completion too. A wrapper's parameter is asked once: a chain that
+    /// fans out or recurses (`hop(g); hop(g);`) would otherwise double per hop.
+    fn forward_runs(
+        &self,
+        file: &FileFacts,
+        call: &CallFact,
+        argument: Span,
+        depth: usize,
+        seen: &mut HashSet<(String, Span, usize)>,
+    ) -> bool {
+        let lookup = self.ctx.semantic_lookup;
+        let Some(depth) = depth.checked_sub(1) else {
+            return false;
+        };
+        let Some(index) = call.arguments.iter().position(|candidate| {
+            !candidate.spread
+                && file.ast.peel_ts_sugar_span(candidate.span)
+                    == file.ast.peel_ts_sugar_span(argument)
+        }) else {
+            return false;
+        };
+        let Some((wrapper_file, wrapper, true)) =
+            crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
+        else {
+            return false;
+        };
+        if !seen.insert((wrapper_file.path.to_string(), wrapper.span, index)) {
+            return false;
+        }
+        let Some(parameter) = wrapper.parameters.get(index) else {
+            return false;
+        };
+        let (solid_facts::ast::BindingShape::Identifier, Some(name)) =
+            (parameter.shape, parameter.names.first())
+        else {
+            return false;
+        };
+        if crate::indexes::binding_written(wrapper_file, name.span) {
+            return false;
+        }
+        // On the wrapper's own stack: not in a function written in it (a timer's,
+        // a handler's, one it returns), not past a suspension of its own.
+        let prefix = synchronous_prefix(wrapper_file, wrapper);
+        wrapper_file
+            .ast
+            .reference_identifiers_to(name.span)
+            .any(|reference| {
+                let at = reference.span;
+                if !prefix.contains(at) || !written_directly_in(&wrapper_file.ast, wrapper, at) {
+                    return false;
+                }
+                // On every completion of the wrapper: `if (on) g()` under
+                // `run(hf, false)` is a call no run reaches.
+                let always = |next: &CallFact| {
+                    crate::interproc::site_on_every_completion(
+                        lookup,
+                        wrapper_file,
+                        wrapper.span,
+                        next.span,
+                    )
+                };
+                wrapper_file.ast.calls.iter().any(|next| {
+                    !next.construct
+                        && wrapper_file.ast.peel_ts_sugar_span(next.callee) == at
+                        && always(next)
+                }) || wrapper_file
+                    .ast
+                    .arguments_containing(at)
+                    .find(|(next, index)| {
+                        wrapper_file
+                            .ast
+                            .peel_ts_sugar_span(next.arguments[*index].span)
+                            == at
+                    })
+                    .is_some_and(|(next, _)| {
+                        always(next) && self.forward_runs(wrapper_file, next, at, depth, seen)
+                    })
+            })
+    }
+
+    /// The function a closed literal's member holds: written there, or named.
+    fn closed_member(
+        &self,
+        file: &FileFacts,
+        member: &solid_facts::ast::MemberFact,
+    ) -> Option<(&'f FileFacts, &'f FunctionFact)> {
+        let lookup = self.ctx.semantic_lookup;
+        lookup
+            .closed_member_function(file, member)
+            .or_else(|| self.named_function(file, lookup.closed_member_value(file, member)?))
+    }
+
     fn named_function(
         &self,
         file: &FileFacts,
@@ -1749,6 +2497,22 @@ impl<'f, 'a> Reach<'f, 'a> {
 
     /// ADR 0537: a call past the region bound: what it runs is not followed,
     /// so it is an obligation.
+    /// ADR 0750: `call` continues a chain past [`MAX_DEPTH`]: an obligation
+    /// at its callee, named by the bound.
+    fn push_search_limit(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &Walk<'_>,
+        file: &FileFacts,
+        call: &CallFact,
+    ) {
+        let mark = draft.static_defects.len();
+        self.push_unfollowed(draft, walk, file, call, call.callee);
+        for defect in &mut draft.static_defects[mark..] {
+            defect.analysis_context = crate::blockers::SEARCH_DEPTH_LIMIT.into();
+        }
+    }
+
     fn push_unfollowed(
         &self,
         draft: &mut ProgramDraft,
@@ -1804,6 +2568,8 @@ impl<'f, 'a> Reach<'f, 'a> {
             u64::from(call.callee.start),
             u64::from(call.callee.end),
         );
+        // A composite callee names no symbol (ADR 0898): it is read through its
+        // operands below (ADR 0897).
         let symbol = call_accessor_symbol(ctx, file, call);
         // ADR 0516: as on the dominance path (ADR 0509), a callee that is a
         // value a caller supplied (a prop, a context or hook member) may be an
@@ -1821,6 +2587,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                     setters: ctx.setters,
                     actions: ctx.actions,
                     props_reactivity: ctx.props_reactivity,
+                    accessors_that_count: None,
                 },
                 file,
                 call.callee,
@@ -1832,8 +2599,68 @@ impl<'f, 'a> Reach<'f, 'a> {
                 draft.push_defect(obligation);
             }
         };
+        // ADR 0897: a comma, conditional, logical or assignment callee
+        // (`(slot = r)()`) names no symbol. On this placed stack it reads the
+        // accessor its operands name, as the member's continuation does
+        // (ADR 0517's arm): exact when total and every operand is a reference
+        // to one accessor, which then answers as the symbol path does
+        // (`read_obligation` unchanged; the region's placement marks the row as
+        // it marks that path's). Any other mix with an accessor operand is an
+        // obligation at the read (review D31: never a tracked first operand's
+        // silence).
+        if symbol.is_none() {
+            let references = file.ast.composite_callee_references(call.callee);
+            let accessors = references
+                .iter()
+                .filter_map(|operand| ctx.entities.at(file.path.as_str(), *operand))
+                .filter(|symbol| ctx.accessors.contains_key(*symbol))
+                .collect::<Vec<_>>();
+            if let Some(&accessor) = accessors.first() {
+                let same = accessors.len() == references.len()
+                    && references.len() == file.ast.composite_callee_operands(call.callee).len()
+                    && accessors.iter().all(|other| *other == accessor)
+                    && file.ast.composite_callee_total(call.callee);
+                let tracking = self.tracking(walk.member, accessor);
+                if same && tracking == Tracking::Tracked {
+                    return;
+                }
+                if walk.reported.insert(key.clone()) {
+                    let obligation = if same {
+                        read_obligation(ctx, Some(accessor), tracking)
+                    } else {
+                        Some(AfterAwaitObligation::CalleeInexact)
+                    };
+                    let name = ctx
+                        .accessors
+                        .get(accessor)
+                        .map_or_else(|| accessor.to_string(), |(name, _)| name.to_string());
+                    let uncertain = obligation.is_some();
+                    draft.push_defect(StaticDefect {
+                        kind: StaticDefectKind::ReactiveReadAfterAwait {
+                            accessor: name,
+                            obligation,
+                        },
+                        location: location(
+                            file.path.shared(),
+                            if same {
+                                references[references.len() - 1]
+                            } else {
+                                call.callee
+                            },
+                        ),
+                        analysis_context: walk.member.context.clone(),
+                        fixes: vec![],
+                        uncertain,
+                    });
+                }
+                return;
+            }
+        }
         let Some(symbol) = symbol else {
             handed(walk, draft);
+            if inexact_callee(ctx, file, call) && walk.reported.insert(key) {
+                draft.push_defect(inexact_callee_obligation(file, call, &walk.member.context));
+            }
             return;
         };
         let Some((name, _)) = ctx.accessors.get(symbol) else {
@@ -1873,7 +2700,23 @@ impl<'f, 'a> Reach<'f, 'a> {
         call: &'f CallFact,
         depth: usize,
     ) {
-        if depth > MAX_DEPTH || call.construct {
+        if call.construct {
+            return;
+        }
+        if depth > MAX_DEPTH {
+            // ADR 0750: the chain goes on past the nesting limit; what its
+            // handlers read after the await is unknown, never clean.
+            self.push_search_limit(draft, walk, file, call);
+            return;
+        }
+        // A computed key (`p["then"](h)`, `p[k](h)`): whatever the type says,
+        // no arm below reads its handlers. They are obligations, never dropped.
+        if file
+            .ast
+            .computed_members
+            .contains(&file.ast.peel_ts_sugar_span(call.callee))
+        {
+            self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
             return;
         }
         let ctx = self.ctx;
@@ -1944,7 +2787,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                             .to_owned(),
                     },
                     location: location(file.path.shared(), argument.span),
-                    analysis_context: walk.member.context.clone(),
+                    // A callee whose body cannot be read.
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::FUNCTION_CALL_TARGET_UNRESOLVED,
+                        &walk.member.context,
+                    ),
                     fixes: vec![],
                     uncertain: false,
                 }),
@@ -1956,21 +2803,69 @@ impl<'f, 'a> Reach<'f, 'a> {
             self.enqueue(walk, queue, helper_file, helper, None);
             return;
         }
-        let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
+        // ADR 0695: a sync helper hands on the flight its chain returns
+        // (`const h1 = () => h0();`), as `untrack`'s callback does above.
+        if let Some((helper_file, helper)) = ctx
+            .semantic_lookup
+            .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+            .filter(|(_, helper)| !helper.r#async && !helper.generator)
+        {
+            for (inner, _) in chain_calls(helper_file, helper) {
+                self.expand(draft, walk, queue, helper_file, inner, depth + 1);
+            }
             return;
+        }
+        // ADR 0874: a call the census withholds is followed as the standard
+        // one would run its handlers, so their rows stand at their sites; its
+        // flight is unproven (as an aggregate's whose premise is withdrawn),
+        // so every handler there is an obligation, never a proof.
+        let (resolved, withheld) = match ctx.semantic_lookup.resolved_callee_call(file, call.callee)
+        {
+            Some(resolved) => (resolved, false),
+            None => {
+                if !ctx
+                    .semantic_lookup
+                    .standard_call_withheld(file, call.callee)
+                {
+                    self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
+                    return;
+                }
+                let Some(resolved) = ctx.semantic_lookup.placing_callee_call(file, call.callee)
+                else {
+                    self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
+                    return;
+                };
+                (resolved, true)
+            }
         };
+        let next = walk.unproven || withheld;
+        let previous = std::mem::replace(&mut walk.unproven, next);
+        self.expand_standard(draft, walk, queue, file, call, depth, resolved, withheld);
+        walk.unproven = previous;
+    }
+
+    /// [`Self::expand`]'s standard-library calls: a promise's handlers, and
+    /// the aggregates.
+    #[allow(clippy::too_many_arguments)]
+    fn expand_standard(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &'f FileFacts,
+        call: &'f CallFact,
+        depth: usize,
+        resolved: &typefacts::ResolvedCall,
+        withheld: bool,
+    ) {
         let Some(name) = standard_call_name(resolved) else {
+            self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
             return;
         };
         let callee = file.ast.peel_ts_sugar_span(call.callee);
         match name {
             "Promise.then" | "Promise.catch" | "Promise.finally" => {
-                let Some(receiver) = file
-                    .ast
-                    .member_at(callee)
-                    .filter(|_| !file.ast.computed_members.contains(&callee))
-                    .map(|member| member.object)
-                else {
+                let Some(receiver) = file.ast.member_at(callee).map(|member| member.object) else {
                     return;
                 };
                 // Only a native promise runs the handler from a microtask on
@@ -1981,7 +2876,19 @@ impl<'f, 'a> Reach<'f, 'a> {
                     // ADR 0349: a receiver the premise would prove native, which
                     // a visible write withdraws, is unproven, not clean: its
                     // handlers are proof obligations.
-                    if native_promise_claim(self.ctx, file, receiver, 0) {
+                    // ADR 0750: a receiver whose claim the nesting limit cut
+                    // may be native too: its handlers are obligations.
+                    let undecided = !native_promise_claim(self.ctx, file, receiver, 0)
+                        && native_promise_undecided(self.ctx, file, receiver, 0);
+                    // Review R39: a withheld call has no claim to read: its
+                    // handlers and its chain stay obligations.
+                    if withheld && !undecided && !native_promise_claim(self.ctx, file, receiver, 0)
+                    {
+                        self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
+                        return;
+                    }
+                    let mark = draft.static_defects.len();
+                    if undecided || native_promise_claim(self.ctx, file, receiver, 0) {
                         for argument in call
                             .arguments
                             .iter()
@@ -1997,9 +2904,22 @@ impl<'f, 'a> Reach<'f, 'a> {
                                     file,
                                     callback,
                                     depth,
-                                    &AfterAwaitObligation::IntrinsicMayBeReplaced,
+                                    &if undecided {
+                                        AfterAwaitObligation::HandlerMayNotRun
+                                    } else {
+                                        AfterAwaitObligation::IntrinsicMayBeReplaced
+                                    },
                                 );
                             }
+                        }
+                    }
+                    if undecided {
+                        for defect in &mut draft.static_defects[mark..] {
+                            defect.analysis_context = crate::blockers::SEARCH_DEPTH_LIMIT.into();
+                        }
+                        let receiver = file.ast.peel_ts_sugar_span(receiver);
+                        if let Some(inner) = file.ast.call_at(receiver) {
+                            self.expand(draft, walk, queue, file, inner, depth + 1);
                         }
                     }
                     return;
@@ -2022,12 +2942,69 @@ impl<'f, 'a> Reach<'f, 'a> {
                     if argument.spread {
                         continue;
                     }
-                    let Some(callback) = callback_argument_literal(file, argument.span) else {
+                    // ADR 0669: a project function handed by name runs as a literal does.
+                    let member = file
+                        .ast
+                        .member_at(file.ast.peel_ts_sugar_span(argument.span))
+                        .filter(|member| !file.ast.computed_members.contains(&member.span));
+                    let Some((handler_file, callback)) =
+                        callback_argument_literal(file, argument.span)
+                            .map(|callback| (file, callback))
+                            .or_else(|| {
+                                (argument.value == ArgumentValueKind::Identifier)
+                                    .then(|| self.named_function(file, argument.span))
+                                    .flatten()
+                            })
+                            .or_else(|| member.and_then(|member| self.closed_member(file, member)))
+                    else {
+                        // A member handler the slot does not resolve exactly
+                        // reads on the flight if it runs: an obligation of the
+                        // rule, at the call (R41), never a name match.
+                        if member.is_some() {
+                            let mut obligation = typed_after_await_obligation(file, call.callee);
+                            obligation.analysis_context = "handed-read-after-await".to_owned();
+                            draft.push_defect(obligation);
+                            continue;
+                        }
+                        // ADR 0880: a handler the walk cannot read (a call's
+                        // result, a parameter) may read on the flight. A plain
+                        // value is no function: no handler.
+                        if !plain_value(file, argument.span) {
+                            self.push_unfollowed(draft, walk, file, call, argument.span);
+                        }
                         continue;
                     };
+                    // ADR 0881: an `async` handler's body runs on the flight
+                    // too, its prefix in the handler's microtask; a generator
+                    // handler's iterator is the chain's value, and a later
+                    // handler may step it on the flight (review D14). Each is
+                    // an obligation until that run is placed.
                     if callback.r#async || callback.generator {
+                        self.report_conditional_region(
+                            draft,
+                            walk,
+                            handler_file,
+                            callback,
+                            depth,
+                            &AfterAwaitObligation::HandOffNotFollowed {
+                                via: Some(
+                                    if callback.generator {
+                                        "a generator handler"
+                                    } else {
+                                        "an async handler"
+                                    }
+                                    .to_owned(),
+                                ),
+                            },
+                        );
                         continue;
                     }
+                    // Review (D-R3d-2): an async function the handler calls
+                    // returns a promise the handler's joins, so its body past
+                    // its own await runs on the flight; its prefix runs in
+                    // the handler's microtask. No queue placed it: walk it as
+                    // an obligation, with no window of its own.
+                    self.enqueue_handler_calls(walk, queue, handler_file, callback);
                     // A rejection handler runs only if the receiver rejects;
                     // a fulfillment handler only if it fulfills. `finally`
                     // runs either way.
@@ -2041,9 +3018,16 @@ impl<'f, 'a> Reach<'f, 'a> {
                         } else {
                             AfterAwaitObligation::IntrinsicMayBeReplaced
                         };
-                        self.report_conditional_region(draft, walk, file, callback, depth, &reason);
+                        self.report_conditional_region(
+                            draft,
+                            walk,
+                            handler_file,
+                            callback,
+                            depth,
+                            &reason,
+                        );
                     } else {
-                        self.report_region(draft, walk, file, callback, depth);
+                        self.report_region(draft, walk, handler_file, callback, depth);
                     }
                 }
                 let receiver = file.ast.peel_ts_sugar_span(receiver);
@@ -2056,7 +3040,122 @@ impl<'f, 'a> Reach<'f, 'a> {
             {
                 self.expand_aggregate(draft, walk, queue, file, call, depth);
             }
+            // Review R39: `PromiseLike.then` and the rest: a withheld call has
+            // handlers the walk must not lose.
+            _ if withheld => {
+                self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
+            }
             _ => {}
+        }
+    }
+
+    /// ADR 0882: `.then`/`.catch`/`.finally` on the flight with no exact
+    /// standard declaration (a cast, an `any` receiver, a thenable): the
+    /// handlers may run on the flight, inline, or never. A function the walk
+    /// can read is an obligation region; any other handler is unresolved.
+    fn unresolved_chain_handlers(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &'f FileFacts,
+        call: &CallFact,
+        depth: usize,
+    ) {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(member) = file.ast.member_at(callee) else {
+            return;
+        };
+        // A literal key names the member (`p["then"](h)`); any other computed
+        // key may name a chain call, and nothing here says which.
+        let computed = file.ast.computed_members.contains(&callee);
+        let name = if computed {
+            file.ast
+                .literal_computed_members
+                .iter()
+                .find(|literal| literal.span == callee)
+                .map(|literal| literal.key.as_ref())
+        } else {
+            file.source_text(member.property)
+        };
+        let handlers = match name {
+            Some("then") => 2,
+            Some("catch" | "finally") => 1,
+            None if computed => {
+                for argument in &call.arguments {
+                    if argument.spread || !plain_value(file, argument.span) {
+                        self.push_unfollowed(draft, walk, file, call, argument.span);
+                    }
+                }
+                // The receiver's chain is its own, whatever this link is.
+                let receiver = file.ast.peel_ts_sugar_span(member.object);
+                if let Some(inner) = file.ast.call_at(receiver) {
+                    self.expand(draft, walk, queue, file, inner, depth + 1);
+                }
+                return;
+            }
+            _ => return,
+        };
+        for argument in call.arguments.iter().take(handlers) {
+            let readable = (!argument.spread)
+                .then(|| {
+                    callback_argument_literal(file, argument.span)
+                        .map(|callback| (file, callback))
+                        .or_else(|| {
+                            (argument.value == ArgumentValueKind::Identifier)
+                                .then(|| self.named_function(file, argument.span))
+                                .flatten()
+                        })
+                })
+                .flatten();
+            match readable {
+                Some((handler_file, callback)) => {
+                    self.enqueue_handler_calls(walk, queue, handler_file, callback);
+                    self.report_conditional_region(
+                        draft,
+                        walk,
+                        handler_file,
+                        callback,
+                        depth,
+                        &AfterAwaitObligation::HandlerMayNotRun,
+                    );
+                }
+                None if !argument.spread && plain_value(file, argument.span) => {}
+                None => self.push_unfollowed(draft, walk, file, call, argument.span),
+            }
+        }
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        if let Some(inner) = file.ast.call_at(receiver) {
+            self.expand(draft, walk, queue, file, inner, depth + 1);
+        }
+    }
+
+    /// Review (D-R3d-2): each async project function a handler calls, walked
+    /// as an obligation with no window of its own (the handler runs off the
+    /// computation's stack).
+    fn enqueue_handler_calls(
+        &self,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &FileFacts,
+        callback: &FunctionFact,
+    ) {
+        for inner in file.ast.calls_within(callback.body) {
+            let Some((helper_file, helper)) = async_helper(self.ctx, file, inner) else {
+                continue;
+            };
+            let past = walk.past_suspension;
+            walk.past_suspension = true;
+            self.enqueue(
+                walk,
+                queue,
+                helper_file,
+                helper,
+                Some(AfterAwaitObligation::HandOffNotFollowed {
+                    via: Some("a promise handler's call".to_owned()),
+                }),
+            );
+            walk.past_suspension = past;
         }
     }
 
@@ -2167,17 +3266,18 @@ impl<'f, 'a> Reach<'f, 'a> {
                 symbol: "".into(),
                 target: "".into(),
                 can_return_async: true,
+                may_answer_sync: false,
+                return_open: false,
                 calls_after_await: Vec::new(),
             },
             |fact| (*fact).clone(),
         );
-        if self.done.contains(&Self::key(&fact)) {
-            return;
-        }
         walk.queued.insert((file.path.to_string(), function.span));
         let fact = Rc::new(fact);
         let mut windows = walk.member.windows.clone();
-        if !walk.untracked {
+        // ADR 0872: a helper's own window tracks only while the computation
+        // has not suspended: past that its prefix runs with no observer.
+        if !walk.untracked && !walk.past_suspension {
             windows.push(Rc::clone(&fact));
         }
         // An `async` function returned without `await` is adopted by its
@@ -2196,13 +3296,33 @@ impl<'f, 'a> Reach<'f, 'a> {
             .or_else(|| {
                 (walk.carried == Carried::Adopted && !self.awaits_pending(file, function))
                     .then_some(AfterAwaitObligation::ContinuationMayRunFirst)
+            })
+            .or_else(|| {
+                walk.past_on_some_path
+                    .then_some(AfterAwaitObligation::SuspensionUnplaced)
             });
-        queue.push(Member {
+        let mut member = Member {
             function: fact,
             context: walk.member.context.clone(),
             windows,
             conditional,
-        });
+            blocker: walk.member.blocker,
+        };
+        // ADR 0871: an unseen window set past the bound: one last walk with no
+        // window and every row an obligation.
+        if !self.done.contains(&Self::walk_key(&member))
+            && self
+                .walks
+                .get(&Self::key(&member.function))
+                .copied()
+                .unwrap_or(0)
+                >= MAX_WALKS_PER_FUNCTION
+        {
+            member.windows = Vec::new();
+            member.conditional = Some(AfterAwaitObligation::SuspensionUnplaced);
+            member.blocker = Some(crate::blockers::SEARCH_DEPTH_LIMIT);
+        }
+        queue.push(member);
     }
 
     /// The producer's fact of `function` (ADR 0351): the fact at its span, or an

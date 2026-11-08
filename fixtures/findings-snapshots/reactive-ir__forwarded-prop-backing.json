@@ -15,6 +15,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 1055,
@@ -25,6 +26,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 1357,
@@ -32,9 +34,32 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
+      "start": 1387,
+      "end": 1393,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
+      "start": 1488,
+      "end": 1493,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 1685,
@@ -45,6 +70,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 1876,
@@ -55,6 +81,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 2101,
@@ -65,6 +92,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 2414,
@@ -72,9 +100,21 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
+      "start": 2443,
+      "end": 2448,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 2604,
@@ -85,10 +125,22 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
       "start": 3187,
       "end": 3194,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-prop-backing/App.tsx",
+      "start": 3254,
+      "end": 3259,
       "fixes": 0
     }
   ]

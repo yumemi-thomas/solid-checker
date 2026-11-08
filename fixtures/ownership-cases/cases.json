@@ -346,11 +346,304 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "props.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
      }
     ],
     "absent": []
    },
    "note": "ADR 0476: a write past the root is uncertifiable. The proxy serves a child only through `isWrappable` (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:2272-2283`, `:5569`, `:5605`), which refuses a frozen object, a non-plain prototype and a DOM node and serves it raw, so a write below such a link lands (Chrome, witnessed with `Object.freeze`). Whether a link's value is plain is a property of the value, not its type."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/loop-head/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0 });\n// A loop head writes on each iteration (ADR 0716).\nexport function Once() {\n  for (profile.count of [1]) {}\n}\n// Nothing proves this loop iterates.\nexport function Maybe(xs: number[]) {\n  for (profile.count of xs) {}\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        169,
+        182
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        279,
+        292
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "no-store-mutation-outside-setter/logical-assignment/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ name: null as string | null, count: 1 });\n// A logical assignment writes only when its test passes (ADR 0718).\nexport function Named() {\n  profile.name ??= \"a\";\n}\n// The literal the store still holds fails the test: nothing is written.\nexport function Counted() {\n  profile.count ??= 2;\n}\n// Nothing proves the value.\nexport function Seeded(seed: number) {\n  const [seeded] = createStore({ n: seed });\n  seeded.n ||= 2;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": { "marker": "profile.name" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "seeded.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "no-store-mutation-outside-setter/parameter-flow/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\ntype N = { n: number };\n// A store handed to a parameter is written through its proxy (ADR 0719).\nconst bump = (o: N) => { o.n = 5; };\n// Only plain values reach this one.\nconst plain = (p: N) => { p.n = 4; };\n// A link past the root is not proven wrapped.\nconst link = (q: N) => { q.n = 2; };\nconst [st] = createStore({ n: 1, user: { n: 1 } });\nexport function Handed() {\n  bump(st);\n  plain({ n: 0 });\n  link(st.user);\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": { "marker": "o.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "q.n" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        420,
+        422
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        163,
+        164
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "no-store-mutation-outside-setter/element-flow/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// A function returning its own parameter returns the store (ADR 0720).\nconst id = <T,>(v: T): T => v;\nconst [st] = createStore({ n: 1, items: [{ n: 1 }] });\nexport function Flow() {\n  id(st).n = 5;\n  // An element past the root is not proven wrapped.\n  for (const row of st.items) row.n = 2;\n  // A copy written itself is a plain array.\n  st.items.slice(0).push({ n: 3 });\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "id(st).n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "row.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        228,
+        230
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        225,
+        231
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "no-store-mutation-outside-setter/setter-alias-limit/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// The setter through six `const` aliases: past the four followed, its callback is a window not proven\n// either way (ADR 0751), so the write in it is unproven, never dropped.\nexport function Six() {\n  const [store, setStore] = createStore({ a: 1 });\n  const s1 = setStore; const s2 = s1; const s3 = s2; const s4 = s3; const s5 = s4; const s6 = s5;\n  const bump = () => { store.a = 2; };\n  return <button onClick={() => s6(() => { bump(); })}>{store.a}</button>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "store.a",
+       "occurrence": 1
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
   },
   {
    "id": "no-store-mutation-outside-setter/nested-props-value/001",
@@ -1093,6 +1386,7 @@
    "ruleOptions": {},
    "presets": [],
    "enableRules": [],
+   "note": "The SC9012 row is the value-use census (ADR 0692): where `target` goes, not its type, so a distinct claim beside TS2345 (invariant 1); uncertifiable rows are internal (ADR 0328).",
    "expect": {
     "findings": [
      {
@@ -1111,6 +1405,26 @@
          }
         }
        ]
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        93,
+        99
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "distinct-claim",
+       "diagnostics": [],
+       "justification": "TS2345 is about the argument's type; the census row says where `target`'s value goes (into `affects`, a slot the census does not follow). A different claim about the same code, which invariant 1 allows. Uncertifiable, so internal only and never reported (ADR 0328)."
       }
      }
     ],
@@ -1490,6 +1804,22 @@
    "enableRules": [],
    "expect": {
     "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
      {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
@@ -2793,6 +3123,22 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "getter()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -2915,7 +3261,7 @@
     ],
     "absent": []
    },
-   "note": "ADR 0482: a member read of an exclusive object-literal arrow result is the `const` it names (ADR 0481), so `holder.store` is the store's root and `.count` its own property. Upstream eslint-plugin-solid 0.14.5 roots a write at the identifier `holder` and never reports it: a kept divergence, since rc.17's proxy drops the write outside the setter (`dist/dev.js:5691-5700`) exactly as it does for `store.count = 5`. Found by the misuse matrix's `hook-member` binding (certified false cleans)."
+   "note": "ADR 0482: a member read of an exclusive object-literal arrow result is the `const` it names (ADR 0481), so `holder.store` is the store's root and `.count` its own property. Upstream eslint-plugin-solid 0.14.5 roots a write at the identifier `holder` and never reports it: a kept divergence, since rc.17's proxy drops the write outside the setter (`dist/dev.js:5691-5700`) exactly as it does for `store.count = 5`. Found by the misuse matrix's `hook-member` binding (certified false cleans). ADR 0811: SC2003 decided the write, so the census follows `store` through the holder (was SC9012 `value-held-in-binding`)."
   },
   {
    "id": "no-store-mutation-outside-setter/hook-member-write-in-setter/001",
@@ -2934,9 +3280,675 @@
      {
       "rule": "no-store-mutation-outside-setter"
      }
+    ],
+    "silent": true
+   },
+   "note": "ADR 0482: the same write through the member inside the store's own setter, itself called through the member (`holder.setStore`), commits (rc.17 `inDraft` holds for the same proxy). The setter check pairs a member alias with the setter slot it names. The legal-context matrix found this class of false positive in ADR 0480's first cut. ADR 0811: the write SC2003 proves legal is the census's row for that use, so `store` is followed (was SC9012 `value-held-in-binding`); measured in Chrome rc.21, quiet, the write commits."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/hook-member-handed/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store, setStore] = createStore({ count: 0 });\nconst useState = () => ({ store, setStore });\nconst holder = useState();\ndeclare function f(x: unknown): void;\nholder.setStore(() => {\n  holder.store.count = 5;\n});\nf(holder.store);\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        119,
+        124
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        260,
+        272
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
     ]
    },
-   "note": "ADR 0482: the same write through the member inside the store's own setter, itself called through the member (`holder.setStore`), commits (rc.17 `inDraft` holds for the same proxy). The setter check pairs a member alias with the setter slot it names. The legal-context matrix found this class of false positive in ADR 0480's first cut."
+   "note": "ADR 0811, the negative: the write in the setter is decided, but the same holder member is also handed to a function no source describes, so `store` stays open (SC9012 `value-to-unresolved-callee`). A decided write speaks only for its own use; the handed use has its own row (ADR 0831)."
+  },
+  {
+   "id": "jsx-no-duplicate-props/solid-v2/open-spread/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "const o: Record<string, string> = { title: \"t\" };\nexport const App = () => <div {...o}>child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "<div {...o}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0651): eslint-plugin-solid 0.14.5 reads a spread only when its argument is an object expression (`jsxGetAllProps`), so an open spread is silent there. In rc.21 a spread beside children can carry innerHTML and wipe them (flip witnesses SC8003 h02-h08). Unproven, so uncertifiable, blocker spread-content-unproven."
+  },
+  {
+   "id": "jsx-no-duplicate-props/solid-v2/nullish-text/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const App = (props: { text?: string }) => <div textContent={props.text}>child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "<div textContent={props.text}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0651): upstream reports any textContent beside children. In rc.21 Chrome, a nullish or empty textContent drops nothing and the children render, so a value not proven filled is uncertifiable, blocker content-source-value-unproven."
+  },
+  {
+   "id": "uncalled-accessor/solid-v2/standard-value/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\nexport const App = () => { const [c] = createSignal(1); return <i>{String(c)}</i>; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [115, 116]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0652): eslint-plugin-solid 0.14.5 exempts every call argument. In rc.21 a standard-library parameter the compiler proves value-only cannot call the accessor, and `String(c)` renders its source, so the argument is an uncertifiable, blocker accessor-value-coerced."
+  },
+  {
+   "id": "reactive-handler-frozen/solid-v2/handed-root/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "const plain = { f: () => {} };\nconst useHandlers = () => plain;\nexport const App = () => { const fromHook = useHandlers(); return <button onClick={fromHook.f} />; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "fromHook.f"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "fromHook.f"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0653): eslint-plugin-solid 0.14.5 reads only a tracked root. A member of a value a hook returned may be a store member in rc.21, where Chrome warns STRICT_READ_UNTRACKED and the handler freezes, so with no proven root it is an uncertifiable, blocker handler-root-unproven."
+  },
+  {
+   "id": "no-destructure/solid-v2/open-root/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const C = (props: { a: number }) => { const [{ a }] = [props]; return <i>{a}</i>; };\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "[{ a }]"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        62,
+        67
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        61,
+        68
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        51,
+        58
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence (ADR 0657): eslint-plugin-solid 0.14.5 reads the parameter pattern only. In rc.21 a destructure through a wrapper Gets the prop at setup and Chrome warns STRICT_READ_UNTRACKED, so a pattern whose value holds a prop or store root is an uncertifiable, blocker destructure-root-unproven."
+  },
+  {
+   "id": "prefer-for/solid-v2/store-receiver/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore, For } from \"solid-js\";\nconst [s] = createStore({ l: [1] });\nexport const App = () => <ul>{s.l.map((x) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "s.l.map((x) => <li>{x}</li>)"
+      },
+      "fix": {
+       "behavior": "safe",
+       "text": "import { createStore, For } from \"solid-js\";\nconst [s] = createStore({ l: [1] });\nexport const App = () => <ul>{<For each={s.l}>{(x) => <li>{x}</li>}</For>}</ul>;\n"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "ADR 0671: a store path's read row spans the callee, so the read is asked of the callee. Upstream's isArrayMap-only check had no store notion to lose."
+  },
+  {
+   "id": "prefer-for/solid-v2/open-receiver-type/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, createStore } from \"solid-js\";\nconst [l] = createSignal<any>([1]);\nexport const App = () => <ul>{l().map((x: number) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "l().map((x: number) => <li>{x}</li>)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence, ADR 0671: an any receiver is no proof either way. Upstream reports any map; this port needs a proven array, so an any stays open rather than silent."
+  },
+  {
+   "id": "prefer-for/solid-v2/open-optional-receiver/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, createStore } from \"solid-js\";\nconst [l] = createSignal<number[] | undefined>([1]);\nexport const App = () => <ul>{l()?.map((x) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "l()?.map((x) => <li>{x}</li>)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence, ADR 0671: a union mixing array and non-array proves neither."
+  },
+  {
+   "id": "prefer-show/solid-v2/open-method-test/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal, createStore } from \"solid-js\";\nconst [s] = createSignal(true);\nconst o = { r() { return s(); } };\nexport const App = () => <div>{o.r() ? <a /> : <b />}</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "s()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "o.r() ? <a /> : <b />"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence, ADR 0671: a project method's call may read, and no row settles it, so the site stays open."
+  },
+  {
+   "id": "prefer-for/solid-v2/settled-literal-receiver/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "import { createSignal } from \"solid-js\";\n",
+    "text": "const rows = [1, 2];\nexport const App = () => <ul>{rows.map((x) => <li>{x}</li>)}</ul>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [
+    "preferences"
+   ],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "prefer-for",
+      "reason": "a const array literal can hold no read"
+     }
+    ]
+   },
+   "note": "ADR 0671: a literal settles the root, so no obligation."
+  },
+  {
+   "id": "prefer-show/solid-v2/settled-identifier-test/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "import { createSignal } from \"solid-js\";\n",
+    "text": "export const App = () => {\n  const on = Math.random() > 0.5;\n  return <div>{on ? <a /> : <b />}</div>;\n};\n"
+   },
+   "ruleOptions": {},
+   "presets": [
+    "preferences"
+   ],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "prefer-show",
+      "reason": "a bare identifier as a test reaches no trap"
+     }
+    ]
+   },
+   "note": "ADR 0671: a value captured once is no read at this position."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/sub-value-flow/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// ADR 0790: a root no row of the flow describes. Upstream's `noWrite` sees none of these.\ntype N = { n: number };\nconst [st] = createStore({ a: { n: 1 } as N, ls: [{ p: { n: 1 } as N }], m: { k: { n: 1 } as N } as Record<string, N> });\nconst id = <T,>(x: T): T => x;\nconst outer = <T,>(y: T): T => id(y);\nexport function Flow() {\n  return <button onClick={() => {\n    outer(st).a = { n: 2 };\n    for (const { p } of st.ls) p.n = 2;\n    for (const [, v] of Object.entries(st.m)) v.n = 4;\n  }}>{st.a.n}</button>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "outer(st).a"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "p.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "v.n"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        415,
+        417
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        409,
+        418
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence from eslint-plugin-solid 0.14.5 (6d3bc311): upstream's `noWrite` reports only a write through a tracked props or store identifier, so a store reached through a nested identity, a destructured loop binding or an entry's value is silent there. rc.21 drops each write with STORE_WRITE_OUTSIDE_SETTER (Chrome, witnessed). The frame binds `y` to `st` at this call, so the first write is proven; the others read past a link (ADR 0476) and stay obligations."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/sub-value-flow/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\n// ADR 0790: the entity at an expression names its first token; `st` here is the test, not the value.\nconst [st] = createStore({ a: { n: 1 } });\nexport function Quiet() {\n  return <button onClick={() => {\n    (st.a.n > 0 ? { n: 1 } : { n: 2 }).n = 3;\n    (Math.random() > 0.5 ? { ...st.a } : { n: 0 }).n = 4;\n  }}>{st.a.n}</button>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [
+     {
+      "rule": "no-store-mutation-outside-setter"
+     }
+    ]
+   },
+   "note": "ADR 0790: before it, the first write was a violation: the root's entity named `st`, the conditional's first token. Chrome is silent on both writes: each lands on a fresh literal."
+  },
+  {
+   "id": "no-store-mutation-outside-setter/delete-computed-required/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: 1 });\nexport function Remove() {\n  delete store[\"req\"];\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "span": {
+       "marker": "store[\"req\"]"
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2790",
+         "span": {
+          "marker": "store[\"req\"]"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "ADR 0791: a computed-key delete reaches the same `deleteProperty` trap, and for a required literal key TypeScript speaks (TS2790), so the checker is silent. Type Facts answers no optionality for an element access, so an optional computed key is a known miss for now (docs/open-work.md), and making it uncertifiable would report this case too. Upstream 0.14.5 has no delete arm; the rule is product-owned (ADR 0461)."
   }
  ]
 }

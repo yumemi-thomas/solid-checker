@@ -4,7 +4,7 @@
 
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
-use crate::execution_role::{allowed_callback_spans, semantic_execution_role};
+use crate::execution_role::{allowed_callback_spans, read_execution_role, semantic_execution_role};
 use crate::identity::SymbolId;
 use crate::owners::{
     component_binding_name, component_props_parameter_fix, containing_ast_function,
@@ -19,6 +19,7 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 mod after_await;
+mod handed_compute;
 mod native_promise;
 mod pre_await;
 
@@ -44,7 +45,11 @@ pub(crate) fn static_prepass<'a>(
             .as_deref_mut()
             .map(|chunks| &mut chunks.value_references),
         &inputs,
-        |file| primitive_value_references(ctx, file),
+        |file| {
+            let mut defects = primitive_value_references(ctx, file);
+            defects.extend(unresolved_import_references(ctx, file));
+            defects
+        },
     );
     push_defects(draft, &per_file);
     let per_file = crate::late_chunks::FileChunks::run(
@@ -150,6 +155,66 @@ fn primitive_result_methods(
     defects
 }
 
+/// ADR 0827: every runtime reference of an import binding the compiler did
+/// not resolve. The binding's symbol aliases a root with no declaration (the
+/// checker's one unknown symbol): a missing module, an export its target
+/// lacks, an import silenced by `@ts-ignore`. Nothing says what the value is,
+/// so a call of it, a read of it in a tracked scope, a tag, a write through
+/// it are all open: an obligation at each reference, never a silent clean.
+/// A binding with no entity is the same missing fact. Type positions are
+/// erased and skipped.
+fn unresolved_import_references(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
+    let ast = &file.ast;
+    let mut defects = Vec::new();
+    for import in ast.imports.iter().filter(|import| !import.type_only) {
+        for binding in import
+            .bindings
+            .iter()
+            .filter(|binding| !binding.type_only && binding.runtime_referenced)
+        {
+            let declaration = binding.local.span;
+            let unresolved = ctx
+                .entities
+                .at(file.path.as_str(), declaration)
+                .is_none_or(|symbol| ctx.semantic_lookup.symbol_undeclared(symbol.as_str()));
+            if !unresolved {
+                continue;
+            }
+            let name = file.source_text(declaration).unwrap_or("this import");
+            for &(reference, _) in
+                ast.reference_declarations
+                    .iter()
+                    .filter(|(reference, declared)| {
+                        *declared == declaration && *reference != declaration
+                    })
+            {
+                if ast
+                    .type_queries
+                    .iter()
+                    .chain(&ast.type_names)
+                    .any(|erased| erased.contains(reference))
+                {
+                    continue;
+                }
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: name.to_owned(),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), reference),
+                    analysis_context: crate::blockers::IMPORT_UNRESOLVED.to_owned(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+        }
+    }
+    defects
+}
+
 /// A dialect primitive referenced as a value rather than called by name
 /// (`const effect = createEffect; effect(…)`, `Reflect.apply(createEffect,
 /// …)`, `afterEach(cleanup)`, `[Solid.createEffect]`). Every rule finds a
@@ -215,6 +280,7 @@ fn primitive_value_references(
                 || ast.type_queries.iter().any(|query| query.contains(span))
                 || ast.type_names.iter().any(|name| name.contains(span))
                 || crate::indexes::reference_is_declaration_or_module_surface(file, span)
+                || crate::symbols::copied_into_primitive_binding(file, span)
                 || !seen.insert(span)
             {
                 continue;
@@ -228,13 +294,38 @@ fn primitive_value_references(
             ) else {
                 continue;
             };
+            // ADR 0825: the primitive is named only when the binder confirms
+            // it (ADR 0711); a symbol the producer attributes to one with no
+            // import that says so stays open, named by its own text.
+            let value = ast
+                .members
+                .iter()
+                .find(|member| member.property == span)
+                .map_or(span, |member| member.span);
+            let proven = ast.reference_declaration(span).is_some_and(|declaration| {
+                ast.namespace_member_binding(declaration).is_some()
+                    || crate::symbols::import_alias_source(file, declaration).is_some()
+            }) || crate::cleanup::primitive_identity_proven_at(
+                ctx.dialect,
+                file,
+                value,
+                &primitive,
+            );
+            let (callee, context) = if proven {
+                (primitive.to_string(), crate::PRIMITIVE_VALUE)
+            } else {
+                (
+                    file.source_text(value).unwrap_or("this value").to_owned(),
+                    crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN,
+                )
+            };
             defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee: primitive.to_string(),
+                    callee,
                     member: None,
                 },
                 location: location(file.path.shared(), span),
-                analysis_context: crate::PRIMITIVE_VALUE.to_owned(),
+                analysis_context: context.to_owned(),
                 fixes: vec![],
                 uncertain: true,
             });
@@ -261,14 +352,14 @@ fn component_props_destructure(
     tables: &crate::late_chunks::DiscoveryTables<'_>,
     file: &solid_facts::FileFacts,
 ) -> Vec<StaticDefect> {
-    let mut defects = Vec::new();
+    let mut defects = open_destructures(ctx, tables, file);
     {
         for function in &file.ast.functions {
-            // Solid invokes components with one props object. Reject the
-            // overwhelmingly common non-destructured functions before the
-            // whole-project component-identity lookup.
-            if function.parameters.len() <= 1
-                && let Some(parameter) = function
+            // Solid invokes components with one props object, whatever else
+            // the signature declares. Reject the overwhelmingly common
+            // non-destructured functions before the whole-project
+            // component-identity lookup.
+            if let Some(parameter) = function
                     .parameters
                     .first()
                     .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
@@ -370,6 +461,53 @@ fn component_props_destructure(
                 ctx.symbol_names,
                 ctx.semantic_lookup,
             );
+            // ADR 0823: a destructure reads every slot it binds. In a leaf
+            // owner a pending getter there is PENDING_ASYNC_FORBIDDEN_SCOPE;
+            // the callers either exclude one or the read is an obligation.
+            // As ADR 0509 asks of `props.x`: a getter of an async source
+            // outside tracked JSX, or in a leaf owner; an open caller set in
+            // a leaf owner.
+            if let Some(declaration) = &prop_declaration {
+                let leaf = || {
+                    crate::local_access::may_run_in_leaf_owner(
+                        file,
+                        binding.pattern,
+                        ctx.entities,
+                        ctx.symbol_names,
+                        ctx.semantic_lookup,
+                    )
+                };
+                let names = (binding.names.len() <= binding.object_slots.len()).then(|| {
+                    binding
+                        .object_slots
+                        .iter()
+                        .map(|slot| slot.property.to_string())
+                        .collect::<Vec<_>>()
+                });
+                let context = match tables.props_pending(declaration, names) {
+                    1 if role != crate::ExecutionRole::TrackedJsx || leaf() => {
+                        Some("async-prop-getter")
+                    }
+                    2 if leaf() => Some(crate::blockers::PROP_PENDING_UNPROVEN),
+                    _ => None,
+                };
+                if let Some(context) = context {
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                            callee: binding
+                                .initializer
+                                .and_then(|span| file.source_text(span))
+                                .unwrap_or("this props object")
+                                .to_owned(),
+                            member: None,
+                        },
+                        location: location(file.path.shared(), binding.pattern),
+                        analysis_context: context.to_owned(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
+            }
             // Fresh-at-call-time contexts: tracked scopes re-run and
             // re-subscribe; event handlers, deferred/leaf callbacks, effect
             // apply, untrack, and directive application read current values
@@ -439,6 +577,208 @@ fn component_props_destructure(
         }
     }
     defects
+}
+
+/// ADR 0657: a destructure no exact root reaches. An assignment, a `for…of`, a
+/// default, a rest pattern, a wrapped initializer holding a prop or store root,
+/// and a hook whose result is not a closed literal may all snapshot a reactive
+/// object at setup: uncertifiable, never a silent clean.
+fn open_destructures(
+    ctx: &AnalysisContext<'_>,
+    tables: &crate::late_chunks::DiscoveryTables<'_>,
+    file: &solid_facts::FileFacts,
+) -> Vec<StaticDefect> {
+    let ast = &file.ast;
+    let holds_root = |value: Span| {
+        ast.identifiers_within(value).any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && !ast
+                    .functions_containing(identifier.span)
+                    .any(|function| value.contains(function.span))
+                // `createSignal(props.x)` reads one value, SC1001's; the
+                // pattern takes the primitive's tuple, not the root.
+                && !ast.members.iter().any(|member| {
+                    value.contains(member.span)
+                        && ast.peel_ts_sugar_span(member.object) == identifier.span
+                })
+                && [Some(identifier.span), ast.reference_declaration(identifier.span)]
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|span| ctx.entities.at(file.path.as_str(), span))
+                    .any(|symbol| {
+                        tables.prop_source(symbol).is_some()
+                            || tables.source_kind(symbol) == Some(&ReactiveSourceKind::Store)
+                    })
+        })
+    };
+    let exact_root = |pattern: Span| {
+        ast.bindings.iter().any(|binding| {
+            binding.pattern == pattern
+                && binding.shape == solid_facts::ast::BindingShape::Object
+                && binding.initializer_identifier.is_some()
+        })
+    };
+    let mut sites = Vec::new();
+    for (pattern, value) in &ast.pattern_values {
+        if !exact_root(*pattern) && holds_root(*value) {
+            sites.push(*pattern);
+        }
+    }
+    for (statement, left) in &ast.loop_repeats {
+        let iterated = ast
+            .iterated_operands
+            .iter()
+            .find(|operand| statement.contains(**operand) && operand.start >= left.end);
+        if iterated.is_some_and(|operand| holds_root(*operand)) {
+            sites.extend(
+                ast.bindings
+                    .iter()
+                    .filter(|binding| {
+                        left.contains(binding.pattern)
+                            && binding.shape != solid_facts::ast::BindingShape::Identifier
+                    })
+                    .map(|binding| binding.pattern),
+            );
+        }
+    }
+    for function in &ast.functions {
+        for parameter in function.parameters.iter().skip(1) {
+            if parameter.shape != solid_facts::ast::BindingShape::Identifier
+                && parameter.initializer.is_some_and(holds_root)
+            {
+                sites.push(parameter.pattern);
+            }
+        }
+        let rest_pattern = function.rest_parameter
+            && function.parameters.is_empty()
+            && function.rest_parameter_names.iter().any(|name| {
+                file.source_text(Span::new(
+                    name.span.start.saturating_sub(3),
+                    name.span.start,
+                )) != Some("...")
+            });
+        if rest_pattern
+            && ctx
+                .semantic_lookup
+                .function_may_be_component(file, function)
+        {
+            sites.extend(function.rest_parameter_names.first().map(|name| name.span));
+        }
+    }
+    for binding in &ast.bindings {
+        if binding.shape == solid_facts::ast::BindingShape::Object
+            && hook_result_open(ctx, file, binding)
+        {
+            sites.push(binding.pattern);
+        }
+    }
+    if sites.is_empty() {
+        return Vec::new();
+    }
+    sites.sort_unstable();
+    sites.dedup();
+    let allowed = allowed_callback_spans(file, ctx.semantic_lookup);
+    sites
+        .into_iter()
+        .filter(|pattern| {
+            !crate::execution_role::discarded_region_contains(file, *pattern)
+                && may_snapshot_at_setup(ctx, file, *pattern, &allowed)
+        })
+        .map(|pattern| StaticDefect {
+            kind: StaticDefectKind::ReactiveObjectDestructure {
+                source: "a reactive object".into(),
+                component_props: false,
+            },
+            location: location(file.path.shared(), pattern),
+            analysis_context: crate::blockers::DESTRUCTURE_ROOT_UNPROVEN.to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        })
+        .collect()
+}
+
+/// Whether a destructure may be a claim at all. A proven fresh role reads current
+/// values when it runs; a helper's role is not proven either way, so unlike the
+/// exact-root arm a helper stays a site: this is uncertifiable, not a claim.
+/// ADR 0670: an apply, a `ref` and an untracked callback read fresh too, but in a
+/// strict window, where a store's Get warns: they stay sites.
+fn may_snapshot_at_setup(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: Span,
+    allowed: &[Span],
+) -> bool {
+    // The read's own role: a ref's nested layers and rows are unplaced or
+    // strict there, whatever the semantic walk says of the callback around them.
+    !matches!(
+        read_execution_role(
+            file,
+            pattern,
+            allowed,
+            ctx.entities,
+            ctx.symbol_names,
+            ctx.semantic_lookup,
+        ),
+        crate::ExecutionRole::TrackedJsx
+            | crate::ExecutionRole::EventCallback
+            | crate::ExecutionRole::DeferredCallback
+            | crate::ExecutionRole::UntrackedUnwindowed
+    )
+}
+
+/// `const { a } = useThing()`: a call of no primitive whose result may be a
+/// store. A project function whose every return is a closed object literal
+/// hands a plain object; the standard library hands no store.
+fn hook_result_open(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> bool {
+    let Some(call) = binding
+        .call_initializer
+        .and_then(|initializer| file.ast.call_at(initializer))
+    else {
+        return false;
+    };
+    let lookup = ctx.semantic_lookup;
+    if call.construct
+        || lookup.primitive_at_call(file, call.span).is_some()
+        || lookup
+            .standard_library_declaration(file, call, typefacts::CallKind::Call)
+            .is_some()
+    {
+        return false;
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let Some((target_file, target)) = lookup.function_called_at(file.path.as_str(), callee) else {
+        return true;
+    };
+    let closed_literal = |span: Span| {
+        let span = target_file.ast.peel_ts_sugar_span(span);
+        target_file.ast.object_get_shapes.iter().any(|shape| {
+            shape.span == span
+                && shape.closed
+                && shape
+                    .properties
+                    .iter()
+                    .all(|property| property.getter.is_none())
+        })
+    };
+    let returns = target_file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            target.body.contains(returned.span)
+                && crate::owners::containing_ast_function(&target_file.ast, returned.span)
+                    .is_some_and(|owner| owner.span == target.span)
+        })
+        .chain(target.expression_return.as_ref())
+        .collect::<Vec<_>>();
+    returns.is_empty()
+        || !returns
+            .iter()
+            .all(|returned| returned.argument.is_some_and(closed_literal))
 }
 
 /// The caller classification of the props a destructuring pattern binds: the
@@ -651,6 +991,7 @@ fn handed_reads_after_await_through_calls<'a>(
         setters: ctx.setters,
         actions: ctx.actions,
         props_reactivity: ctx.props_reactivity,
+        accessors_that_count: None,
     };
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
@@ -690,7 +1031,7 @@ fn handed_reads_after_await_through_calls<'a>(
                     else {
                         continue;
                     };
-                    let Some((read_file, read)) =
+                    let Some((read_file, read, blocker)) =
                         region_calls_handed(ctx, &tables, file, literal.body, literal.span, 3)
                     else {
                         continue;
@@ -706,7 +1047,7 @@ fn handed_reads_after_await_through_calls<'a>(
                             member: None,
                         },
                         location: location(read_file.path.shared(), read),
-                        analysis_context: format!("handed-read-after-await {analysis_context}"),
+                        analysis_context: crate::blockers::with_detail(blocker, &analysis_context),
                         fixes: vec![],
                         uncertain: true,
                     });
@@ -756,7 +1097,7 @@ fn handed_reads_after_await_through_calls<'a>(
                             region_calls_handed(ctx, &tables, file, literal.body, literal.span, 3)
                         })
                 };
-                let Some((read_file, read)) = through_helper
+                let Some((read_file, read, blocker)) = through_helper
                     .or_else(through_argument)
                     .or_else(through_literal)
                 else {
@@ -782,7 +1123,7 @@ fn handed_reads_after_await_through_calls<'a>(
                         member: None,
                     },
                     location: location(read_file.path.shared(), read),
-                    analysis_context: format!("handed-read-after-await {analysis_context}"),
+                    analysis_context: crate::blockers::with_detail(blocker, analysis_context),
                     fixes: vec![],
                     uncertain: true,
                 });
@@ -793,7 +1134,8 @@ fn handed_reads_after_await_through_calls<'a>(
 
 /// The first read in `region` (or a helper it calls, `depth` deep) of a
 /// value a caller supplied: a call of one, or a prop read the callers do not
-/// prove static. Its file and span.
+/// prove static. Its file and span, and the blocker it is reported under:
+/// ADR 0750, a helper past `depth` is unread, so its call stands for it.
 fn region_calls_handed<'f>(
     ctx: &AnalysisContext<'f>,
     tables: &crate::local_access::HandedTables<'_, '_>,
@@ -801,10 +1143,11 @@ fn region_calls_handed<'f>(
     region: solid_facts::core::Span,
     owner: solid_facts::core::Span,
     depth: usize,
-) -> Option<(&'f solid_facts::FileFacts, solid_facts::core::Span)> {
-    if depth == 0 {
-        return None;
-    }
+) -> Option<(
+    &'f solid_facts::FileFacts,
+    solid_facts::core::Span,
+    &'static str,
+)> {
     // A prop read the callers do not prove static (a getter-backed prop).
     let prop_read = file.ast.members.iter().find(|member| {
         if !region.contains(member.span) || file.ast.computed_members.contains(&member.span) {
@@ -823,7 +1166,7 @@ fn region_calls_handed<'f>(
         })
     });
     if let Some(member) = prop_read {
-        return Some((file, member.span));
+        return Some((file, member.span, HANDED_READ_AFTER_AWAIT));
     }
     file.ast
         .calls
@@ -847,7 +1190,7 @@ fn region_calls_handed<'f>(
                 call.callee,
                 crate::local_access::HANDED_DEPTH,
             ) {
-                return Some((file, call.callee));
+                return Some((file, call.callee, HANDED_READ_AFTER_AWAIT));
             }
             let (inner_file, inner) = ctx
                 .semantic_lookup
@@ -855,9 +1198,16 @@ fn region_calls_handed<'f>(
             if inner.span == owner {
                 return None;
             }
+            // `depth` regions are read, this one included.
+            if depth <= 1 {
+                return Some((file, call.callee, crate::blockers::SEARCH_DEPTH_LIMIT));
+            }
             region_calls_handed(ctx, tables, inner_file, inner.body, inner.span, depth - 1)
         })
 }
+
+/// The obligation context of a handed read after an await (ADR 0509).
+const HANDED_READ_AFTER_AWAIT: &str = "handed-read-after-await";
 
 /// ADR 0294: a typed candidate whose implementation is not visible.
 fn typed_unknown(ctx: &AnalysisContext<'_>, symbol: &SymbolId) -> bool {
@@ -923,6 +1273,13 @@ fn call_accessor_symbol<'s>(
     call: &solid_facts::ast::CallFact,
 ) -> Option<&'s SymbolId> {
     let callee = file.ast.peel_ts_sugar_span(call.callee);
+    // ADR 0898 (review D32): a comma, conditional, logical or assignment callee
+    // names no symbol. The entity at its span is its first token's
+    // (`(n.length > 5 ? n : plain)()` calls `plain`); a caller that credits a
+    // read reads its operands (`read_accessor_symbol`, ADR 0897's arm).
+    if !file.ast.composite_callee_operands(call.callee).is_empty() {
+        return None;
+    }
     // ADR 0481: a member read that is exactly a `const` names that `const`.
     if let Some(alias) = file.ast.local_alias_member(callee) {
         return ctx.entities.at(file.path.as_str(), alias.source);
@@ -983,8 +1340,31 @@ fn tracked_before_first_suspension(
             && file
                 .ast
                 .call_at(*span)
-                .is_some_and(|call| same_source(ctx, call_accessor_symbol(ctx, file, call), symbol))
+                .is_some_and(|call| same_source(ctx, read_accessor_symbol(ctx, file, call), symbol))
     })
+}
+
+/// ADR 0898: the accessor a call proves it reads, where a read is credited as
+/// a dependency. A composite callee (ADR 0468) proves one only when total and
+/// every operand is a reference to that accessor (ADR 0517's exact rule); any
+/// other proves no read, and what it may read is the possible-read scan's.
+fn read_accessor_symbol<'s>(
+    ctx: &'s AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'s SymbolId> {
+    let operands = file.ast.composite_callee_operands(call.callee);
+    if operands.is_empty() {
+        return call_accessor_symbol(ctx, file, call);
+    }
+    let references = file.ast.composite_callee_references(call.callee);
+    let first = ctx.entities.at(file.path.as_str(), *references.first()?)?;
+    (references.len() == operands.len()
+        && file.ast.composite_callee_total(call.callee)
+        && references
+            .iter()
+            .all(|reference| ctx.entities.at(file.path.as_str(), *reference) == Some(first)))
+    .then_some(first)
 }
 
 /// The store paths a function reads in its own straight-line flow before its
@@ -1423,10 +1803,22 @@ fn member_reads_after_await(
 pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for function in &file.ast.functions {
-            let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
-            else {
+            // ADR 0656: a component need not have a name (`[function () {…}][0]`).
+            let name = function_binding_name(file, function).or(function.name.as_ref());
+            // A primitive's own callback is that primitive's: `dynamic(() => …)`
+            // re-runs its source, so its test selects nothing once.
+            if name.is_none()
+                && file.ast.calls.iter().any(|call| {
+                    ctx.semantic_lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some()
+                        && call.arguments.iter().any(|argument| {
+                            file.ast.peel_ts_sugar_span(argument.span) == function.span
+                        })
+                })
+            {
                 continue;
-            };
+            }
             let component_status = ctx
                 .semantic_lookup
                 .function_component_status(file, function);
@@ -1480,8 +1872,8 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                     draft.push_defect(StaticDefect {
                         kind: StaticDefectKind::ComponentReturnsConditionally,
                         location,
-                        analysis_context: file
-                            .source_text(name.span)
+                        analysis_context: name
+                            .and_then(|name| file.source_text(name.span))
                             .unwrap_or_default()
                             .to_owned(),
                         fixes: vec![],
@@ -1707,7 +2099,7 @@ fn result_access_obligation(
 
 /// Whether the binding declared at `declaration` is a parameter of a function
 /// in this file.
-fn declared_as_parameter(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+pub(crate) fn declared_as_parameter(file: &solid_facts::FileFacts, declaration: Span) -> bool {
     file.ast.functions.iter().any(|function| {
         function
             .parameters

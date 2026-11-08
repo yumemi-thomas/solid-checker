@@ -105,9 +105,9 @@
       "irreducible": "No source fact narrows a declared `number` to the finite subset. A finite *literal* is a different value with its own constant fact, and the compiler's numeric domain is already consulted: an all-finite-constituents guarantee certifies, and its absence is the obligation. Nothing else about the program can decide it.",
       "closes": [
         {
-          "evidence": "the declared domain is a finite literal union, so every inhabitant is JSON-safe",
+          "evidence": "the value is a non-zero finite constant, so it is JSON-safe. A literal union stays open: a numeric domain does not say whether it holds `0`, and TypeScript types `-0` as `0` (ADR 0707)",
           "expect": "silent",
-          "code": "type Finite = 0 | 1.5;\ndeclare const value: Finite;\nexport async function save(input: Finite) {\n  \"use server\";\n  return input;\n}\nvoid save(value);\n"
+          "code": "const value = 1.5;\nexport async function save(input: number) {\n  \"use server\";\n  return input;\n}\nvoid save(value);\n"
         }
       ]
     },

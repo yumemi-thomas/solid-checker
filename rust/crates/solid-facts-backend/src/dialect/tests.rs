@@ -65,6 +65,8 @@ fn catalog_prose_program() -> Program {
     ];
     Program {
         reads: vec![ReactiveRead {
+            pending_open: false,
+            withdrawn_slot: false,
             summary_attributed: false,
             transported: false,
             kind: "signal".into(),
@@ -95,17 +97,21 @@ fn catalog_prose_program() -> Program {
             multiplicity: 1,
         }],
         missing_owners: vec![OwnerRequirement {
+            flight_error_unobserved: false,
+            computation_error_unobserved: false,
             operation: OwnerRequirementOperation::Cleanup,
             location: location(5),
             uncertain: false,
             runtime_uncertain: false,
             caller_uncertain: false,
             conditional_owner: false,
+            owner_varies_by_caller: false,
             later_run_unowned: false,
             component_uncertain: false,
             unplaced_callback: false,
             after_await: false,
             after_yield: false,
+            context_unaccounted: false,
             missing_jsx_census: false,
             provider_open: false,
             default_unproven: false,
@@ -114,6 +120,7 @@ fn catalog_prose_program() -> Program {
             report: true,
         }],
         async_reads: vec![AsyncRead {
+            provenance_open: false,
             accessor: "sampleAsyncAccessor".into(),
             location: location(6),
             declaration: location(7),
@@ -124,6 +131,8 @@ fn catalog_prose_program() -> Program {
             async_provenance: true,
             declared_loading: false,
             options_opaque: false,
+            caught: false,
+            component_prop: false,
             ssr_client_hole: false,
             server_rendering_unresolved: false,
             host_callback_timing: false,
@@ -133,10 +142,15 @@ fn catalog_prose_program() -> Program {
             settle_unproven: false,
             call_attributed: false,
             creation_pass_unproven: false,
+            root_pass_unproven: false,
             carrier_run_unproven: false,
             apply_first_run_pending: false,
             pending_origin: None,
             pending_apply: None,
+            origin: None,
+            unaccounted: false,
+            source_module_unresolved: false,
+            walk_cut: false,
         }],
         static_defects: defect_kinds
             .into_iter()
@@ -1150,7 +1164,7 @@ fn the_notice_identity_is_the_one_the_catalog_publishes() {
     // The advice pins all three, and names what it found.
     assert!(
             finding.hint.contains(
-                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.17, the audited release of each"
+                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.21, the audited release of each"
             ) && finding
                 .hint
                 .contains(&format!("this project resolves {found}")),

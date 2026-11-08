@@ -85,6 +85,7 @@ project_tables! {
     47 write_flow_answers: WriteFlowAnswer,
     48 module_scope: ModuleScopeRuns,
     49 flush_veto: FlushVetoAnswer,
+    50 handed_calls: IntrinsicHandedToUnseen,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -310,17 +311,18 @@ impl Memo<BuildSchema> for ParameterCompletionSlot {
 }
 
 whole_program! {
-    /// ADR 0349: whether the Promise and array-iteration premises hold, as
-    /// `(promise, array_iteration)`.
-    IntrinsicsTripwires, 39, intrinsics, "intrinsics", (bool, bool),
-    cycle: (false, false),
+    /// ADR 0349: whether the Promise and array-iteration premises hold, and
+    /// (ADR 0803) no visible write can reach iteration, as
+    /// `(promise, array_iteration, visible_iteration)`.
+    IntrinsicsTripwires, 39, intrinsics, "intrinsics", (bool, bool, bool),
+    cycle: (false, false, false),
     direct: |lookup| {
         let found = super::intrinsics::tripwires(lookup);
-        (found.promise, found.array_iteration)
+        (found.promise, found.array_iteration, found.visible_iteration)
     },
     |ctx| Ok(ctx.project(|lookup| {
         let found = super::intrinsics::tripwires(lookup);
-        (found.promise, found.array_iteration)
+        (found.promise, found.array_iteration, found.visible_iteration)
     }))
 }
 
@@ -344,6 +346,15 @@ whole_program! {
     |ctx| Ok(ctx.project(|lookup| {
         crate::interproc::accessor_provenance::visible_string_code(lookup)
     }))
+}
+
+whole_program! {
+    /// ADR 0803 (review a9fc #1, step 2): whether a call hands an obtained
+    /// value to code the checker does not see.
+    IntrinsicHandedToUnseen, 50, handed_calls, "intrinsic_handed_to_unseen", bool,
+    cycle: true,
+    direct: |lookup| crate::interproc::accessor_provenance::handed_to_unseen_code(lookup),
+    |ctx| Ok(ctx.project(crate::interproc::accessor_provenance::handed_to_unseen_code))
 }
 
 whole_program! {
@@ -407,11 +418,11 @@ whole_program! {
     /// lookup (the dispatch sites, the receivers' declarations, the callers'
     /// positions, the two function censuses), so this memo reads the whole
     /// program and reruns in every build in which it moved; a reader of the
-    /// veto records this answer, not the program, and reruns only when the two
+    /// veto records this answer, not the program, and reruns only when the
     /// bits do (early cutoff: an equal rerun keeps its revision). Fail
-    /// closed on a cycle: both proofs withheld.
-    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool),
-    cycle: (true, true),
+    /// closed on a cycle: every proof withheld.
+    DispatchVetoAnswer, 46, dispatch_veto, "dispatch_veto", (bool, bool, bool, bool, bool),
+    cycle: (true, true, true, true, true),
     direct: |lookup| lookup.dispatch_veto(),
     |ctx| Ok(ctx.project(|lookup| lookup.dispatch_veto()))
 }

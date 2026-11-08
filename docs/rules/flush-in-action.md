@@ -128,7 +128,16 @@ the result, read after the action resolves (`await save(); …`).
   run at an inline carrier (`[1].forEach(f)`) or called from a step, one
   handed to a project helper, written as a member's value or an object slot,
   a method of a class written in the body, and a chain of in-place layers
-  past the climb's bound of 16, re-asked from where it stopped.
+  past the climb's bound of 16, re-asked from where it stopped. Also
+  uncertifiable (ADR 0708, blocker `function-run-unplaced`): a `flush` in a
+  function no call edge places (an object method, slot or getter, a class
+  member, a `Map` or array slot, a tag, `toString`, a function handed where
+  nothing follows it), or in a named helper one of those calls, when the
+  project names `action`. Chrome throws for each when an action's body
+  reaches it; module-level members are no longer silent.
+  A closure written as an argument of a project call in a step (a chain of
+  forwarding helpers, `hc1(() => flush())`) is uncertifiable too, with the
+  same blocker (ADR 0832): no layer follows the forward.
 - **After a suspension.** In an async generator, a call that any `await`,
   `for await`, `yield*` or `await using` of the body can run before — or that
   a loop can reach again after one — is not claimed. A later `yield` re-enters

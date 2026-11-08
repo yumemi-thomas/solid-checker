@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 502,
+      "end": 512,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 606,
+      "end": 616,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 819,
+      "end": 829,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "blocker": "response-head-position-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 988,
+      "end": 998,
+      "fixes": 0
+    }
+  ]
+}

@@ -35,7 +35,7 @@ pub(crate) fn provider_free_contexts(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> HashMap<Location, bool> {
+) -> HashMap<Location, ContextVerdict> {
     // ADR 0517: an open program is censused too. What the census finds
     // provider-free there may still be provided by code the analysis does not
     // see, so the read is an obligation (`owner_emission`), not silence.
@@ -50,7 +50,19 @@ pub(crate) fn provider_free_contexts(
     for found in parallel_balanced_results(&facts.files, |file| {
         file_candidates(facts, lookup, symbol_names, entities, file)
     }) {
-        candidates.extend(found);
+        for (key, candidate, verdict) in found {
+            // ADR 0713: a binding the census cannot close (`let`, a pattern)
+            // is still a context with no default: its reads are open. One
+            // with a proven default, or a package's, is silent.
+            match verdict {
+                None => {
+                    candidates.insert(key, candidate);
+                }
+                Some(verdict) => {
+                    free.insert(key, verdict);
+                }
+            }
+        }
     }
     if candidates.is_empty() {
         return free;
@@ -70,7 +82,14 @@ pub(crate) fn provider_free_contexts(
                 .any(|export| export.kind == ExportKind::All || export.namespace.is_some())
     });
     if reaches_unnamed {
-        candidates.retain(|_, (_, exported, _)| !*exported);
+        // ADR 0713: an export a namespace or module load may reach is open,
+        // not silent.
+        candidates.retain(|key, (_, exported, _)| {
+            if *exported {
+                free.insert(key.clone(), ContextVerdict::Open);
+            }
+            !*exported
+        });
     }
     if candidates.is_empty() {
         return free;
@@ -100,43 +119,85 @@ pub(crate) fn provider_free_contexts(
         blocked_names.extend(census.blocked);
     }
     for (key, (name, _, proven)) in &candidates {
-        if escaped.contains(key) || provided.contains(key) || blocked_names.contains(name) {
-            continue;
-        }
-        free.insert(key.clone(), *proven);
+        // ADR 0713: a context provided somewhere, or handed to code that may
+        // provide it, is open: whether a provider is above a read is the
+        // read's own proof (`owner_emission`), never silence.
+        let verdict =
+            if escaped.contains(key) || provided.contains(key) || blocked_names.contains(name) {
+                ContextVerdict::Open
+            } else {
+                ContextVerdict::Free(*proven)
+            };
+        free.insert(key.clone(), verdict);
     }
     free
 }
 
-/// The candidates `file` declares, in the order the file declares them.
+/// The census's answer for a project context created with no default
+/// (ADR 0713).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ContextVerdict {
+    /// No provider can supply it; whether its lack of a default is proven.
+    Free(bool),
+    /// A provider may supply it somewhere: each read needs its own proof.
+    Open,
+    /// Created with a default the syntax proves, or in a package: a read
+    /// never throws for want of a provider here (unchanged by ADR 0713).
+    Silent,
+}
+
+/// A candidate's name, whether its file exports it, and whether its lack of
+/// a default is proven.
+type Candidate = (String, bool, bool);
+
+/// The candidates `file` declares, in the order the file declares them, each
+/// with its verdict when the census need not close it (ADR 0713).
 fn file_candidates(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     entities: &EntitySymbols,
     file: &solid_facts::FileFacts,
-) -> Vec<(Location, (String, bool, bool))> {
+) -> Vec<(Location, Candidate, Option<ContextVerdict>)> {
     let mut found = Vec::new();
-    if facts.dependency_source_root(file.path.as_str()).is_some() {
-        return found;
-    }
+    let dependency = facts.dependency_source_root(file.path.as_str()).is_some();
     for call in &file.ast.calls {
         if context_role_of(lookup, file, call, entities, symbol_names) != Some(ContextRole::Create)
         {
             continue;
         }
-        let Some(proven) = default_absent(lookup, file, call) else {
+        let proven = default_absent(lookup, file, call);
+        if dependency || proven.is_none() {
+            for binding in &file.ast.bindings {
+                if binding.call_initializer == Some(call.span) {
+                    found.push((
+                        location(file.path.shared(), binding.pattern),
+                        (String::new(), false, false),
+                        Some(ContextVerdict::Silent),
+                    ));
+                }
+            }
+            continue;
+        }
+        let Some(proven) = proven else {
             continue;
         };
         for binding in &file.ast.bindings {
             // A `const` cannot be assigned. The name-based redeclaration check of
             // `binding_written` would also count a shadowing declaration, which
             // is another binding, so it is not used here.
-            if binding.call_initializer != Some(call.span)
-                || !binding.immutable
-                || binding.shape != BindingShape::Identifier
-                || binding.names.len() != 1
-            {
+            if binding.call_initializer != Some(call.span) {
+                continue;
+            }
+            let closed = binding.immutable
+                && binding.shape == BindingShape::Identifier
+                && binding.names.len() == 1;
+            if !closed {
+                found.push((
+                    location(file.path.shared(), binding.pattern),
+                    (String::new(), false, proven),
+                    Some(ContextVerdict::Open),
+                ));
                 continue;
             }
             let name = file.source_text(binding.names[0].span).unwrap_or_default();
@@ -150,6 +211,7 @@ fn file_candidates(
             found.push((
                 location(file.path.shared(), binding.pattern),
                 (name.to_owned(), exported, proven),
+                None,
             ));
         }
     }
@@ -385,4 +447,221 @@ fn context_role_of(
     lookup
         .dialect
         .context_role(lookup.dialect.name_of(primitive)?)
+}
+
+/// How many functions [`provided_above`] climbs through callers.
+const PROVIDED_DEPTH: usize = 8;
+
+/// ADR 0713: whether every run of the function `reading` (in `file`) is
+/// under a provider of the context `key`: a named, non-async, non-generator
+/// function every reference to which is a call or render site the call
+/// graph accounts for (none exported in an open program, no `eval`), with at
+/// least one site, each written in the children of a `<Ctx value>` element
+/// (not `value={undefined}`), or of a wrapper that renders its
+/// `props.children` there unconditionally, with no function layer between,
+/// or directly in a function that is itself provided for `key`.
+pub(crate) fn provided_above(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    reading: &solid_facts::ast::FunctionFact,
+    key: &Location,
+) -> bool {
+    function_provided(
+        lookup,
+        file,
+        reading,
+        key,
+        PROVIDED_DEPTH,
+        &mut rustc_hash::FxHashMap::default(),
+    )
+}
+
+/// One function, asked at one remaining depth, for one `key`.
+type ProvidedMemo = rustc_hash::FxHashMap<(String, Span, usize), bool>;
+
+/// Asks each function once per remaining depth: a function many sites reach
+/// costs one walk, not one per path, and the answer is the same (`walk_memo`).
+fn function_provided(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    key: &Location,
+    depth: usize,
+    memo: &mut ProvidedMemo,
+) -> bool {
+    crate::walk_memo::memoized(
+        memo,
+        (file.path.to_string(), function.span, depth),
+        |memo| function_provided_once(lookup, file, function, key, depth, memo),
+    )
+}
+
+fn function_provided_once(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    key: &Location,
+    depth: usize,
+    memo: &mut ProvidedMemo,
+) -> bool {
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    if function.r#async
+        || function.generator
+        || lookup.program_has_eval()
+        || !lookup.function_value_is_current(file, function)
+        || (!lookup.program_closed && crate::execution_role::module_exports(file, function, lookup))
+    {
+        return false;
+    }
+    let path = file.path.as_str();
+    let Some(name) = crate::owners::function_binding_name(file, function) else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(path, name.span) else {
+        return false;
+    };
+    let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
+        return false;
+    };
+    let accounted = lookup
+        .function_call_site_references(path, function.span)
+        .into_iter()
+        .map(|(caller, callee)| (caller.path.as_str().to_owned(), callee.start, callee.end))
+        .collect::<HashSet<_>>();
+    let every_reference_a_site = references.iter().all(|reference| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        (reference.path.as_ref() == path && start == name.span.start && end == name.span.end)
+            || accounted.contains(&(reference.path.as_ref().to_owned(), start, end))
+    });
+    let sites = lookup.function_call_sites(path, function.span);
+    every_reference_a_site
+        && !sites.is_empty()
+        && sites
+            .iter()
+            .all(|(caller, site)| site_provided(lookup, caller, *site, key, depth, memo))
+}
+
+/// Whether the call or render at `site` runs under a provider of `key`.
+fn site_provided(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    site: Span,
+    key: &Location,
+    depth: usize,
+    memo: &mut ProvidedMemo,
+) -> bool {
+    let ast = &file.ast;
+    let layer = containing_ast_function(ast, site);
+    let mut around = ast
+        .jsx_elements
+        .iter()
+        .filter(|element| {
+            element.span.contains(site)
+                && element.name.span != site
+                && layer.is_none_or(|layer| layer.span.contains(element.span))
+        })
+        .collect::<Vec<_>>();
+    around.sort_by_key(|element| element.span.end - element.span.start);
+    for element in around {
+        // An attribute's value is built by the element's parent, not under it.
+        if !element.children.iter().any(|child| child.contains(site)) {
+            continue;
+        }
+        if context_key_at(lookup, file, element.name.span).as_ref() == Some(key) {
+            if provides_undefined(file, element) {
+                return false;
+            }
+            return true;
+        }
+        if wrapper_provides(lookup, file, element, key) {
+            return true;
+        }
+    }
+    layer.is_some_and(|layer| function_provided(lookup, file, layer, key, depth, memo))
+}
+
+/// ADR 0713: the component `element` renders is a wrapper that returns, on
+/// its one `return` (or as its expression body), a `<Ctx value>` element
+/// providing `key` whose direct child is its props parameter's `children`,
+/// with no function, `?:` or logical expression between.
+fn wrapper_provides(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    key: &Location,
+) -> bool {
+    if crate::execution_role::intrinsic_element(file, element) {
+        return false;
+    }
+    let Some((wrapper_file, wrapper)) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)
+    else {
+        return false;
+    };
+    let ast = &wrapper_file.ast;
+    let Some(parameter) = wrapper.parameters.first() else {
+        return false;
+    };
+    let [props] = parameter.names.as_slice() else {
+        return false;
+    };
+    if parameter.shape != BindingShape::Identifier || wrapper.r#async || wrapper.generator {
+        return false;
+    }
+    let returned = if wrapper.expression_body {
+        vec![Some(wrapper.body)]
+    } else {
+        ast.returns
+            .iter()
+            .filter(|returned| {
+                containing_ast_function(ast, returned.span)
+                    .is_some_and(|owner| owner.span == wrapper.span)
+            })
+            .map(|returned| returned.argument)
+            .collect()
+    };
+    let [Some(returned)] = returned.as_slice() else {
+        return false;
+    };
+    let in_wrapper_code = |span: Span| {
+        containing_ast_function(ast, span).is_some_and(|owner| owner.span == wrapper.span)
+    };
+    let branch_between = |outer: Span, inner: Span| {
+        ast.conditional_expressions
+            .iter()
+            .any(|branch| outer.contains(branch.span) && branch.span.contains(inner))
+            || ast
+                .logical_expressions
+                .iter()
+                .any(|branch| outer.contains(branch.span) && branch.span.contains(inner))
+    };
+    ast.jsx_elements.iter().any(|provider| {
+        returned.contains(provider.span)
+            && in_wrapper_code(provider.span)
+            && !branch_between(*returned, provider.span)
+            && context_key_at(lookup, wrapper_file, provider.name.span).as_ref() == Some(key)
+            && !provides_undefined(wrapper_file, provider)
+            && provider.children.iter().any(|child| {
+                ast.members.iter().any(|member| {
+                    child.contains(member.span)
+                        && in_wrapper_code(member.span)
+                        && !branch_between(*child, member.span)
+                        && ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+                            == Some(props.span)
+                        && wrapper_file.source_text(member.property) == Some("children")
+                        && !ast.jsx_elements.iter().any(|nested| {
+                            nested.span != provider.span
+                                && provider.span.contains(nested.span)
+                                && nested.span.contains(member.span)
+                        })
+                })
+            })
+    })
 }

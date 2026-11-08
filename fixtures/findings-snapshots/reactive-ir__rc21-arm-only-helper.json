@@ -1,0 +1,37 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "build-constant-arm",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-arm-only-helper/App.tsx",
+      "start": 573,
+      "end": 577,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "build-constant-arm",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-arm-only-helper/App.tsx",
+      "start": 671,
+      "end": 675,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-arm-only-helper/App.tsx",
+      "start": 761,
+      "end": 765,
+      "fixes": 0
+    }
+  ]
+}

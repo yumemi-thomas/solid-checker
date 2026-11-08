@@ -82,9 +82,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
+      "start": 1982,
+      "end": 1992,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
       "start": 2312,
@@ -95,6 +107,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
       "start": 2584,
@@ -115,6 +128,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
       "start": 3030,
@@ -124,7 +138,8 @@
     {
       "rule": "missing-context-provider",
       "code": "SC4002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
       "start": 3383,

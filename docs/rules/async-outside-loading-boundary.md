@@ -20,7 +20,9 @@ is a proven violation only when every render chain was followed to a
 `render()`/`hydrate()` root without meeting a boundary; a chain that ends at a
 function nothing in the project renders (an exported component, a page handed
 to a router) is **uncertifiable**, because the boundary may be written where
-the analysis cannot see.
+the analysis cannot see. A read written in what a component tag receives is uncertifiable too:
+a prop is a getter, so the child decides whether a render ever reads it (ADR 0641). A control-flow
+tag runs it in a render, and stays proven.
 
 A read written directly in a named local function (`const wrapUse = () =>
 { user(); }`) is rendered where a call of that function sits in rendered JSX,
@@ -28,7 +30,7 @@ through up to four such functions. The finding sits at that call and is
 uncertifiable, never proven: nothing shows the read runs pending while the
 call renders (ADR 0462). A call in a named function no named-callback role
 places (a closure in a `<For>` child handed to a timer, or never called) is not
-rendered by the JSX around it (ADR 0564). A read in a callback a
+rendered by the JSX around it (ADR 0564). A function run in place in a tracked JSX expression of a flow row (`<For>{() => <p>{(() => use())()}</p>}</For>`) is rendered there, as outside a flow row (ADR 0834). A closure handed on from a child callback (`<Show when={1}>{(_u) => { h(() => use()); … }}</Show>`) is not rendered by the element around it: uncertifiable, never this rule's violation (ADR 0836). A read in a callback a
 standard-library carrier may run zero times (`{[].map(() => user())}`, an
 unknown-length receiver) is uncertifiable (ADR 0563). An exact `const` alias of the accessor (`const read =
 user`, `const { read } = { read: user }`) is the accessor (ADR 0463).
@@ -58,6 +60,8 @@ options argument cannot be read statically (a spread, a variable), the source
 may declare either key, so the bare render is **uncertifiable**, never a
 violation (ADR 0430; the same holds for the SSR variant below, and for
 SC5001). Pass the options as an object literal so the checker can read them.
+
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889). Where the source starts from an import nothing resolves (`createSignal(fromAbsentModule())`), the same row has blocker `source-module-unresolved` (ADR 0891).
 
 ## Why is this bad?
 
@@ -139,3 +143,14 @@ server has a provisional value to render.
 
 - [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — untracked pending reads, which do throw
 - [missing-owner](missing-owner.md) — boundaries need owners
+
+A violation needs two proofs: the source is pending, and the read's first run is inside
+a `render()` call, which is the only place the runtime checks (`web.dev.js:536-557`). A
+read a condition may delay, or a component mounted later, is uncertifiable, blocker
+`root-mount-pass-unproven` (ADR 0661). A source really pending at a later mount is quiet.
+
+A named function a carrier provably runs at a tracked position reads there, with the carrier's cover: `[1].map(hf)` with no boundary is proven, `[].map(hf)` reads nothing, and a carrier that may not run leaves it uncertifiable (ADR 0776). A read no fact places, a read at an anonymous function in a tracked position, and a call of a value that may hold a pending source (an alias, a literal member, a hook's value) are uncertifiable; a value that reaches only settled sources stays clean (ADRs 0774, 0775, 0779).
+
+A source no fact proves async, a `lazy` tag, and a read in a method nothing places are uncertifiable, blocker `async-provenance-unproven` for the first two (ADRs 0665-0667). So is a source whose compute reads what it was handed (`createMemo(() => props.get())`) or names an async source in a function form: it is pending while that is, and a settled caller is not followed yet (ADR 0802). A hook's tuple slot is the accessor it names, so its read is proved or certified by that source (ADR 0801). A `Loading` covers what it holds, not what sits beside it (ADR 0668).
+
+A flow element that is no JSX child and no component's return may never render, and rc.21 is silent then: its read is uncertifiable, blocker `carrier-run-unproven` (ADR 0892).

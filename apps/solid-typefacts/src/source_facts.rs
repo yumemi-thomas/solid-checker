@@ -42,6 +42,7 @@ use tsrs_ast::{
     is_switch_statement, is_throw_statement, is_try_statement, is_variable_declaration,
     is_variable_statement,
 };
+use tsrs_checker::types::TypeFlags;
 use tsrs_checker::types::{SignatureKind, Type};
 use tsrs_compiler::Checker;
 use tsrs_core::P;
@@ -237,6 +238,37 @@ fn is_async_function_node(node: P<Node>) -> bool {
 }
 
 /// Go: `asyncReturnType`.
+/// ADR 0631: every value of `return_type` is a native `Promise` or async
+/// generator: pending on the call's stack. A union with a plain value, a custom
+/// thenable and a custom async iterable may answer there.
+/// ADR 0654: the type states nothing about what a call returns.
+fn return_type_open(return_type: P<Type>) -> bool {
+    if return_type.is_union() || return_type.is_intersection() {
+        return return_type
+            .types()
+            .iter()
+            .any(|constituent| return_type_open(*constituent));
+    }
+    return_type.flags().intersects(
+        TypeFlags::Any
+            .union(TypeFlags::Unknown)
+            .union(TypeFlags::IncludesError)
+            .union(TypeFlags::Instantiable),
+    )
+}
+
+fn every_answer_is_a_flight(return_type: P<Type>) -> bool {
+    if return_type.is_union() {
+        return return_type
+            .types()
+            .iter()
+            .all(|constituent| every_answer_is_a_flight(*constituent));
+    }
+    return_type
+        .symbol()
+        .is_some_and(|symbol| matches!(symbol.name(), "Promise" | "AsyncGenerator"))
+}
+
 fn async_return_type(checker: &mut Checker, return_type: P<Type>) -> bool {
     if return_type.is_union() || return_type.is_intersection() {
         return return_type
@@ -259,6 +291,15 @@ fn async_return_type(checker: &mut Checker, return_type: P<Type>) -> bool {
     }
     if let Some(symbol) = return_type.symbol()
         && matches!(symbol.name(), "AsyncIterable" | "AsyncIterator")
+    {
+        return true;
+    }
+    // ADR 0865: `handleAsync` probes the member, so the member decides:
+    // `AsyncGenerator`, whose bases a reference does not list, or a class.
+    let async_iterator = checker.get_property_name_for_known_symbol_name("asyncIterator");
+    if checker
+        .get_property_of_type_exported(return_type, &async_iterator)
+        .is_some()
     {
         return true;
     }
@@ -555,6 +596,8 @@ fn async_function_fact(
         symbol,
         target: "".into(),
         can_return_async: has_syntactic_modifier(node, ModifierFlags::Async),
+        may_answer_sync: false,
+        return_open: false,
         calls_after_await: Vec::new(),
     };
     if !fact.can_return_async {
@@ -566,8 +609,10 @@ fn async_function_fact(
             let return_type = env
                 .checker
                 .get_return_type_of_signature_exported(*signature);
+            fact.return_open |= return_type_open(return_type);
             if async_return_type(env.checker, return_type) {
                 fact.can_return_async = true;
+                fact.may_answer_sync = !every_answer_is_a_flight(return_type);
                 break;
             }
         }
@@ -613,6 +658,8 @@ fn async_alias_fact(
         symbol,
         target,
         can_return_async: false,
+        may_answer_sync: false,
+        return_open: false,
         calls_after_await: Vec::new(),
     })
 }

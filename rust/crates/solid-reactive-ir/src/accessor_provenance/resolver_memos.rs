@@ -498,6 +498,16 @@ impl Derived for TupleIteration {
     const ID: DerivedId = DerivedId(247);
 }
 
+/// [`TupleIteration`] for a hook's accessor slot (ADR 0801).
+struct TupleSlotIteration;
+
+impl Derived for TupleSlotIteration {
+    type Key = ();
+    type Value = bool;
+    const NAME: &'static str = "resolver_tuple_slot_iteration";
+    const ID: DerivedId = DerivedId(248);
+}
+
 adapter! {
     /// [`dependency_member_stable`] for a member of an object literal.
     DependencyMemberStable: (FileId, Span, Arc<str>) => bool, "resolver_dependency_member_stable",
@@ -898,6 +908,10 @@ impl<'w> World<'w> for MemoWorld<'_, '_, 'w> {
         self.ctx.derived::<TupleIteration>(&()).unwrap_or(true)
     }
 
+    fn tuple_slot_iteration(&self) -> bool {
+        self.ctx.derived::<TupleSlotIteration>(&()).unwrap_or(true)
+    }
+
     fn receiver_channels_opaque(&self) -> bool {
         self.ctx.hazard(Hazard::Eval) || self.ctx.hazard(Hazard::CodeEvaluatingCall)
     }
@@ -1293,6 +1307,7 @@ fn build_on(
     );
     state.questions = current;
     store.publish::<TupleIteration>([((), Some(lookup.member_stability().tuple_iteration))]);
+    store.publish::<TupleSlotIteration>([((), Some(lookup.tuple_slot_iteration_may_be_mutated()))]);
     timer.lap("inputs");
     // Stage 2: binding locations (a parameter key overwrites) and
     // declarations, last wins in file order.

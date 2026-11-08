@@ -96,27 +96,26 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
         defaults, preset,
         "the compatibility preset must be redundant once preferences are default-enabled"
     );
-    assert_eq!(
+    let count = |id: &str, kind: &str| {
         defaults
             .iter()
-            .filter(|finding| finding["id"] == "SC8014")
-            .count(),
-        6,
-        "array Type Facts plus direct, prop-head, prop-accessor, interprocedural, and v2 async facts select six lists: {defaults:#?}"
+            .filter(|finding| finding["id"] == id && finding["kind"] == kind)
+            .count()
+    };
+    assert_eq!(
+        count("SC8014", "violation"),
+        7,
+        "array Type Facts plus direct, prop-head, prop-accessor, interprocedural, store and v2 async facts select seven lists: {defaults:#?}"
     );
     assert_eq!(
-        defaults
-            .iter()
-            .filter(|finding| finding["id"] == "SC8015")
-            .count(),
+        count("SC8015", "violation"),
         5,
         "per-prop caller facts must keep the static sibling clean: {defaults:#?}"
     );
-    assert!(
-        defaults
-            .iter()
-            .all(|finding| finding["kind"] == "violation")
-    );
+    // ADR 0671: a receiver or test that may read and is not decided.
+    assert_eq!(count("SC8014", "uncertifiable"), 6, "{defaults:#?}");
+    assert_eq!(count("SC8015", "uncertifiable"), 2, "{defaults:#?}");
+    assert_eq!(defaults.len(), 20, "{defaults:#?}");
     let v2_source = std::fs::read_to_string(fixture_root.join("preferences-v2/App.tsx"))
         .expect("read v2 preference fixture");
     let starts = defaults
@@ -138,7 +137,6 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
     // ADR 0221: the head Get `props.items` of a reactive caller's prop.
     assert!(starts.contains(&marker("props.items.map")));
     assert!(!starts.contains(&marker("props.staticReady &&")));
-    assert!(!starts.contains(&marker("customCollection().map")));
     let async_map = marker("items().map(async");
     assert!(starts.contains(&async_map));
     assert!(defaults.iter().any(|finding| {
@@ -182,6 +180,47 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
     assert!(
         v2_disabled.is_empty(),
         "explicit v2 disables must win over catalog defaults: {v2_disabled:#?}"
+    );
+
+    // ADR 0840: a class with its own `map` is a census site of its program, so
+    // a standard `map` on an unproven receiver there is withheld: its
+    // prefer-for is uncertifiable beside the impostor row. The class's own
+    // `map` is another `map`: no prefer-for row.
+    let custom = project_snapshot_findings_with(
+        fixture_root.join("preferences-v2-custom-collection/tsconfig.json"),
+        Some("solid-v2"),
+        &[],
+    );
+    let custom_source =
+        std::fs::read_to_string(fixture_root.join("preferences-v2-custom-collection/App.tsx"))
+            .expect("read custom collection fixture");
+    let custom_at = |source: &str| {
+        u64::try_from(custom_source.find(source).expect("fixture marker")).expect("offset fits u64")
+    };
+    let at = |finding: &serde_json::Value| finding["primaryLocation"]["startByte"].as_u64();
+    let custom_prefer = custom
+        .iter()
+        .filter(|finding| finding["id"] == "SC8014")
+        .collect::<Vec<_>>();
+    assert_eq!(custom_prefer.len(), 1, "{custom:#?}");
+    assert_eq!(at(custom_prefer[0]), Some(custom_at("items().map")));
+    assert_eq!(custom_prefer[0]["kind"], "uncertifiable", "{custom:#?}");
+    assert!(
+        custom.iter().any(|finding| {
+            finding["analysisContext"]
+                .as_str()
+                .and_then(|context| context.split(':').next())
+                == Some("standard-member-impostor")
+                && at(finding) == Some(custom_at("items().map"))
+        }),
+        "{custom:#?}"
+    );
+    assert!(
+        custom.iter().all(
+            |finding| at(finding) != Some(custom_at("customCollection().map"))
+                || finding["id"] != "SC8014"
+        ),
+        "{custom:#?}"
     );
 }
 
@@ -392,7 +431,14 @@ fn retired_policy1_async_summary_no_longer_supplies_behavior() {
             .join("tests/fixtures/stale-async-summary/tsconfig.json"),
         Some("solid-v2"),
     );
-    assert!(findings.iter().all(|finding| finding["id"] != "SC7002"));
+    // The retired summary proves nothing, so no violation. ADR 0655: an import
+    // with no proof either way is uncertifiable, never a silent clean.
+    assert!(
+        findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC7002")
+            .all(|finding| finding["kind"] == "uncertifiable")
+    );
 }
 
 #[test]
@@ -756,6 +802,45 @@ fn the_pre_beta_experiment_is_refused_although_its_major_is_carried() {
     );
 }
 
+/// ADR 0700: a resolved `solid-js` whose version names no release
+/// (`nightly`) is analyzed under the default dialect, and the analysis carries
+/// the SC9014 notice with the `solid-version-unclassified` blocker. It used to
+/// certify: an install nobody classified was read as an absence.
+#[test]
+fn an_unclassified_release_is_analyzed_with_a_named_blocker() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, snapshot) = run_checker("unclassified-release-nightly", &[]);
+    let ids = finding_ids(&snapshot);
+    assert!(
+        ids.contains(&"SC1003".to_owned()),
+        "the analysis ran: {ids:?}"
+    );
+    assert_eq!(
+        ids.iter().filter(|id| *id == "SC9014").count(),
+        1,
+        "{ids:?}"
+    );
+    assert_ne!(snapshot["status"], "certified");
+    let notice = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["id"] == "SC9014")
+        .unwrap();
+    assert_eq!(notice["kind"], "uncertifiable");
+    assert_eq!(notice["analysisContext"], "solid-version-unclassified");
+    let message = notice["message"].as_str().unwrap();
+    assert!(message.contains("nightly"), "{message}");
+    assert_eq!(code, 0);
+    assert_eq!(
+        run_checker("unclassified-release-nightly", &["--certify"]).0,
+        1,
+        "an unclassified release cannot certify"
+    );
+}
+
 /// A reviewed release older than the audited one is analyzed, and the
 /// analysis carries one project-level uncertifiable notice naming the release,
 /// its open gaps, and the review. The audited release beside it carries none.
@@ -764,9 +849,9 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
-    // rc.17 is the audited release (ADR 0194): the same project, analyzed, no
+    // rc.21 is the audited release (ADR 0194): the same project, analyzed, no
     // notice. rc.13, a read release older than it, carries one.
-    let (code, audited) = run_checker("unaudited-release-rc17", &[]);
+    let (code, audited) = run_checker("unaudited-release-rc21", &[]);
     let ids = finding_ids(&audited);
     assert!(ids.contains(&"SC1003".to_owned()), "{ids:?}");
     assert!(!ids.contains(&"SC9014".to_owned()), "{ids:?}");
@@ -815,7 +900,7 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     let hint = notice["hint"].as_str().unwrap();
     assert!(
         hint.contains("docs/release-audits/2026-09-26-solid-2-rc1-rc8-release-review.md")
-            && hint.contains("to 2.0.0-rc.17, the audited release of each"),
+            && hint.contains("to 2.0.0-rc.21, the audited release of each"),
         "the notice points at the review and the audited release: {hint}"
     );
     let gaps = notice["evidence"]

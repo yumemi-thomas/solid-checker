@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 297,
+      "end": 311,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -22,9 +33,21 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 557,
+      "end": 571,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
       "start": 583,

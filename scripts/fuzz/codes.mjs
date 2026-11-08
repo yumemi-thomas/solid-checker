@@ -4,7 +4,7 @@
 // drift. `codeRules` is derived from the policy table below.
 
 // --- The policy table (phase D) -------------------------------------------------------------------------------
-// Every rc.17 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for
+// Every rc.21 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for
 // the comparison (`disposition`), and how loud Solid is about it (`severity`: "error" throws or is an engine failure,
 // "warn" and "info" report). codes.test.mjs greps `code: "X"` across the pinned dev dists and fails on a code that is
 // not here, so a Solid bump cannot add noise silently.
@@ -60,13 +60,20 @@ export const codePolicy = {
   // ADR 0517: SC5006 records an obligation for a `<Loading on>` whose hold it cannot prove its own; it never claims a violation,
   // so a runtime diagnostic it covers is a recall gap, never agree.
   LOADING_ON_OUTSIDE_HOLD: claimed(["loading-on-outside-hold"], "warn"),
+  // New on rc.21. `<Loading on={fn}>` (SC5007) and `onFlush` under a children-capable owner (SC3002).
+  LOADING_ON_ACCESSOR: claimed(["loading-on-accessor"], "warn"),
+  ON_FLUSH_IN_OWNED_SCOPE: claimed(["on-flush-in-owned-scope"], "warn"),
+  // SC2009 and SC5008 (ADRs 0636, 0637): each proven in the pass that creates the source.
+  OPTIMISTIC_WRITE_BEFORE_LOAD: claimed(["optimistic-write-before-load"], "error"),
+  CAUGHT_REACTIVE_READ: claimed(["caught-reactive-read"], "warn"),
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: claimed(["leaf-owner-forbidden-call"], "error"),
   DYNAMIC_STATIC_PROMISE: claimed(["static-dynamic-async-source"], "error"),
 
   // Defects no rule claims.
   PRIMITIVE_IN_EFFECT_CALLBACK: claimed(["primitive-in-effect-callback"], "error"),
   RUN_WITH_DISPOSED_OWNER: unclaimed("warn", "decided not to build: docs/open-work.md, `runWithOwner` with a disposed owner"),
-  ASYNC_STORE_SETTER: unclaimed("error"),
+  // Invariant 1: the setter callback is `(state) => void | T`, so an async one is TS2345 and tsc reports it.
+  ASYNC_STORE_SETTER: { rules: [], disposition: "out-of-scope", severity: "error", note: "typed away: the published types reject an async setter callback" },
   UNCOMMITTED_INPUT_OVERWRITTEN: unclaimed("warn", "decided not to build: docs/open-work.md, `UNCOMMITTED_INPUT_OVERWRITTEN`"),
 
   // The engine's reaction to an earlier failure.
@@ -105,6 +112,7 @@ export const codePolicy = {
   // The typings reject a bad target, so tsc reports it (invariant 1): the checker stays silent.
   INVALID_REFRESH_TARGET: outOfScope("error", "typed away"),
   INVALID_AFFECTS_TARGET: outOfScope("error", "typed away"),
+  ASYNC_MEMO_ELEMENT: outOfScope("error", "SSR"),
   DYNAMIC_ASYNC_COMPONENT: outOfScope("error", "SSR"),
   LATE_HEADER_WRITE: outOfScope("error", "SSR"),
   LAZY_ASSET_UNMAPPED: outOfScope("warn", "SSR"),
@@ -158,20 +166,69 @@ export const sameDefectFamily = (a, b) => defectFamilies.some((family) => family
  * as the matrix does (`placeless` in misuse.mjs), never by line. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is reported "located at the first
  * pending effect's owner path" once per mount. Every other claimed code is reported at its call with the caller's stack
  * (checked in the pinned `@solidjs/signals` dev dist). `LOADING_ON_OUTSIDE_HOLD` is reported from the boundary's notification in the
- * flush too (ADR 0517).
+ * flush too (ADR 0517). `SETTLED_CLEANUP_UNOWNED` is reported by the one-shot's `fire` after the callback returned: 642 of 642 smoke rows
+ * that fired it had no authored position (ADR 0815).
  */
-export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD"];
+export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD", "LOADING_ON_ACCESSOR", "CAUGHT_REACTIVE_READ", "SETTLED_CLEANUP_UNOWNED"];
 export const isPlacelessCode = (code) => placelessCodes.includes(code);
 
-/** Findings of these rules cover any runtime diagnostic at their site (the checker withheld an answer). */
+/**
+ * Findings of these rules cover a runtime diagnostic at its recorded position only (the checker withheld an answer there; review 4c,
+ * R5): `withheldAtStack`. A withholding elsewhere withheld some other answer. A placeless code has no position, so none covers it.
+ */
 export const withholdingRules = ["reactive-dispatch-unresolved"];
+/** Codes about a value a call was handed, which code with no authored frame then read or wrote: a withholding at that argument covers them (R20). */
+export const handedCodes = ["STRICT_READ_UNTRACKED", "UNTRACKED_READ_AFTER_AWAIT", "PENDING_ASYNC_UNTRACKED_READ", "STORE_WRITE_OUTSIDE_SETTER"];
 /** The flat code -> declining rules table (the policy's `declining`), mirrored as `decliningRules` in scripts/runtime-oracle.mjs. */
 export const decliningRules = Object.fromEntries(Object.entries(codePolicy).filter(([, policy]) => policy.declining?.length).map(([code, policy]) => [code, policy.declining]));
 /**
- * Whether `finding` covers a diagnostic of `code`: a finding of a rule that claims it, a withholding, or an uncertifiable finding of a
- * rule that declines it. Only a claiming rule's violation answers the code; this is the "the checker said something" test.
+ * Whether `finding` covers a diagnostic of `code` (review 4c, R5, R8): a finding of a rule that claims it when `atSite` (the caller found
+ * it at the diagnostic's recorded position, `withheldAtStack`), anywhere for a placeless code (it has no position); an uncertifiable
+ * finding of a rule that declines it, on the same terms (R21); or a withholding when `atSite`, never for a placeless code. Only a claiming rule's violation
+ * answers the code; this is the "the checker said something" test.
  */
-export const coversCode = (code, finding) => (codeRules[code] ?? []).includes(finding.rule) || withholdingRules.includes(finding.rule) || declinesCode(code, finding);
+export const coversCodeAt = (code, finding, atSite) => ((codeRules[code] ?? []).includes(finding.rule) ? isPlacelessCode(code) || atSite === true
+  : (declinesCode(code, finding) && (isPlacelessCode(code) || atSite === true)) || (withholdingRules.includes(finding.rule) && atSite === true && !isPlacelessCode(code)));
+
+/**
+ * Whether a withholding `finding` (`line`, `column`, 1-based: its start) is at a position of `stack` (innermost first: `{ line, column }`,
+ * a source-mapped stack frame): the top frame's position (the read, write or throw), or a deeper frame's exact call position (the call
+ * that leads to it) when `mount(frame)` says it mounts nothing (call-starts.mjs `mount`: every read below a mount runs through it, so a withholding there covers nothing deeper). Positions, never line ranges: a multi-line finding covers nothing
+ * inside it. A frame with no column matches nothing, except a hand-read `closedAt` line (`handRead`, matched by line). A frame's
+ * `starts` (`withStarts`) are the starts it stands for, its own position first.
+ */
+/**
+ * Whether `finding` at a handed argument `at` covers `code`: a withholding on a code about a handed value. A store write's target is the
+ * receiver of a member call (`list.push(x)` says nothing about `x`, R22) and a project or standard function's first argument, so no other
+ * argument counts, and no argument of a dependency's function: a judge does not assume what an unread body writes. Known limit: the judge
+ * cannot tell which argument a read went through (`Object.assign(out, st, holder.v)`).
+ */
+const handedCovers = (at, finding, code) => handedCodes.includes(code) && withholdingRules.includes(finding.rule)
+  && (code !== "STORE_WRITE_OUTSIDE_SETTER" || (!at.noTarget && at.index === 0));
+
+export const withheldAtStack = (finding, stack, mount = () => true, code = null) => (stack ?? []).some((frame, depth) =>
+  (frame.handRead ? finding.line === frame.line
+    : Number.isInteger(frame.column) && (frame.starts ?? [frame]).some((at) => finding.line === at.line && finding.column === at.column
+      && (!at.handed || handedCovers(at, finding, code))))
+  && (depth === 0 || !mount(frame)));
+
+/**
+ * The stack of a diagnostic's positions, innermost first, with another file's frames kept but blank: they place nothing, and depth stays
+ * the depth in the whole stack, so the top authored frame is the real one (R20) and a deeper App.tsx frame still takes the mount test.
+ */
+export const appStack = (positions) => (positions ?? []).map((position) => (position.file === "App.tsx" || position.file === undefined ? position : { file: position.file, line: -1 }));
+
+/**
+ * A stack's frames with `starts` (call-starts.mjs `callStarts`): a frame in the callee of a call, `new`, tagged template or JSX tag also
+ * stands for that expression's start and its callee object's (V8 puts a member call's frame at the property). `startsOf(frame)` gives
+ * the starts for a frame (at its depth) of the program's text, or null when the frame's file has none.
+ */
+export const withStarts = (stack, startsOf) => (stack ?? []).map((frame, depth) => {
+  if (!Number.isInteger(frame.column) || !startsOf) return frame;
+  const starts = startsOf(frame, depth);
+  return starts ? { ...frame, starts } : frame;
+});
+
 /** Whether `finding` is an uncertifiable finding of a rule that declines `code` (the policy's `declining`). */
 export const declinesCode = (code, finding) => finding.kind === "uncertifiable" && (decliningRules[code] ?? []).includes(finding.rule);
 /** Violations the oracle never holds against the runtime (style rules with no dev diagnostic). */
@@ -192,10 +249,38 @@ export function codeOfThrown(message) {
 }
 
 /**
+ * A logged or uncaught error's text without its class prefix: `Error: `, and Solid's own classes (`NoOwnerError: `, `ContextNotFoundError: `),
+ * which a console.error of the error object prints (R3e, Part 16: the `Error: `-only strip dropped those reports).
+ */
+export const stripErrorClass = (text) => String(text ?? "").replace(/^[A-Za-z]*Error: /, "");
+/** The code of a logged or reported error's text (`codeOfThrown` after `stripErrorClass`), or null. */
+export const codeOfLogged = (text) => codeOfThrown(stripErrorClass(text));
+
+/**
+ * ADR 0858: the Solid code an uncaught throw's message carries, or null: a `[CODE]` tag naming a code of the policy table, or a message
+ * `thrownCodes` knows. Such a throw is the program's own runtime result; any other failure is the harness's.
+ */
+export function codeOfUncaught(message) {
+  const text = stripErrorClass(message);
+  const tag = /^\[([A-Z][A-Z_]+)\]/.exec(text)?.[1];
+  return tag && codePolicy[tag] ? tag : codeOfThrown(text);
+}
+
+/**
  * Rules whose violation stands beside a code as a claim of its own, so it never names that code wrongly: an effect created in an apply throws
  * PRIMITIVE_IN_EFFECT_CALLBACK and is an unowned effect too, the leak a production build keeps (ADR 0483).
  */
-export const besideCode = { PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"] };
+export const besideCode = {
+  // ADR 0696, owner: a destructure over a pending prop is a true read, and Chrome warns under the pending code.
+  PENDING_ASYNC_UNTRACKED_READ: ["no-destructure"],
+  PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"],
+  // ADR 0641: masked, not reported. In these programs Chrome reports only the row's code, because the first throw stops the run; each
+  // twin with that cause removed reports the other rule's code. `createEffect(fn, undefined)`, given an apply: PRIMITIVE_IN_EFFECT_CALLBACK
+  // in an apply or a reaction, PRIMITIVE_IN_FORBIDDEN_SCOPE in a leaf. A helper shared with a tracked effect, the effect removed:
+  // NO_OWNER_CLEANUP and NO_OWNER_EFFECT, three times each.
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: ["missing-owner"], CLEANUP_IN_FORBIDDEN_SCOPE: ["missing-owner"],
+  MISSING_EFFECT_FN: ["primitive-in-effect-callback", "leaf-owner-forbidden-call"],
+};
 /**
  * Rules whose defect the runtime names for only some of what they claim, so its silence contradicts nothing. `primitive-in-directive-application`:
  * a `ref` apply has no owner (`onCleanup` there reports NO_OWNER_CLEANUP), an effect created there warns NO_OWNER_EFFECT and a memo, the same leak, warns
@@ -203,7 +288,7 @@ export const besideCode = { PRIMITIVE_IN_EFFECT_CALLBACK: ["missing-owner"] };
  */
 export const partlySilentRules = ["primitive-in-directive-application"];
 /** Outcomes that need a look: a misuse grid's and a legal grid's. */
-export const PROBLEMS = ["false-clean", "wrong-rule", "harness", "false-positive", "not-legal", "tsc-overlap"];
+export const PROBLEMS = ["false-clean", "misplaced", "unplaced", "wrong-rule", "harness", "unjudged-claim", "halted-claim", "stacked-claim", "false-positive", "not-legal", "tsc-overlap"];
 /**
  * What a grid row needs a look for, or null: its outcome, or a second code on the site's lines missed in a file with no uncertifiable
  * finding (matrix.mjs `judge`, `secondary`), a false clean of that code whatever the row's own outcome. The one test of focus, the audit and smoke.

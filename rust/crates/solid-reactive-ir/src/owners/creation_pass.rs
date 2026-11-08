@@ -58,6 +58,36 @@ pub(crate) fn read_in_creation_pass(
     runs_in_pass(lookup, file, read, &creator, CREATION_DEPTH, true)
 }
 
+/// ADR 0661: the read's first run is inside a `render()` call: its position in
+/// each function is unconditional, and the chain reaches a function a
+/// module-scope `render` mounts. `ASYNC_OUTSIDE_LOADING_BOUNDARY` is enabled only
+/// for that call (`web.dev.js:536-557`), so a later mount is quiet even when
+/// the source is really pending.
+pub(crate) fn read_in_root_pass(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    read: Span,
+) -> bool {
+    let mut at = read;
+    for _ in 0..CREATION_DEPTH {
+        if !super::async_context::unconditional_position(lookup, file, at) {
+            return false;
+        }
+        let Some(function) = containing_ast_function(&file.ast, at) else {
+            break;
+        };
+        // A callback no call names runs where its own position says.
+        if !lookup
+            .function_call_sites(file.path.as_str(), function.span)
+            .is_empty()
+        {
+            break;
+        }
+        at = function.span;
+    }
+    runs_in_pass(lookup, file, read, &Creator::Module, CREATION_DEPTH, true)
+}
+
 fn creator_of<'a>(
     lookup: &SemanticLookup<'a>,
     file: &'a solid_facts::FileFacts,
@@ -199,7 +229,8 @@ fn runs_in_pass(
         return true;
     }
     if matches!(creator, Creator::Module)
-        && !super::async_context::direct_render_sites(lookup, file, function).is_empty()
+        && (!super::async_context::direct_render_sites(lookup, file, function).is_empty()
+            || super::async_context::mounted_by_root(lookup, file, function))
     {
         return true;
     }

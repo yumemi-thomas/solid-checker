@@ -14,7 +14,7 @@ import { OBSERVE, flush } from 'solid-js';
 import { render } from '@solidjs/web';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { appFrames } from './frames.mjs';
+import { appFrames, programFrames } from './frames.mjs';
 import { installVirtualClock } from './virtual-clock.mjs';
 
 // `--virtual-clock` (FUZZ_VIRTUAL_CLOCK=1): the program's timers and the runner's own waits run on a virtual clock (virtual-clock.mjs),
@@ -26,6 +26,12 @@ const describeError = (e: any) => ({
   stack: String(e?.stack ?? ''),
   cause: e?.cause ? { message: String(e.cause?.message ?? e.cause), stack: String(e.cause?.stack ?? '') } : null,
 });
+
+/** A logged value's stack and its cause's message and stack, kept apart (the judge decides when the cause places it); none for a value that is no error. */
+const isError = (value: any) => value instanceof Error || (value && typeof value === 'object' && typeof value.stack === 'string');
+const loggedError = (value: any): { stack: string, cause: { message: string, stack: string } | null } | null => isError(value)
+  ? { stack: String(value.stack ?? ''), cause: isError(value.cause) ? { message: String(value.cause.message ?? value.cause), stack: String(value.cause.stack ?? '') } : null }
+  : null;
 
 function events() {
   return [
@@ -62,7 +68,9 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   const started = performance.now();
   const outDir = (outDirOverride ?? process.env.FUZZ_FAST_OUT) as string;
   const settings = { eventPasses: 2, pauseMs: Number(process.env.FUZZ_PAUSE_MS ?? 60), finalMs: Number(process.env.FUZZ_FINAL_MS ?? 150) };
-  const diagnostics: any[] = [], errors: any[] = [], consoleErrors: string[] = [], disposers: (() => void)[] = [];
+  const diagnostics: any[] = [], errors: any[] = [], disposers: (() => void)[] = [];
+  // Each logged line, with the stacks of the errors it logged (ADR 0907; chrome-host/runner.tsx).
+  const consoleErrors: { text: string, error: ReturnType<typeof loggedError> }[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
   const halted: string[] = [];
   // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED or an error-severity diagnostic (thrown at its
@@ -91,7 +99,7 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   process.on('uncaughtException', onProcessError);
   process.on('unhandledRejection', onProcessRejection);
   const oldError = console.error, oldWarn = console.warn;
-  console.error = (...args) => { consoleErrors.push(args.map(x => String(x)).join(' ')); };
+  console.error = (...args) => { consoleErrors.push({ text: args.map(x => String(x)).join(' '), error: args.map(loggedError).find(Boolean) ?? null }); };
   console.warn = () => {};
   window.addEventListener('error', onError);
   window.addEventListener('unhandledrejection', onRejection);
@@ -102,7 +110,8 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   try {
     const plan = JSON.parse(readFileSync(join(caseDir, 'sites.json'), 'utf8'));
     const captured = await captureArtifact(async () => {
-      const mod = await load();
+      // Rendered from the case's entry, in the task that evaluates App.tsx (fast.mjs ENTRY_SOURCE).
+      (globalThis as any).__scMount = (mod: Record<string, unknown>) => {
       const root = document.createElement('div'); root.id = 'root'; document.body.append(root);
       phase = 'render';
       // As scripts/runtime-oracle.mjs: every exported capitalized function renders in its own root.
@@ -113,6 +122,9 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
         try { disposers.push(render(() => <Component />, host)); }
         catch (e) { errors.push({ phase, kind: 'render', export: name, ...describeError(e) }); }
       }
+      };
+      await load();
+      const root = document.getElementById('root') as HTMLElement;
       phase = 'exercise';
       await pause(settings.pauseMs);
       for (let pass = 0; pass < settings.eventPasses; pass++) {
@@ -170,7 +182,9 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
       diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, positions: appFrames(id, d.stack) })),
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...appFrames(id, e.stack), ...appFrames(id, e.cause?.stack)] })),
-      consoleErrors: consoleErrors.slice(0, 20), artifactCount,
+      consoleErrors: consoleErrors.slice(0, 20).map(row => row.text),
+      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => programFrames(id, row.error?.stack ?? '')),
+      consoleErrorCauses: consoleErrors.slice(0, 20).map(row => row.error?.cause ? { message: row.error.cause.message, positions: programFrames(id, row.error.cause.stack) } : null), artifactCount,
     };
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, `${id}.json`), JSON.stringify(record));

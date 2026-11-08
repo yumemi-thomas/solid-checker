@@ -4,7 +4,18 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 5687,
+      "end": 5712,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
       "start": 7945,
@@ -15,6 +26,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
       "start": 8387,

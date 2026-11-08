@@ -2,10 +2,10 @@
   "format": 1,
   "documentKind": "solid-checker-solid2-compiler-facts-identity",
   "repository": "https://github.com/yumemi-thomas/solid",
-  "branch": "solid-checker/compiler-facts-rc17",
-  "upstreamRevision": "5b1b777648a89b6e207e8bb78514d5c03420e08b",
-  "implementationRevision": "a4983a7130daa210bfc00f079dce57939fe14502",
-  "distributionRevision": "9f5fff59c2abc4465058d96080771c82dfd91990",
+  "branch": "solid-checker/compiler-facts-rc21",
+  "upstreamRevision": "2105ffb8ca2fced55f5fac0763177fc93f97c2c2",
+  "implementationRevision": "31d8fe49b5141544eee5f78bbdca74921c64a2a5",
+  "distributionRevision": "ea3c78584d86e46112d9d6e3800960a1453439f3",
   "semanticTraceVersion": 3,
   "compilerFactsProtocol": 2
 }

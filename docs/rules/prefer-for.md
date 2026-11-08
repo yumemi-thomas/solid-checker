@@ -29,9 +29,12 @@ A raw mapped array recreates its output when the surrounding expression runs.
 `Array#map` callback; `keyed={false}` instead receives an item accessor and is
 not an automatic semantics-preserving rewrite.
 
-The preference is intentionally silent when source provenance is unresolved.
-An unknown call or generic `.map` member is not evidence of reactive updates,
-and reactive reads inside the callback do not make a static receiver reactive.
+When a receiver may read and nothing here decides it, a project or unresolved
+call, a Get on a root no literal settles, or a read whose backing is open, the
+site is uncertifiable (`preference-read-unproven`, ADR 0671). So is a receiver
+typed `any` or a union mixing arrays with other values. A literal, a proven
+primitive and a `const` of either settle it: such a site is clean. Reads inside
+the callback do not make a static receiver reactive.
 
 ## Examples
 

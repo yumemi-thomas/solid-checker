@@ -55,6 +55,124 @@ pub(super) fn typescript_directive_comment(source: &str, comments: &[Comment]) -
     })
 }
 
+/// Every comment either compiler may register as an `@ts-ignore` or
+/// `@ts-expect-error` directive (`AstFacts::typescript_directives`).
+///
+/// tsgo (`scanner.rs` `process_comment_directive`) skips, for `//`, the two
+/// slashes, any further `/`, then spaces and tabs; for `/* */`, spaces and
+/// tabs, the run of `/` and `*`, then spaces and tabs. tsc 5 matches
+/// `^\/\/\/?\s*@` and `^(?:\/|\*)*\s*@`, so it takes one extra `/` only and
+/// any whitespace. A comment either reads as a directive is listed; it is
+/// `exact` only where both do and it keeps to one line, since tsc files a
+/// directive under its last line and tsgo under its first.
+pub(super) fn typescript_directives(
+    source: &str,
+    comments: &[Comment],
+) -> Vec<super::TypescriptDirectiveFact> {
+    let lines = LineTable::new(source);
+    comments
+        .iter()
+        .filter_map(|comment| {
+            let span = comment.span;
+            let text = source.get(span.start as usize..span.end as usize)?;
+            let (either, both) = directive_readings(text, comment.is_line());
+            if !either {
+                return None;
+            }
+            let first_line = lines.line(span.start).saturating_sub(1);
+            let last_line = lines.line(span.end.saturating_sub(1)).saturating_sub(1);
+            Some(super::TypescriptDirectiveFact {
+                first_line,
+                last_line,
+                exact: both && first_line == last_line,
+            })
+        })
+        .collect()
+}
+
+/// Whether a comment (delimiters included) reads as a directive to either
+/// compiler, and to both.
+fn directive_readings(text: &str, line: bool) -> (bool, bool) {
+    let directive = |rest: &str| {
+        rest.strip_prefix('@').is_some_and(|rest| {
+            rest.starts_with("ts-expect-error") || rest.starts_with("ts-ignore")
+        })
+    };
+    let spaces = |rest: &str| rest.trim_start_matches([' ', '\t']).len();
+    if line {
+        let Some(after) = text.strip_prefix("//") else {
+            return (false, false);
+        };
+        // tsgo: any further slashes, then spaces and tabs.
+        let go = after
+            .trim_start_matches('/')
+            .trim_start_matches([' ', '\t']);
+        // tsc 5: at most one further slash, then any whitespace.
+        let one = after.strip_prefix('/').unwrap_or(after);
+        let tsc = one.trim_start();
+        let both = directive(go)
+            && directive(tsc)
+            && after.len() - after.trim_start_matches('/').len() <= 1
+            && spaces(one) == tsc.len();
+        (directive(go) || directive(tsc), both)
+    } else {
+        let run = text.trim_start_matches(['/', '*']);
+        let go = run.trim_start_matches([' ', '\t']);
+        let tsc = run.trim_start();
+        let both = directive(go) && directive(tsc) && go.len() == tsc.len();
+        (directive(go) || directive(tsc), both)
+    }
+}
+
+/// The file's `@ts-check`/`@ts-nocheck` pragma (`AstFacts::typescript_check_pragma`).
+///
+/// Both compilers read a `ts-check` or `ts-nocheck` pragma from the `//`
+/// comments before the first token, the last one winning. Read narrowly: a
+/// `@ts-check` in any comment of the file is `Some(true)`, and only a
+/// canonical `// @ts-nocheck` (an optional third `/`, spaces or tabs, the
+/// name, then nothing or a space) among the leading comments is `Some(false)`.
+pub(super) fn typescript_check_pragma(source: &str, comments: &[Comment]) -> Option<bool> {
+    let mentions_check = comments.iter().any(|comment| {
+        let span = comment.span;
+        source
+            .get(span.start as usize..span.end as usize)
+            .is_some_and(|text| text.contains("@ts-check"))
+    });
+    if mentions_check {
+        return Some(true);
+    }
+    let bytes = source.as_bytes();
+    let mut position = 0usize;
+    if source.starts_with("#!") {
+        position = source.find(['\n', '\r']).unwrap_or(source.len());
+    }
+    let mut nocheck = false;
+    for comment in comments {
+        while position < bytes.len() && (bytes[position] as char).is_ascii_whitespace() {
+            position += 1;
+        }
+        if comment.span.start as usize != position {
+            break;
+        }
+        position = comment.span.end as usize;
+        if !comment.is_line() {
+            continue;
+        }
+        let Some(text) = source.get(comment.span.start as usize..comment.span.end as usize) else {
+            break;
+        };
+        let after = text.strip_prefix("//").unwrap_or_default();
+        let after = after.strip_prefix('/').unwrap_or(after);
+        let after = after.trim_start_matches([' ', '\t']);
+        if let Some(rest) = after.strip_prefix("@ts-nocheck")
+            && (rest.is_empty() || rest.starts_with([' ', '\t']))
+        {
+            nocheck = true;
+        }
+    }
+    nocheck.then_some(false)
+}
+
 /// The suppression a comment's text (delimiters removed) spells, if it spells
 /// one.
 fn parse_suppression(
@@ -194,6 +312,17 @@ impl LineTable {
             starts.push(u32::try_from(next).unwrap_or(u32::MAX));
         }
         Self { starts }
+    }
+
+    /// The text of zero-based line `line`, its terminator included.
+    #[must_use]
+    pub fn text_of<'a>(&self, source: &'a str, line: u32) -> Option<&'a str> {
+        let start = *self.starts.get(line as usize)? as usize;
+        let end = self
+            .starts
+            .get(line as usize + 1)
+            .map_or(source.len(), |end| *end as usize);
+        source.get(start..end)
     }
 
     /// The one-based line a byte offset falls on.

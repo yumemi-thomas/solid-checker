@@ -3,7 +3,8 @@
 `SC7001` · **error** · violation
 
 `createEffect` is called without an effect (apply) function — the removed Solid 1.x
-single-callback form.
+single-callback form — or an effect constructor is handed a value its runtime
+cannot call.
 
 ## What it does
 
@@ -14,7 +15,14 @@ overload is release-dependent: `@solidjs/signals` rc.0-rc.5 declare
 one-argument call (or an exact one-element spread) is TS2554 and this rule is
 silent on it — the call resolves to no published signature. Those spellings
 are reported only where the installed release still declares the overload
-(measured on rc.3; the tsc oracle now installs only rc.9). An absent
+(measured on rc.3; the tsc oracle now installs only rc.9). Where both
+compilers suppress that TS2554 on the callee's line, or TS2345 on a one-line
+apply argument (`// @ts-ignore` or `@ts-expect-error` above it, a leading
+`// @ts-nocheck`), nothing reports the call: it is judged as if it type-checked
+and the value as one no type vouches for, so an absent or non-callable apply is
+a violation (ADR 0830). A directive on another line proves nothing. Where only
+one compiler may suppress it, or in JavaScript, the call is an `SC9012`
+uncertifiable result, `solid-call-rejected-unchecked`. An absent
 apply function throws `MISSING_EFFECT_FN` in dev; a cast-hidden non-function
 crashes when the runtime reads `.effect` off it or calls it. Raw `undefined`,
 `null`, primitive, array, and invalid object arguments are already rejected by
@@ -25,6 +33,16 @@ stays silent. An `any`, unresolved value, non-null assertion over a nullable
 value, or non-exact object whose runtime apply function is not known produces
 an **uncertifiable** finding: it may be callable, but silence would falsely
 certify that it is.
+
+The slot is the dialect's answer (`effect_function_slot`, ADR 0701), so
+`createRenderEffect` and `createReaction` are read too. `createRenderEffect`
+takes its effect function second and reads no `{ effect, error }` bundle: the
+runtime hands the value to the node as is, so a cast-hidden `undefined`,
+primitive or object literal is a **violation** (Chrome: `node._effectFn is not
+a function` at the first run). `createReaction` takes it first and reads it
+only when the tracker it returns runs, so a cast-hidden non-callable there is
+**uncertifiable**, blocker `effect-returned-function-run-unproven`: the call
+alone proves no run.
 
 When an otherwise-reporting call is covered by `"use server"`, the finding is
 **uncertifiable**. No core Solid package reads that directive — it is a

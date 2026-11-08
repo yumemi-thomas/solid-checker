@@ -42,6 +42,10 @@ pub(crate) struct Intrinsics {
     /// `Array.prototype[Symbol.iterator]` and the array iterator are the
     /// built-ins.
     pub(crate) array_iteration: bool,
+    /// ADR 0803: no visible write can reach the array iteration protocol
+    /// ([`crate::interproc::accessor_provenance::visible_iteration_write`]).
+    /// Read only for a primitive's array-pattern slots.
+    pub(crate) visible_iteration: bool,
 }
 
 impl<'a> SemanticLookup<'a> {
@@ -52,7 +56,18 @@ impl<'a> SemanticLookup<'a> {
 
     /// ADR 0349: no analyzed file visibly writes to the array iterator.
     pub(crate) fn array_iteration_intact(&self) -> bool {
-        self.intrinsics_view().array_iteration
+        // Review a9fc #2: ADR 0349's spelling misses a write through
+        // `Object.getPrototypeOf([])` under a key no literal names; whatever
+        // withdraws a tuple's slots (ADR 0803) breaks this premise too.
+        self.intrinsics_view().array_iteration && !self.array_slots_withdrawn()
+    }
+
+    /// ADR 0803: whether a primitive's array pattern may not hold the
+    /// primitive's own slots: a visible write that can reach iteration, or
+    /// ADR 0801's census (code from a string, an intrinsic obtained as a
+    /// value). An unresolved call alone is no evidence of either.
+    pub(crate) fn array_slots_withdrawn(&self) -> bool {
+        !self.intrinsics_view().visible_iteration || self.tuple_slot_iteration_may_be_mutated()
     }
 }
 
@@ -61,11 +76,12 @@ impl SemanticLookup<'_> {
     /// memo built once per build.
     fn intrinsics_view(&self) -> &Intrinsics {
         self.intrinsics.get_or_init(|| {
-            let (promise, array_iteration) =
+            let (promise, array_iteration, visible_iteration) =
                 self.whole_program_answer::<super::project_memos::IntrinsicsTripwires>();
             Intrinsics {
                 promise,
                 array_iteration,
+                visible_iteration,
             }
         })
     }
@@ -75,8 +91,12 @@ pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
     let mut found = Intrinsics {
         promise: true,
         array_iteration: true,
+        visible_iteration: true,
     };
     for file in lookup.files() {
+        if crate::interproc::accessor_provenance::visible_iteration_write(file, lookup) {
+            found.visible_iteration = false;
+        }
         for target in file
             .ast
             .write_targets

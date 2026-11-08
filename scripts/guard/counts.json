@@ -1,0 +1,1430 @@
+{
+ "about": "One-way uncertifiable count (endstage-report.md 1b; scripts/guard/count.mjs). A clean needs a proof: a count that falls, or a key that goes, needs a drops row naming an ADR, a proof (file::symbol) and a fixture on each side; a rise is recorded with --update. drops and renames are append-only.",
+ "inRepo": {
+  "SC1001 binding-before-initialization": 7,
+  "SC1001 build-constant-arm": 3,
+  "SC1001 callback-invocation-unproven": 3,
+  "SC1001 callee-callback-timing": 399,
+  "SC1001 client-root-unproven": 1,
+  "SC1001 compiler-refused-file": 1,
+  "SC1001 component-identity-unproven": 136,
+  "SC1001 function-run-unplaced": 1127,
+  "SC1001 host-callback-timing": 12,
+  "SC1001 jsx-census-missing": 1,
+  "SC1001 mount-form-window": 2,
+  "SC1001 no-hydration-subtree": 2,
+  "SC1001 read-backing-unproven": 357,
+  "SC1001 summary-read-unplaced": 91,
+  "SC1001 write-path-read-unproven": 13,
+  "SC1002 function-run-unplaced": 2,
+  "SC1002 generator-stepped": 11,
+  "SC1002 handed-read-after-await": 177,
+  "SC1002 search-depth-limit": 1,
+  "SC1002 tuple-iteration-written": 82,
+  "SC1003 destructure-root-unproven": 29,
+  "SC1003 props-callers-unenumerated": 14,
+  "SC1004 component-identity-unproven": 1,
+  "SC1004 conditional-return-unproven": 8,
+  "SC1005 accessor-value-coerced": 13,
+  "SC1005 solid-call-rejected-unchecked": 4,
+  "SC1005 tuple-iteration-written": 1,
+  "SC1007 handler-root-unproven": 10,
+  "SC1007 props-callers-unenumerated": 10,
+  "SC1007 unchecked-native-handler-value": 2,
+  "SC2001 binding-before-initialization": 3,
+  "SC2001 component-identity-unproven": 9,
+  "SC2001 function-run-unplaced": 460,
+  "SC2001 function-unentered": 2,
+  "SC2001 lazy-compute-unread": 7,
+  "SC2001 owned-write-option-unread": 3,
+  "SC2001 refused-creation-unrun": 13,
+  "SC2001 unreached-dead-code": 5,
+  "SC2002 function-run-unplaced": 22,
+  "SC2002 lazy-compute-unread": 1,
+  "SC2002 refused-creation-unrun": 1,
+  "SC2003 binding-before-initialization": 2,
+  "SC2003 build-constant-arm": 2,
+  "SC2003 component-identity-unproven": 4,
+  "SC2003 delete-operand-unproven": 11,
+  "SC2003 no-hydration-subtree": 1,
+  "SC2003 search-depth-limit": 1,
+  "SC2003 store-operation-may-not-write": 20,
+  "SC2003 store-write-unproven": 91,
+  "SC2003 unproven-container-root": 122,
+  "SC2004 component-identity-unproven": 1,
+  "SC2004 computation-error-unobserved": 15,
+  "SC2004 function-run-unplaced": 11,
+  "SC2004 search-depth-limit": 1,
+  "SC2005 function-run-unplaced": 3,
+  "SC2006 function-run-unplaced": 45,
+  "SC2006 primitive-alias-call": 2,
+  "SC2007 async-flight-error-unobserved": 2,
+  "SC2007 static-source-unproven": 7,
+  "SC2008 callee-callback-timing": 1,
+  "SC2008 function-run-unplaced": 17,
+  "SC2008 handler-dispatch-unproven": 22,
+  "SC2008 primitive-alias-call": 2,
+  "SC2008 search-depth-limit": 2,
+  "SC2009 optimistic-reach-unresolved": 9,
+  "SC3001 computation-error-unobserved": 1,
+  "SC3001 leaf-operation-identity-unproven": 4,
+  "SC3001 leaf-owner-unproven": 45,
+  "SC3001 refused-creation-unrun": 1,
+  "SC4001 async-flight-error-unobserved": 4,
+  "SC4001 component-identity-unproven": 14,
+  "SC4001 computation-error-unobserved": 1,
+  "SC4001 function-run-unplaced": 219,
+  "SC4001 function-unentered": 3,
+  "SC4001 handler-member-unresolved": 39,
+  "SC4001 handler-spread-unresolved": 58,
+  "SC4001 owner-allocation-unproven": 23,
+  "SC4001 owner-callers-unenumerated": 165,
+  "SC4001 owner-later-run-unowned": 19,
+  "SC4001 owner-nullable": 7,
+  "SC4001 owner-unproven": 13,
+  "SC4001 owner-varies-by-caller": 84,
+  "SC4001 unreached-dead-code": 2,
+  "SC4002 component-identity-unproven": 1,
+  "SC4002 computation-error-unobserved": 7,
+  "SC4002 function-unentered": 4,
+  "SC4002 lazy-compute-unread": 2,
+  "SC4002 owner-unproven": 5,
+  "SC4002 provider-not-proven-above": 50,
+  "SC5001 async-component-prop": 2,
+  "SC5001 async-options-opaque": 17,
+  "SC5001 async-provenance-unproven": 14,
+  "SC5001 async-read-caught": 2,
+  "SC5001 async-read-unaccounted": 23,
+  "SC5001 binding-before-initialization": 1,
+  "SC5001 call-attributed-read": 3,
+  "SC5001 callee-callback-timing": 6,
+  "SC5001 carrier-run-unproven": 4,
+  "SC5001 component-identity-unproven": 1,
+  "SC5001 creation-pass-unproven": 18,
+  "SC5001 declared-loading-value": 4,
+  "SC5001 host-callback-timing": 1,
+  "SC5001 invocation-context-unproven": 89,
+  "SC5001 mount-form-window": 1,
+  "SC5001 mount-unresolved": 2,
+  "SC5001 source-module-unresolved": 1,
+  "SC5001 source-pending-unproven": 341,
+  "SC5003 async-options-opaque": 30,
+  "SC5003 async-provenance-unproven": 125,
+  "SC5003 async-read-caught": 3,
+  "SC5003 async-read-unaccounted": 342,
+  "SC5003 call-attributed-read": 85,
+  "SC5003 carrier-run-unproven": 2,
+  "SC5003 mount-form-window": 2,
+  "SC5003 mount-unresolved": 346,
+  "SC5003 root-mount-pass-unproven": 43,
+  "SC5003 server-rendering-unresolved": 1,
+  "SC5003 source-module-unresolved": 1,
+  "SC5003 source-pending-unproven": 1,
+  "SC5006 function-run-unplaced": 3,
+  "SC5006 loading-hold-unproven": 5,
+  "SC5007 loading-on-value-unproven": 8,
+  "SC5008 async-read-unaccounted": 3,
+  "SC5008 caught-read-unproven": 21,
+  "SC6001 directive-owner-unproven": 19,
+  "SC6002 callee-callback-timing": 2,
+  "SC6002 effect-owner-unproven": 25,
+  "SC6002 function-run-unplaced": 28,
+  "SC6002 primitive-alias-call": 2,
+  "SC6002 search-depth-limit": 2,
+  "SC7001 effect-argument-shape-uncertain": 27,
+  "SC7001 effect-returned-function-run-unproven": 1,
+  "SC7001 effect-runtime-entry-uncertain": 1,
+  "SC7002 callee-callback-timing": 1,
+  "SC7002 compute-return-unproven": 11,
+  "SC7002 primitive-alias-call": 2,
+  "SC7005 boundary-settle-order-unproven": 6,
+  "SC7005 response-head-position-unproven": 9,
+  "SC7005 server-rendering-unresolved": 2,
+  "SC7006 server-export-value-unproven": 3,
+  "SC7007 server-function-rich-argument-unresolved": 16,
+  "SC7007 server-function-value-handed": 15,
+  "SC7007 solid-call-rejected-unchecked": 1,
+  "SC8003 content-source-value-unproven": 4,
+  "SC8003 spread-content-unproven": 21,
+  "SC8014 preference-read-unproven": 7,
+  "SC8015 preference-read-unproven": 13,
+  "SC9005 package-source-unavailable": 60,
+  "SC9012 async-prop-getter": 3,
+  "SC9012 closed-parameter-member-dispatch": 68,
+  "SC9012 composite-callee-unresolved": 9,
+  "SC9012 computed-call-target-unresolved": 16,
+  "SC9012 created-accessor-read-unproven": 1,
+  "SC9012 dependency-source-getter": 49,
+  "SC9012 dependency-source-program-call-error": 1,
+  "SC9012 dependency-value-unfollowed": 22,
+  "SC9012 derived-read-under-untrack": 6,
+  "SC9012 exported-parameter-member-dispatch": 79,
+  "SC9012 forwarded-to-undescribed-callee": 28,
+  "SC9012 function-call-target-unresolved": 8,
+  "SC9012 function-prototype-callee-unresolved": 1,
+  "SC9012 handed-member-dispatch": 420,
+  "SC9012 handed-member-read": 65,
+  "SC9012 handed-read-after-await": 10,
+  "SC9012 import-unresolved": 37,
+  "SC9012 installed-member": 53,
+  "SC9012 leaf-callback-opaque": 122,
+  "SC9012 listener-reach": 52,
+  "SC9012 package-callee": 23,
+  "SC9012 parameter-call-argument-unproven": 46,
+  "SC9012 parameter-default-unresolved": 5,
+  "SC9012 parameter-member-path-unresolved": 20,
+  "SC9012 parameter-member-target-unresolved": 141,
+  "SC9012 parameter-member-targets-diverge": 11,
+  "SC9012 parameter-use-unmodeled": 117,
+  "SC9012 primitive-alias-call": 15,
+  "SC9012 primitive-result-method": 8,
+  "SC9012 primitive-value": 26,
+  "SC9012 prop-pending-unproven": 48,
+  "SC9012 result-access-callback-body-unresolved": 1,
+  "SC9012 result-access-callback-opaque-call": 1,
+  "SC9012 result-access-callback-reactive-operation": 6,
+  "SC9012 returned-callable-outside-source-universe": 47,
+  "SC9012 search-depth-limit": 6,
+  "SC9012 solid-call-rejected-unchecked": 3,
+  "SC9012 standard-member-impostor": 124,
+  "SC9012 store-key-undecided": 12,
+  "SC9012 tuple-iteration-written": 1362,
+  "SC9012 type-only-source": 85,
+  "SC9012 value-as-parameter-default": 8,
+  "SC9012 value-bound-held": 5,
+  "SC9012 value-escaped-from-untrack": 3,
+  "SC9012 value-exported-unnamed": 5,
+  "SC9012 value-forwarded": 240,
+  "SC9012 value-from-primitive-callback": 23,
+  "SC9012 value-held-in-binding": 109,
+  "SC9012 value-held-in-member": 24,
+  "SC9012 value-in-carrier": 339,
+  "SC9012 value-in-class-field": 12,
+  "SC9012 value-pending-in-jsx": 1,
+  "SC9012 value-read-under-untrack": 1,
+  "SC9012 value-root-in-helper": 35,
+  "SC9012 value-through-await": 5,
+  "SC9012 value-through-generator": 5,
+  "SC9012 value-through-logical": 37,
+  "SC9012 value-through-new": 29,
+  "SC9012 value-to-unresolved-callee": 255,
+  "SC9012 value-use-unclassified": 70,
+  "SC9012 withheld-object-member": 51,
+  "SC9014 dialect-detection": 149,
+  "SC9014 router-release": 4,
+  "SC9015 compiler-facts": 4,
+  "SC9016 suppression-comments": 4
+ },
+ "drops": [
+  {
+   "key": "SC9012 value-held-in-binding",
+   "from": 82,
+   "to": 76,
+   "adr": "ADR 0811",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs::examined_member_writes",
+   "fixtures": {
+    "proved": "reactive-ir/store-write-literal-links",
+    "open": "reactive-ir/local-alias-member-reads"
+   }
+  },
+  {
+   "key": "SC1001 host-callback-timing",
+   "from": 17,
+   "to": 12,
+   "adr": "ADR 0840",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::impostor_veto",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-census",
+    "open": "reactive-ir/host-callback-listener-real"
+   }
+  },
+  {
+   "key": "SC9012 value-in-carrier",
+   "from": 252,
+   "to": 247,
+   "adr": "ADR 0840",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::impostor_veto",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-census",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "key": "SC9012 tuple-iteration-written",
+   "from": 138,
+   "to": 45,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::visible_iteration_write",
+   "fixtures": {
+    "proved": "reactive-ir/project-callback-uses",
+    "open": "reactive-ir/iteration-written-slots"
+   }
+  },
+  {
+   "key": "SC1001 read-backing-unproven",
+   "from": 343,
+   "to": 339,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::visible_iteration_write",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-compared-prototype",
+    "open": "reactive-ir/iteration-written-slots-prop-value"
+   }
+  },
+  {
+   "key": "SC8015 preference-read-unproven",
+   "from": 14,
+   "to": 13,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::visible_iteration_write",
+   "fixtures": {
+    "proved": "reactive-ir/invocation-flow",
+    "open": "reactive-ir/accessor-provenance"
+   }
+  },
+  {
+   "key": "SC1001 component-identity-unproven",
+   "from": 138,
+   "to": 137,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/reactive_analysis.rs::hold_withdrawn_slot_rows",
+   "fixtures": {
+    "proved": "reactive-ir/compound-components-escapes-eval",
+    "open": "reactive-ir/component-identity-escapes"
+   }
+  },
+  {
+   "key": "SC2001 function-run-unplaced",
+   "from": 526,
+   "to": 521,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/reactive_analysis.rs::hold_withdrawn_slot_rows",
+   "fixtures": {
+    "proved": "reactive-ir/arrow-bound-helper-reachability-eval",
+    "open": "reactive-ir/arrow-bound-helper-reachability"
+   }
+  },
+  {
+   "key": "SC2002 function-run-unplaced",
+   "from": 25,
+   "to": 22,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::program_has_eval",
+   "fixtures": {
+    "proved": "reactive-ir/arrow-bound-helper-reachability-eval",
+    "open": "reactive-ir/arrow-bound-helper-reachability"
+   }
+  },
+  {
+   "key": "SC2003 unproven-container-root",
+   "from": 108,
+   "to": 107,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::program_has_eval",
+   "fixtures": {
+    "proved": "reactive-ir/package-access-helper",
+    "open": "reactive-ir/accessor-provenance"
+   }
+  },
+  {
+   "key": "SC4001 handler-spread-unresolved",
+   "from": 58,
+   "to": 57,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::program_has_eval",
+   "fixtures": {
+    "proved": "reactive-ir/forwarded-event-prop-eval-handler",
+    "open": "reactive-ir/forwarded-event-prop"
+   }
+  },
+  {
+   "key": "SC9012 value-forwarded",
+   "from": 140,
+   "to": 139,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::push_withdrawn_slot_obligations",
+   "fixtures": {
+    "proved": "reactive-ir/tuple-slot-function-obtained",
+    "open": "reactive-ir/accessor-rebinding"
+   }
+  },
+  {
+   "key": "SC9012 withheld-object-member",
+   "from": 51,
+   "to": 50,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::program_has_eval",
+   "fixtures": {
+    "proved": "reactive-ir/getter-parameter-read",
+    "open": "reactive-ir/action-step-window"
+   }
+  },
+  {
+   "key": "SC2004 function-run-unplaced",
+   "from": 12,
+   "to": 11,
+   "adr": "ADR 0834",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/callee_roles.rs::control-flow-tracked-region",
+   "fixtures": {
+    "proved": "reactive-ir/flow-iife-tracked",
+    "open": "reactive-ir/observer-callers"
+   }
+  },
+  {
+   "key": "SC9012 value-held-in-binding",
+   "from": 124,
+   "to": 109,
+   "adr": "ADR 0811",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs::examined_member_writes",
+   "fixtures": {
+    "proved": "reactive-ir/store-write-literal-links",
+    "open": "reactive-ir/local-alias-member-reads"
+   }
+  },
+  {
+   "key": "SC2004 function-run-unplaced",
+   "from": 11,
+   "to": 10,
+   "adr": "ADR 0857",
+   "proof": "rust/crates/solid-reactive-ir/src/static_api.rs::resolve_scope_of_entries",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-resolve-leaf",
+    "open": "reactive-ir/resolve-named-closure-unplaced"
+   },
+   "note": "Net of two proved, U to V (rc21-resolve-leaf helper(), resolve-named-closure-unplaced NamedForEach; Chrome rc.21 throws RESOLVE_IN_REACTIVE_SCOPE in both, probes flip-r3c cases/v1) and one added U (resolve-inline-entries Empty)"
+  },
+  {
+   "key": "SC2005 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 0857",
+   "proof": "rust/crates/solid-reactive-ir/src/static_api.rs::resolve_scope_of_entries",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-named-closure-unplaced",
+    "open": "reactive-ir/rc9-until-scope"
+   },
+   "note": "resolve-named-closure-unplaced AliasForEachUntil, U to V: [1].forEach(hf) provably runs hf in a compute a memo names through a const alias; Chrome rc.21 throws UNTIL_IN_REACTIVE_SCOPE (probe flip-r3c cases/v2)"
+  },
+  {
+   "key": "SC1001 callee-callback-timing",
+   "from": 402,
+   "to": 401,
+   "adr": "ADR 0851",
+   "proof": "rust/crates/solid-reactive-ir/src/owners.rs::generator_creations",
+   "fixtures": {
+    "proved": "reactive-ir/generator-step-owner",
+    "open": "reactive-ir/helper-prop-read"
+   },
+   "note": "Not a proof and not a rename: a relabel, still uncertifiable at the same span. helper-prop-read GeneratorHelper's `yield props.value` (start 7847): callee-callback-timing -> SC1001 function-run-unplaced under ADR 0851 (a generator's creating call runs none of its body; its steps are placed by generator_creations). The key's other 6 rows in helper-prop-read stay."
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC5003 mount-unresolved",
+   "from": 11,
+   "to": 9,
+   "adr": "ADR 0889",
+   "kind": "relabel",
+   "relabeledTo": "SC5003 async-options-opaque"
+  },
+  {
+   "fixture": "reactive-ir/rc21-declared-first-pass",
+   "key": "SC1001 read-backing-unproven",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0890",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs::served_in_creating_pass",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-declared-first-pass",
+    "open": "reactive-ir/effect-apply-first-run-expression-child"
+   }
+  },
+  {
+   "fixture": "reactive-ir/rc21-declared-first-pass",
+   "key": "SC5001 declared-loading-value",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 0890",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs::served_in_creating_pass",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-declared-first-pass",
+    "open": "reactive-ir/async-boundary"
+   }
+  },
+  {
+   "fixture": "reactive-ir/rc21-declared-first-pass",
+   "key": "SC5001 source-pending-unproven",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0890",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs::served_in_creating_pass",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-declared-first-pass",
+    "open": "reactive-ir/pending-source-first-run-apply-member"
+   }
+  },
+  {
+   "fixture": "reactive-ir/host-callback-read-timing",
+   "key": "SC1001 host-callback-timing",
+   "from": 12,
+   "to": 5,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced"
+  },
+  {
+   "fixture": "reactive-ir/host-callback-read-timing",
+   "key": "SC5001 host-callback-timing",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC5001 invocation-context-unproven"
+  },
+  {
+   "fixture": "reactive-ir/lying-assertion",
+   "key": "SC1001 callee-callback-timing",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced"
+  },
+  {
+   "fixture": "reactive-ir/plain-container-receiver",
+   "key": "SC1001 callee-callback-timing",
+   "from": 4,
+   "to": 1,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced"
+  },
+  {
+   "fixture": "reactive-ir/rc21-standard-subclass",
+   "key": "SC1001 callee-callback-timing",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC1002 handed-read-after-await",
+   "from": 67,
+   "to": 66,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 standard-member-impostor",
+   "note": "Not a clean: `.then(() => value())`'s SC1002 row is gone, the read keeps its SC1001 U, the withheld `.then` holds this row. Open, notGenerated in open-defects.json."
+  },
+  {
+   "fixture": "reactive-ir/solid2-precision",
+   "key": "SC9012 function-call-target-unresolved",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 standard-member-impostor",
+   "note": "The withheld `result.filter` takes the row; the read inside keeps SC1001 and SC1002 U."
+  },
+  {
+   "fixture": "reactive-ir/host-callback-read-timing",
+   "key": "SC1001 host-callback-timing",
+   "from": 12,
+   "to": 5,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced",
+   "note": "review R11: the rows of a withheld addEventListener's callback stand at the same spans; the ADR 0840 row above is this, not a proof",
+   "sites": [
+    "App.tsx 744-751",
+    "App.tsx 862-869",
+    "App.tsx 983-990",
+    "App.tsx 1888-1895",
+    "App.tsx 2040-2046",
+    "App.tsx 2441-2448",
+    "App.tsx 2776-2782"
+   ]
+  },
+  {
+   "fixture": "reactive-ir/loading-on-outside-hold",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 value-forwarded",
+   "note": "`a()` in `<p>{a()}</p>`, App.tsx 2380: the same row under the census's other blocker, uncertifiable before and after"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC5001 async-read-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0892",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/async_context.rs::read_in_flow_prop",
+   "fixtures": {
+    "proved": "uncertifiable-repro/sc1001",
+    "open": "reactive-ir/handed-net-guards"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4002 computation-error-unobserved",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 0893",
+   "proof": "rust/crates/solid-reactive-ir/src/stored_throw.rs::throw_end",
+   "fixtures": {
+    "proved": "reactive-ir/owner-callback-prop",
+    "open": "reactive-ir/stored-throw-observation"
+   }
+  },
+  {
+   "key": "SC1001 component-identity-unproven",
+   "from": 137,
+   "to": 136,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/compound-components-escapes-patched-assign",
+    "open": "reactive-ir/component-identity-escapes"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC2001 function-run-unplaced",
+   "from": 521,
+   "to": 426,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/helper-literal-roles",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 function-prototype-callee-unresolved",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/dispatch-and-copies",
+    "open": "reactive-ir/dispatch-and-copies-apply-unknown"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-bound-held",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/package-access-helper",
+    "open": "reactive-ir/value-use-census"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-forwarded",
+   "from": 139,
+   "to": 136,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/dependency-source-owner",
+    "open": "reactive-ir/accessor-rebinding"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-held-in-binding",
+   "from": 82,
+   "to": 78,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/dispatch-and-copies",
+    "open": "reactive-ir/accessor-rebinding"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-in-carrier",
+   "from": 176,
+   "to": 163,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-installed-accessor-wrapper",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-root-in-helper",
+   "from": 15,
+   "to": 13,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/package-access-helper",
+    "open": "reactive-ir/omit-view-props-root"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-through-logical",
+   "from": 36,
+   "to": 30,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/package-access-helper",
+    "open": "reactive-ir/callee-spelling"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-through-new",
+   "from": 16,
+   "to": 15,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "uncertifiable-repro/sc2001",
+    "open": "reactive-ir/returned-store-proxy"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 157,
+   "to": 148,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/read-after-await-reach",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "key": "SC9012 value-use-unclassified",
+   "from": 46,
+   "to": 45,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::handed_to_unseen_code",
+   "fixtures": {
+    "proved": "reactive-ir/dispatch-and-copies",
+    "open": "reactive-ir/accessor-provenance"
+   },
+   "note": "ADR 0803 step 2: no proof of these uses: slots withdrawn, so a site that named this blocker now has its SC9012 tuple-iteration-written row, one U blocker replaced by a broader one, nothing became clean"
+  },
+  {
+   "fixture": "reactive-ir/async-read-under-jsx",
+   "key": "SC4001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0883",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::control_flow_child",
+   "fixtures": {
+    "proved": "reactive-ir/async-read-under-jsx",
+    "open": "reactive-ir/owner-helper-callback"
+   }
+  },
+  {
+   "fixture": "reactive-ir/compound-components-escapes-patched-assign",
+   "key": "SC1001 component-identity-unproven",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 read-backing-unproven"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC9012 value-forwarded",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC9012 function-prototype-callee-unresolved",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC9012 value-held-in-binding",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC9012 value-use-unclassified",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/generator-step-owner",
+   "key": "SC2001 function-run-unplaced",
+   "from": 7,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/helper-literal-roles",
+   "key": "SC2001 function-run-unplaced",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/impostor-receivers",
+   "key": "SC2001 function-run-unplaced",
+   "from": 9,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 value-bound-held",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 value-forwarded",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 value-held-in-binding",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 value-in-carrier",
+   "from": 22,
+   "to": 19,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 value-root-in-helper",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 value-through-logical",
+   "from": 6,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/rc21-installed-accessor-wrapper",
+   "key": "SC9012 value-in-carrier",
+   "from": 12,
+   "to": 6,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/rc21-listener-reach",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/rc21-listener-shared",
+   "key": "SC9012 value-in-carrier",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/standard-patches",
+   "key": "SC2001 function-run-unplaced",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/transported-member-stability",
+   "key": "SC9012 value-in-carrier",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/transported-member-stability",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 8,
+   "to": 2,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/value-use-escaped",
+   "key": "SC9012 value-forwarded",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/value-use-escaped",
+   "key": "SC9012 value-from-primitive-callback",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/value-use-escaped",
+   "key": "SC9012 value-held-in-member",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/value-use-escaped",
+   "key": "SC9012 value-in-carrier",
+   "from": 16,
+   "to": 11,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/value-use-escaped",
+   "key": "SC9012 value-through-logical",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/write-detached-owner-helper",
+   "key": "SC2001 function-run-unplaced",
+   "from": 18,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/write-render-apply-row-layers",
+   "key": "SC4001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0883",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::control_flow_child",
+   "fixtures": {
+    "proved": "reactive-ir/write-render-apply-row-layers",
+    "open": "reactive-ir/owner-helper-callback"
+   }
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2001 function-run-unplaced",
+   "from": 63,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 value-held-in-binding",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 value-in-carrier",
+   "from": 7,
+   "to": 5,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 value-through-new",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2001 function-run-unplaced",
+   "from": 8,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "uncertifiable-repro/veto-listener-wrapper",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0803",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 tuple-iteration-written"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 handed-read-after-await",
+   "from": 12,
+   "to": 11,
+   "adr": "ADR 0895",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs::closed_member",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/after-await-handoff"
+   },
+   "note": "Proved, U to V: Member, `const ho = { m: hf }; ho.m()` past the await: the slot names the function, the literal is closed, and rc.21 warns on the fuzzer's handoff-member programs (49 agree, Chrome-confirmed). The open twin in the same fixture is MemberWrapper."
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 tuple-iteration-written",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/read-after-await-purity"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again; all 4 spans are SC1002 violations now (proved, U to V)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 22,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-handoff",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/callback-props-reads",
+   "key": "SC1001 read-backing-unproven",
+   "from": 10,
+   "to": 1,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/callback-props-reads",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again; 9 spans are SC1001 violations now (proved, U to V), 1 keeps its U"
+  },
+  {
+   "fixture": "reactive-ir/callback-props-reads",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 26,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/callback-props-reads",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-owner",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/fresh-stack-scheduler-owner",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-read-role",
+   "key": "SC1001 read-backing-unproven",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/fresh-stack-scheduler-read-role",
+    "open": "engine/eslint-reactivity-v2"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again; both spans are SC1001 violations now (proved, U to V)"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-read-role",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 16,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/fresh-stack-scheduler-read-role",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-default-view-optional",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-default-view-optional",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-listener-param",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-listener-param",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/owner-region-no-edge",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/owner-region-no-edge",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes"
+  },
+  {
+   "fixture": "reactive-ir/rc21-listener-shared",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 0803",
+   "proof": "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs::callback_seen",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-listener-shared",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "R1f T2 (5e5d3a307, b8d691226): the callback or listener is read at the call that hands the window on, so the slots are exact again and the withdrawal row at the span goes at 2 spans; the third span keeps an SC9012 U under value-in-carrier (a relabel there, not a proof of that use)"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 standard-member-impostor",
+   "from": 10,
+   "to": 8,
+   "adr": "ADR 0874",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::assignment_writes",
+   "fixtures": {
+    "proved": "reactive-ir/package-access-helper",
+    "open": "reactive-ir/impostor-census"
+   },
+   "note": "a member a call in the target holds is only read: the false patch that vetoed the call is gone"
+  },
+  {
+   "fixture": "reactive-ir/rc21-installed-prototype",
+   "key": "SC2003 unproven-container-root",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0874",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::assignment_writes",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-installed-prototype",
+    "open": "reactive-ir/store-sub-value-flow"
+   },
+   "note": "a member a call in the target holds is only read: the false patch that vetoed the call is gone"
+  },
+  {
+   "fixture": "reactive-ir/store-sub-value-flow",
+   "key": "SC2003 unproven-container-root",
+   "from": 12,
+   "to": 11,
+   "adr": "ADR 0874",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::assignment_writes",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-installed-prototype",
+    "open": "reactive-ir/store-sub-value-flow"
+   },
+   "note": "a member a call in the target holds is only read: the false patch that vetoed the call is gone"
+  },
+  {
+   "fixture": "reactive-ir/rc21-installed-prototype",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 0874",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 value-in-carrier",
+   "note": "`Object.create(store).v`: the same rows, once `Object.create` keeps its resolution"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC9012 parameter-call-argument-unproven",
+   "from": 31,
+   "to": 29,
+   "adr": "ADR 0874",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::assignment_writes",
+   "fixtures": {
+    "proved": "reactive-ir/package-access-helper",
+    "open": "reactive-ir/package-access-helper"
+   },
+   "note": "`text` and `value` hold `String(n).slice(0)`, a string once the false patch that vetoed `String` is gone"
+  },
+  {
+   "fixture": "reactive-ir/impostor-receivers",
+   "key": "SC5003 async-provenance-unproven",
+   "from": 9,
+   "to": 8,
+   "adr": "ADR 0874",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::impostor_veto",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-receivers",
+    "open": "reactive-ir/impostor-receivers"
+   },
+   "note": "no proof: fa042308c moved `CleanArity` (R10a) out of this fixture into impostor-host-intact, where its write is a proved SC2001 (that README); the fall is the component leaving, the key's other rows here stand"
+  },
+  {
+   "fixture": "reactive-ir/impostor-receivers",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 23,
+   "to": 21,
+   "adr": "ADR 0874",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::impostor_veto",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-receivers",
+    "open": "reactive-ir/impostor-receivers"
+   },
+   "note": "no proof: fa042308c moved `CleanArity` (R10a) out of this fixture into impostor-host-intact, where its write is a proved SC2001 (that README); the fall is the component leaving, the key's other rows here stand"
+  },
+  {
+   "fixture": "reactive-ir/handed-net",
+   "key": "SC9012 handed-read-after-await",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0897",
+   "kind": "relabel",
+   "relabeledTo": "SC1002 handed-read-after-await"
+  },
+  {
+   "fixture": "reactive-ir/eslint-plugin-corpus",
+   "key": "SC1001 read-backing-unproven",
+   "from": 7,
+   "to": 6,
+   "adr": "ADR 0883",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced",
+   "note": "props-extended-invalid.tsx 498-508 `props.name` in NamedControlFlow's render closure keeps its SC1001 U under function-run-unplaced (R5 9f64d027e, a named Show/Match child of length 0 gives no invocation proof)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget",
+   "key": "SC9014 dialect-detection",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0878",
+   "proof": "rust/crates/solid-facts-backend/src/diagnostics.rs::unaudited_release_finding",
+   "fixtures": {
+    "proved": "reactive-ir/value-walk-budget",
+    "open": "reactive-ir/impostor-withheld-rows"
+   },
+   "note": "no proof: the fixture gains its @solidjs/signals and @solidjs/web stubs (Part 16's report on cca25ed17), so dialect detection no longer notes the missing runtime packages"
+  },
+  {
+   "fixture": "reactive-ir/primitive-alias-call",
+   "key": "SC4001 owner-allocation-unproven",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::push_namespace_slots",
+   "fixtures": {
+    "proved": "reactive-ir/primitive-alias-call",
+    "open": "reactive-ir/callback-ts-sugar-identity"
+   },
+   "note": "`const { onSettled: settled = S.onSettled } = S`: the default is the same member, so `settled` is `onSettled`; its callback returns no cleanup, so the timer's unowned call reports nothing, as the direct `onSettled` in a timer (probe) and missing-owner.md say"
+  },
+  {
+   "fixture": "reactive-ir/primitive-alias-call",
+   "key": "SC9012 primitive-alias-call",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::import_alias_source",
+   "fixtures": {
+    "proved": "reactive-ir/primitive-alias-call",
+    "open": "reactive-ir/rc9-reexport-gap-import-equals"
+   },
+   "note": "`held` (closed holder `{ m: onCleanup }`) and `settled` (namespace slot with the same member as default, visitor.rs::push_namespace_slots) name their primitive: `held(…)` in the timer is SC4001's violation as the direct call is; `later` (`flush.bind`) keeps the row"
+  },
+  {
+   "fixture": "reactive-ir/primitive-alias-call",
+   "key": "SC9012 primitive-value",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::copied_into_primitive_binding",
+   "fixtures": {
+    "proved": "reactive-ir/primitive-alias-call",
+    "open": "reactive-ir/primitive-namespace-aliases"
+   },
+   "note": "the values copied into those two exact bindings are no value use; `flush` handed to `bind` keeps its row"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC1001 function-run-unplaced",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::import_alias_source",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/after-await-handoff"
+   },
+   "note": "`const effect = createEffect; effect(() => count(), …)`: the compute is `createEffect`'s, tracked, as the direct control's is (no row there); the module-scope call is SC4001's violation like the control"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC9012 primitive-value",
+   "from": 7,
+   "to": 6,
+   "adr": "ADR 0901",
+   "proof": "rust/crates/solid-reactive-ir/src/symbols.rs::copied_into_primitive_binding",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/primitive-namespace-aliases"
+   },
+   "note": "`const effect = createEffect` is an exact alias, no value use; the exported `Solid.createEffect` keeps its row (an importer's mention resolves nothing)"
+  },
+  {
+   "fixture": "reactive-ir/tuple-accessor-slots-vetoed",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0905",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 value-through-logical",
+   "note": "patched.tsx 218: the same row under another census blocker, uncertifiable before and after; the census now keeps a span's least blocker instead of the first walk's, whose turn hashed the absolute path"
+  },
+  {
+   "fixture": "reactive-ir/loading-on-outside-hold",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0905",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 value-forwarded",
+   "note": "`setT(2)`, App.tsx 2472: the same row under another census blocker, uncertifiable before and after. Which blocker it got depended on the fixture's absolute path (the walks' turn hashed it); the census now keeps the span's least blocker"
+  },
+  {
+   "fixture": "reactive-ir/loading-on-outside-hold",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0905",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 value-forwarded",
+   "note": "the merge of C2's ADR 0905 onto census 119e4b500 (Part 17, s5): beside C2's `setT(2)` at App.tsx 2472, the row at 2380 [2380,2383) also takes the span's least blocker, value-forwarded, now that a second walk reaches it on the merged tree (R1f/R1g's ADR 0901 names more aliases); uncertifiable before and after, same rule and span"
+  }
+ ],
+ "renames": []
+}

@@ -26,6 +26,12 @@ evaluated at module scope, and a JSX-returning function bound to a call's result
 are not placed: a write there is uncertifiable, never a violation. An exported
 capitalized function stays a component by module surface (ADR 0331).
 
+A closure handed to a helper inside a `createRoot` body or a `runWithOwner(owner, …)`
+callback (`createRoot(() => hc1(() => set(1)))`, written in a handler) may run on that
+callback's stack, under its owner: the handler's permissive role is no proof for it, and its
+own entries decide (ADR 0828). A helper chain that only forwards and calls it proves the
+violation under a root; under a bound owner the write is uncertifiable.
+
 A `createRenderEffect` apply callback is only partly such a scope. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, so a
 write there throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a component body, a
@@ -186,7 +192,10 @@ none it is **uncertifiable**. One proof makes it legal (ADR 0333): it runs
 after an await that dominates it (later in the await's block, a `try` block
 included; its `catch` or `finally` only when the block starts by awaiting a
 call of an async function with inert arguments; not in a generator, JSX or
-an instance field). A write that only may follow an await in its own function
+an instance field), or it is past a `yield` of a generator its async caller
+steps across one of its own suspensions (ADR 0851: `for await` over it, or a
+`for…of` whose body starts with an `await`; a later `await` in the body leaves
+it uncertifiable). A write that only may follow an await in its own function
 (a `catch` or `finally` past another `try` head, code after an await in a
 branch) runs on the stack its function was entered on or on a later task with
 no owner: it takes its function's entries' role when that role is permissive
@@ -312,6 +321,10 @@ only dead code calls: ADR 0578) is uncertifiable (ADR 0458,
 `fixtures/reactive-ir/dead-code-sites`). So is a write in a lazy memo
 (`createMemo(fn, { lazy: true })`) no proven read of its accessor computes
 (ADR 0576, `fixtures/reactive-ir/lazy-memo-unread`).
+So is a write or `refresh` in a function no call edge reaches but that may
+run (a method, constructor, instance field, getter, `toString`, iterator, `Map`
+slot, or a helper one of those calls; ADR 0721); directly in a tag the body
+runs it is a violation. Module initialization is silent.
 So is a write in a `createRoot` body, or in a component rendered only there,
 when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,
@@ -397,3 +410,7 @@ using it on application state reintroduces the feedback loops this rule prevents
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the same constraint for actions
 
 A write in a layer of a callback named by its binding is judged at that callback's positions (ADR 0517); several `untrack` positions with no rejecting one are an obligation.
+
+A write in a handler is proven ownerless only while no call can deliver the handler under an owner. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the write uncertifiable.
+
+A generator is placed at its steps, never at iterator creation (ADR 0851). Exported iterators, mixed step contexts, and a named generator also handed on as a value retain `function-run-unplaced` obligations; the creation call cannot restore a rejecting compute role (ADR 0853). Some synchronous consumption/first-segment write positions also remain obligations where the write-role proof does not preserve the step context.

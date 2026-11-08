@@ -30,6 +30,17 @@
       "start": 1014,
       "end": 1019,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
+      "start": 1893,
+      "end": 1903,
+      "fixes": 0
     }
   ]
 }

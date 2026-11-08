@@ -1,0 +1,2 @@
+(window.requestIdleCallback || setTimeout)(() => {});
+export {};

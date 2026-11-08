@@ -5,10 +5,22 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shadowed-control-flow-tag/App.tsx",
       "start": 292,
       "end": 303,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shadowed-control-flow-tag/App.tsx",
+      "start": 320,
+      "end": 324,
       "fixes": 0
     },
     {

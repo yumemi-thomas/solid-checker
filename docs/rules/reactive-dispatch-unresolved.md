@@ -25,8 +25,10 @@ reactivity analysis but cannot be established. Covered forms include:
   or union of objects whose method summaries differ;
 - a computed call such as `handlers[index]()` whose runtime target is not an
   exact symbol;
-- a Solid primitive used as a value (`const eff = createEffect`,
-  `Reflect.apply(createEffect, …)`): the calls it reaches are not followed; and
+- a Solid primitive used as a value (`let eff = createEffect`,
+  `Reflect.apply(createEffect, …)`): the calls it reaches are not followed. A
+  binding that exactly holds it (`const eff = createEffect`, `const r =
+  S.refresh`, a closed holder's member; ADR 0901) names it instead; and
 - an exported helper that directly invokes a member supplied through a
   parameter outside a proven tracked JSX region, because callers outside the
   analyzed project can supply unseen behavior.
@@ -190,6 +192,30 @@ function may hand its parameter on to such a callee (ADR 0370).
 To let the analysis see the call, keep the receiving function in the project,
 or provide analyzable runtime source for the package under the declared host.
 
+## The value-use census (ADR 0692)
+
+Every reference of a proven source is followed, or it is this rule's uncertifiable, naming the position:
+
+| `analysisContext` | Position |
+|---|---|
+| `value-held-in-binding` | a `let`, an assignment, or a name no row reads |
+| `primitive-alias-call` | a call the compiler resolves to a Solid primitive, through a name no rule reads (ADR 0884) |
+| `value-held-in-member` | a member assignment |
+| `value-through-logical` | a value of `? :`, `&&`, `\|\|`, `??` or a comma that goes on |
+| `value-in-class-field` | a class field or `this.x` |
+| `value-through-generator`, `value-through-await`, `value-through-new` | `yield`, `await`, `new` |
+| `value-as-parameter-default` | a parameter's default |
+| `value-in-carrier` | a spread, an iteration, a nested literal, a standard call that keeps or copies it, a primitive's value slot |
+| `value-to-unresolved-callee` | an unresolved call, a tag, a method's or a handed function's result |
+| `value-from-primitive-callback` | what a primitive's callback returns, unless the primitive answers it (`createRoot`) |
+| `value-bound-held` | `.bind` not called on the spot |
+| `value-forwarded` | a second hop |
+| `value-root-in-helper` | a store or props root a helper received |
+| `value-pending-in-jsx` | a source that may be pending, a bare child of an element (ADR 0812) |
+| `value-use-unclassified` | anything else, the default: `throw`, a computed key, a walk's limit |
+
+A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. The row stands at the reference and, too, at each use the walk ends at, in any file: an IIFE's result, a `let` and a class field are walked on to their uses (ADR 0831). Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
+
 ## What keeps a leaf callback open
 
 The leaf walk follows each call in the callback's synchronous extent to a
@@ -206,6 +232,10 @@ constructor, a reassigned `let` function and a synchronous DOM dispatcher
 
 - **Primitive results.** A member call on the result of a primitive whose result holds a getter (`createSignal(1).slice(0)`, `createMemo(fn).bind(null)`, a chain, or a call on a `const pair = createSignal(1)` binding) is that value's method, not the primitive's, and its provenance is unstated. It raises `primitive-result-method`, an obligation, never silence. A primitive wrapper's method result is exempt only when its receiver is proven primitive at run time (a literal, a template, or an audited `String` or `Number` call), and a TypeScript assertion on the way voids the exemption, because the resolved declaration is a type fact.
 - **Callee arguments.** A callee that calls the parameter an argument lands in reads through that argument unless the argument is proven not to be a getter. An exact accessor is the proven read. Proven not a getter: a literal; an unwritten project function, named by a bare identifier and never by what it returns; a store used as the proxy itself, not a member read or a binding initialized by one; a value Type Facts proves primitive; a data literal; a primitive wrapper's own method result. Expression arguments (`[get][0]`, a conditional, a spread slot, an IIFE, an object member) take the same proof. Any other argument (a spread or rest destructure, a held alias, `Array.from`, `slice`, `bind` or `Reflect.apply` of a getter, a helper's return, a member of a mutable object) keeps an obligation with analysis context `parameter-call-argument-unproven`. A local bound to a standard-library call's result is not a proof, since those calls hand a getter back.
+
+- **Handed values.** A call of a value a caller supplied, at any member depth, a hook no call arm resolves (`.call`, `.bind`, a computed member, a rebound binding) and a `Function.prototype` or `Reflect.apply` hand-off of a reactive value are obligations (ADRs 0770, 0772, 0773). At a tracked position a read is legal, so a helper's parameter obligations stand only where an argument may hold a setter, an action, an async source or a value a caller supplied (ADR 0771).
+
+- **Standard members the program may replace (ADR 0840).** A standard call of a member the program may put a function at, on an object of its own (`then`, `catch`, `finally`, the array iteration methods, `addEventListener`, `addListener`, `setActionHandler`, `replace`, `replaceAll`, `slice`), is withheld unless its receiver is one the standard library made by a fact of its file (an array literal, a `new` of a global container, `Promise.resolve()`, `fetch(u)`, `Object.entries(o)`, a standard method's new value on one of these, `window`, `document.body`, a string literal), on the spot or in a `const` whose every use is a method call's receiver. The call is `standard-member-impostor`. A key no fact names (`o[k] = f`, `{ [k]: f }`) may be any member.
 
 ## TypeScript boundary
 
@@ -233,3 +263,19 @@ An unresolved package boundary remains uncertifiable.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — a reactive read is proven to execute untracked
+
+A Get of a value a selected package makes where the walk over its source ends (an accessor installed at run time, a class getter, a proxy, a call nothing resolves) is `dependency-value-unfollowed`, and importing a package that installs a function that may read a source on a global is `dependency-global-read` (ADR 0822).
+
+A prop read in a leaf owner (`createTrackedEffect`, `onSettled`) is `prop-pending-unproven` unless every caller is enumerated and none may pass a pending async getter: an unseen caller, an unresolved tag, or a value nothing classifies can (ADR 0823).
+
+A value the type facts attribute to a Solid primitive is named only when an import of a Solid module confirms it (ADR 0711); otherwise the row is `primitive-identity-unproven`, named by the value's own text (ADR 0825). An unresolved import is no primitive at all: a Solid package's own unresolved import names nothing (ADR 0826). Each runtime use of an import the compiler did not resolve (a missing module, an export its target lacks) is open, `import-unresolved`: nothing says what the value is (ADR 0827).
+
+A guarded `composedPath().find(...)` excludes the window only while `Array.find`, `Node` and `instanceof` remain intact. A replaced `find` may ignore the guard and return the window, so the path use stays uncertifiable and tuple slots are held (`tuple-iteration-written`, ADR 0803).
+
+ADR 0877: a computed key held by an immutable same-file identifier is a symbol
+only when its initializer proves that value, through assertions. Such a key
+cannot replace a named standard member. Mutable and destructured bindings,
+`Symbol.replace`, `Symbol.species`, and reflective definers retain the open
+key. A census that may replace `Symbol` or `Symbol.for` reopens symbol sites;
+this proof does not trust the spelling of a shadowed `Symbol`.
+A store put on an object as its prototype (`({ __proto__: store })`, `t.__proto__ = store`, a handed `"__proto__"` key) makes each Get and write of that object the store's. Besides the install, each access of the object this file writes is uncertifiable (`installed-member`) at the access, or at the call it is handed to (ADR 0643).

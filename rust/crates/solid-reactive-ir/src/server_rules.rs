@@ -98,10 +98,13 @@ fn http_response_in_file<'a>(
         if server_rendering == crate::source_discovery::ServerRenderingPremise::ProvenClientOnly {
             continue;
         }
-        // Render-time scopes only. An event handler or deferred callback
-        // is a client-time (or post-render) call and is a no-op for a
-        // different reason than the post-flush drop; unknown scopes stay
-        // silent.
+        // ADR 0703: only a role proven to run outside the response's render
+        // is skipped. An event handler, deferred callback, effect or
+        // directive apply is a client-time (or post-render) call, a no-op
+        // for a different reason than the post-flush drop; code the
+        // compiler discarded never runs; a module-scope call runs at import,
+        // in no request. Every other role, `Unknown` and `Unreported`
+        // included, may run in a boundary's content and goes on.
         let allowed = allowed.get_or_insert_with(|| {
             crate::execution_role::allowed_callback_spans(file, ctx.semantic_lookup)
         });
@@ -113,9 +116,14 @@ fn http_response_in_file<'a>(
             ctx.symbol_names,
             ctx.semantic_lookup,
         );
-        if !matches!(
+        if matches!(
             role,
-            ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx
+            ExecutionRole::EventCallback
+                | ExecutionRole::DeferredCallback
+                | ExecutionRole::EffectApply
+                | ExecutionRole::DirectiveApply
+                | ExecutionRole::DiscardedRendering
+                | ExecutionRole::ModuleInitialization
         ) {
             continue;
         }
@@ -130,9 +138,6 @@ fn http_response_in_file<'a>(
                         .contains(&(file.path.as_str(), function.span))
                 },
             );
-        if !dominated {
-            continue;
-        }
         // Both spellings come from the dialect rather than from this
         // module. `static_api.rs` already asks `boundary_name` for the
         // same boundary two rules away; this one had `<Loading>` written
@@ -144,6 +149,33 @@ fn http_response_in_file<'a>(
             continue;
         };
         let boundary = ctx.dialect.boundary_name(solid_dialect::Boundary::Async);
+        let what = if kind == Primitive::HttpStatus {
+            "status"
+        } else {
+            "header"
+        };
+        // ADR 0703: a call no boundary is proven to dominate is not proven
+        // shell content either: a call edge, a method, a compute or a
+        // wrapper's `props.children` may place it below a boundary (the SSR
+        // host drops each). Silence would certify the head; it is an
+        // obligation with the position as its blocker.
+        if !dominated {
+            violations.push(StaticViolation {
+                id: "SC7005".into(),
+                rule: "http-response-after-flush".into(),
+                message: format!(
+                    "{name}() is called where no proof places it in shell content above every <{boundary}> boundary; under streaming SSR the response head commits at the shell flush, so if this call runs in a boundary's content after that flush, the {what} is silently dropped"
+                ),
+                hint: format!(
+                    "Decide the response head in the component the render entry renders, outside every <{boundary}> boundary and not in a helper, method, compute or child the boundary may wrap, or mark the async source this {name}() depends on with deferStream: true."
+                ),
+                location: location(file.path.shared(), call.callee),
+                analysis_context: crate::blockers::RESPONSE_HEAD_POSITION_UNPROVEN.into(),
+                fixes: vec![],
+                uncertain: true,
+            });
+            continue;
+        }
         violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
@@ -162,7 +194,12 @@ fn http_response_in_file<'a>(
                     "Decide the response head in shell content — above every <{boundary}> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
                 ),
                 location: location(file.path.shared(), call.callee),
-                analysis_context: String::new(),
+                analysis_context: if server_rendering.renders() {
+                    crate::blockers::BOUNDARY_SETTLE_ORDER_UNPROVEN
+                } else {
+                    crate::blockers::SERVER_RENDERING_UNRESOLVED
+                }
+                .to_owned(),
                 fixes: vec![],
                 uncertain: true,
             });
@@ -274,6 +311,108 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
     }
 }
 
+/// ADR 0704: a server function read as a value rather than called (`const s =
+/// save`, `{ save }`, `run(save)`, `save.call(…)`) reaches calls the call loop
+/// never sees, and their arguments cross the client transport unchecked. Each
+/// such reference in client code is an obligation, blocker
+/// `server-function-value-handed`, unless the project's rich-argument
+/// serializer is proven. A reference resolves to its function exactly, as
+/// [`member_of_server_function`] does.
+fn handed_server_function_values(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    serializer_proof: &OnceLock<SerializerProof>,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let ast = &file.ast;
+    let mut handed = Vec::new();
+    for identifier in &ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference {
+            continue;
+        }
+        let span = identifier.span;
+        if ast
+            .calls
+            .iter()
+            .any(|call| ast.peel_ts_sugar_span(call.callee) == span)
+            || ast.type_queries.iter().any(|query| query.contains(span))
+            || ast.type_names.iter().any(|name| name.contains(span))
+            || crate::indexes::reference_is_declaration_or_module_surface(file, span)
+            || ast
+                .functions
+                .iter()
+                .any(|scope| scope.body.contains(span) && scope.has_directive(USE_SERVER))
+        {
+            continue;
+        }
+        // The object of a member read hands nothing on, except a member that
+        // invokes it with other arguments (`.call`, `.apply`, `.bind`); an
+        // unresolved member is the call loop's obligation already
+        // (`member_of_server_function`), a resolved one another declaration.
+        if let Some(member) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == span)
+            && !matches!(
+                file.source_text(member.property),
+                Some("call" | "apply" | "bind")
+            )
+        {
+            continue;
+        }
+        // Through the binder's declaration first: the compiler answers a
+        // shorthand property (`{ save }`) with the property's symbol, the
+        // binder with the value binding's.
+        let Some(symbol) = ast
+            .reference_declaration(span)
+            .and_then(|declaration| ctx.entities.value_symbol(file, declaration))
+            .or_else(|| ctx.entities.value_symbol(file, span))
+        else {
+            continue;
+        };
+        let Some((declaration_file, function)) =
+            ctx.semantic_lookup.function_for_symbol(symbol.as_str())
+        else {
+            continue;
+        };
+        let server_function = function.has_directive(USE_SERVER)
+            || (declaration_file
+                .ast
+                .module_directives
+                .iter()
+                .any(|directive| directive.value == USE_SERVER)
+                && declaration_file.path != file.path);
+        // The declaration's own name is not a handed value.
+        if server_function
+            && !(declaration_file.path == file.path
+                && function.name.as_ref().is_some_and(|name| name.span == span))
+        {
+            handed.push(span);
+        }
+    }
+    if handed.is_empty()
+        || *serializer_proof.get_or_init(|| project_rich_argument_serializer(ctx))
+            == SerializerProof::Enabled
+    {
+        return;
+    }
+    handed.sort_by_key(|span| (span.start, span.end));
+    handed.dedup();
+    for span in handed {
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::ServerFunctionRichArgument {
+                transport: RichArgumentTransport::Unresolved {
+                    reason: "the server function is handed on as a value, and the calls it reaches are not followed, so whether their arguments cross the transport as JSON is unproven".to_string(),
+                },
+            },
+            location: location(file.path.shared(), span),
+            analysis_context: crate::blockers::SERVER_FUNCTION_VALUE_HANDED.into(),
+            fixes: vec![],
+            uncertain: true,
+        });
+    }
+}
+
 /// One file's defects of [`server_function_rich_argument`], and whether the
 /// file found the project's serializer installed, which ends the rule.
 fn rich_arguments_in_file(
@@ -297,9 +436,15 @@ fn rich_arguments_in_file(
         if call.arguments.is_empty() {
             continue;
         }
+        // ADR 0707 (SSR audit D9): a static member of a namespace import
+        // (`api.save(new Date())`) is the exported function itself.
         let Some((declaration_file, function)) = ctx
             .semantic_lookup
             .function_called_at(file.path.as_str(), call.callee)
+            .or_else(|| {
+                ctx.semantic_lookup
+                    .namespace_member_function(file, call.callee)
+            })
         else {
             // A member read off a server function (`query.keyFor(x)`) is
             // not that function, and nothing names it by its leading token.
@@ -336,6 +481,23 @@ fn rich_arguments_in_file(
         }
         match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
             Some(resolved) if resolved.validity == ResolvedCallValidity::Valid => {}
+            // ADR 0830: a rejected call on a line a directive may silence, or
+            // in JavaScript, is reported by nothing: whether its arguments
+            // cross the transport is open, never a violation.
+            Some(_) if file.tsc_may_be_silent_within(call.span) => {
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ServerFunctionRichArgument {
+                        transport: RichArgumentTransport::Unresolved {
+                            reason: "TypeScript rejects this call, and a directive or an unchecked file may keep it from saying so".to_string(),
+                        },
+                    },
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: crate::blockers::SOLID_CALL_REJECTED_UNCHECKED.into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+                continue;
+            }
             // Recovery and unresolved calls are TypeScript-owned. Emitting
             // a transport finding on the same invalid call would violate
             // the project's no-duplicate boundary.
@@ -400,7 +562,9 @@ fn rich_arguments_in_file(
                 .as_deref()
                 .and_then(|types| rich_transport_member(types));
             let Some(matched) = matched else {
-                if argument_is_proven_json_safe(argument, entity) {
+                if argument_is_proven_json_safe(argument, entity)
+                    || argument_is_unsigned_number_literal(file, argument)
+                {
                     continue;
                 }
                 let serializer =
@@ -430,7 +594,22 @@ fn rich_arguments_in_file(
                         ObjectGraphProof::Open => {}
                     }
                 }
-                if argument_is_proven_json_unsafe_primitive(entity) {
+                // ADR 0707 (SSR audit D4): rc.21 sends a leading `undefined`
+                // as `null` when a later argument goes as the request body, so
+                // an `undefined` before another argument is not a proven throw.
+                let leading_undefined = index + 1 < call.arguments.len()
+                    && entity
+                        .primitive_value_domain
+                        .present()
+                        .is_some_and(|domain| domain.may_be_undefined());
+                if argument_is_proven_json_unsafe_primitive(entity) && leading_undefined {
+                    push_rich_argument_uncertainty(
+                        &mut defects,
+                        file,
+                        argument.span,
+                        "a leading undefined is sent as null when a later argument goes as the request body, so whether this call throws is not proven",
+                    );
+                } else if argument_is_proven_json_unsafe_primitive(entity) {
                     if serializer == SerializerProof::Unresolved {
                         push_rich_argument_uncertainty(
                             &mut defects,
@@ -511,6 +690,7 @@ fn rich_arguments_in_file(
             });
         }
     }
+    handed_server_function_values(ctx, file, serializer_proof, &mut defects);
     (defects, false)
 }
 
@@ -537,6 +717,29 @@ fn argument_is_proven_json_safe(
     value_is_proven_json_safe(entity)
 }
 
+/// ADR 0707 (SSR audit D11): an unsigned decimal literal written as the
+/// argument itself (`0`, `42`, `1.5`; no sign, exponent or radix prefix, at
+/// most 15 digits) is finite and is not negative zero, which rc.21's
+/// `isJSONSafe` rejects (`Object.is(v, -0)`) and whose literal type is `0`.
+fn argument_is_unsigned_number_literal(
+    file: &FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> bool {
+    unsigned_number_literal(file.source_text(file.ast.peel_ts_sugar_span(argument.span)))
+}
+
+fn unsigned_number_literal(text: Option<&str>) -> bool {
+    text.is_some_and(|text| {
+        !text.is_empty()
+            && text.len() <= 15
+            && text.starts_with(|first: char| first.is_ascii_digit())
+            && text
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '.' || c == '_')
+            && text.matches('.').count() <= 1
+    })
+}
+
 /// Whether one runtime value is proven to be inside JSON's domain, from the
 /// compiler's constant value or its primitive domain. Shared by the argument
 /// check and the object-graph walk so the two cannot drift.
@@ -544,7 +747,10 @@ fn value_is_proven_json_safe(entity: &EntityFact) -> bool {
     if let Some(value) = entity.constant_value.as_ref() {
         return match value.kind {
             ConstantValueKind::String => true,
-            ConstantValueKind::Number => value.number.is_finite(),
+            // ADR 0707: TypeScript types `-0` as `0`, and rc.21's
+            // `isJSONSafe` rejects negative zero: a zero constant is not
+            // proven safe.
+            ConstantValueKind::Number => value.number.is_finite() && value.number != 0.0,
         };
     }
     let Some(domain) = entity.primitive_value_domain.present() else {
@@ -555,7 +761,8 @@ fn value_is_proven_json_safe(entity: &EntityFact) -> bool {
         && !domain.may_be_symbol()
         && !domain.may_be_undefined()
         && !domain.may_be_object()
-        && (!domain.may_be_number() || domain.numbers_are_finite())
+        // ADR 0707: a finite literal domain may hold `0`, which may be `-0`.
+        && !domain.may_be_number()
 }
 
 fn argument_is_proven_json_unsafe_primitive(entity: &EntityFact) -> bool {
@@ -873,6 +1080,8 @@ fn object_graph_proof(
             }
             leaf_safe |= value_is_proven_json_safe(entity);
         }
+        // ADR 0707: an unsigned decimal literal written as the value.
+        leaf_safe |= unsigned_number_literal(file.source_text(file.ast.peel_ts_sugar_span(value)));
         // An accessor's written value is a function whose body runs on access,
         // so it proves nothing about what the property yields.
         all_safe &= leaf_safe && property.data;
@@ -918,13 +1127,16 @@ fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMe
 fn project_rich_argument_serializer(ctx: &AnalysisContext<'_>) -> SerializerProof {
     let mut unresolved = false;
     for file in &ctx.facts.files {
-        let rich_args_import = file.ast.imports.iter().any(|import| {
-            !import.type_only
-                && import.module.as_str() == "@solidjs/web/server-functions/rich-args"
-                && import.bindings.iter().any(|binding| !binding.type_only)
-        });
-        if rich_args_import {
-            return SerializerProof::Enabled;
+        // ADR 0707 (SSR audit D10): the opt-in is the call, not the import:
+        // rc.21's rich-args installs the codec inside
+        // `enableRichArguments()`. Proven only for an unconditional
+        // module-scope call in the client entry, before its `render` or
+        // `hydrate`; any other call (in a function, under a condition, after
+        // the render, in another file) is unresolved.
+        match rich_arguments_enabled_in(ctx, file) {
+            Some(true) => return SerializerProof::Enabled,
+            Some(false) => unresolved = true,
+            None => {}
         }
         for call in &file.ast.calls {
             let exact_configure = ctx
@@ -963,6 +1175,76 @@ fn project_rich_argument_serializer(ctx: &AnalysisContext<'_>) -> SerializerProo
     } else {
         SerializerProof::Disabled
     }
+}
+
+/// `Some(true)`: `file` calls `enableRichArguments()` unconditionally at module
+/// scope before a module-scope `render`/`hydrate` call; `Some(false)`: it
+/// imports the rich-args entry and the call is not proven so; `None`: it does
+/// not import it. Callees are matched through the binder to their import
+/// binding (a zero-argument call has no resolved-call fact to ask).
+fn rich_arguments_enabled_in(ctx: &AnalysisContext<'_>, file: &FileFacts) -> Option<bool> {
+    const RICH_ARGS: &str = "@solidjs/web/server-functions/rich-args";
+    let ast = &file.ast;
+    if !ast
+        .imports
+        .iter()
+        .any(|import| !import.type_only && import.module.as_str() == RICH_ARGS)
+    {
+        return None;
+    }
+    let imported_as =
+        |call: &solid_facts::ast::CallFact, names: &[&str], module: &dyn Fn(&str) -> bool| {
+            ast.reference_declaration(ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|declaration| {
+                    ast.imports.iter().any(|import| {
+                        !import.type_only
+                            && module(import.module.as_str())
+                            && import.bindings.iter().any(|binding| {
+                                !binding.type_only
+                                    && binding.local.span == declaration
+                                    && binding
+                                        .imported
+                                        .as_deref()
+                                        .is_some_and(|imported| names.contains(&imported))
+                            })
+                    })
+                })
+        };
+    let unconditional_module_scope = |span: Span| {
+        ast.innermost_function_containing(span).is_none()
+            && !ast.if_regions.iter().any(|region| {
+                region.consequent.contains(span)
+                    || region
+                        .alternate
+                        .is_some_and(|alternate| alternate.contains(span))
+            })
+            && !ast
+                .logical_expressions
+                .iter()
+                .any(|logical| logical.right.contains(span))
+            && !ast.conditional_expressions.iter().any(|conditional| {
+                conditional.consequent.contains(span) || conditional.alternate.contains(span)
+            })
+    };
+    let first_root = ast
+        .calls
+        .iter()
+        .filter(|call| {
+            unconditional_module_scope(call.span)
+                && imported_as(call, &["render", "hydrate"], &|module| {
+                    ctx.dialect.owns_module(module)
+                })
+        })
+        .map(|call| call.span.start)
+        .min();
+    Some(first_root.is_some_and(|root| {
+        ast.calls.iter().any(|call| {
+            imported_as(call, &["enableRichArguments"], &|module| {
+                module == RICH_ARGS
+            }) && unconditional_module_scope(call.span)
+                && call.span.end <= root
+        })
+    }))
 }
 
 #[cfg(test)]

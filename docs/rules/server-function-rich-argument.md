@@ -14,8 +14,8 @@ TypeScript type is (or contains at top level) one of the types the default
 transport cannot carry: `Date`, `Map`/`ReadonlyMap`, `Set`/`ReadonlySet`,
 `RegExp`, or a typed array. Identifier and inline-expression arguments receive
 the same compiler library-identity facts. The rule goes silent project-wide once
-`enableRichArguments` is imported (from
-`@solidjs/web/server-functions/rich-args`) or a `serializeArgs` is configured
+`enableRichArguments()` is proven called on the client first (from
+`@solidjs/web/server-functions/rich-args`; ADR 0707) or a `serializeArgs` is configured
 through the exact resolved `configureServerFunctionsClient` API. A dynamic
 options value that may or may not contain `serializeArgs` makes SC7007
 uncertifiable instead of silently suppressing the transport check. Arguments
@@ -25,6 +25,11 @@ finite numeric-literal domains, and unions made only from those categories.
 Bigint/symbol/undefined-only domains are proven violations. Broad numbers,
 mixed safe/unsafe primitive unions, spreads, structurally typed objects,
 arrays, and missing compiler facts remain uncertifiable.
+A server function read as a value rather than called (an alias, a shorthand
+object slot, a higher-order argument, `save.call(…)`) reaches calls this rule
+does not follow, so each such reference outside server code is uncertifiable,
+blocker `server-function-value-handed` (ADR 0704), unless the serializer is
+proven. The runtime is not measured: no host compiles `"use server"`.
 Type assertions, `satisfies`, non-null assertions, and parentheses are
 transparent to this transport proof: the checker classifies the peeled runtime
 value with compiler facts demanded at that exact span. Consequently
@@ -50,6 +55,11 @@ constrained set — "Dates, Maps, Sets, typed arrays, cyclic structures" (RFC
 10 and the `rich-args` entry's own doc comment) — is what the rule encodes;
 `RegExp` rides the doc's "etc." and is included because the probe proves it
 throws (its prototype fails the plain-object check).
+
+A call TypeScript rejects (an extra argument is TS2554) is TypeScript's and
+silent, except where `tsc` may report nothing on it (a `// @ts-ignore` or
+`@ts-expect-error` that may cover a line of it, a `@ts-nocheck`, JavaScript):
+there it is uncertifiable, `solid-call-rejected-unchecked` (ADR 0830).
 
 ## Why is this bad?
 
@@ -106,8 +116,10 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
 
 ## When it does not fire
 
-- **`enableRichArguments` imported anywhere** (a value import of the
-  `rich-args` entry — importing the entry is the opt-in), or
+- **`enableRichArguments()` proven called first**: an unconditional
+  module-scope call in the client entry, before its `render` or `hydrate`
+  (ADR 0707; rc.21 installs the codec inside the call: an import alone, or a
+  call elsewhere, is uncertifiable), or
   **`configureServerFunctionsClient({ serializeArgs })`** configured: both
   install a serializer and remove the throw project-wide (probed), so the
   rule is silent for the whole project.
@@ -119,10 +131,15 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
   hole: `{ when: Date }` is no longer silently missed even though the available
   library identity is top-level only.
 - **The proven primitive set is structural, not textual:** `null`, strings,
-  booleans, finite numeric constants, and aliases/unions composed only from
-  those categories certify. A numeric type certifies only when every numeric
-  constituent is a finite literal. Bigint, symbol, and undefined-only domains
-  are violations because plain JSON cannot encode them faithfully. Object
+  booleans, nonzero finite numeric constants, an unsigned decimal literal
+  written as the argument or leaf, and aliases/unions of the non-numeric
+  categories certify. TypeScript types `-0` as `0` and rc.21 rejects negative
+  zero, so a zero constant or a numeric literal domain is uncertifiable
+  (ADR 0707). Bigint, symbol, and undefined-only domains are violations
+  because plain JSON cannot encode them faithfully, except an `undefined`
+  before another argument, which rc.21 may send as `null`: uncertifiable. A
+  static member of a namespace import (`api.save(…)`) is the exported
+  function. Object
   graphs still need a recursive compiler JSON-safety fact before the checker
   can certify them without guessing.
 - **Type assertions do not change runtime transport.** The proof uses the

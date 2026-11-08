@@ -1,0 +1,100 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 211,
+      "end": 218,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 334,
+      "end": 339,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 592,
+      "end": 599,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "component-identity-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 712,
+      "end": 719,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 917,
+      "end": 924,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "search-depth-limit",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 1574,
+      "end": 1581,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 1899,
+      "end": 1906,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 2233,
+      "end": 2240,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 2276,
+      "end": 2284,
+      "fixes": 0
+    }
+  ]
+}

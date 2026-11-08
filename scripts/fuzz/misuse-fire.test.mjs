@@ -34,6 +34,14 @@ describe("every template fires its code in the fast runtime", () => {
 });
 
 describe("buildCase of a misuse program", () => {
+  it("gives a wrapper's one line a counter of its own, in the twin alone, so a finding there is measured there", () => {
+    const built = buildCase(generateProgram(5, { profile: "misuse", misusePlan: { code: "NO_OWNER_EFFECT", context: "handler", binding: "wrapper" } }));
+    const line = built.files["App.tsx"].split("\n").findIndex((text) => /(const|function) wrapUse/.test(text)) + 1;
+    expect(line).toBeGreaterThan(0);
+    expect(built.files["App.run.txt"].split("\n")[line - 1]).toMatch(/wrapUse.*\{ __h\(\d+\); /);
+    expect(built.files["App.tsx"]).not.toContain("__h(");
+    expect(built.glue.some((site) => site.line === line && site.kind === "aux")).toBe(true);
+  });
   it("names the site's code and aux lines in sites.json", () => {
     const built = buildCase(generateProgram(5, { profile: "misuse", misusePlan: { code: "NO_OWNER_EFFECT", context: "handler", binding: "wrapper" } }));
     const sites = JSON.parse(built.files["sites.json"]).sites;

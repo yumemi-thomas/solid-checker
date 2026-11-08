@@ -3220,6 +3220,85 @@ fn namespace_member_bindings_record_only_exact_unwritten_slots_of_an_import_name
     );
 }
 
+/// Review D36 (facts schema 92): `const local = S.key` and a slot whose
+/// default is exactly the same namespace's `key` hold the export, as an ADR
+/// 0459 slot does; every other member or default stays unrecorded.
+#[test]
+fn namespace_member_bindings_record_exact_member_reads_and_defaults() {
+    let source = concat!(
+        "import * as S from \"solid-js\";\n",
+        "import { flush } from \"solid-js\";\n",
+        "const key = \"onCleanup\";\n",
+        "const a = S.onCleanup;\n",
+        "const b = (S.flush as typeof S.flush);\n",
+        "const c = S[\"createMemo\"];\n",
+        "const d = S?.onCleanup;\n",
+        "const e = S[key];\n",
+        "const S2 = S;\n",
+        "const f = S2.onCleanup;\n",
+        "const { onCleanup: g = S.onCleanup } = S;\n",
+        "const { onCleanup: h = S.flush } = S;\n",
+        "const { onCleanup: i = S2.onCleanup } = S;\n",
+        "const { onCleanup: j = flush } = S;\n",
+        "let k = S.onCleanup;\n",
+        "let l = S.onCleanup;\n",
+        "l = () => {};\n",
+        "const m = flush.name;\n",
+        "function shadow(S: any) { const n = S.onCleanup; return n; }\n",
+    );
+    let facts = extract("members.ts", source).unwrap();
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let recorded = facts
+        .namespace_member_bindings
+        .iter()
+        .map(|fact| (text(fact.local), fact.key.as_str(), text(fact.namespace)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded,
+        [
+            ("a", "onCleanup", "S"),
+            ("b", "flush", "S"),
+            ("c", "createMemo", "S"),
+            ("f", "onCleanup", "S"),
+            ("g", "onCleanup", "S"),
+            ("k", "onCleanup", "S"),
+        ]
+    );
+}
+
+/// Review D36: a direct `eval` in the file, or a classic script's `with`, can
+/// write an ADR 0481 holder's object with no reference the census sees.
+#[test]
+fn local_alias_members_need_no_direct_eval_and_a_module() {
+    let source = concat!(
+        "const r = () => 1;\n",
+        "const make = () => ({ set: r });\n",
+        "const thing = make();\n",
+        "thing.set;\n",
+    );
+    assert_eq!(
+        extract("members.ts", source)
+            .unwrap()
+            .local_alias_members
+            .len(),
+        1
+    );
+    let with_eval = format!("{source}eval(\"thing.set = () => 2\");\n");
+    assert!(
+        extract("members.ts", &with_eval)
+            .unwrap()
+            .local_alias_members
+            .is_empty()
+    );
+    let with_statement = format!("{source}with (thing) {{ set = () => 2; }}\n");
+    assert!(
+        extract("members.cjs", &with_statement)
+            .unwrap()
+            .local_alias_members
+            .is_empty()
+    );
+}
+
 /// ADR 0458 (facts schema 77): the regions no execution reaches, from the
 /// syntax alone, and the live code around them.
 #[test]
@@ -3525,6 +3604,26 @@ fn records_the_invoked_identifier_of_a_callee_spelling() {
 /// ADR 0468: the operands a comma, conditional or logical callee may evaluate
 /// to, and the identifier references among them; `&&`'s left is never one.
 #[test]
+fn a_composite_walk_ends_on_a_postfix_update() {
+    // `i++` is a fact whose value is the update itself: without a visited set
+    // the walk pushes two spans for every pop and fills memory.
+    let source = "let i = 0;\ni++;\n";
+    let facts = extract("/project/App.ts", source).unwrap();
+    let start = source.find("i++").unwrap() as u32;
+    let update = Span {
+        start,
+        end: start + 3,
+    };
+    let text = |span: Span| &source[span.start as usize..span.end as usize];
+    let operands = facts.composite_callee_operands(update);
+    assert_eq!(
+        operands.iter().map(|span| text(*span)).collect::<Vec<_>>(),
+        ["i", "i++"]
+    );
+    assert!(!facts.composite_callee_total(update));
+}
+
+#[test]
 fn lists_the_operands_a_composite_callee_may_evaluate_to() {
     let source = "declare const c: boolean;\n\
                   declare const f: () => void, h: () => void;\n\
@@ -3580,4 +3679,36 @@ fn lists_the_operands_a_composite_callee_may_evaluate_to() {
         total,
         [true, false, true, true, true, true, false, false, false]
     );
+}
+
+/// Memory review item 7: the per-file index answers what the scan of `bindings`
+/// it replaced answered, for every name of every shape.
+#[test]
+fn identifier_binding_answers_what_the_scan_answered() {
+    let facts = extract(
+        "fixture.ts",
+        concat!(
+            "const a = 1; let b; var c = a; const { d, e: f } = g; const [h] = i;\n",
+            "function p(q: number, r = q) { const a = r; return a; }\n",
+            "for (const s of []) { const t = s; }\n",
+        ),
+    )
+    .unwrap();
+    let scan = |declaration| {
+        facts.bindings.iter().position(|binding| {
+            binding.shape == BindingShape::Identifier
+                && binding.names.iter().any(|name| name.span == declaration)
+        })
+    };
+    let names = facts
+        .bindings
+        .iter()
+        .flat_map(|binding| binding.names.iter().map(|name| name.span))
+        .collect::<Vec<_>>();
+    assert!(names.len() >= 9, "{names:?}");
+    for name in names.into_iter().chain([Span::new(0, 1)]) {
+        let indexed = facts.identifier_binding(name).map(std::ptr::from_ref);
+        let scanned = scan(name).map(|at| std::ptr::from_ref(&facts.bindings[at]));
+        assert_eq!(indexed, scanned, "{name:?}");
+    }
 }

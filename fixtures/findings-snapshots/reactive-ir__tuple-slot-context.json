@@ -5,6 +5,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
       "start": 187,
@@ -15,6 +16,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
       "start": 277,
@@ -22,13 +24,36 @@
       "fixes": 0
     },
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
+      "start": 859,
+      "end": 869,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
       "start": 887,
       "end": 891,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-slot-context/App.tsx",
+      "start": 1040,
+      "end": 1050,
       "fixes": 0
     },
     {

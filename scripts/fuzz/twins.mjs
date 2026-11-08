@@ -29,11 +29,11 @@ import { fileURLToPath } from "node:url";
 import { EntryCache, cacheDirectory, cacheableTypecheck, typecheckDigest, typecheckEnvironmentKey } from "./cache.mjs";
 import { DEFAULT_ORACLE_INSTALL } from "./chrome.mjs";
 import { assertFindingsMapped, materializeForChecker, runChecker } from "./checker.mjs";
-import { codeRules, declinesCode, ignoredRules, policyOf, withholdingRules } from "./codes.mjs";
+import { codeRules, declinesCode, ignoredRules, isPlacelessCode, policyOf, withholdingRules } from "./codes.mjs";
 import { generateLegal, legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
-import { axesKey, cellList, generateShape, gridShapes, recallShapes } from "./matrix.mjs";
+import { axesKey, cellList, generateShape, gridShapes, recallShapes, regionOf, siteOf } from "./matrix.mjs";
 import { CONTROL_LAYERS, FILE_LAYERS, LAYERS, PAIR_LAYERS, RECALL_LAYERS } from "./misuse.mjs";
-import { DEPTH_FORMS, HANDOFF_FORMS } from "./model.mjs";
+import { CHAIN_FORMS, DEPTH_FORMS, HANDOFF_FORMS } from "./model.mjs";
 import { typecheckKeyOf } from "./pipeline.mjs";
 import { fnv } from "./rng.mjs";
 import { requireTypeChecker, resolveTsc, typecheck, typecheckBatch } from "./typecheck.mjs";
@@ -57,6 +57,7 @@ export const TWIN_LAYERS = {
   "try-finally": "`try {} finally { … }`", label: "`outer: { …; break outer; }`", generator: "`(function* () { …; yield 1; })().next()`: the body runs up to the yield at `.next()`",
   ...Object.fromEntries(HANDOFF_FORMS.map((layer) => [layer, "a function handed on by name and called once at once (forEach, Array.from, sort of two, call, apply, Reflect.apply, a tag, a wrapper, a member, an assigned member, a declaration)"])),
   ...Object.fromEntries(DEPTH_FORMS.map((layer) => [layer, "N arrows, each called where it is written"])),
+  ...Object.fromEntries(CHAIN_FORMS.map((layer) => [layer, "N named helpers, or a callback N helpers hand on"])),
   // The pair grids' composites (misuse.mjs PAIR_LAYERS): both parts run their body once, in place.
   ...Object.fromEntries(PAIR_LAYERS.map((layer) => [layer, "a hand-off form inside the module helper's callback: each calls its body once, at once"])),
 };
@@ -82,19 +83,25 @@ export const TWIN_CODES = Object.keys(codeRules).filter((code) => policyOf(code)
 
 /**
  * A program's answer per code: a violation of a rule that claims it anywhere in the file, else a declining finding of such a rule, an
- * uncertifiable finding of a rule that declines the code (codes.mjs `decliningRules`), or a finding of a withholding rule (codes.mjs `withholdingRules`: the checker withheld an answer, which covers any code, as the grids count it),
- * else none.
+ * uncertifiable finding of a rule that declines the code (codes.mjs `decliningRules`), or a finding of a withholding rule (codes.mjs
+ * `withholdingRules`: the checker withheld an answer) starting on a site line `region` (matrix.mjs `regionOf`), never for a placeless
+ * code (review 4c: an SC9012 elsewhere withheld another answer), else none.
  */
-export function answersOf(findings) {
+export function answersOf(findings, region = []) {
   const out = {};
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
-  const withheld = relevant.some((finding) => withholdingRules.includes(finding.rule));
+  // The twins have no runtime stacks: a withholding answers at a site line its start is on (no line range), never a placeless code.
+  const withheldAtSite = relevant.some((finding) => withholdingRules.includes(finding.rule) && region.includes(finding.line));
   for (const code of TWIN_CODES) {
     const mine = relevant.filter((finding) => codeRules[code].includes(finding.rule) || declinesCode(code, finding));
+    const withheld = !isPlacelessCode(code) && withheldAtSite;
     out[code] = mine.some((finding) => finding.kind === "violation") ? "violation" : mine.length || withheld ? "uncertifiable" : "none";
   }
   return out;
 }
+
+/** A finding's twins.jsonl label: `rule/kind@line`, with `-endLine` when it spans more than one line. */
+const findingLabel = (finding) => `${finding.rule}/${finding.kind}@${finding.line}${finding.endLine && finding.endLine !== finding.line ? `-${finding.endLine}` : ""}`;
 
 /** The twin group of a grid program: everything but the layer. */
 export const groupKey = (kind, code, context, shape) => [kind, code, context, shape.variant ?? "-", shape.binding, shape.callback ?? "-", shape.mount ?? "root", shape.source ?? "local"].join("|");
@@ -231,12 +238,12 @@ export async function runTwins(options) {
       }
     }, concurrency);
     await pool(part, async (program) => {
-      const row = { id: program.built.id, kind: program.kind, code: program.cell.code, context: program.cell.context, layer: program.shape.layer, group: program.group };
+      const row = { id: program.built.id, kind: program.kind, code: program.cell.code, context: program.cell.context, layer: program.shape.layer, group: program.group, region: regionOf(siteOf(program.built)) };
       if (!types.get(program.built.id)?.ok) rows.push({ ...row, outcome: "typed-away" });
       else {
         const checked = await runChecker(program.dir, { bin: options.checkerBin, typefacts: options.typefacts });
         if (!checked.ok) rows.push({ ...row, outcome: "harness", why: String(checked.error).slice(0, 200) });
-        else rows.push({ ...row, outcome: "checked", answers: answersOf(checked.findings), findings: checked.findings.filter((f) => !ignoredRules.includes(f.rule)).map((f) => `${f.rule}/${f.kind}@${f.line}`) });
+        else rows.push({ ...row, outcome: "checked", answers: answersOf(checked.findings, row.region), findings: checked.findings.filter((f) => !ignoredRules.includes(f.rule)).map(findingLabel) });
       }
       if (!options.keepWork) rmSync(program.dir, { recursive: true, force: true });
     }, concurrency);
@@ -246,12 +253,18 @@ export async function runTwins(options) {
   return report(rows, { ...options, out, started, cache });
 }
 
-/** A recorded row's findings as the checker gave them (`rule/kind@line` labels, twins.jsonl), for `answersOf`. */
-const parsedFindings = (labels) => labels.map((label) => { const [rule, rest] = label.split("/"); const [kind, line] = rest.split("@"); return { rule, kind, line: Number(line) }; });
+/** A recorded row's findings as the checker gave them (`rule/kind@line[-endLine]` labels, twins.jsonl), for `answersOf`. */
+const parsedFindings = (labels) => labels.map((label) => {
+  const [rule, rest] = label.split("/");
+  const [kind, lines] = rest.split("@");
+  const [line, endLine] = lines.split("-").map(Number);
+  return { rule, kind, line, endLine: endLine ?? line };
+});
 
 /** Judges the rows of a run (fresh, or `--from` an earlier run's twins.jsonl) and writes twins.json and twins.jsonl. */
 function report(rows, { out, started, cache = null, ...options }) {
-  for (const row of rows) if (row.outcome === "checked") row.answers = answersOf(parsedFindings(row.findings));
+  // A row recorded before review 4c has no `region`: its withholdings then cover no site.
+  for (const row of rows) if (row.outcome === "checked") row.answers = answersOf(parsedFindings(row.findings), row.region ?? []);
   const byGroup = new Map();
   for (const row of rows) { if (!byGroup.has(row.group)) byGroup.set(row.group, []); byGroup.get(row.group).push(row); }
   const flagged = [];

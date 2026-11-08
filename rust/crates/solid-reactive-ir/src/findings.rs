@@ -227,7 +227,10 @@ impl Finding {
                 && !missing_jsx_census
                 && !provider_open
                 && !default_unproven
-                && !owned_run_throws);
+                && !owned_run_throws
+                && !requirement.flight_error_unobserved
+                && !requirement.computation_error_unobserved
+                && !requirement.context_unaccounted);
         let mut message = message.to_string();
         let mut hint = hint.to_string();
         if missing_jsx_census {
@@ -266,6 +269,9 @@ impl Finding {
                 // to any caller this build cannot see (its open-world seed); the
                 // runWithOwner wording would name a cause that is not there.
                 "this function is exported, and a caller solid-checker cannot see may supply no owner, so this operation may execute with or without a reactive owner"
+                    .into()
+            } else if requirement.owner_varies_by_caller {
+                "this function runs under a reactive owner on some paths and with none on others, and no fact proves an unowned path runs, so this operation may execute detached"
                     .into()
             } else if conditional_owner {
                 "runWithOwner receives a nullable owner, so this operation may execute detached"
@@ -332,6 +338,20 @@ impl Finding {
                 "; but this read also runs under an owner, where the context has no provider and Solid throws `ContextNotFoundError` first (missing-context-provider), and a run with no owner is not proven to be reached after that",
             );
         }
+        if requirement.computation_error_unobserved {
+            message.push_str(
+                "; but the throw is stored on a computation or taken by a `try` or an error boundary, and no read that reports it is proven",
+            );
+        }
+        if requirement.flight_error_unobserved {
+            message.push_str(
+                "; but the throw rejects the async generator stepper's flight, and whether a later read or error boundary observes that rejection is not proven",
+            );
+            evidence.push(EvidenceStep {
+                message: "the resumed step has no owner, but error propagation from its rejected flight to an observed read or boundary is unproven".into(),
+                location: Some(requirement.location.clone()),
+            });
+        }
         if runtime_uncertain {
             let (clause, guidance, evidence_message) = match requirement.operation {
                 crate::OwnerRequirementOperation::SettledCleanup => (
@@ -354,7 +374,11 @@ impl Finding {
         }
         // The exported-caller clause below carries the open-world cause; the
         // runWithOwner clause is for a nullable owner only (ADR 0349).
-        if conditional_owner && !requirement.caller_uncertain {
+        if requirement.owner_varies_by_caller && !requirement.caller_uncertain {
+            message.push_str(
+                "; its callers differ, so solid-checker cannot prove every execution has an owner",
+            );
+        } else if conditional_owner && !requirement.caller_uncertain {
             message.push_str(
                 "; runWithOwner may receive null, so solid-checker cannot prove this execution has an owner",
             );
@@ -384,6 +408,11 @@ impl Finding {
             );
             hint.push_str(
                 " If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+            );
+        }
+        if requirement.context_unaccounted {
+            message.push_str(
+                "; no fact solid-checker holds ends this operation's owner context, as a proven owner, a proven absence of one or a named obligation, so whether it runs with an owner cannot be proven",
             );
         }
         if unplaced_callback {

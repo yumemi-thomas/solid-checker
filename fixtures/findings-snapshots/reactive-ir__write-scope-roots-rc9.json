@@ -62,6 +62,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope-roots-rc9/components.tsx",
+      "start": 1167,
+      "end": 1172,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -105,6 +116,7 @@
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/write-scope-roots-rc9/node_modules/solid-js/package.json",
       "start": 0,
@@ -145,6 +157,7 @@
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope-roots-rc9/roots.ts",
       "start": 895,
@@ -185,6 +198,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope-roots-rc9/roots.ts",
       "start": 1404,
@@ -195,6 +209,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope-roots-rc9/roots.ts",
       "start": 1448,
@@ -205,6 +220,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope-roots-rc9/roots.ts",
       "start": 1511,
@@ -249,6 +265,17 @@
       "path": "fixtures/reactive-ir/write-scope-roots-rc9/roots.ts",
       "start": 1914,
       "end": 1925,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope-roots-rc9/roots.ts",
+      "start": 2198,
+      "end": 2209,
       "fixes": 0
     }
   ]

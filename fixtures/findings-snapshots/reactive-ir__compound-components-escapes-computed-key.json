@@ -5,6 +5,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "component-identity-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/compound-components-escapes/variants/computed-key/App.tsx",
       "start": 146,

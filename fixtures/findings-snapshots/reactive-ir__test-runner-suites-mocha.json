@@ -5,6 +5,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/test-runner-suites/variants/mocha/App.test.tsx",
       "start": 234,

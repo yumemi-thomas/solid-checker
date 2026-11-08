@@ -57,6 +57,7 @@ pub(crate) mod property_gets;
 #[path = "accessor_provenance.rs"]
 pub(crate) mod accessor_provenance;
 
+pub(crate) mod completeness;
 mod parameter_use;
 use parameter_use::*;
 mod retained_literal;
@@ -77,6 +78,7 @@ mod result_reads;
 mod transport_reads;
 pub(crate) use result_reads::*;
 pub(crate) use transport_reads::{AccessorTable, SourceKindTable, TransportReads};
+mod dependency_values;
 mod node_index;
 mod reads;
 mod refresh;

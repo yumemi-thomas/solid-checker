@@ -62,6 +62,15 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
         suppression::suppression_comments(source, &parsed.program.comments);
     facts.typescript_directive_comment =
         suppression::typescript_directive_comment(source, &parsed.program.comments);
+    facts.typescript_directives =
+        suppression::typescript_directives(source, &parsed.program.comments);
+    facts.typescript_check_pragma =
+        suppression::typescript_check_pragma(source, &parsed.program.comments);
+    facts.typescript_nocheck_comment = parsed.program.comments.iter().any(|comment| {
+        source
+            .get(comment.span.start as usize..comment.span.end as usize)
+            .is_some_and(|text| text.contains("@ts-nocheck"))
+    });
     facts.unreachable_regions = unreachable::unreachable_regions(&parsed.program);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
@@ -137,12 +146,16 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) switch_case_declarators: Vec<Span>,
     pub(super) ambient_module_depth: usize,
     pub(super) ambient_variable: bool,
+    /// Review D36: the file holds a `with` statement, which can write an
+    /// object through a bare name (a classic script; a module rejects it).
+    pub(super) with_statement: bool,
     pub(super) identifiers: Vec<IdentifierFact>,
     pub(super) reference_declarations: Vec<(Span, Span)>,
     pub(super) awaits: Vec<Span>,
     pub(super) unconditional_awaits: Vec<Span>,
     pub(super) dominating_awaits: Vec<(Span, Span)>,
     pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
+    pub(super) try_catches: Vec<TryCatchFact>,
     pub(super) in_place_import_globs: Vec<Span>,
     pub(super) unmodeled_require_references: Vec<Span>,
     /// The `require` identifiers that are the (peeled) callee of a call.
@@ -177,9 +190,11 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) coercing_operands: Vec<Span>,
     pub(super) primitive_results: Vec<Span>,
     pub(super) iterated_operands: Vec<Span>,
+    pub(super) key_probed_operands: Vec<Span>,
     pub(super) assignments: Vec<AssignmentFact>,
     pub(super) write_targets: Vec<Span>,
     pub(super) deleted_targets: Vec<Span>,
+    pub(super) inert_operands: Vec<Span>,
     pub(super) if_regions: Vec<IfRegionFact>,
     pub(super) jump_statements: Vec<Span>,
     pub(super) throw_statements: Vec<Span>,
@@ -389,12 +404,14 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             switch_case_declarators: Vec::new(),
             ambient_module_depth: 0,
             ambient_variable: false,
+            with_statement: false,
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            try_catches: Vec::new(),
             in_place_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             direct_require_callees: Vec::new(),
@@ -425,9 +442,11 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: Vec::new(),
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
+            key_probed_operands: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),
+            inert_operands: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             throw_statements: Vec::new(),
@@ -521,6 +540,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.primitive_results.dedup();
         self.iterated_operands.sort_unstable();
         self.iterated_operands.dedup();
+        self.key_probed_operands.sort_unstable();
+        self.key_probed_operands.dedup();
         self.assignments.sort_by_key(|fact| fact.target);
         self.write_targets.sort_unstable();
         self.write_targets.dedup();
@@ -643,7 +664,19 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     .or_default()
                     .push((member, key, optional));
             }
+            // Review D36: a direct `eval` in this file (`eval("thing.k = f")`),
+            // or a `with` in a classic script (`with (thing) { k = f; }`), can
+            // write the holder's object with no reference the census sees, so
+            // no holder's member is exact there. A module rejects `with`.
+            let file_has_eval = self.with_statement
+                || self
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == ModuleHazardKind::Eval);
             for (holder, arrow) in std::mem::take(&mut self.member_holders) {
+                if file_has_eval {
+                    continue;
+                }
                 let (Some(values), Some(holder_reads)) =
                     (object_arrows.get(&arrow), reads.get(&holder))
                 else {
@@ -717,6 +750,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: self.unconditional_awaits,
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
+            try_catches: self.try_catches,
             in_place_import_globs: self.in_place_import_globs,
             unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,
@@ -744,9 +778,11 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: self.coercing_operands,
             primitive_results: self.primitive_results,
             iterated_operands: self.iterated_operands,
+            key_probed_operands: self.key_probed_operands,
             assignments: self.assignments,
             write_targets: self.write_targets,
             deleted_targets: self.deleted_targets,
+            inert_operands: self.inert_operands,
             if_regions: self.if_regions,
             jump_statements: self.jump_statements,
             throw_statements: self.throw_statements,
@@ -760,6 +796,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             stray_directives: self.stray_directives,
             suppression_comments: Vec::new(),
             typescript_directive_comment: false,
+            typescript_directives: Vec::new(),
+            typescript_check_pragma: None,
+            typescript_nocheck_comment: false,
             unreachable_regions: Vec::new(),
             tagged_templates: self.tagged_templates,
             array_literal_elements: self.array_literal_elements,

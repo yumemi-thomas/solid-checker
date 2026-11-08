@@ -33,6 +33,7 @@ mod resolver_world;
 #[path = "accessor_provenance/transport_memos.rs"]
 mod transport_memos;
 pub(crate) use projection_helpers::*;
+pub(crate) use resolver_dependencies::plain_value_text;
 use resolver_dependencies::{Dependencies, dependency_member_stable};
 use resolver_index::*;
 pub(crate) use resolver_memos::{RESOLVER_TABLES, RESOLVER_TABLES_FROM, ResolverTables};

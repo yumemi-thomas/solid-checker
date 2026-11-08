@@ -38,6 +38,14 @@ module is server code. Unlike upstream, a stray string statement in the
 extracted function's own block is silent too (it "changes nothing"; ownership
 case `stray-in-extracted-function/001`).
 
+A function-level server function that **captures a binding an enclosing
+function declares** (an enclosing `const` or parameter, a default parameter
+reading one, an enclosing helper, a sibling server function, its own name) is
+a compile error on both builds: the directive pass hoists it to module scope
+("server functions cannot capture non-top-level variables", measured with
+`@solidjs/compiler@2.0.0-rc.21`, ADR 0706). Module-scope bindings, its own
+locals and type-only references compile. `tsc` accepts every one.
+
 In a module whose prologue contains `"use server"`:
 
 - **A re-export** (`export { x } from`, `export * from`) is a compile error
@@ -71,6 +79,12 @@ rc.4 registered by value. It is no longer reported on any release (the
 compiler version is not observable, so the rule fails closed). Such an export,
 and any alias or call whose value the facts do not show to be a function, is an
 **uncertifiable** result.
+
+Registration is the initializer at the declaration (ADR 0702, measured with
+`@solidjs/compiler@2.0.0-rc.21` `transformDirectives`): the compiler rewrites
+`export let f = …` to `registerServerReference(id, <initializer>)` in place, so
+a later reassignment never reaches it. `export let f = async () => {}; f = 1 as
+any` is clean, and `export let n: any = 1; n = async () => {}` is a violation.
 
 ### The `clientWrappers` option
 

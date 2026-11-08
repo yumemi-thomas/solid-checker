@@ -200,6 +200,59 @@ pub(super) fn semantic_role_before_awaits(
     // below follow. Each of them would place it -- most often in the
     // enclosing component body, the one place it is least likely to run --
     // so the role is left unknown and projection claims nothing about it.
+    // ADR 0851: calling a generator runs none of its body; each step runs the
+    // next segment on the stack of the code that makes it. A site in the body
+    // of a generator every reference of which creates an iterator takes the
+    // role at its steps: one role where they all agree, none where they differ
+    // or a step escapes (unplaced), and no run where nothing creates it.
+    if let Some(generator) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function.generator && function.body.contains(span))
+        && let Some(calls) = crate::owners::generator_creations(file, generator, lookup)
+    {
+        let key = (file.path.to_string(), generator.span);
+        if !classifying.insert(key.clone()) {
+            return role_arm!("callee_roles.generator-steps-cycle", ExecutionRole::Unknown);
+        }
+        let mut sites = Vec::new();
+        let mut unplaced = crate::owners::generator_exported(file, generator);
+        for call in calls {
+            match crate::owners::iterator_steps(file, call, lookup) {
+                crate::owners::IteratorSteps::InPlace => sites.push(call.span),
+                crate::owners::IteratorSteps::Held(steps) => sites.extend(steps),
+                crate::owners::IteratorSteps::Unplaced => unplaced = true,
+            }
+        }
+        let mut role = None;
+        let mut differ = unplaced;
+        for site in sites {
+            if differ {
+                break;
+            }
+            let at = semantic_execution_role_within(
+                file,
+                site,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+            differ |= role.is_some_and(|role| role != at);
+            role = Some(at);
+        }
+        classifying.remove(&key);
+        return match role {
+            _ if differ => role_arm!(
+                "callee_roles.generator-steps-unplaced",
+                ExecutionRole::Unknown
+            ),
+            Some(role) => role_arm!("callee_roles.generator-steps", role),
+            None => role_arm!(
+                "callee_roles.generator-never-stepped",
+                ExecutionRole::Unreported
+            ),
+        };
+    }
     if result_access_callback_contains(file, span, lookup) {
         return role_arm!(
             "callee_roles.result-access-callback",
@@ -297,6 +350,12 @@ pub(super) fn semantic_role_before_awaits(
             return role_arm!("callee_roles.named-climb-unplaced", ExecutionRole::Unknown);
         }
     }
+    // ADR 0678: reads only, a write under the root keeps its role.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(role) = named_mount_root_role(file, span, allowed, lookup, classifying)
+    {
+        return role_arm!("callee_roles.named-mount-root", role);
+    }
     if classifying.contains(&write_classification_marker()) {
         if let Some(role) =
             super::named_callbacks::named_callback_write_execution_role(file, span, lookup)
@@ -320,6 +379,39 @@ pub(super) fn semantic_role_before_awaits(
         {
             let entry = lookup.named_callback_roles(file).get(callback.span);
             if !(entry.tracked || entry.effect_compute) {
+                // ADR 0675: the handler is one entry of a function also called
+                // in place (`h(); <button onClick={h} />`): where such a call
+                // reports, a read in a window-inheriting callback runs there
+                // too. A summary claims every other read at the call.
+                if !classifying.contains(&write_classification_marker())
+                    && file.ast.arguments_containing(span).any(|(call, index)| {
+                        lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some_and(|primitive| {
+                                lookup
+                                    .dialect
+                                    .callback_inherits_calling_window(primitive, index)
+                            })
+                    })
+                    && let Some(called) = lookup
+                        .function_call_sites(file.path.as_str(), callback.span)
+                        .into_iter()
+                        .filter(|(caller, _)| caller.path == file.path)
+                        .map(|(_, callee)| {
+                            semantic_execution_role_within(
+                                file,
+                                callee,
+                                allowed,
+                                entities,
+                                symbol_names,
+                                lookup,
+                                classifying,
+                            )
+                        })
+                        .find(|role| role.reports_untracked_read())
+                {
+                    return role_arm!("callee_roles.named-callback-called-in-place", called);
+                }
                 return role_arm!("callee_roles.named-callback-untracked", role);
             }
             // A closure whose binding only inline carriers in the callback's
@@ -368,6 +460,14 @@ pub(super) fn semantic_role_before_awaits(
     }
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
         return role_arm!("callee_roles.returned-factory-callback", role);
+    }
+    // ADR 0874: nothing places code an impostor may run, or never run. A JSX
+    // expression the compiler wraps keeps its own role (ADR 0470, below).
+    if (classifying.contains(&write_classification_marker())
+        || own_jsx_compiler_role(file, span).is_none())
+        && super::write_roles::runs_in_withheld_layer(file, span, lookup)
+    {
+        return role_arm!("callee_roles.withheld-layer", ExecutionRole::Unknown);
     }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
         return role_arm!("callee_roles.inline-callback", role);
@@ -467,6 +567,18 @@ pub(super) fn semantic_role_before_awaits(
             )
         );
     }
+    // ADR 0628: a label that is not one non-empty string may open no window.
+    if file.ast.arguments_containing(span).any(|(call, index)| {
+        index == 0
+            && direct_callback_contains(file, call.arguments[index].span, span)
+            && lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Untrack)
+            && super::untrack_label(file, call) == super::UntrackLabel::Unproven
+    }) {
+        return role_arm!(
+            "callee_roles.untrack-label-unproven",
+            ExecutionRole::Unknown
+        );
+    }
     if file.ast.arguments_containing(span).any(|(call, index)| {
         crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
@@ -474,6 +586,8 @@ pub(super) fn semantic_role_before_awaits(
             .is_some_and(|primitive| {
                 callback_execution_at_call(file, call, primitive, index, lookup).is_some()
                     && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
+                    && (primitive != solid_dialect::Primitive::Untrack
+                        || super::untrack_label(file, call) == super::UntrackLabel::Window)
                     && direct_callback_contains(file, call.arguments[index].span, span)
                     // ADR 0548: an exact bundle's `error` member runs before
                     // the window opens.
@@ -642,9 +756,102 @@ pub(super) fn semantic_role_before_awaits(
                 ExecutionRole::Unknown
             );
         }
-        return role_arm!(default "callee_roles.allowed-unplaced-nested", ExecutionRole::DeferredCallback);
+        // ADR 0695: a cleanup runs at its owner's disposal, in no window, unless
+        // code in the project can dispose an owner on a stack of its own.
+        let disposal = super::write_roles::runs_in_disposal(file, span, lookup);
+        if disposal == super::write_roles::DisposalReach::Only {
+            return if lookup.project_may_dispose() {
+                role_arm!(
+                    "callee_roles.allowed-disposal-reachable",
+                    ExecutionRole::Unknown
+                )
+            } else {
+                role_arm!(
+                    "callee_roles.allowed-nested-disposal",
+                    ExecutionRole::DeferredCallback
+                )
+            };
+        }
+        // The value an effect's compute returns, where the apply never calls it.
+        if crate::owners::containing_ast_function(&file.ast, span)
+            .is_some_and(|function| returned_to_idle_apply(file, function, lookup))
+        {
+            return role_arm!(
+                "callee_roles.allowed-nested-never-called",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        // A function only a host keeps or a scheduler runs, in a project that
+        // dispatches nothing on its own stack (ADR 0535, `addEventListener`).
+        if let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+            && let Some(name) = crate::owners::function_binding_name(file, function)
+            && !lookup.synchronous_event_dispatch_present()
+        {
+            use crate::local_access::HandOff;
+            let mut hand_offs = Vec::new();
+            crate::local_access::binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+            if hand_offs
+                .iter()
+                .any(|hand_off| matches!(hand_off, HandOff::Retained | HandOff::FreshStack))
+                && hand_offs.iter().all(|hand_off| {
+                    matches!(
+                        hand_off,
+                        HandOff::Retained | HandOff::FreshStack | HandOff::Value
+                    )
+                })
+            {
+                return role_arm!(
+                    "callee_roles.allowed-nested-host-kept",
+                    ExecutionRole::DeferredCallback
+                );
+            }
+        }
+        // A cleanup that may run off a disposal: `onCleanup` hands out a handle,
+        // and a call of it runs the callback on the caller's stack (`a13`).
+        if crate::owners::containing_ast_function(&file.ast, span).is_some_and(|function| {
+            file.ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span) == Some(Primitive::OnCleanup)
+                })
+        }) {
+            return role_arm!(
+                "callee_roles.allowed-cleanup-off-disposal",
+                ExecutionRole::Unknown
+            );
+        }
+        // Proven off this stack: a function only events invoke, a fresh stack,
+        // a callback the engine runs on its own schedule.
+        if disposal == super::write_roles::DisposalReach::NotIn {
+            return role_arm!(
+                "callee_roles.allowed-nested-off-stack",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        // A callback a primitive takes is placed by that primitive's own
+        // arm, and a scheduler's runs on a fresh stack. Nothing above placed
+        // anything else, so no silence is proven.
+        if crate::owners::containing_ast_function(&file.ast, span)
+            .is_some_and(|function| function_placed_by_dialect(file, function.span, lookup))
+        {
+            return role_arm!(
+                "callee_roles.allowed-primitive-callback",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        if fresh_stack_callback_call(file, span, lookup).is_some() {
+            return role_arm!(
+                "callee_roles.allowed-nested-fresh-stack",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        return role_arm!(
+            "callee_roles.allowed-unplaced-nested",
+            ExecutionRole::Unknown
+        );
     }
-    if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
+    if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, lookup) {
         // A read in a function nested in the flow callback that runs in
         // place there (a helper's callback, an IIFE, an inline library
         // callback; `climb_in_place_layers`) runs on the stack of the layer's
@@ -697,6 +904,35 @@ pub(super) fn semantic_role_before_awaits(
                     None => role_arm!("callee_roles.control-flow-climb", placed),
                 };
             }
+        }
+        // ADR 0834: a site in a tracked JSX expression nested inside the flow
+        // callback, run in place there (`<For>{() => <p>{(() => { h(); })()}</p>}</For>`),
+        // runs in that expression's insert, not in a nested handler: tracked,
+        // as the tracked-region arm below decides it. A function the region
+        // hands on (a handler, a callback prop) keeps the callback's answer.
+        // Writes keep their own classification.
+        if role == ExecutionRole::DeferredCallback
+            && !classifying.contains(&write_classification_marker())
+            && let Some(body) = flow_callback_body(file, span, entities, symbol_names, dialect)
+            && file.compiler.tracked_regions.iter().any(|region| {
+                body.contains(region.span)
+                    && region.span.contains(span)
+                    && !component_child_function_within(file, region.span, span)
+                    && !attribute_function_within(file, region.span, span, lookup)
+                    && !unrun_closure_within(
+                        file,
+                        region.span,
+                        span,
+                        entities,
+                        symbol_names,
+                        lookup,
+                    )
+            })
+        {
+            return role_arm!(
+                "callee_roles.control-flow-tracked-region",
+                ExecutionRole::TrackedJsx
+            );
         }
         return role_arm!("callee_roles.control-flow", role);
     }
@@ -1304,6 +1540,11 @@ pub(super) fn callee_parameter_use_role(
             lookup,
             classifying,
         );
+        // A call in a denied handler: a known delivery, with no proof of its
+        // stack, so the callee is unplaced, never the component's rendering.
+        if here == ExecutionRole::Unknown && super::in_denied_handler(file, call.span) {
+            return Some(ExecutionRole::Unknown);
+        }
         if !matches!(
             here,
             ExecutionRole::EventCallback
@@ -1665,6 +1906,47 @@ pub(super) fn fresh_stack_callback_role(
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
     fresh_stack_callback_call(file, span, lookup).map(|_| ExecutionRole::DeferredCallback)
+}
+
+/// ADR 0695: whether `function` is what a primitive's first callback returns
+/// directly (`createEffect(() => () => read(), …)`) and the literal apply beside
+/// it only `void`s the value it receives, so nothing calls `function`.
+fn returned_to_idle_apply(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(compute) = ast
+        .functions
+        .iter()
+        .find(|outer| outer.expression_body && ast.peel_ts_sugar_span(outer.body) == function.span)
+    else {
+        return false;
+    };
+    ast.arguments_containing(compute.span).any(|(call, index)| {
+        index == 0
+            && ast.peel_ts_sugar_span(call.arguments[0].span) == compute.span
+            && lookup.primitive_at_call(file, call.span).is_some()
+            && call.arguments.get(1).is_some_and(|apply| {
+                ast.function_at(ast.peel_ts_sugar_span(apply.span))
+                    .is_some_and(|apply| {
+                        apply.parameters.first().is_none_or(|parameter| {
+                            parameter.names.iter().all(|name| {
+                                ast.identifiers_within(apply.body).all(|identifier| {
+                                    ast.reference_declaration(identifier.span) != Some(name.span)
+                                        || file
+                                            .source
+                                            .get(..identifier.span.start as usize)
+                                            .is_some_and(|before| {
+                                                before.trim_end().ends_with("void")
+                                            })
+                                })
+                            })
+                        })
+                    })
+            })
+    })
 }
 
 /// The selected scheduler declaration enclosing a literal callback, following
@@ -2100,8 +2382,200 @@ pub(super) fn inheriting_call_role(
                 ExecutionRole::Unreported
             )
         }
+        other if other.reports_untracked_read() => {
+            reporting_role_where_the_call_runs(file, call, other, allowed, lookup, classifying)
+        }
         other => other,
     }
+}
+
+/// ADR 0675: a reporting role at a window-inheriting call (`createRoot`,
+/// `runWithOwner`) holds only where the code around the call runs on that
+/// position's stack. Up the layers that run in place: a scheduler's callback
+/// has no window, proved silent, and a function nothing places proves no role.
+fn reporting_role_where_the_call_runs(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    at_call: ExecutionRole,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    let at = super::write_roles::climb_in_place_layers(file, call.callee, lookup)
+        .map_or(call.callee, |climb| climb.at);
+    if fresh_stack_callback_call(file, at, lookup).is_some() {
+        return role_arm!(
+            "callee_roles.inheriting-fresh-stack",
+            ExecutionRole::DeferredCallback
+        );
+    }
+    // A component's render enters its body, whatever else names it.
+    if crate::owners::containing_ast_function(&file.ast, at)
+        .is_some_and(|function| lookup.function_may_be_component(file, function))
+    {
+        return at_call;
+    }
+    if crate::local_access::function_escapes_unfollowed(file, at, lookup) {
+        return role_arm!("callee_roles.inheriting-unplaced", ExecutionRole::Unknown);
+    }
+    // `UntrackedRendering` here is lexical: the function holding the call is
+    // written in a component, which does not put it on the body's stack.
+    if at_call == ExecutionRole::UntrackedRendering
+        && let Some(holder) = crate::owners::containing_ast_function(&file.ast, at)
+    {
+        return holder_call_role(file, holder, at, at_call, allowed, lookup, classifying);
+    }
+    at_call
+}
+
+/// The role a window-inheriting call keeps in `holder`, a function not proven to
+/// run in place: a compiler or primitive callback has its own role. A binding
+/// answers from where it runs: one reporting position proves the claim, and
+/// positions none of which reports prove it silent. A binding only handed to
+/// schedulers has no window, and anything else is placed nowhere (ADR 0679).
+fn holder_call_role(
+    file: &solid_facts::FileFacts,
+    holder: &solid_facts::ast::FunctionFact,
+    at: Span,
+    at_call: ExecutionRole,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    use crate::local_access::HandOff;
+    let compiler_callback = file
+        .compiler
+        .callback_roles
+        .iter()
+        .any(|callback| callback.span.contains(holder.span));
+    let primitive_callback = file.ast.arguments_containing(at).any(|(call, index)| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .callback_semantics_at(primitive, index, call.arguments.len())
+                    .execution
+                    .is_some()
+            })
+    });
+    if compiler_callback || primitive_callback {
+        return at_call;
+    }
+    let Some(name) = crate::owners::function_binding_name(file, holder) else {
+        return role_arm!(
+            "callee_roles.inheriting-holder-unnamed",
+            ExecutionRole::Unknown
+        );
+    };
+    let mut hand_offs = Vec::new();
+    crate::local_access::binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+    if hand_offs.is_empty() {
+        return role_arm!(
+            "callee_roles.inheriting-holder-no-hand-off",
+            ExecutionRole::Unknown
+        );
+    }
+    let mut positions = Vec::new();
+    for hand_off in &hand_offs {
+        match hand_off {
+            HandOff::Call => positions.extend(direct_call_positions(file, name.span, lookup)),
+            HandOff::Inline(carrier) => positions.push(*carrier),
+            HandOff::FreshStack | HandOff::Value => {}
+            _ => {
+                return role_arm!(
+                    "callee_roles.inheriting-holder-handed",
+                    ExecutionRole::Unknown
+                );
+            }
+        }
+    }
+    // The path guard below stops a cycle, and each position re-explores what
+    // it shares with the others, so the depth is the bound on this search.
+    let Some(level) = holder_level(classifying) else {
+        return role_arm!(
+            "callee_roles.inheriting-holder-depth",
+            ExecutionRole::Unknown
+        );
+    };
+    classifying.insert(level.clone());
+    let mut roles = Vec::new();
+    for position in positions {
+        let key = (file.path.to_string(), position);
+        if !classifying.insert(key.clone()) {
+            classifying.remove(&level);
+            return role_arm!(
+                "callee_roles.inheriting-holder-recursive",
+                ExecutionRole::Unknown
+            );
+        }
+        roles.push(semantic_execution_role_within(
+            file,
+            position,
+            allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+            classifying,
+        ));
+        classifying.remove(&key);
+    }
+    classifying.remove(&level);
+    if roles.iter().any(|role| role.reports_untracked_read()) {
+        return at_call;
+    }
+    if roles.contains(&ExecutionRole::Unknown) {
+        return role_arm!(
+            "callee_roles.inheriting-holder-unplaced",
+            ExecutionRole::Unknown
+        );
+    }
+    role_arm!(
+        "callee_roles.inheriting-holder-silent",
+        ExecutionRole::DeferredCallback
+    )
+}
+
+/// How many holders [`holder_call_role`] nests through before it stops asking.
+const HOLDER_DEPTH: u32 = 8;
+
+/// The marker of the next nested [`holder_call_role`], or `None` past
+/// [`HOLDER_DEPTH`]. Kept in `classifying`, as the write marker is: the depth
+/// has to cross the role walk between two holders. The path holds a NUL, so no
+/// file's key is one.
+fn holder_level(classifying: &HashSet<(String, Span)>) -> Option<(String, Span)> {
+    (0..HOLDER_DEPTH)
+        .map(|level| ("\0holder".to_owned(), Span::new(level, level)))
+        .find(|marker| !classifying.contains(marker))
+}
+
+/// The calls whose callee is exactly the binding at `name`, in its own file.
+fn direct_call_positions(
+    file: &solid_facts::FileFacts,
+    name: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let Some(symbol) = lookup
+        .entities()
+        .exact(&crate::execution_role::location(file.path.shared(), name))
+    else {
+        return Vec::new();
+    };
+    lookup
+        .symbol_references(symbol.as_str())
+        .iter()
+        .filter(|reference| reference.path.as_ref() == file.path.as_str())
+        .filter_map(|reference| {
+            let at = Span::new(
+                u32::try_from(reference.start_byte).ok()?,
+                u32::try_from(reference.end_byte).ok()?,
+            );
+            file.ast
+                .calls_with_peeled_callee(at)
+                .next()
+                .map(|call| call.span)
+        })
+        .collect()
 }
 
 /// ADR 0547: the read role of `span`, written in the body of `function`, an
@@ -2279,6 +2753,7 @@ pub(crate) fn action_step_call_sites<'a>(
             if file.compiler.callback_roles.iter().any(|callback| {
                 callback.span == reference
                     && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    && !super::handler_event_denied(file, callback.span)
             }) {
                 continue;
             }
@@ -2367,4 +2842,28 @@ fn carried_into_callback(
             !function.span.contains(*carrier)
                 && carried_into_callback(file, *carrier, callback, lookup, depth - 1)
         })
+}
+
+#[cfg(test)]
+mod holder_depth_tests {
+    use super::{HOLDER_DEPTH, HashSet, holder_level};
+
+    #[test]
+    fn nested_holders_stop_at_the_depth_limit_and_free_their_level() {
+        let mut classifying: HashSet<(String, solid_facts::core::Span)> = HashSet::default();
+        // A file's own key is no level, whatever its span.
+        classifying.insert(("a.tsx".to_owned(), solid_facts::core::Span::new(0, 0)));
+        let mut held = Vec::new();
+        for _ in 0..HOLDER_DEPTH {
+            let level = holder_level(&classifying).expect("within the depth");
+            assert!(classifying.insert(level.clone()), "each level is its own");
+            held.push(level);
+        }
+        // Past the depth the caller answers `Unknown`, never silent.
+        assert_eq!(holder_level(&classifying), None);
+        // A sibling position after a return is asked at the same depth again.
+        let last = held.pop().unwrap();
+        classifying.remove(&last);
+        assert_eq!(holder_level(&classifying), Some(last));
+    }
 }

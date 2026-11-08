@@ -5,6 +5,14 @@
 A store or projection is written through its read proxy instead of through its
 setter.
 
+A shallow store (`{ shallow: true }`) serves its values raw, so a write below its
+root lands on the raw object and warns nothing: silent, and a root write stays
+reported (ADR 0626).
+
+A write through an escaped store carries an SC9012 at the write site
+(ADR 0860), with the blocker from its escape, including a carrier or logical
+expression. The escape alone does not prove that the write targets a store.
+
 ## What it does
 
 **Props (2026-10-19).** A write through a 2.0 props object, or a `merge`/`omit`
@@ -21,7 +29,11 @@ working (ADR 0425). The shapes, each proven at the exact store or projection
 symbol:
 
 - an assignment, compound assignment or update (`store.a.b = x`,
-  `store.n++`);
+  `store.n++`); a logical one (`??=`, `||=`, `&&=`) only where the store's own
+  literal passes its test, clean where it fails, else uncertifiable (ADR 0718);
+- a `for (… of …)` or `for (… in …)` head (`for (store.a of [2])`), which
+  writes on each iteration: a violation over an array literal with an element,
+  uncertifiable (`store-operation-may-not-write`) over anything else (ADR 0716);
 - a `delete` of a bare or parenthesized static member path (`delete
   store.a.b`) whose property Type Facts proves optional and not readonly
   (ADR 0461), its links past the root judged as an assignment's (ADR 0465,
@@ -31,7 +43,8 @@ symbol:
   path of the store. The callee must resolve through Type Facts to the
   standard library's `Array` method, so a project method of the same name, a
   typed array's `fill` and an unresolved receiver are silent (upstream's
-  `no-store-mutation-outside-setter` matches the method name);
+  `no-store-mutation-outside-setter` matches the method name); `sort`,
+  `reverse`, `fill` and `copyWithin` may write nothing: uncertifiable (ADR 0718);
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
@@ -39,6 +52,29 @@ symbol:
 (`const holder = useState(); holder.state`, ADR 0481) is the write's root, so
 `holder.state.v = 1` is reported like `state.v = 1`, and a write inside the
 store's own setter called as `holder.setState(…)` is exempt.
+
+**Through a parameter (ADR 0719).** A write through a plain parameter
+(`const bump = (o) => { o.n = 5; }`) asks its callers, or, for a callback
+literal handed to a project function, that function's calls of it. A proven
+store from a call outside every setter window, every hop in place, is a
+violation; anything else is uncertifiable (`unproven-container-root`); plain
+values and a setter's draft are silent. A setter reached through more aliases
+than are followed opens a window not proven either way: uncertifiable,
+`search-depth-limit` (ADR 0751).
+
+**Through a call or a loop (ADR 0720).** An identity function (`id(store).n =
+1`) or a `createMemo(() => store)` accessor returns the store: a violation. An
+element (`find`, `at`, `for…of`, a `For` row, a `filter`, `slice` or
+`Object.values` copy, a `map` not returning a fresh literal) is a link:
+uncertifiable. A copy written itself is a plain array.
+
+**Any other root (ADR 0790).** A destructured or rest parameter, a pattern
+binding, a `let` and its assignments, a callee's returns (with the call as the
+frame), a conditional's branches, `||`/`??` operands, and the values of any
+other root are followed; only the store itself through one frame or a branch is
+a violation (`outer(store).v = 1`, `(c ? store : x).v = 1`), the rest is
+uncertifiable. A literal or a `new` written at its own property is fresh, and a
+conditional's test is not its value (`(store.v > 0 ? {} : {}).n = 1` is silent).
 
 **Past the root (ADR 0465, 0476).** A write that reads no link past the root
 (`store.v = 1`, `list.push(1)` on a store that is the array, a cast root) is a
@@ -110,18 +146,28 @@ function this does not know, leaves it uncertifiable. Fixture
 Not reported, deliberately:
 
 - `delete` of a required or readonly property: tsc reports TS2790 (under
-  strictNullChecks) or TS2704. A non-optional property typed `T | undefined`
-  stays silent too (TS2790 under `exactOptionalPropertyTypes`). Only a property
-  the checker marks optional and not readonly (`v?: T`, `Partial<T>`) is
-  reported, through the Type Fact `writableOptionalProperty`. A type
+  strictNullChecks) or TS2704. Only a property the checker marks optional and
+  not readonly (`v?: T`, `Partial<T>`) is reported, through the Type Fact
+  `writableOptionalProperty`. An operand TypeScript is proven to reject
+  (`deleteOperandRejected`: TS2790, TS2704, TS18011 under the program's own
+  options) is silent. Any other operand (an element access `store["v"]` or
+  `store.rec[k]`, an index signature, a non-optional `T | undefined`, which tsc
+  accepts without `exactOptionalPropertyTypes`, an `unknown`) is uncertifiable,
+  `delete-operand-unproven` (ADR 0829). A type
   assertion on the operand (`delete store.v!`, `delete (store.v as T)`) is
-  TS2703, and a link that may be `undefined` or `null` (`store.o.b` with `o?:`)
+  TS2703, silent. Where both compilers suppress the rejection on the
+  operand's own line (`// @ts-ignore` or `@ts-expect-error` above it, a
+  leading `// @ts-nocheck`), nothing reports the delete and it reaches the
+  trap: the operand is judged as the member under the assertion, and a
+  rejected one as proven (ADR 0830). Where only one compiler may suppress it,
+  or the file is JavaScript, it is uncertifiable. A link that may be `undefined` or `null` (`store.o.b` with `o?:`)
   is TS18048/TS18047: both silent. Any other chain past the root
   (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
-  proves nothing at run time. An element access, an optional chain and a
-  cast root are refused; an exact `const` alias of the store is the store
+  proves nothing at run time. An optional chain may skip the delete:
+  uncertifiable (ADR 0791). A cast root is the store (ADR 0790); an exact `const` alias of the store is the store
   (ADR 0463), for an assignment and a `delete` alike. Pinned in the tsc oracle and ownership cases
-  `…/delete-required-property/001`, `…/delete-optional-property/001`; fixture
+  `…/delete-required-property/001`, `…/delete-optional-property/001`,
+  `…/delete-computed-required/001`; fixture
   `store-delete`.
 - Reassigning an accessor binding (`count = 2`, this rule's former
   accessor-binding arm). On rc.17 a `const` binding is TS2588 and a `let`
@@ -184,6 +230,12 @@ A write in a component also handed out as a plain function is uncertifiable
 (ADR 0328), except in a `flush(fn)` callback of a body entered only through an
 exact dynamic factory (ADR 0542), and in a local closure every reference of
 which is a plain call there (ADR 0571).
+
+`Object.assign`, `Reflect.set`, `Object.defineProperty` and `Reflect.deleteProperty` on a
+store are writes (ADRs 0526, 0638), also through a `const` alias (`const set = Reflect.set`,
+ADR 0717), judged by the declaration; `Object.assign` only when its first source is a closed literal with a data key (ADR 0718). `Array.prototype.sort.call(store)` is not followed. A class method a store path holds runs with the proxy as
+`this`, so a write of `this.x` in it is uncertifiable (ADR 0638). A write through a `merge` of
+several sources, or on a store whose value may be raw, is uncertifiable (ADRs 0630, 0634).
 
 ## Why is this bad?
 

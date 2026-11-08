@@ -40,6 +40,19 @@
     {
       "rule": "missing-context-provider",
       "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-closed/App.tsx",
+      "start": 1928,
+      "end": 1938,
+      "fixes": 0,
+      "message": "this read runs under an owner, and nothing proves a default for its context or a provider above every render of the function reading it; Solid throws `ContextNotFoundError` where a context with no default has no provider above",
+      "hint": "Render a provider above every use of this component, or give the context a default."
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-provider-closed/remote.ts",

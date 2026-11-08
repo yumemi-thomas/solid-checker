@@ -15,11 +15,36 @@ message variant retains **warning** severity; untracked reads retain **error**
 severity. Each message names the execution scope that made the read unsafe.
 
 A declared `loadingValue` or store `seedLoadingValue` makes the first flight
-safe, but the protection ends after the first real answer. A later refresh or
-input change can make the same unsuspendable read throw, so the rule remains
-with conditional wording. If the options object cannot be read, the untracked
+safe. The pass that creates such a source gets the served value: no pending
+throw, so a body read is `strict-read-untracked` and an `untrack` of it is silent
+(ADR 0632), through closures and helpers too. Any other read of it throws or warns
+only on a re-ask, which is uncertifiable, with conditional wording. If the options object cannot be read, the untracked
 variant becomes uncertifiable because a declared first-paint value can neither
 be proven nor ruled out.
+
+A compute that may answer without a pending flight (`cache.get(k) ?? load()`, a
+conditional, a custom thenable) proves nothing: uncertifiable (ADR 0631). An
+uninitialized derived store refuses `Object.keys`, `in`, `hasOwn` and `for…in` too
+(ADR 0635). `isPending`, `latest` and `isPending(() => p.a)` are probes: a strict
+read, no throw (ADR 0633).
+
+While a module evaluates (module scope, or a function `render` runs before it
+returns) no strict-read window is open: a pending read emits nothing and throws a
+plain `NotReadyError`. Uncaught, the module fails: a violation. A `catch` in that
+module may be on the stack and swallow it (Chrome is silent): **uncertifiable**,
+`async-read-caught` (ADR 0855). A component body, an apply and a labelled
+`untrack` emit `PENDING_ASYNC_UNTRACKED_READ` before they throw, so a `catch`
+there changes nothing.
+
+On rc.21 an unlabelled `untrack` in a component body does not hide a pending
+source that body created: `const v = untrack(() => memo())` throws as a direct
+read does, and so does a derived store or a projection the body made (ADR 0619).
+A source made elsewhere does not. A tracked read in a compute suspends, and is no
+obligation (ADR 0623). A hook creates under its caller's owner, so its memo throws
+too, read plainly or through `untrack`, `untrack(m)` and what runs on the untrack's
+stack; a module-scope source suspends, and one nothing places is uncertifiable. A
+labelled `untrack(fn, "name")` opens a window of its own, in a handler too, and
+throws on any pending source (ADR 0628).
 
 A read written directly in a named local function (`const f1 = () => {
 user(); }`), whose binding is never written, is read where a call of that
@@ -122,6 +147,8 @@ operator, template or loop there or in the body before the effect, which may
 throw through a coercion (ADR 0511 closes ADR 0507's residual). The climb also passes a `<Loading>` with a literal
 `fallback` and no `on`, which renders its one child at creation (ADR 0511).
 
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent. A walk cut on one path leaves the read its own rows, whatever the other paths placed. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889). Where the source starts from an import nothing resolves (`createSignal(fromAbsentModule())`), the same row has blocker `source-module-unresolved` (ADR 0891).
+
 ## Examples
 
 Incorrect:
@@ -164,3 +191,15 @@ does not make later revalidation reads safe.
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — tracked async reads without fallback UI
 - [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) — calls forbidden by a leaf owner's lifetime
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous untracked-read analogue
+
+A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.
+
+A body `clientOnly` loads, or `lazy` where a server pass exists, is uncertifiable, blocker `mount-form-window`: the first mount has no window and a later one does (ADR 0664).
+
+A source whose compute returns `any`, or may throw `NotReadyError`, is uncertifiable, blocker `async-provenance-unproven`, as its SC1001 is: the same text is pending in one program and settled in another (ADR 0665).
+
+A member tag of a same-file `const` holder ADR 0342 accounts (`<Ui.Panel value={data()} />`) renders the stored function, so its pending getter reaches the child's prop as a plain tag's does. A prop read in a leaf owner whose callers do not exclude a pending getter is SC9012 `prop-pending-unproven` (ADR 0823).
+
+A destructure of a props object reads every slot it binds and asks the same question (ADR 0824): a caller's async getter outside tracked JSX, or in a leaf owner, is SC9012 `async-prop-getter`; an open caller set in a leaf owner is `prop-pending-unproven`.
+
+A read written in `Show`'s or `Match`'s `when` or `For`'s `each` on rc.21 is held by the component's own computation: no SC5001 (ADR 0892). A `/*@static*/` value, an element or function between, an argument of a call, a spread on the tag and a `Match` outside a `Switch` stay open.

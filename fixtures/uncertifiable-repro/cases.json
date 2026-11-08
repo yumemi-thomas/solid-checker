@@ -23,7 +23,54 @@
     "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-factory-member",
@@ -103,7 +150,44 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "condition"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "param-use-object",
@@ -1937,19 +2021,10 @@
     "src/select.test.tsx"
    ],
    "causes": [
-    "SC1001/open-program-boundary/unplaced-read/handler-placed",
-    "SC1001/open-program-boundary/unplaced-read/condition/handler-placed",
-    "SC2001/open-program-boundary/unplaced-write/handler-placed",
     "SC4001/open-program-boundary/exported-function-callers/call",
     "SC9012/open-program-boundary/parameter-member-call/exported-parameter-member-dispatch"
    ],
    "expect": [
-    {
-     "rule": "SC1001",
-     "family": "unplaced-read",
-     "context": "condition",
-     "cause": "SC1001/open-program-boundary/unplaced-read/condition/handler-placed"
-    },
     {
      "rule": "SC4001",
      "family": "exported-function-callers",
@@ -1961,18 +2036,6 @@
      "family": "parameter-member-call",
      "context": "exported-parameter-member-dispatch",
      "cause": "SC9012/open-program-boundary/parameter-member-call/exported-parameter-member-dispatch/function-declaration"
-    },
-    {
-     "rule": "SC2001",
-     "family": "unplaced-write",
-     "context": "",
-     "cause": "SC2001/open-program-boundary/unplaced-write/handler-placed"
-    },
-    {
-     "rule": "SC1001",
-     "family": "unplaced-read",
-     "context": "",
-     "cause": "SC1001/open-program-boundary/unplaced-read/handler-placed"
     }
    ],
    "source": {
@@ -2156,6 +2219,43 @@
     "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18"
    },
    "status": "uncertifiable",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `window.addEventListener(type, eventListener)` at src/keyboard.tsx:11 takes a listener from a parameter the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "listener-reach"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "listener-reach"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "condition"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   },
    "labelWeight": 224,
    "sites": 206,
    "verification": {
@@ -2286,7 +2386,34 @@
      }
     ]
    },
-   "verifiedWeight": 63
+   "verifiedWeight": 63,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     }
+    ]
+   }
   },
   {
    "id": "callback-in-options-object",
@@ -2864,7 +2991,64 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     }
+    ]
+   }
   },
   {
    "id": "param-default",
@@ -4104,14 +4288,14 @@
     "src/props-condition-render-prop.tsx"
    ],
    "causes": [
-    "SC1001/direct-read-callers-unenumerable/condition/props-escape:other"
+    "SC1004/conditional-return/unnamed-function"
    ],
    "expect": [
     {
-     "rule": "SC1001",
-     "family": "direct-read-callers-unenumerable",
-     "context": "condition",
-     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:other"
+     "rule": "SC1004",
+     "family": "conditional-return",
+     "context": "",
+     "cause": "SC1004/conditional-return/unnamed-function"
     }
    ],
    "source": {
@@ -4182,14 +4366,14 @@
     "src/props-condition-not-in-component.tsx"
    ],
    "causes": [
-    "SC1001/direct-read-callers-unenumerable/condition/props-escape:not-in-component"
+    "SC1004/conditional-return/unnamed-function"
    ],
    "expect": [
     {
-     "rule": "SC1001",
-     "family": "direct-read-callers-unenumerable",
-     "context": "condition",
-     "cause": "SC1001/direct-read-callers-unenumerable/condition/props-escape:not-in-component"
+     "rule": "SC1004",
+     "family": "conditional-return",
+     "context": "",
+     "cause": "SC1004/conditional-return/unnamed-function"
     }
    ],
    "source": {
@@ -4521,14 +4705,14 @@
     "src/unrooted-read.tsx"
    ],
    "causes": [
-    "SC5003/unrooted-read/root-present:exported"
+    "SC5003/unrooted-read/root-mount-pass-unproven/root-present:exported"
    ],
    "expect": [
     {
      "rule": "SC5003",
      "family": "unrooted-read",
-     "context": "",
-     "cause": "SC5003/unrooted-read/root-present:exported"
+     "context": "root-mount-pass-unproven",
+     "cause": "SC5003/unrooted-read/root-mount-pass-unproven/root-present:exported"
     }
    ],
    "source": {
@@ -4808,7 +4992,24 @@
      }
     ]
    },
-   "verifiedWeight": 58
+   "verifiedWeight": 58,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-object-for-package",
@@ -4904,7 +5105,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-in-carrier"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-memo-options",
@@ -4964,7 +5187,24 @@
      }
     ]
    },
-   "verifiedWeight": 3
+   "verifiedWeight": 3,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-store-member",
@@ -5784,7 +6024,79 @@
      }
     ]
    },
-   "verifiedWeight": 65
+   "verifiedWeight": 65,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-root-in-helper"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "closed-parameter-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-root-in-helper"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-merged-nested-helper",
@@ -5965,7 +6277,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "param-member-forwarded",
@@ -6601,7 +6940,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-context-value",
@@ -6679,7 +7035,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-returned-array",
@@ -6748,7 +7121,24 @@
      }
     ]
    },
-   "verifiedWeight": 4
+   "verifiedWeight": 4,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-pushed-object",
@@ -6799,7 +7189,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-view-transition",
@@ -6895,7 +7302,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-returned-closure",
@@ -6946,7 +7370,29 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-exported-object",
@@ -6997,7 +7443,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-assigned-handler",
@@ -7075,7 +7538,24 @@
      }
     ]
    },
-   "verifiedWeight": 6
+   "verifiedWeight": 6,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-returned-tuple",
@@ -7153,7 +7633,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "refresh-in-factory-member",
@@ -7237,7 +7734,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-promise-executor",
@@ -7279,7 +7793,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-in-class-options",
@@ -7330,7 +7861,24 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-parameter-default",
@@ -9021,7 +9569,44 @@
      }
     ]
    },
-   "verifiedWeight": 40
+   "verifiedWeight": 40,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-package-component-callback",
@@ -9521,7 +10106,24 @@
      }
     ]
    },
-   "verifiedWeight": 1
+   "verifiedWeight": 1,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-bound",
@@ -9581,7 +10183,39 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-called-after-await",
@@ -9623,7 +10257,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     }
+    ]
+   }
   },
   {
    "id": "prop-called-from-two-arrows",
@@ -9674,7 +10330,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "closed-parameter-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "closed-parameter-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-forwarded-to-unresolved",
@@ -9784,7 +10467,59 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-handed-to-package-function",
@@ -9835,7 +10570,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-conditional-spread",
@@ -9895,7 +10647,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-handler-registry",
@@ -9937,7 +10706,24 @@
      }
     ]
    },
-   "verifiedWeight": 1
+   "verifiedWeight": 1,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-in-listener-registration",
@@ -9988,7 +10774,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     }
+    ]
+   }
   },
   {
    "id": "prop-mixed-callers",
@@ -10057,7 +10870,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-presence-in-show",
@@ -10111,7 +10941,44 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-to-factory-component",
@@ -10162,7 +11029,29 @@
      }
     ]
    },
-   "verifiedWeight": 2
+   "verifiedWeight": 2,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-typeof-guard-spread",
@@ -10210,7 +11099,34 @@
      }
     ]
    },
-   "verifiedWeight": 1
+   "verifiedWeight": 1,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-untracked-alias",
@@ -10295,7 +11211,44 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     }
+    ]
+   }
   },
   {
    "id": "prop-via-tag-member",
@@ -10364,7 +11317,29 @@
      }
     ]
    },
-   "verifiedWeight": 4
+   "verifiedWeight": 4,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-view-escapes",
@@ -10442,7 +11417,39 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     }
+    ]
+   }
   },
   {
    "id": "read-in-component-body",
@@ -10927,7 +11934,7 @@
   {
    "id": "clean-primitive-in-component-body",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-primitive-in-component-body.tsx"
    ],
@@ -10944,7 +11951,7 @@
   {
    "id": "clean-effect-returns-cleanup",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-effect-returns-cleanup.tsx"
    ],
@@ -11069,7 +12076,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-reexported",
@@ -11149,7 +12178,24 @@
      }
     ]
    },
-   "verifiedWeight": 32
+   "verifiedWeight": 32,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-merged",
@@ -11245,7 +12291,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-local-object-this-text",
@@ -11341,7 +12404,24 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-object-handed-to-package",
@@ -11437,7 +12517,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-options-sibling-called",
@@ -11516,7 +12618,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-held-in-binding"
+     }
+    ]
+   }
   },
   {
    "id": "prop-spread-onto-intrinsic",
@@ -11618,7 +12747,34 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-sibling-called",
@@ -11687,7 +12843,19 @@
      }
     ]
    },
-   "verifiedWeight": 4
+   "verifiedWeight": 4,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "prop-omit-view",
@@ -11789,7 +12957,29 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "handler-spread-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "options-default-parameter",
@@ -12317,7 +13507,44 @@
      }
     ]
    },
-   "verifiedWeight": 19
+   "verifiedWeight": 19,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "parameter-use-unmodeled"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-sibling-mentions-this",
@@ -12420,7 +13647,44 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     }
+    ]
+   }
   },
   {
    "id": "write-factory-accessor-and-memo",
@@ -12499,7 +13763,49 @@
      }
     ]
    },
-   "verifiedWeight": 0
+   "verifiedWeight": 0,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     }
+    ]
+   }
   },
   {
    "id": "veto-handler-helper",
@@ -13753,7 +15059,59 @@
      }
     ]
    },
-   "verifiedWeight": 26
+   "verifiedWeight": 26,
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     }
+    ]
+   }
   },
   {
    "id": "handler-spread-any-call-result",
@@ -14129,12 +15487,54 @@
     "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-copied-timer",
    "kind": "clean",
-   "project": "sc2001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-copied-timer.tsx"
    ],
@@ -14161,7 +15561,49 @@
     "commit": "5e0d76c55e4b23909bcdcc8b6cbcf60b6cd7e06f"
    },
    "weight": 3,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5006",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5001",
+      "context": "async-read-unaccounted"
+     }
+    ]
+   }
   },
   {
    "id": "clean-effect-interval-write",
@@ -14177,7 +15619,49 @@
     "commit": "b79162ad88a8069943bf2cd4cea9619b354c1106"
    },
    "weight": 2,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "async-provenance-unproven"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-interval-hook",
@@ -14193,7 +15677,29 @@
     "commit": "60823453a7e5e3aaa52179746d26abb46c7ff373"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-read"
+     }
+    ]
+   }
   },
   {
    "id": "clean-ref-let-settled",
@@ -14209,7 +15715,24 @@
     "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
    },
    "weight": 3,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     }
+    ]
+   }
   },
   {
    "id": "clean-run-unowned-store-write",
@@ -14225,12 +15748,49 @@
     "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6"
    },
    "weight": 1,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0803",
+    "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5001",
+      "context": "async-read-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "async-read-unaccounted"
+     }
+    ]
+   }
   },
   {
    "id": "clean-module-root-memo",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-module-root-memo.tsx"
    ],
@@ -14244,25 +15804,9 @@
    "status": "certified"
   },
   {
-   "id": "clean-owner-or-root",
-   "kind": "clean",
-   "project": "sc4001",
-   "files": [
-    "src/clean-owner-or-root.tsx"
-   ],
-   "source": {
-    "app": "dashiboard-ui",
-    "path": "dashiboard-ui/src/persist.ts",
-    "line": 49,
-    "commit": "3f91389394c1711f5c8380ea3cca89f076e5a534"
-   },
-   "weight": 1,
-   "status": "certified"
-  },
-  {
    "id": "clean-render-effect-cleanup",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-render-effect-cleanup.tsx"
    ],
@@ -14278,7 +15822,7 @@
   {
    "id": "clean-root-dispose",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-root-dispose.tsx"
    ],
@@ -14294,7 +15838,7 @@
   {
    "id": "clean-tracked-effect",
    "kind": "clean",
-   "project": "sc4001",
+   "project": "sc4001-clean",
    "files": [
     "src/clean-tracked-effect.tsx"
    ],

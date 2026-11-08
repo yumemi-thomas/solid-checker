@@ -166,6 +166,8 @@ pub struct AstFacts {
     /// Whether the operand can throw is the consumer's question.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub try_head_awaits: Vec<TryHeadAwaitFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub try_catches: Vec<TryCatchFact>,
     /// The `import.meta.glob(…)` and `import.meta.globEager(…)` calls that the
     /// bundler may turn into static imports run in place (facts schema 70):
     /// every call except `glob` with no options, or with an options object
@@ -310,6 +312,10 @@ pub struct AstFacts {
     /// of a caller's value leaves the enumeration undescribable.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iterated_operands: Vec<Span>,
+    /// The right operand of each `key in value` and `for (key in value)`: an
+    /// operation that probes the value's keys without reading one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key_probed_operands: Vec<Span>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     /// Exact simple assignment targets, including destructuring leaves,
@@ -320,6 +326,11 @@ pub struct AstFacts {
     /// Exact operands of delete expressions, independently of assignments.
     #[serde(default)]
     pub deleted_targets: Vec<Span>,
+    /// Values nothing takes: an expression statement's value, the operand of
+    /// `void` or `typeof`, either side of `===` or `!==` (facts schema 90, ADR
+    /// 0692). No coercion runs and no value leaves.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inert_operands: Vec<Span>,
     #[serde(default)]
     pub if_regions: Vec<IfRegionFact>,
     /// Every `break` and `continue` statement, by span, sorted.
@@ -432,6 +443,28 @@ pub struct AstFacts {
     /// withhold the premise that `tsc` reports an error in the file.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub typescript_directive_comment: bool,
+    /// Every comment TypeScript registers as an `@ts-ignore` or
+    /// `@ts-expect-error` directive (facts schema 91): its first and last
+    /// line, zero-based, by ECMAScript line terminators. `exact` is set only
+    /// when tsc 5 and tsgo agree that it is one: a one-line comment spelling
+    /// `//`, an optional third `/`, spaces or tabs, then the directive (a
+    /// `/* */` comment the same with its `/` and `*` run). tsc keys a
+    /// directive by its last line and tsgo by its first, so a comment that
+    /// spans lines is never exact. See [`crate::FileFacts::tsc_silence_at`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub typescript_directives: Vec<TypescriptDirectiveFact>,
+    /// The file's `@ts-check`/`@ts-nocheck` pragma (facts schema 91), read as
+    /// both compilers read it: the last `// @ts-check` or `// @ts-nocheck`
+    /// among the comments before the first token. `Some(false)` is a
+    /// canonical `// @ts-nocheck` there with no `@ts-check` in any comment
+    /// of the file; `Some(true)` any `@ts-check` comment; `None` neither.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typescript_check_pragma: Option<bool>,
+    /// Whether any comment of the file mentions `@ts-nocheck` (facts schema
+    /// 91), wherever it is: one the reading above does not take may still
+    /// switch checking off, so every line may be unchecked.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub typescript_nocheck_comment: bool,
     /// Code no execution reaches, from the syntax alone (facts schema 77, ADR
     /// 0458): every statement after one that never completes normally in the
     /// same list (a `function` declaration excepted, it is hoisted), and every
@@ -1333,6 +1366,16 @@ pub enum IdentifierRole {
     Reference,
 }
 
+/// One TypeScript checking directive comment (facts schema 91).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypescriptDirectiveFact {
+    pub first_line: u32,
+    pub last_line: u32,
+    /// Both compilers read it as a directive on `first_line` (= `last_line`).
+    pub exact: bool,
+}
+
 /// One `yield` expression (facts schema 88).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1352,6 +1395,14 @@ pub struct YieldFact {
     /// region runs only after that `yield` handed its value out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<Span>,
+}
+
+/// A `try` with a `catch` clause.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TryCatchFact {
+    pub block: Span,
+    pub handler: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1724,6 +1775,10 @@ pub enum CoerciveOperandKind {
     /// Unary `+`, `-`, or `~`: the operand is read through `ToNumber`, and
     /// TypeScript accepts a function there.
     NumericCoercion,
+    /// A side of `==` or `!=`, but for `null`: ToPrimitive, and TypeScript
+    /// rejects a function beside a value it cannot equal, so only an erased
+    /// type reaches here (ADR 0652).
+    LooseEquality,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1747,6 +1802,21 @@ pub struct AssignmentFact {
     pub call_initializer: Option<Span>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub array_slots: Vec<Option<Span>>,
+    /// The operator of a logical assignment (`??=`, `||=`, `&&=`), which
+    /// writes only when its test passes (facts schema 89, ADR 0718).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logical: Option<LogicalAssignmentOperator>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogicalAssignmentOperator {
+    /// `??=`: writes when the target is `null` or `undefined`.
+    Nullish,
+    /// `||=`: writes when the target is falsy.
+    Or,
+    /// `&&=`: writes when the target is truthy.
+    And,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -2117,8 +2187,18 @@ impl AstFacts {
         let mut pending = vec![root];
         let mut operands = Vec::new();
         let mut total = true;
+        // A postfix update is a fact whose `value_span` is its whole expression
+        // (`i++`), so that span leads back to itself and pushes two for every
+        // pop. Syntax is a tree, so a span met twice is such a cycle: it answers
+        // as written and the walk is not total.
+        let mut seen = std::collections::BTreeSet::new();
         while let Some(span) = pending.pop() {
             let span = self.peel_ts_sugar_span(span);
+            if !seen.insert(span) {
+                total = false;
+                operands.push(span);
+                continue;
+            }
             if let Some(tail) = sequence_tail(span) {
                 pending.push(tail);
             } else if let Some(conditional) = self.conditional_at(span) {
@@ -2272,6 +2352,7 @@ impl AstFacts {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            try_catches: Vec::new(),
             in_place_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
@@ -2299,9 +2380,11 @@ impl AstFacts {
             coercing_operands: Vec::new(),
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
+            key_probed_operands: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),
+            inert_operands: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             throw_statements: Vec::new(),
@@ -2315,6 +2398,9 @@ impl AstFacts {
             stray_directives: Vec::new(),
             suppression_comments: Vec::new(),
             typescript_directive_comment: false,
+            typescript_directives: Vec::new(),
+            typescript_check_pragma: None,
+            typescript_nocheck_comment: false,
             unreachable_regions: Vec::new(),
             tagged_templates: Vec::new(),
             array_literal_elements: Vec::new(),

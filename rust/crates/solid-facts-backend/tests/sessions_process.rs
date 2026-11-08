@@ -794,6 +794,15 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ("after-await-member.tsx", "reactive-dispatch-unresolved"),
         ("after-await-parameter.tsx", "reactive-dispatch-unresolved"),
         ("after-await-namespace.tsx", "reactive-read-after-await"),
+        // ADR 0669: a parameter called after an await may be an accessor.
+        (
+            "after-await-plain-function.tsx",
+            "reactive-read-after-await",
+        ),
+        (
+            "after-await-local-accessor.tsx",
+            "reactive-read-after-await",
+        ),
         (
             "after-await-callback-before-read.tsx",
             "reactive-read-after-await",
@@ -843,14 +852,6 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
     let negatives = [
         ("effect-apply-plain-function.tsx", "strict-read-untracked"),
         ("effect-apply-structural-store.tsx", "strict-read-untracked"),
-        (
-            "after-await-plain-function.tsx",
-            "reactive-read-after-await",
-        ),
-        (
-            "after-await-local-accessor.tsx",
-            "reactive-read-after-await",
-        ),
         ("before-await-accessor.tsx", "reactive-read-after-await"),
         (
             "conditional-await-accessor.tsx",

@@ -5,6 +5,7 @@
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
       "start": 601,
@@ -19,36 +20,6 @@
       "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
       "start": 723,
       "end": 730,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 863,
-      "end": 866,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 868,
-      "end": 871,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 873,
-      "end": 876,
       "fixes": 0
     },
     {
@@ -75,30 +46,11 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
       "start": 1331,
       "end": 1340,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 1454,
-      "end": 1457,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 1459,
-      "end": 1462,
       "fixes": 0
     },
     {
@@ -125,20 +77,11 @@
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
+      "blocker": "store-write-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
       "start": 1872,
       "end": 1877,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 1960,
-      "end": 1963,
       "fixes": 0
     },
     {
@@ -152,29 +95,10 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 2512,
-      "end": 2515,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/past-await-owner-observer/App.tsx",
-      "start": 2923,
-      "end": 2926,
-      "fixes": 0
-    },
-    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/past-await-owner-observer/node_modules/solid-js/package.json",
       "start": 0,

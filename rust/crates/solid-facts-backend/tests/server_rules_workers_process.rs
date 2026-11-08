@@ -54,7 +54,8 @@ fn the_rich_argument_rule_answers_alike_on_every_worker_count() {
         "server-function-rich-argument",
     )
     .len();
-    assert_eq!(fixture_findings, 19, "the fixture's own findings");
+    // 20 since ADR 0707 (`SafeScalar` may hold `-0`).
+    assert_eq!(fixture_findings, 20, "the fixture's own findings");
     let modules: usize = 100;
     for index in 0..modules {
         let body = match index % 3 {
@@ -83,9 +84,10 @@ fn the_rich_argument_rule_answers_alike_on_every_worker_count() {
     fs::remove_dir_all(project).unwrap();
 }
 
-/// A serializer installed: the first file that asks for the proof ends the
-/// rule, keeping what it found before asking. That file is the fixture's
-/// `App.tsx`, which calls a server function with a `Date`. Modules that sort
+/// A serializer installed (ADR 0707: `enableRichArguments()` called in the
+/// client entry before its render): the first file that asks for the proof
+/// ends the rule, keeping what it found before asking. That file is the
+/// fixture's `App.tsx`, which calls a server function with a `Date`. Modules that sort
 /// before it keep their obligations, which do not ask for the proof; modules
 /// that sort after it add nothing.
 #[test]
@@ -93,7 +95,7 @@ fn an_installed_serializer_ends_the_rich_argument_rule_at_the_same_file() {
     let Ok(producer) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let project = project("server-function-rich-args-enabled", "enabled");
+    let project = project("server-function-rich-args-entry", "enabled");
     // An untyped member of a query wrapper: whether a call of it crosses the
     // transport is unproven, which is an obligation that does not ask for the
     // serializer.
@@ -135,8 +137,9 @@ fn an_installed_serializer_ends_the_rich_argument_rule_at_the_same_file() {
     fs::remove_dir_all(project).unwrap();
 }
 
-/// The response head under a `Loading` boundary: the fixture's three
-/// findings, among enough other modules to run the rule on the workers, are
+/// The response head under a `Loading` boundary: the fixture's six findings
+/// (three dominated, three shell or fallback obligations since ADR 0703),
+/// among enough other modules to run the rule on the workers, are
 /// the same on every worker count, and a module's own calls are found in each.
 #[test]
 fn the_response_head_rule_answers_alike_on_every_worker_count() {
@@ -149,7 +152,7 @@ fn the_response_head_rule_answers_alike_on_every_worker_count() {
         "http-response-after-flush",
     )
     .len();
-    assert_eq!(fixture_findings, 3, "the fixture's own findings");
+    assert_eq!(fixture_findings, 6, "the fixture's own findings");
     let source = fs::read_to_string(project.join("App.tsx")).unwrap();
     let modules = 70;
     for index in 0..modules {

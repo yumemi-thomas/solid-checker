@@ -2229,3 +2229,78 @@ fn returned_invocations_through_random_edits_equal_a_fresh_store() {
 /// The accessor-provenance resolver's memo build (S7b), over this harness.
 #[path = "../accessor_provenance/tests/resolver_memos.rs"]
 mod resolver_memos;
+
+/// ADR 0876 where R1f's member census asks it (`standard_member_intact`): a
+/// write to a project's own `prototype` member vetoes the standard member of
+/// its name once some `prototype` key may be anyone's (`Foo.prototype.k = f`
+/// after `Foo.prototype = …`), and a write whose chain reaches a standard
+/// prototype vetoes it too; a project prototype nothing rebinds does not.
+#[test]
+fn an_own_prototype_write_vetoes_the_standard_member() {
+    let vetoed = |source: &str| {
+        let project = Project {
+            files: vec![("/fixture/app.ts".to_owned(), source.to_owned())],
+            schemes: HashMap::default(),
+            unreferenced: Vec::new(),
+        };
+        let facts = facts(&project).unwrap();
+        let ast_indexes = facts
+            .files
+            .iter()
+            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+            .collect::<HashMap<_, _>>();
+        let symbols = entity_symbols(&facts);
+        let references = OnceLock::new();
+        let table = super::FileTable::new(&facts.files);
+        let views = Views {
+            table: &table,
+            files: &facts.files,
+            sources: ViewSources {
+                ast_indexes: &ast_indexes,
+                symbols: &symbols,
+                typescript: &facts.typescript,
+                references: &references,
+                resolutions: None,
+            },
+            constants: BuildConstants {
+                dialect: &solid_dialect::Solid2,
+            },
+        };
+        let hazards = views
+            .contribution(table.slot_id(0), super::contributions::hazards)
+            .slot(0)
+            .iter()
+            .map(|(hazard, _)| *hazard)
+            .collect::<Vec<_>>();
+        let present = |hazard| hazards.contains(&hazard);
+        (
+            super::contributions::patch_vetoed("Array.forEach", &present),
+            super::contributions::reached_patch("Array.forEach", &present),
+        )
+    };
+    let late = "(cb: () => void) => { queueMicrotask(cb); }";
+    assert!(
+        vetoed(&format!(
+            "function Foo() {{}} (Foo as any).prototype = Array.prototype; (Foo as any).prototype.forEach = {late};"
+        ))
+        .0
+    );
+    assert!(
+        vetoed(&format!(
+            "function Foo() {{}} const k: string = (globalThis as any).k; (Foo as any)[k] = {{}}; (Foo as any).prototype.forEach = {late};"
+        ))
+        .0
+    );
+    assert!(
+        vetoed(&format!(
+            "const gp = Object.getPrototypeOf([]); gp.forEach = {late};"
+        ))
+        .1
+    );
+    assert_eq!(
+        vetoed(&format!(
+            "function Foo() {{}} Foo.prototype.forEach = {late};"
+        )),
+        (false, false)
+    );
+}

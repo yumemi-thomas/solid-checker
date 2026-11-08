@@ -11,6 +11,27 @@ A positively identified visible configuration use makes it uncertifiable,
 with the veto site related. Missing reference evidence does not veto this
 conditional premise.
 
+A whole store is read by more than its members (ADRs 0620, 0621, measured on
+rc.21): `deep(s)`, `JSON.stringify(s)`, `Reflect.get(s, k)`, `Array.from(s)` and
+`${s}` on any store; `for…of`, an array or call spread and array destructuring on
+an array; `{...s}`, `Object.values`, `Object.entries` and `Object.assign` on an
+object that holds a key. A store of unknown shape is uncertifiable there, and
+`Object.keys`, `in`, `hasOwn`, `for…in` and `snapshot` read nothing on a settled store.
+A `merge` view's Get lands on its last source that holds the key: a key a literal
+serves reads nothing (ADR 0630). A store over a value no literal states may be its
+raw value where a project uses `markRaw` or a shallow store (ADR 0634).
+
+`untrack` scopes the wrapped read: a Get of a store proxy it returns warns
+(`const o = untrack(() => s.o); o.x`), proven where the store's literal initial value
+holds an object or array there (ADR 0629). A labelled `untrack(fn, "name")` opens a
+window wherever it runs (ADR 0628).
+
+A read through an escaped reactive value carries an SC9012 at the read site
+(ADR 0860), with the blocker from its escape: a carrier, logical expression,
+unresolved member, primitive callback return or forwarded value. A proven
+tracked role discharges that read. A package-installed global function gets
+`dependency-global-read` at its call (ADR 0862). These rows prove no violation.
+
 ## What it does
 
 Flags reads of reactive values that happen outside every tracking scope: at the top
@@ -134,6 +155,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
 - **Named hand-offs (ADR 0531).** Resolved synchronous standard-library carriers,
   template tags and Function.call/apply place a named reader at the carrier's
   role. Other hand-offs are obligations; reviewed fresh-stack callbacks stay legal.
+- **A Get that only leads to a write is uncertifiable in a dynamic-only body.**
+  In `flush(fn)` in a body only `dynamic()` mounts, `s.a` in `s.a.v = 7` stands
+  for no read of its own: the same write in the body is uncertifiable, so the
+  path claims no more (ADR 0694). A real read there stays a violation.
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
   scope only stores has no execution role; a read there is reported as
@@ -197,7 +222,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   touching the listener, so a read inside it subscribes a memo or effect compute
   that calls it, and in a component body it is reported exactly as a bare read
   there (probed on every published rc.0-rc.9 client build). `untrack` is the
-  wrapper that clears the listener.
+  wrapper that clears the listener. A layer that runs in place inside `fn` (an IIFE)
+  answers as `fn` does, and in a helper not proven to run in the body the read is
+  uncertifiable (ADR 0859).
 - **Props follow their callers.** `devComponent` wraps the body in
   `untrack(() => Comp(props), '<Name>')`, and the warning fires only when a prop
   *getter* reads reactive state in that window. A prop that every visible call
@@ -342,3 +369,17 @@ A read in a callback named at its sole `createRoot`/`runWithOwner` position, or 
 ADRs 0528–0530: eager IIFEs in handler expressions do not inherit the yielded handler's dispatch exemption. Binding-dispatched reads in proven in-place layers retain an undecided enclosing-summary row (an obligation). A closed dynamic-only component entry has the unwindowed role: a stale snapshot, with no promise of a runtime diagnostic; mixed entries stay unproven. Under `dynamicCore`'s unlabelled `untrack`, a read in `flush(fn)` (which keeps the label) is such a snapshot too, also through a closure it calls (ADR 0571).
 
 Placement climbs that exhaust their budget retain an uncertifiable read (ADR 0532): 16 in-place layers, eight generator steps, or eight layers inspected for a pre-suspension window. Outer unread layers cannot supply a deferred or unwindowed role.
+
+A handler's read is proven to run in no window only while no call can deliver it on another stack. `focus`, `blur`, `select`, `remove` and the other calls of ADR 0642 run a listener synchronously, like `click`, so an unplaced one in the program makes the read uncertifiable.
+
+A read in a function only a hidden call runs (a getter, `toString`, an iterator, a tag, a class field, a `Map` slot), directly or through named
+helpers, has no call node to place it: uncertifiable (ADR 0673). So is one in a helper handed on from such a member, or from another file
+(`h.call(null)`, `[1].map(h)`, a copy, a tag), and a generator's body, a parameter default and a read past an await on some paths below one (ADR 0674). A
+named function handed to a carrier that provably runs in a body takes the carrier's role: proved. A setter runs its callback on its stack: a read there, or in a `reconcile` key that is argument 0, takes the setter call's role, except a store's own Gets, which never warn
+(ADR 0676). A key on a `reconcile` held elsewhere is uncertifiable, and so is a read in the callback of a setter called in a named helper no named-callback role places, which no summary carries (ADR 0833). Under a scheduler a window-inheriting call reports nothing (ADR 0675). In a named function it answers from where that function runs: its direct calls, or a scheduler that takes it (ADR 0679).
+
+A function every reference of which lies in an `isServer` arm never runs on a client: silent. One only a build constant, a `clientOnly` or resumed `lazy` body by call, or a `<NoHydration>` subtree in a hydrating project reaches is uncertifiable (ADR 0677). `render(Local, el)` calls `Local` with no strict window, so a read there is silent where `<Local />` warns (ADR 0678). A callback handed to a standard method a project subclass overrides is not proven in place: uncertifiable (ADR 0683).
+
+A member tag of a same-file `const` holder ADR 0342 accounts is one of the stored component's call sites (ADR 0823): `<Ui.Card title={label()} />` with `Card` reading `props.title` in its body is proved; an imported or escaping holder keeps the component's callers open.
+
+A named `Show` or `Match` function child with runtime `length` 0 is a value. Its child position proves no untracked invocation; reads remain uncertifiable when their callers are unknown. An inline one runs in the insert's tracked effect only where the element is itself inserted (a child or child expression's value of an intrinsic element or of an inserted fragment, or a proven component's return); held and called elsewhere, its read is uncertifiable.

@@ -1,0 +1,1 @@
+`NoHydration` returns `undefined` while hydrating, and a non-hydrating mount renders its children, so with `hydrate` in the project no client claim holds there (ADR 0677): `Read`, `Write` and `Nested` (under an inner `Hydration`) are uncertifiable, blocker `no-hydration-subtree`. `Outside` keeps its violation.

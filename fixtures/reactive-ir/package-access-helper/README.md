@@ -2,7 +2,7 @@
 
 Claim: a helper that branches on its parameter's type or arity is decided for a call whose argument is a getter the selected dialect has audited. `@solid-primitives/utils`'s `access = (v) => typeof v === "function" && !v.length ? v() : v` reads a `createSignal` or `createMemo` getter on every path, because both getters are `typeof "function"` with `length` 0 (`read.bind(null, node)` over `function read(el)`, `@solidjs/signals@2.0.0-rc.13` `dist/dev.js` `accessor` and `dist/prod/signals.js`; the dialect records the sources in `Dialect::accessor_getter_length`). Called in a component body, that read is untracked: `STRICT_READ_UNTRACKED`, confirmed in the rc.13 dev runtime.
 
-- `BadSignal`, `BadMemo` (positive): `access(value)` and `access(doubled)` in the component body. `strict-read-untracked` violation, through the package source.
+- `BadSignal`, `BadMemo` (positive): `access(value)` and `access(doubled)` in the component body: `strict-read-untracked`, through the package source.
 - `BadAccessWith` (positive): `accessWith(value)` calls any function argument.
 - `BadLocalCallsEveryFunction` (positive): a project function named `access` is followed by its own body (`local-calls.ts` calls every function), not by the name.
 - `GoodTracked`, `GoodMemoCompute` (negative): the same call in a tracked JSX expression and in a memo's compute.
@@ -10,18 +10,18 @@ Claim: a helper that branches on its parameter's type or arity is decided for a 
 - `UncertifiableMutableMember` (SC9012): `config.label` of a mutable object may hold a getter.
 - `GoodStore` (negative): a store is an object, not a getter.
 - `GoodWithParameters` (negative): a function with a parameter has `length` 1; `access` returns it without calling it.
-- `GoodLocalCallsWithParameters` (negative): a project `access` that calls only a function of positive `length` (`local-access.ts`) never calls a getter, so nothing is read.
+- `GoodLocalCallsWithParameters` (negative): a project `access` that calls only a function of positive `length` (`local-access.ts`) never calls a getter.
 - `UncertifiableMemoToString`, `…Slice`, `…Reverse`, `…SliceZero`, `…MemoBind`, `…ReverseTwice`, `…HeldTuple` (SC9012): a member call on a primitive's result (`.toString()`, `.slice(0)`, `.bind(null)`, `.reverse()`, also on a held tuple) is the value's own method, so its return has no stated provenance (`.slice(0)` keeps the getter, which silence would have certified).
 - `GoodMemberCallElsewhere` (negative): a member call on a value that is not a primitive's result raises nothing; `String(1).slice(0)` is a primitive.
 - `Unproven.tsx` (ADR 0338, inverted): `access` calls its argument unless it is proven not a function, so an argument the engine can prove neither a getter nor a non-function keeps an SC9012 obligation (`parameter-call-argument-unproven`). The `Uncertifiable*` components reach `access` with a getter through a spread, rest, held alias, `Array.from`, `slice`, `bind`, `Reflect.apply` or a helper's return or hop. `GoodProjectFunction`, `GoodLiteral` and `GoodPrimitiveTyped` are proven non-getters and stay clean.
 - `UncertifiableRedefinedLength`, `UncertifiablePassedElsewhere` (uncertifiable): `length` is configurable, so a getter handed to `Object.defineProperty` or anything but the decided helper proves no length; every reference must be a call of it or an argument of that helper (whose `: v` return is unreachable for length 0).
 - `BadCalledAndRepeated` (positive): calling the getter and handing it to the same helper twice keep the fact.
-- `UncertifiableHoistedRedefinition` (uncertifiable): the helper redefines `length` in a hoisted function declaration written after its `return`; a declaration's body runs whenever it is called, so a site in it is never unreachable for coming after a `return` (the ADR 0280 walk).
+- `UncertifiableHoistedRedefinition` (uncertifiable): the helper redefines `length` in a hoisted function declaration written after its `return`; a declaration's body runs whenever called, so its sites are never unreachable for following a `return` (ADR 0280's walk).
 - `exported-getter.tsx`, `exported-mut.ts`, `exported-index.tsx` (uncertifiable): other code can reach an exported getter through the module namespace (`Object.values(m)`, `m[key]`, `import()`) and redefine `length`, as `exported-mut.ts` does, so an exported binding proves no length.
 - `variants/patched-bind` (uncertifiable): the project replaces `Function.prototype.bind` and gives every bound function `length` 1, which is how every rc.13 getter is built, so the length fact is withheld project-wide.
 - `Eval.tsx` `UncertifiableEval` (uncertifiable): a direct `eval` in the declaring file reaches the binding with no static reference.
-- `MissedHoistedCallee` (known miss, silent): a helper that reads its parameter inside a hoisted function it calls is not followed (nested function declarations are not summarised), so the read is not reported; open-work.md.
-- `UncertifiableAlias` (uncertifiable, internal): `const alias = value` is not the binding the primitive created, so the argument proves nothing about its arity and the read stays one the call is not proven to perform.
+- `MissedHoistedCallee` (known miss, silent): a helper reading its parameter inside a hoisted function it calls is not followed (nested function declarations are not summarised); open-work.md.
+- `UncertifiableAlias` (uncertifiable, internal): `const alias = value` is not the primitive's own binding, so it proves no arity and the call is not proven to read.
 
 Only an exact, unwritten binding whose references are all calls or arguments of the decided helper of the accessor slot of `createSignal`/`createOptimistic` (`const [value] = ...`) or of `createMemo` proves the value; a function literal, an alias, a props value, a store, a setter or an import proves nothing, so the branch stays undecided.
 
@@ -43,3 +43,5 @@ The `exports` map's `@solid-primitives/source` condition names unshipped `src/`;
 ## tsc
 
 `solid-js.d.ts` is `dependency-source-package-accessor`'s stub plus `createStore` from `@solidjs/signals@2.0.0-rc.13` `store/index.d.ts`; it omits names the package's declarations import, hence `skipLibCheck`. `App.tsx`, `local-access.ts` and `local-calls.ts` pass strict `tsc --noEmit` (TypeScript 6.0.3) against the published 2.0.0-rc.13 typings and these declarations, so no finding duplicates a type error.
+
+Variant `eval`: `Eval.tsx`, moved here from this project. ADR 0803 (item 3): a direct `eval` anywhere in a project may patch array iteration, which withdraws every primitive's tuple slots in it; the eval cases live in `variants/eval` so the cases here keep their proofs, and the variant pins the withdrawal.

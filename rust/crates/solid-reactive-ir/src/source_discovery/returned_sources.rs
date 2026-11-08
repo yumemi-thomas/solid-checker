@@ -59,8 +59,7 @@ pub(super) fn push_callback_return_sources(
                     lookup.dialect,
                 ),
             ));
-            let options =
-                async_source_options(file, returned.created, Some(primitive), lookup.dialect);
+            let options = first_answer_options(lookup, file, returned.created, Some(primitive));
             if options != AsyncSourceOptions::default() {
                 result.source_async_options.push((symbol.clone(), options));
             }
@@ -69,7 +68,7 @@ pub(super) fn push_callback_return_sources(
                     .created
                     .arguments
                     .first()
-                    .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                    .is_some_and(|argument| super::source_may_be_async(lookup, file, argument))
             {
                 result.async_sources.push(symbol.clone());
             }
@@ -146,6 +145,32 @@ pub(super) fn proxied_target(
     (file.ast.peel_ts_sugar_span(construct.arguments[0].span) == target).then_some(target)
 }
 
+/// ADR 0628: the primitive of `created`, a call a project function returns as it
+/// is, when that call's value is one fresh accessor or store: a creation whose
+/// result is a tuple is no single source.
+fn directly_returned_creation(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    created: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+) -> Option<Primitive> {
+    if created.construct || !created.direct_callee {
+        return None;
+    }
+    let primitive = known_primitive(&crate::call_primitive_name_cached(
+        lookup,
+        file,
+        created,
+        entities,
+        symbol_names,
+        lookup.dialect,
+    ))?;
+    (lookup.dialect.creates_reactive_source(primitive)
+        && !lookup.dialect.returns_reactive_tuple(primitive))
+    .then_some(primitive)
+}
+
 pub(super) fn returned_source_through<'a>(
     lookup: &SemanticLookup<'a>,
     caller: &FileFacts,
@@ -170,11 +195,17 @@ pub(super) fn returned_source_through<'a>(
     let (file, function) = target?;
     if function.r#async
         || function.generator
-        || function.expression_body
         || function.method_name.is_some()
         || !lookup.function_value_is_current(file, function)
     {
         return None;
+    }
+    // ADR 0628: an arrow whose body is the creation (`() => createMemo(...)`).
+    if function.expression_body {
+        let value = file.ast.peel_ts_sugar_span(function.body);
+        let created = file.ast.call_at(value)?;
+        let primitive = directly_returned_creation(lookup, file, created, entities, symbol_names)?;
+        return Some((file, created, primitive));
     }
     let returns = file
         .ast
@@ -202,6 +233,20 @@ pub(super) fn returned_source_through<'a>(
         if let Some(target) = proxied_target(lookup, file, value) {
             roots.push(target);
             proxy_targets.push(target);
+            continue;
+        }
+        // ADR 0628: `return createMemo(...)`: this call's own fresh source, as
+        // `const m = createMemo(...); return m;` is.
+        if let Some(created) = file.ast.call_at(value)
+            && let Some(primitive) =
+                directly_returned_creation(lookup, file, created, entities, symbol_names)
+        {
+            if forwarded.is_some_and(|prior: (&FileFacts, &solid_facts::ast::CallFact, _)| {
+                prior.1.span != created.span
+            }) {
+                return None;
+            }
+            forwarded = Some((file, created, primitive));
             continue;
         }
         // ADR 0287: `return g(…)`, where `g` is a function in this same file

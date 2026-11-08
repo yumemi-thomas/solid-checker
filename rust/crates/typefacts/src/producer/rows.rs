@@ -5,14 +5,15 @@ use super::EncodeError;
 use super::plan::{PathOpRef, Slot, SymbolBody, SymbolOpRef};
 use super::writer::{LocationState, RowWriter};
 use crate::v3::{
-    ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC, BINDING_FLAG_ARRAY, FUNCTION_FLAG_ARROW,
-    FUNCTION_FLAG_ASYNC, FUNCTION_FLAG_EXPORTED, TYPE_FACTS_TABLE_SCHEMA_V5,
-    TYPE_FACTS_TABLE_SCHEMA_V6, TYPE_FACTS_TABLE_SCHEMA_V7, TYPE_FACTS_TABLE_SCHEMA_V8,
-    TYPE_FACTS_TABLE_SCHEMA_V9, TYPE_FACTS_TABLE_SCHEMA_V11, TYPE_FACTS_TABLE_SCHEMA_V12,
-    TYPE_FACTS_TABLE_SCHEMA_V13, TYPE_FACTS_TABLE_SCHEMA_V14, TYPE_FACTS_TABLE_SCHEMA_V15,
-    TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17, TYPE_FACTS_TABLE_SCHEMA_V18,
-    TYPE_FACTS_TABLE_SCHEMA_V19, TYPE_FACTS_TABLE_SCHEMA_V20, TYPE_FACTS_TABLE_SCHEMA_V21,
-    TYPE_FACTS_TABLE_SCHEMA_V23, TYPE_FACTS_TABLE_SCHEMA_V24, TransitionMode, rows,
+    ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC, ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC,
+    ASYNC_FUNCTION_FLAG_RETURN_OPEN, BINDING_FLAG_ARRAY, FUNCTION_FLAG_ARROW, FUNCTION_FLAG_ASYNC,
+    FUNCTION_FLAG_EXPORTED, TYPE_FACTS_TABLE_SCHEMA_V5, TYPE_FACTS_TABLE_SCHEMA_V6,
+    TYPE_FACTS_TABLE_SCHEMA_V7, TYPE_FACTS_TABLE_SCHEMA_V8, TYPE_FACTS_TABLE_SCHEMA_V9,
+    TYPE_FACTS_TABLE_SCHEMA_V11, TYPE_FACTS_TABLE_SCHEMA_V12, TYPE_FACTS_TABLE_SCHEMA_V13,
+    TYPE_FACTS_TABLE_SCHEMA_V14, TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16,
+    TYPE_FACTS_TABLE_SCHEMA_V17, TYPE_FACTS_TABLE_SCHEMA_V18, TYPE_FACTS_TABLE_SCHEMA_V19,
+    TYPE_FACTS_TABLE_SCHEMA_V20, TYPE_FACTS_TABLE_SCHEMA_V21, TYPE_FACTS_TABLE_SCHEMA_V23,
+    TYPE_FACTS_TABLE_SCHEMA_V24, TYPE_FACTS_TABLE_SCHEMA_V25, TransitionMode, rows,
 };
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, CallKind,
@@ -217,6 +218,10 @@ fn write_entity_run(
         set(
             schema >= TYPE_FACTS_TABLE_SCHEMA_V24 && entity.writable_optional_property,
             rows::ENTITY_WRITABLE_OPTIONAL_PROPERTY,
+        );
+        set(
+            schema >= TYPE_FACTS_TABLE_SCHEMA_V25 && entity.delete_operand_rejected,
+            rows::ENTITY_DELETE_OPERAND_REJECTED,
         );
         set(
             schema >= TYPE_FACTS_TABLE_SCHEMA_V5 && entity.symbol_claim == SymbolClaim::Unresolved,
@@ -588,11 +593,21 @@ fn write_file_body(w: &mut RowWriter<'_>, file: &FileFact) -> Result<(), EncodeE
         w.location(&function.expression, &mut state)?;
         w.text_arc(&function.symbol);
         w.text_arc(&function.target);
-        w.u64(if function.can_return_async {
-            ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC
-        } else {
-            0
-        });
+        w.u64(
+            if function.can_return_async {
+                ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC
+            } else {
+                0
+            } | if function.may_answer_sync {
+                ASYNC_FUNCTION_FLAG_MAY_ANSWER_SYNC
+            } else {
+                0
+            } | if function.return_open {
+                ASYNC_FUNCTION_FLAG_RETURN_OPEN
+            } else {
+                0
+            },
+        );
         w.locations(&function.calls_after_await)?;
     }
     Ok(())

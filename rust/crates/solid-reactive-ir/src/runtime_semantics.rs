@@ -362,6 +362,71 @@ pub(super) fn argument_behavior(
     })
 }
 
+/// ADR 0893: a scheduler whose callback's throw nothing in the program can
+/// take: the call hands no promise back, so the throw reaches the global
+/// handler.
+pub(super) fn scheduler_throw_reaches_host(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && matches!(
+                declaration.qualified_name.as_ref(),
+                "queueMicrotask"
+                    | "setTimeout"
+                    | "setInterval"
+                    | "requestAnimationFrame"
+                    | "requestIdleCallback"
+                    | "WindowOrWorkerGlobalScope.queueMicrotask"
+                    | "WindowOrWorkerGlobalScope.setTimeout"
+                    | "WindowOrWorkerGlobalScope.setInterval"
+                    | "AnimationFrameProvider.requestAnimationFrame"
+                    | "Window.requestIdleCallback"
+                    | "IntersectionObserver.construct"
+                    | "ResizeObserver.construct"
+                    | "MutationObserver.construct"
+                    | "PerformanceObserver.construct"
+                    | "ReportingObserver.construct"
+            )
+    })
+}
+
+/// ADR 0893: a default-library `addEventListener`, whatever DOM interface
+/// redeclares it.
+pub(super) fn add_event_listener_call(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && declaration
+                .qualified_name
+                .rsplit('.')
+                .next()
+                .is_some_and(|member| member == "addEventListener")
+    })
+}
+
+/// ADR 0893: a standard `Promise` `then`, `catch` or `finally`: its callback's
+/// throw rejects the promise the call returns.
+pub(super) fn promise_handler_call(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && matches!(
+                declaration.qualified_name.as_ref(),
+                "Promise.then" | "Promise.catch" | "Promise.finally"
+            )
+    })
+}
+
+/// ADR 0810: standard calls that read an object's own keys, run no getter and
+/// answer no value of it. `Object.keys` Gets nothing: a store's `ownKeys` trap
+/// has no strict-read warning in Chrome.
+pub(super) fn reads_keys_only(call: &ResolvedCall) -> bool {
+    runtime_declaration(call).is_some_and(|declaration| {
+        declaration.standard_library
+            && matches!(
+                declaration.qualified_name.as_ref(),
+                "ObjectConstructor.keys" | "ObjectConstructor.getOwnPropertyNames"
+            )
+    })
+}
+
 /// Only the reviewed global runtime calls consume the independent
 /// default-library binding fact. It never promotes a package declaration or
 /// a structurally typed method into the general library model.
@@ -770,6 +835,127 @@ pub(super) fn is_timer_call(call: &ResolvedCall) -> bool {
 /// The qualified name of the exact standard-library declaration a valid
 /// resolved call selected (`Promise.then`, `PromiseConstructor.all`, ...), or
 /// `None` for a project, package, unresolved or invalid call.
+/// ADR 0642: an exact `lib.dom` declaration that delivers a project's listeners
+/// on its caller's stack, as measured in Chrome: activation and dispatch,
+/// focus moves, whatever loses focus, `invalid`, a form's `reset` and `submit`,
+/// and `beforetoggle`. Whether focus moves is a runtime fact, so each is taken
+/// to deliver. Named by declaration: a project method called `focus` is none.
+/// The ruling on ADR 0642, measured in Chrome: an event whose every synchronous
+/// deliverer is a call the hazard census lists. Anything else may be delivered
+/// by a state change with no call to name: a focus event, and `change` and
+/// `compositionend` with it, by any way the focused element leaves, Solid's own
+/// unmount included; `beforetoggle` by an attribute write, `load` by an
+/// insertion, `formdata` by a constructor. So they never take the proof that
+/// only the host delivers a handler, and neither does a name nobody measured.
+pub(crate) fn event_keeps_delivery_proof(attribute: &str) -> bool {
+    let name = attribute.to_ascii_lowercase();
+    let name = name.strip_prefix("on").unwrap_or(&name);
+    let name = name.strip_prefix(':').unwrap_or(name);
+    matches!(
+        name,
+        "pointerdown"
+            | "pointerup"
+            | "pointermove"
+            | "pointerover"
+            | "pointerout"
+            | "pointerenter"
+            | "pointerleave"
+            | "pointercancel"
+            | "pointerrawupdate"
+            | "gotpointercapture"
+            | "lostpointercapture"
+            | "mousedown"
+            | "mouseup"
+            | "mousemove"
+            | "mouseover"
+            | "mouseout"
+            | "mouseenter"
+            | "mouseleave"
+            | "keydown"
+            | "keyup"
+            | "keypress"
+            | "wheel"
+            | "touchstart"
+            | "touchend"
+            | "touchmove"
+            | "touchcancel"
+            | "drag"
+            | "dragstart"
+            | "dragend"
+            | "dragover"
+            | "dragenter"
+            | "dragleave"
+            | "drop"
+            | "click"
+            | "dblclick"
+            | "auxclick"
+            | "contextmenu"
+            | "input"
+            | "beforeinput"
+            | "submit"
+            | "reset"
+            | "invalid"
+            | "cancel"
+            | "command"
+            | "select"
+            | "selectstart"
+            | "copy"
+            | "cut"
+            | "paste"
+            | "beforecopy"
+            | "beforecut"
+            | "scroll"
+            | "scrollend"
+            | "toggle"
+            | "close"
+            | "error"
+            | "animationstart"
+            | "animationend"
+            | "animationiteration"
+            | "animationcancel"
+            | "transitionstart"
+            | "transitionend"
+            | "transitionrun"
+            | "transitioncancel"
+            | "compositionstart"
+            | "compositionupdate"
+    )
+}
+
+pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
+    // ADR 0705: the global `reportError` dispatches `error` at the window.
+    if qualified_name == "reportError" {
+        return true;
+    }
+    let Some((owner, member)) = qualified_name.rsplit_once('.') else {
+        return false;
+    };
+    match member {
+        "dispatchEvent" => owner == "EventTarget",
+        "click" => owner == "HTMLElement",
+        "focus" | "blur" => matches!(owner, "HTMLOrSVGOrMathMLElement" | "HTMLOrSVGElement"),
+        "remove" => matches!(owner, "ChildNode" | "HTMLSelectElement"),
+        "removeChild" => owner == "Node",
+        // ADR 0705, as `cleanup.rs`'s table.
+        "replaceWith" => owner == "ChildNode",
+        "replaceChild" => owner == "Node",
+        "replaceChildren" => owner == "ParentNode",
+        "submit" => owner == "HTMLFormElement",
+        "reportError" => owner == "WindowOrWorkerGlobalScope",
+        "go" => owner == "History",
+        "assign" | "reload" | "replace" => owner == "Location",
+        "execCommand" => owner == "Document",
+        "select" => matches!(owner, "HTMLInputElement" | "HTMLTextAreaElement"),
+        "checkValidity" | "reportValidity" => {
+            owner == "ElementInternals" || (owner.starts_with("HTML") && owner.ends_with("Element"))
+        }
+        "reset" | "requestSubmit" => owner == "HTMLFormElement",
+        "show" | "showModal" | "close" | "requestClose" => owner == "HTMLDialogElement",
+        "showPopover" | "hidePopover" | "togglePopover" => owner == "HTMLElement",
+        _ => false,
+    }
+}
+
 pub(super) fn standard_call_name(call: &ResolvedCall) -> Option<&str> {
     if call.validity != ResolvedCallValidity::Valid {
         return None;

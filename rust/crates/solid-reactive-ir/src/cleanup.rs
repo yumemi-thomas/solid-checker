@@ -186,7 +186,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .source_text(callback_span)
                     .unwrap_or_default()
                     .to_owned();
-                for (kind, guaranteed) in kinds {
+                for (kind, guaranteed, identity_unproven) in kinds {
                     operations.push(LeafOwnerOperation {
                         kind,
                         owner: owner.to_string(),
@@ -196,6 +196,8 @@ pub(super) fn leaf_owner_operations_for_file(
                         uncertain: false,
                         possible: !guaranteed,
                         via: Some(via.clone()),
+                        identity_unproven,
+                        computation_error_unobserved: false,
                     });
                 }
                 if complete {
@@ -210,6 +212,8 @@ pub(super) fn leaf_owner_operations_for_file(
                     uncertain: true,
                     possible: false,
                     via: None,
+                    identity_unproven: false,
+                    computation_error_unobserved: false,
                 });
                 continue;
             }
@@ -237,10 +241,70 @@ pub(super) fn leaf_owner_operations_for_file(
                 uncertain: true,
                 possible: false,
                 via: None,
+                identity_unproven: false,
+                computation_error_unobserved: false,
             });
             continue;
         };
         let callback_region = leaf_callback.span;
+        // A call in IIFE layers the callback runs in place is judged at its
+        // own line, as a direct call is: that is where rc.21 raises the
+        // code (the strict judge, Chrome). The IIFE call itself takes no
+        // helper path, so the operation is not claimed at it too. `None`:
+        // past the bound, no answer: an obligation, never a drop.
+        let through_iife = |span: Span| {
+            let ast = &callback_file.ast;
+            let mut at = span;
+            for _ in 0..16 {
+                let Some(function) = crate::owners::owning_function(ast, at) else {
+                    return Some(false);
+                };
+                // A parameter list is the helper path's (argument facts,
+                // defaults): only a layer with none is the leaf's own text.
+                if function.span == leaf_callback.span
+                    || function.r#async
+                    || function.generator
+                    || !function.parameters.is_empty()
+                    || function.rest_parameter
+                    || !function.body.contains(at)
+                {
+                    return Some(false);
+                }
+                let Some(iife) = ast.calls_with_peeled_callee(function.span).next() else {
+                    return Some(false);
+                };
+                if direct_callback_runs(callback_file, leaf_callback.span, iife.span) {
+                    return Some(true);
+                }
+                at = iife.span;
+            }
+            None
+        };
+        // ADR 0883: JSX in the leaf's own text creates a computation or a root
+        // with no call to name it. A creating call elsewhere is the helper
+        // paths'; JSX there is the owner rule's (`jsx-effect`).
+        for site in crate::owners::jsx_sites(callback_file, lookup) {
+            if site.kind == crate::owners::JsxSiteKind::MaybeRenderEffect
+                || site.in_getter
+                || !callback_region.contains(site.span)
+                || !(direct_callback_runs(callback_file, leaf_callback.span, site.span)
+                    || through_iife(site.span) != Some(false))
+            {
+                continue;
+            }
+            operations.push(LeafOwnerOperation {
+                kind: crate::LeafOwnerOperationKind::Primitive("JSX".into()),
+                owner: owner.to_string(),
+                location: location(callback_file.path.shared(), site.span),
+                fix: None,
+                call_site_gate: call_site_gate.clone(),
+                uncertain: false,
+                possible: false,
+                via: None,
+                identity_unproven: false,
+                computation_error_unobserved: false,
+            });
+        }
         for call in &callback_file.ast.calls {
             if call.span == owner_call.span || !callback_region.contains(call.span) {
                 continue;
@@ -331,8 +395,38 @@ pub(super) fn leaf_owner_operations_for_file(
                     },
                 )
             };
+            let iife_call = callback_file
+                .ast
+                .function_at(callback_file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|literal| {
+                    !literal.r#async
+                        && !literal.generator
+                        && literal.parameters.is_empty()
+                        && !literal.rest_parameter
+                })
+                && (direct_callback_runs(callback_file, leaf_callback.span, call.span)
+                    || through_iife(call.span) != Some(false));
+            if iife_call {
+                continue;
+            }
+            if through_iife(call.span).is_none() {
+                operations.push(LeafOwnerOperation {
+                    kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
+                    owner: owner.to_string(),
+                    location: location(callback_file.path.shared(), call.callee),
+                    fix: None,
+                    call_site_gate: call_site_gate.clone(),
+                    uncertain: true,
+                    possible: false,
+                    via: None,
+                    identity_unproven: false,
+                    computation_error_unobserved: false,
+                });
+                continue;
+            }
             if !own_list
                 && !direct_callback_runs(callback_file, leaf_callback.span, call.span)
+                && through_iife(call.span) != Some(true)
                 && !(handed() && in_place())
             {
                 continue;
@@ -368,7 +462,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .source_text(call.callee)
                     .unwrap_or_default()
                     .to_owned();
-                for (kind, guaranteed) in kinds {
+                for (kind, guaranteed, identity_unproven) in kinds {
                     operations.push(LeafOwnerOperation {
                         kind,
                         owner: owner.to_string(),
@@ -378,6 +472,8 @@ pub(super) fn leaf_owner_operations_for_file(
                         uncertain: false,
                         possible: !guaranteed,
                         via: Some(via.clone()),
+                        identity_unproven,
+                        computation_error_unobserved: false,
                     });
                 }
                 if !complete {
@@ -390,6 +486,8 @@ pub(super) fn leaf_owner_operations_for_file(
                         uncertain: true,
                         possible: false,
                         via: Some(via),
+                        identity_unproven: false,
+                        computation_error_unobserved: false,
                     });
                 }
                 continue;
@@ -398,6 +496,10 @@ pub(super) fn leaf_owner_operations_for_file(
             else {
                 continue;
             };
+            // ADR 0711: the attribution must name the primitive the callee
+            // is bound to; otherwise the operation is an obligation.
+            let identity_proven =
+                primitive_identity_proven(dialect, callback_file, call, &primitive);
             // Only `onCleanup` has a rewrite -- return the cleanup
             // instead of registering it -- and only where the owner reads
             // a returned function as cleanup. That is a 2.0 idea: 1.x's
@@ -415,9 +517,11 @@ pub(super) fn leaf_owner_operations_for_file(
                 location: location(callback_file.path.shared(), call.callee),
                 fix,
                 call_site_gate: call_site_gate.clone(),
-                uncertain: false,
+                uncertain: !identity_proven,
                 possible: false,
                 via: None,
+                identity_unproven: !identity_proven,
+                computation_error_unobserved: false,
             });
         }
         // ADR 0537: a tagged template written in the callback's own extent
@@ -443,7 +547,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 .source_text(template.tag)
                 .unwrap_or_default()
                 .to_owned();
-            for (kind, guaranteed) in kinds {
+            for (kind, guaranteed, identity_unproven) in kinds {
                 operations.push(LeafOwnerOperation {
                     kind,
                     owner: owner.to_string(),
@@ -453,6 +557,8 @@ pub(super) fn leaf_owner_operations_for_file(
                     uncertain: false,
                     possible: !guaranteed,
                     via: Some(via.clone()),
+                    identity_unproven,
+                    computation_error_unobserved: false,
                 });
             }
             if !complete {
@@ -465,6 +571,8 @@ pub(super) fn leaf_owner_operations_for_file(
                     uncertain: true,
                     possible: false,
                     via: Some(via),
+                    identity_unproven: false,
+                    computation_error_unobserved: false,
                 });
             }
         }
@@ -644,8 +752,68 @@ fn forbidden_operation_kind(
     leaf_forbids(dialect, file, call, kind).then(|| match kind {
         Primitive::OnCleanup => crate::LeafOwnerOperationKind::Cleanup,
         Primitive::Flush => crate::LeafOwnerOperationKind::Flush,
+        _ if dialect.leaf_call_throws_observer_guard(kind) => {
+            crate::LeafOwnerOperationKind::ObserverGuarded(primitive.to_string())
+        }
         _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
     })
+}
+
+/// ADR 0711: whether the binder confirms the primitive attributed to `call`:
+/// the callee is a named import binding whose imported name is that
+/// primitive's, or a non-computed member of a namespace import of a module the
+/// dialect owns whose property is. Anything else (a local alias, a wrapper's
+/// value, an import whose target the producer could not read) proves no
+/// identity, whatever symbol the producer put at the callee.
+fn primitive_identity_proven(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: &PrimitiveName,
+) -> bool {
+    primitive_identity_proven_at(dialect, file, call.callee, primitive)
+}
+
+/// [`primitive_identity_proven`] for the value at `callee`, whether or not a
+/// call holds it (ADR 0825: a primitive used as a value).
+pub(crate) fn primitive_identity_proven_at(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    callee: Span,
+    primitive: &PrimitiveName,
+) -> bool {
+    use solid_facts::ast::ImportKind;
+    let Some(kind) = primitive.primitive() else {
+        return false;
+    };
+    let ast = &file.ast;
+    let names = |name: &str| dialect.primitive(name) == Some(kind);
+    let binding_at = |declaration: Span| {
+        ast.imports.iter().find_map(|import| {
+            import
+                .bindings
+                .iter()
+                .find(|binding| binding.local.span == declaration)
+                .map(|binding| (import, binding))
+        })
+    };
+    let callee = ast.peel_ts_sugar_span(callee);
+    if let Some(member) = ast.member_at(callee) {
+        let object = ast.peel_ts_sugar_span(member.object);
+        return ast
+            .reference_declaration(object)
+            .and_then(binding_at)
+            .is_some_and(|(import, binding)| {
+                binding.kind == ImportKind::Namespace
+                    && dialect.owns_module(import.module.as_str())
+                    && file.source_text(member.property).is_some_and(names)
+            });
+    }
+    ast.reference_declaration(callee)
+        .and_then(binding_at)
+        .is_some_and(|(_, binding)| {
+            binding.kind != ImportKind::Namespace && binding.imported.as_deref().is_some_and(names)
+        })
 }
 
 /// Whether the dialect forbids this primitive call under a leaf owner.
@@ -712,13 +880,23 @@ struct LeafScopeResolution<'a, 'lookup> {
 
 /// A forbidden operation the walk reached, and whether the leaf scope's call
 /// runs it on every normal completion (ADR 0275). Only a guaranteed one is a
-/// violation; the others are proof obligations.
-type Reached = Vec<(crate::LeafOwnerOperationKind, bool)>;
+/// violation; the others are proof obligations. The last field says no proven
+/// run names the primitive: only an attribution the binder does not confirm
+/// (ADR 0711) reached it.
+type Reached = Vec<(crate::LeafOwnerOperationKind, bool, bool)>;
 
-fn record(kinds: &mut Reached, kind: crate::LeafOwnerOperationKind, guaranteed: bool) {
-    match kinds.iter_mut().find(|(known, _)| *known == kind) {
-        Some((_, known)) => *known |= guaranteed,
-        None => kinds.push((kind, guaranteed)),
+fn record(
+    kinds: &mut Reached,
+    kind: crate::LeafOwnerOperationKind,
+    guaranteed: bool,
+    identity_unproven: bool,
+) {
+    match kinds.iter_mut().find(|(known, ..)| *known == kind) {
+        Some((_, known, open)) => {
+            *known |= guaranteed;
+            *open &= identity_unproven;
+        }
+        None => kinds.push((kind, guaranteed, identity_unproven)),
     }
 }
 
@@ -942,9 +1120,9 @@ fn helper_forbidden_operations(
             None,
             Entry::ActionStep { guaranteed },
         );
-        for (kind, guaranteed) in step {
+        for (kind, guaranteed, identity_unproven) in step {
             if kind != crate::LeafOwnerOperationKind::Flush {
-                record(kinds, kind, guaranteed);
+                record(kinds, kind, guaranteed, identity_unproven);
             }
         }
         return complete;
@@ -1245,7 +1423,9 @@ fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
 /// `show`/`showModal`/`close`/`requestClose`, `AbortController.abort`
 /// (`abort` on its signal), `XMLHttpRequest.open`/`abort`/`send`
 /// (`readystatechange`, `abort`, `loadstart`), `FileReader.abort` (`abort`,
-/// `loadend`) and `Document.execCommand` (`input`).
+/// `loadend`), `Document.execCommand` (`input`) and, measured against ADR 0329's
+/// "tree mutation stays trusted", what moves focus without naming it (ADR 0642):
+/// `remove`/`removeChild` of a focused element (`blur`) and `select` (`focus`).
 /// `lib.dom` also declares `dispatchEvent`, `focus` and `blur` as globals for
 /// `window`.
 fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
@@ -1257,7 +1437,20 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
         "focus" | "blur" | "click" | "dispatchEvent" | "checkValidity" | "reportValidity"
     ) || matches!(
         (owner, member),
-        ("HTMLFormElement", "reset" | "requestSubmit")
+        // ADR 0705: `submit` delivers `formdata`; `replaceWith`,
+        // `replaceChild` and `replaceChildren` blur a focused element they
+        // remove; `reportError` dispatches `error` at the global; a
+        // navigation fires `beforeunload`. Measured in Chrome where the page
+        // survives it (not `History`/`Location`); a state requirement
+        // (focus, a navigation) is unknown, so each is taken to deliver.
+        ("HTMLFormElement", "reset" | "requestSubmit" | "submit")
+            | ("ChildNode", "remove" | "replaceWith")
+            | ("Node", "removeChild" | "replaceChild")
+            | ("ParentNode", "replaceChildren")
+            | ("" | "WindowOrWorkerGlobalScope", "reportError")
+            | ("History", "go")
+            | ("Location", "assign" | "reload" | "replace")
+            | ("HTMLInputElement" | "HTMLTextAreaElement", "select")
             | (
                 "HTMLElement",
                 "showPopover" | "hidePopover" | "togglePopover"
@@ -1270,6 +1463,8 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
             | ("XMLHttpRequest", "open" | "abort" | "send")
             | ("FileReader", "abort")
             | ("Document", "execCommand")
+            | ("ElementInternals", "checkValidity" | "reportValidity")
+            | ("HTMLSelectElement", "remove")
     )
 }
 
@@ -1655,6 +1850,39 @@ fn function_forbidden_operations(
         }
         _ => None,
     };
+    // ADR 0883: JSX written in the helper's body creates on this stack too. Past
+    // an await every run reaches first it has left the leaf (`jsx-effect`'s).
+    if helper_file
+        .ast
+        .jsx_elements
+        .iter()
+        .map(|element| &element.span)
+        .chain(&helper_file.ast.jsx_fragments)
+        .any(|jsx| helper.body.contains(*jsx))
+    {
+        for site in crate::owners::jsx_sites(helper_file, lookup) {
+            if site.kind == crate::owners::JsxSiteKind::MaybeRenderEffect
+                || site.in_getter
+                || !helper.body.contains(site.span)
+                || !crate::owners::written_directly_in(&helper_file.ast, helper, site.span)
+                || helper_file
+                    .ast
+                    .unconditional_awaits
+                    .iter()
+                    .any(|await_span| await_span.end <= site.span.start)
+            {
+                continue;
+            }
+            let guaranteed =
+                reached_on_every_call(resolution, helper_file, helper, site.span, entry);
+            record(
+                kinds,
+                crate::LeafOwnerOperationKind::Primitive("JSX".into()),
+                guaranteed,
+                false,
+            );
+        }
+    }
     for inner in helper_file.ast.calls_within(helper.body) {
         // A call inside a nested function -- its body or its parameter list
         // (ADR 0204) -- is not executed by calling the helper; it belongs to
@@ -1742,7 +1970,10 @@ fn function_forbidden_operations(
         // adjacent-only `dedup` would leave byte-identical operations in the
         // serialized IR — reject at the push instead.
         if let Some(kind) = forbidden_operation_kind(dialect, helper_file, inner, &primitive) {
-            record(kinds, kind, guaranteed);
+            // ADR 0711: an attribution the binder does not confirm is
+            // possible only.
+            let proven = primitive_identity_proven(dialect, helper_file, inner, &primitive);
+            record(kinds, kind, guaranteed && proven, !proven);
         }
     }
     // ADR 0537: a tagged template written in the body calls its tag there.
@@ -2146,6 +2377,20 @@ mod dom_dispatch_tests {
             "HTMLDialogElement.showModal",
             "HTMLDialogElement.close",
             "AbortController.abort",
+            "HTMLInputElement.select",
+            "ChildNode.remove",
+            "Node.removeChild",
+            // ADR 0705.
+            "HTMLFormElement.submit",
+            "ChildNode.replaceWith",
+            "Node.replaceChild",
+            "ParentNode.replaceChildren",
+            "reportError",
+            "WindowOrWorkerGlobalScope.reportError",
+            "History.go",
+            "Location.assign",
+            "Location.reload",
+            "Location.replace",
         ] {
             assert!(
                 synchronously_dispatching_dom_member(dispatching),
@@ -2159,10 +2404,8 @@ mod dom_dispatch_tests {
             "Element.getAttribute",
             "Element.scrollIntoView",
             "Element.scrollTo",
-            "HTMLInputElement.select",
-            "HTMLFormElement.submit",
             "Element.setAttribute",
-            "ChildNode.remove",
+            "History.pushState",
             "ParentNode.append",
             "Node.appendChild",
             "Animatable.animate",

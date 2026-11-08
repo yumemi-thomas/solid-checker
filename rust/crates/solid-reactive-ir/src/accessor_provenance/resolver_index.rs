@@ -404,6 +404,17 @@ pub(super) struct CensusRows {
 /// its selected member is immediately called; a Get that escapes an
 /// object/member cannot certify a later invocation. `forwarded` says whether
 /// a span of the file is an argument some parameter receives.
+/// Whether calling `member` hands the object out or writes it: the
+/// `Object.prototype` members that do. The only names `tsc` accepts beyond a
+/// closed literal's own slots are these members, so a receiver of any other is
+/// a slot call (D4: `x.valueOf()`, `x.__defineGetter__`).
+fn hands_out_receiver(file: &FileFacts, member: &ast::MemberFact) -> bool {
+    matches!(
+        file.source_text(member.property),
+        Some("valueOf" | "__defineGetter__" | "__defineSetter__")
+    )
+}
+
 pub(super) fn census_rows<'w, W: World<'w>>(
     w: &W,
     file: &'w FileFacts,
@@ -433,7 +444,11 @@ pub(super) fn census_rows<'w, W: World<'w>>(
         .ast
         .members
         .iter()
-        .filter(|m| !file.ast.computed_members.contains(&m.span) && callees.contains(&m.span))
+        .filter(|m| {
+            !file.ast.computed_members.contains(&m.span)
+                && callees.contains(&m.span)
+                && !hands_out_receiver(file, m)
+        })
         .map(|m| file.ast.peel_ts_sugar_span(m.object))
         .collect::<HashSet<_>>();
     // ADR 0511: a Get of a named member whose value lands whole in a closed
@@ -893,7 +908,11 @@ pub(super) fn origin_rows<'w, W: World<'w>>(
         .ast
         .members
         .iter()
-        .filter(|m| !file.ast.computed_members.contains(&m.span) && callees.contains(&m.span))
+        .filter(|m| {
+            !file.ast.computed_members.contains(&m.span)
+                && callees.contains(&m.span)
+                && !hands_out_receiver(file, m)
+        })
         .map(|m| file.ast.peel_ts_sugar_span(m.object))
         .collect::<HashSet<_>>();
     // An unbound result can mutate/escape the same shared object too.

@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 127,
+      "end": 138,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 243,
+      "end": 254,
+      "fixes": 0
+    }
+  ]
+}

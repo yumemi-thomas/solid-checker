@@ -1,0 +1,1934 @@
+[
+ {
+  "id": "SC1002/c05-map",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "value-in-carrier"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC1003/o12-helper",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 6,
+    "blocker": "value-root-in-helper"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC2003/c04-param",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "value-root-in-helper"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC2003/c15-map",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "value-in-carrier"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC2003/c16-class",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "value-in-class-field"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC2003/j07-weakmap",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "value-in-carrier"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC2009/a02-opt-class",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 5,
+    "blocker": "value-through-new"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC2009/a03-opt-map",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 5,
+    "blocker": "value-in-carrier"
+   },
+   "closedBy": "SC9012"
+  }
+ },
+ {
+  "id": "SC8014/d04-for-store",
+  "adr": "ADR 0671",
+  "why": "SC8014 proves the store receiver now: the row expects a violation, not an uncertifiable",
+  "fields": [
+   "proved"
+  ],
+  "from": {
+   "proved": null
+  },
+  "to": {
+   "proved": true
+  }
+ },
+ {
+  "id": "SC7005/helper",
+  "adr": "ADR 0813",
+  "why": "`export default function App` became `export function App` for check.mjs's main.tsx import; both forms measured the same (tsc, checker, SSR host)",
+  "fields": [
+   "source"
+  ],
+  "from": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction h() { httpStatus(410); }\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); h(); return <b>{n}</b>; }\nexport default function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n"
+  },
+  "to": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction h() { httpStatus(410); }\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); h(); return <b>{n}</b>; }\nexport function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n"
+  }
+ },
+ {
+  "id": "SC7005/method",
+  "adr": "ADR 0813",
+  "why": "`export default function App` became `export function App` for check.mjs's main.tsx import; both forms measured the same (tsc, checker, SSR host)",
+  "fields": [
+   "source"
+  ],
+  "from": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nconst o = { h() { httpStatus(410); } };\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); o.h(); return <b>{n}</b>; }\nexport default function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n"
+  },
+  "to": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nconst o = { h() { httpStatus(410); } };\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); o.h(); return <b>{n}</b>; }\nexport function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n"
+  }
+ },
+ {
+  "id": "SC7005/memo",
+  "adr": "ADR 0813",
+  "why": "`export default function App` became `export function App` for check.mjs's main.tsx import; both forms measured the same (tsc, checker, SSR host)",
+  "fields": [
+   "source"
+  ],
+  "from": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const m = createMemo(() => { const n = v(); httpStatus(410); return n; }); return <b>{m()}</b>; }\nexport default function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n"
+  },
+  "to": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const m = createMemo(() => { const n = v(); httpStatus(410); return n; }); return <b>{m()}</b>; }\nexport function App() { return <main><Loading fallback={<p>l</p>}><Inner /></Loading></main>; }\n"
+  }
+ },
+ {
+  "id": "SC7005/wrapper",
+  "adr": "ADR 0813",
+  "why": "`export default function App` became `export function App` for check.mjs's main.tsx import; both forms measured the same (tsc, checker, SSR host)",
+  "fields": [
+   "source"
+  ],
+  "from": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); httpStatus(410); return <b>{n}</b>; }\nfunction W(props: { children: any }) { return <Loading fallback={<p>l</p>}>{props.children}</Loading>; }\nexport default function App() { return <main><W><Inner /></W></main>; }\n"
+  },
+  "to": {
+   "source": "import { createMemo, Loading, createEffect } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst wait = () => new Promise<number>((r) => setTimeout(() => r(1), 30));\nfunction Inner() { const v = createMemo(async () => await wait()); const n = v(); httpStatus(410); return <b>{n}</b>; }\nfunction W(props: { children: any }) { return <Loading fallback={<p>l</p>}>{props.children}</Loading>; }\nexport function App() { return <main><W><Inner /></W></main>; }\n"
+  }
+ },
+ {
+  "id": "SC9012/cases3-p03-pending-direct-control",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "invocation-context-unproven"
+   },
+   "closedBy": "SC5001"
+  }
+ },
+ {
+  "id": "SC9012/cases3b-f06-children-helper-read",
+  "adr": "ADR 0692",
+  "why": "the census closes it: closedBy names SC9012 and closedAt the row read by hand at the runtime site (judge.mjs)",
+  "fields": [
+   "closedAt",
+   "closedBy"
+  ],
+  "from": {
+   "closedAt": null,
+   "closedBy": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "read-backing-unproven"
+   },
+   "closedBy": "SC1001"
+  }
+ },
+ {
+  "id": "SC9012/cases2-v01-store-map-get",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v02-store-nullish",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-through-logical"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v03-store-let",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v04-store-class-field",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v05-store-iife",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v06-store-weakref",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v08-store-write-map",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v09-store-write-nullish",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "id": "SC2003"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v10-store-write-let",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v11-store-write-class",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v20-props-map-get",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v21-props-nullish",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-through-logical"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v22-props-let",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v23-props-class-field",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v24-props-iife",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v31-handed-nullish",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v32-handed-or",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v33-handed-let",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v34-handed-map",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v35-handed-class",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v36-handed-iife",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v37-context-nullish",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v38-context-map",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v40-helper-call-of-let",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v41-helper-map-module",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v42-F0-hook-param",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v43-member-class-instance-module",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 13,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-v49-await-accessor",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-r01-values-inline",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-r03-arrayfrom-inline",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-r05-entries-inline",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-r06-values-at",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-r08-values-member",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-r09-map-get-held",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-r10-project-call-inline",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-w07-memo-in-root-body",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 8,
+    "id": "SC1001"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-w08-direct-primitive-call-body",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 8,
+    "id": "SC1001"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases1-h22-private-field",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 14,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases1-h26-weakref-deref",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 13,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a01-map-get",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a02-set-values",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a03-weakmap-get",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a05-object-assign",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a08-array-at",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a12-private-static",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a18-generator-yield",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a19-globalthis",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site; ADR 0803 step 2 moves it: `(globalThis as any).__c()` on line 12 calls a member the program wrote, so the census cannot call it absent and every slot is withdrawn, tuple-iteration-written at line 11",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "tuple-iteration-written"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a20-proxy-of-accessor",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a21-map-call",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a22-object-values",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a24-static-block",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a25-label-break-handoff",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a30-iife-return",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a31-promise-sync-no",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-a32-try-finally-handoff",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-w01-private-field-setter",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-dispatch"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-w02-weakref-setter",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-dispatch"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases2-w03-map-setter",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-dispatch"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e01-let-plain-assign",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e03-let-bare-block",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e04-let-for-block",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e05-let-try-only",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e06-let-switch",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e07-let-arrow-assign-called",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e10-const-nullish-unknown-left",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e20-map-literal-set-get",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e23-class-public-field",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 13,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e24-class-ctor-assign",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 13,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e25-static-public",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e26-promise-executor-assign",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e27-callback-sync-assign",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e28-pending-via-map",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 13,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e29-pending-via-private",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 14,
+    "blocker": "handed-member-read"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-e31-write-via-static-block",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 12,
+    "blocker": "handed-member-dispatch"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-f02-async-generator-read-after-await",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "id": "SC1002"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases3-f10-getter-this-chain",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 11,
+    "blocker": "value-in-carrier"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases4-k10-mapArray-result",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "id": "SC1001"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases4-k11-repeat-result",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "id": "SC1001"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases4-k12-createRoot-returns-accessor",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 10,
+    "blocker": "value-held-in-binding"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases4-k13-untrack-returns-accessor",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "value-from-primitive-callback"
+   }
+  }
+ },
+ {
+  "id": "SC9012/cases4-k14-runWithOwner-returns-accessor",
+  "adr": "ADR 0814",
+  "why": "closedAt pinned: an SC9012 row passes only at the row read by hand at its runtime site",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 9,
+    "blocker": "value-from-primitive-callback"
+   }
+  }
+ },
+ {
+  "id": "SC3001/c03-memo-alias",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 4,
+    "blocker": "leaf-callback-opaque"
+   }
+  }
+ },
+ {
+  "id": "SC3001/c04-cleanup-obj",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 4,
+    "blocker": "leaf-callback-opaque"
+   }
+  }
+ },
+ {
+  "id": "SC3001/c05-cleanup-hof",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 4,
+    "blocker": "leaf-callback-opaque"
+   }
+  }
+ },
+ {
+  "id": "SC3001/d02-map-fn",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "leaf-callback-opaque"
+   }
+  }
+ },
+ {
+  "id": "SC3001/d04-then-sync",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "leaf-callback-opaque"
+   }
+  }
+ },
+ {
+  "id": "SC3001/d05-getter",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "leaf-callback-opaque"
+   }
+  }
+ },
+ {
+  "id": "SC3001/d06-proxy",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 7,
+    "blocker": "leaf-callback-opaque"
+   }
+  }
+ },
+ {
+  "id": "SC3002/e02-alias",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 4,
+    "blocker": "primitive-value"
+   }
+  }
+ },
+ {
+  "id": "SC3002/e03-obj",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 4,
+    "blocker": "primitive-value"
+   }
+  }
+ },
+ {
+  "id": "SC3002/e05-hof",
+  "adr": "ADR 0815",
+  "why": "review 4c: a withholding covers a code only at the row's closedAt, so this regress row pins the SC9012 on the site's own line, read by hand",
+  "fields": [
+   "closedAt"
+  ],
+  "from": {
+   "closedAt": null
+  },
+  "to": {
+   "closedAt": {
+    "file": "App.tsx",
+    "line": 4,
+    "blocker": "primitive-value"
+   }
+  }
+ },
+ {
+  "id": "SC2007/n01-ctl",
+  "adr": "ADR 0893",
+  "why": "a throw the program catches fires no diagnostic and is no violation by default (coordinator's ruling); the recorded run has none, so keep moves to warn; SC2007/n11-uncaught, the same source uncaught, keeps the V",
+  "fields": [
+   "kind"
+  ],
+  "from": {
+   "kind": "keep"
+  },
+  "to": {
+   "kind": "warn"
+  }
+ }
+]

@@ -1,0 +1,69 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/ClientBody.tsx",
+      "start": 226,
+      "end": 229,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "mount-form-window",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/ClientBody.tsx",
+      "start": 337,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/ClientBody.tsx",
+      "start": 354,
+      "end": 363,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "mount-form-window",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/ClientBody.tsx",
+      "start": 354,
+      "end": 363,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/LazyBody.tsx",
+      "start": 196,
+      "end": 199,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "mount-form-window",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/Picked.tsx",
+      "start": 168,
+      "end": 171,
+      "fixes": 0
+    }
+  ]
+}

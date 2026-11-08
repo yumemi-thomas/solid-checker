@@ -39,6 +39,8 @@ pub(super) struct NamedCallbackRole {
     /// as untracked rendering. Answering None instead defers such reads to
     /// compiler facts and the returned-adapter classifiers.
     pub(super) admitted: bool,
+    /// A `Show` or `Match` child of `length` 0: a value, run where it is read.
+    pub(super) value_child: bool,
     pub(super) untracked_callback: bool,
     /// The function is a map function: untracked in no window (ADR 0443).
     pub(super) untracked_unwindowed: bool,
@@ -502,8 +504,22 @@ pub(crate) fn named_callback_roles(
     // Identity-exact, like the tracked/deferred arms above -- the attribute
     // value must *be* the function, so `onClick={() => handler()}` keeps
     // classifying the arrow rather than `handler`.
+    // One denied delivery denies the function, whatever else it is bound to.
+    let denied = file
+        .compiler
+        .callback_roles
+        .iter()
+        .filter(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && super::handler_event_denied(file, callback.span)
+        })
+        .flat_map(|callback| index.identity_at(file, entities, callback.span))
+        .map(|candidate| index.functions[*candidate])
+        .collect::<HashSet<_>>();
     for callback in &file.compiler.callback_roles {
-        if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler {
+        if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler
+            || super::handler_event_denied(file, callback.span)
+        {
             continue;
         }
         // The attribute value must be a bare identifier reference.
@@ -519,6 +535,9 @@ pub(crate) fn named_callback_roles(
         }
         for candidate in index.identity_at(file, entities, callback.span) {
             let function = index.functions[*candidate];
+            if denied.contains(&function) {
+                continue;
+            }
             let entry = roles.entry(function);
             entry.admitted = true;
             entry.deferred = true;
@@ -573,12 +592,40 @@ pub(crate) fn named_callback_roles(
             index.named_at(file, entities, identifier.span, &mut named);
             for candidate in &named {
                 let function = index.functions[*candidate];
-                roles.entry(function).admitted = true;
+                // `Show` and `Match` call a function child only when its
+                // `length` is above 0; else it is a value, run wherever it is
+                // read: no untrack of theirs says anything about that run.
+                let value =
+                    known_primitive(&primitives.jsx[element_index]).is_some_and(|primitive| {
+                        dialect.children_callback_requires_parameters(primitive)
+                    }) && file
+                        .ast
+                        .function_at(function)
+                        .is_some_and(|function| function_length(function) == 0);
+                let entry = roles.entry(function);
+                entry.admitted = true;
+                entry.value_child |= value;
                 roles.admit_at(function, identifier.span);
             }
         }
     }
     roles
+}
+
+/// A function's runtime `length`: the parameters before the first default or
+/// the rest parameter.
+pub(crate) fn function_length(function: &solid_facts::ast::FunctionFact) -> usize {
+    function
+        .parameters
+        .iter()
+        .take_while(|parameter| parameter.initializer.is_none())
+        .count()
+        .min(
+            function
+                .parameters
+                .len()
+                .saturating_sub(usize::from(function.rest_parameter)),
+        )
 }
 
 /// The innermost function around `span` that a callback position of its file
@@ -653,6 +700,10 @@ pub(crate) fn named_at_tracked_position(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    // ADR 0874: its position says nothing while an impostor may run it.
+    if runs_in_withheld_layer(file, span, lookup) {
+        return false;
+    }
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         let role = lookup.named_callback_roles(file).get(function.span);
         role.tracked || role.effect_compute
@@ -769,6 +820,11 @@ pub(crate) fn named_callback_execution_role(
         Some(role_arm!(
             "named_callbacks.named_callback_execution_role.tracked-jsx-2",
             ExecutionRole::TrackedJsx
+        ))
+    } else if role.value_child {
+        Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.value-child",
+            ExecutionRole::Unknown
         ))
     } else {
         Some(role_arm!(

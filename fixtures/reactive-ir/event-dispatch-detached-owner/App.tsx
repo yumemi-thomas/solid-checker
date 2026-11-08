@@ -6,7 +6,7 @@ const [count, setCount] = createSignal(0);
 // read are proven event-only, and its effect proven ownerless, is what the
 // dispatch below decides.
 export function Card() {
-  const el = document.createElement("input");
+  const el = document.querySelector("input")!;
   runWithOwner(null, () => el.click());
   return (
     <button

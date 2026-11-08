@@ -2,29 +2,10 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
-      "start": 527,
-      "end": 537,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
-      "start": 604,
-      "end": 614,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
       "start": 1612,
@@ -55,7 +36,19 @@
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
+      "blocker": "async-component-prop",
       "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 2614,
+      "end": 2624,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
       "start": 2614,
       "end": 2624,

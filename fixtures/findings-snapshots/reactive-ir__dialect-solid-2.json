@@ -10,7 +10,7 @@
       "start": 1340,
       "end": 1352,
       "fixes": 0,
-      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+      "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
@@ -22,13 +22,14 @@
       "start": 1981,
       "end": 1993,
       "fixes": 0,
-      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+      "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
       "start": 2029,
@@ -46,7 +47,7 @@
       "start": 2029,
       "end": 2041,
       "fixes": 0,
-      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+      "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
@@ -58,13 +59,14 @@
       "start": 2097,
       "end": 2109,
       "fixes": 0,
-      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+      "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
       "start": 2166,
@@ -82,25 +84,27 @@
       "start": 2166,
       "end": 2178,
       "fixes": 0,
-      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+      "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "uncertifiable",
+      "blocker": "effect-runtime-entry-uncertain",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
       "start": 2718,
       "end": 2730,
       "fixes": 0,
-      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect; a use-server directive makes the selected Solid runtime entry unknown, so this is a client-runtime proof obligation rather than a proven defect",
+      "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect; a use-server directive makes the selected Solid runtime entry unknown, so this is a client-runtime proof obligation rather than a proven defect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument. Prove the effective client/server entry through project compiler facts before treating this as a violation."
     },
     {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
       "start": 2988,
@@ -118,8 +122,21 @@
       "start": 3326,
       "end": 3336,
       "fixes": 0,
-      "message": "createMemo is marked sync: true but its computation can return a Promise or AsyncIterable; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is",
+      "message": "createMemo is marked sync: true but its computation returns a Promise or AsyncIterable; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is",
       "hint": "Drop sync: true and let the read suspend to a <Loading> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here."
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 3326,
+      "end": 3367,
+      "fixes": 0,
+      "message": "the runtime target of this value cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior",
+      "hint": "Narrow the value to one exact implementation, or wrap the alternatives in an adapter whose body is available to solid-checker and has one explicit reactive behavior."
     },
     {
       "rule": "missing-owner",
@@ -144,6 +161,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "blocker": "effect-argument-shape-uncertain",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 4382,
+      "end": 4396,
+      "fixes": 0,
+      "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect; the runtime effect argument may be callable or non-callable, so neither failure nor safety is proven",
+      "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument. Pass a statically resolved callable function or an exact effect bundle to certify safety."
     },
     {
       "rule": "missing-owner",
@@ -173,6 +203,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
       "start": 5769,

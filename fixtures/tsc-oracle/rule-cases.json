@@ -73,6 +73,10 @@
         {
           "rule": "strict-read-untracked",
           "why": "The reactive-read finding concerns reading a source outside tracking while forming the target; TS2345 concerns whether the resulting value carries the refresh brand."
+        },
+        {
+          "rule": "reactive-dispatch-unresolved",
+          "why": "The census row is an internal uncertifiable naming where the store root `state` goes (an argument of refresh()); TS2345 concerns the target's type."
         }
       ],
       "why": "SC7003, removed 2026-08-17. `Refreshable<T> = T & { readonly [$REFRESH]: any }` encodes the source brand *as a type*, so every target shape the rule proved invalid -- a wrapper thunk, a read value, an object literal, a plain accessor, a store child record, and a value-form store -- is TS2345 against it. A valid target type-checks, so the type draws the same line the rule drew. TypeScript 7.1 reports the object literal `{}` as TS2741 (`Property '[$REFRESH]' is missing in type '{}'`) where 5.9.3 reported TS2345: a general 7.1 change of the code for a missing required property, same error and span, so the rule stays tsc-redundant (ADR 0361).",
@@ -99,6 +103,10 @@
         {
           "rule": "strict-read-untracked",
           "why": "The reactive-read finding concerns invoking an accessor outside tracking; TS2345 concerns passing that returned value as an affects target."
+        },
+        {
+          "rule": "reactive-dispatch-unresolved",
+          "why": "The census rows are internal uncertifiables naming where `memo` and `signalGet` go (an argument of affects()); TS2345 concerns the extra key argument."
         }
       ],
       "why": "SC7004, removed 2026-08-17. A key on an accessor target selects the one-argument `affects(target: Accessor<unknown> | Store<object>)` overload, whose second parameter does not exist, so TypeScript reports TS2345 on the key itself -- exactly the rule's claim.",
@@ -247,6 +255,12 @@
       "dialect": "v2",
       "expect": "removed-because-redundant",
       "checker": "silent",
+      "distinctFindings": [
+        {
+          "rule": "reactive-dispatch-unresolved",
+          "why": "The census row is an internal uncertifiable naming where `label` goes (a computed key); TS2538 concerns its type as an index."
+        }
+      ],
       "why": "SC1005's three typed value positions, narrowed 2026-08-17: a native JSX attribute (TS2322 -- an accessor is never assignable to a DOM attribute's type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), and a computed property access (TS2538, \"cannot be used as an index type\"). All three hold in both dialects. The rule SURVIVES on the positions TypeScript permits -- see the sibling `silent` case.",
       "allow": [
         2322,
@@ -347,8 +361,25 @@
       "expect": "silent",
       "checker": "reports",
       "checkerCount": 1,
-      "why": "SC2003's surviving store arms in 2.0, each a write TypeScript accepts while the runtime drops it. The cast is the one that constrains the implementation: `member_root` resolves through it, so the narrowing must require the written member's object to be a bare *identifier* rather than merely equal to the resolved root span. The capitalized ordinary helper with no JSX result is a negative control: its parameter is not component props merely because the function is named `Props`. A nested write (`profile.user.name = ...`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass; it is pinned by the fixtures `store-write-chain-links` and `store-write-chain-links-loose`.",
-      "code": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// A cast erases the root's readonly-ness from a root property.\nexport function Cast() {\n  (profile as { count: number }).count = 1;\n}\n// A props member is not readonly at all.\nexport function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
+      "why": "SC2003's surviving store arms in 2.0, each a write TypeScript accepts while the runtime drops it. The cast is the one that constrains the implementation: `member_root` resolves through it, so the narrowing must require the written member's object to be a bare *identifier* rather than merely equal to the resolved root span. A nested write (`profile.user.name = ...`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass; it is pinned by the fixtures `store-write-chain-links` and `store-write-chain-links-loose`.",
+      "code": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// A cast erases the root's readonly-ness from a root property.\nexport function Cast() {\n  (profile as { count: number }).count = 1;\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "The negative control case 32 held: a capitalized helper with no JSX result is not component props merely because the function is named `Props`, so its write is no violation. Exported, its callers are open and one may hand a store, so it stays a named obligation (ADR 0719). The closed twin below answers silent.",
+      "code": "export function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The closed twin of the control above: every caller is visible and hands a plain literal, so `props` is no store and no component's props, and the name proves nothing.",
+      "code": "function Props(props: { n: number }) {\n  props.n = 1;\n}\nProps({ n: 0 });\n"
     },
     {
       "rule": "reactive-dispatch-unresolved",
@@ -519,7 +550,15 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "SC4003's keystone. A boundary element at module scope is perfectly well typed -- it is just an element. The claim is an ownership one: created with no reactive owner above it, the boundary can never be disposed, and the subtree it manages leaks for the lifetime of the app.",
+      "why": "SC4003's keystone. A boundary created by a call at module scope is perfectly well typed. The claim is an ownership one: created with no reactive owner above it, rc.21 warns NO_OWNER_BOUNDARY and the boundary can never be disposed.",
+      "code": "import { Loading } from \"solid-js\";\nexport const Orphan = Loading({ fallback: 0, children: 1 });\n"
+    },
+    {
+      "rule": "missing-owner",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "ADR 0869: the JSX form is no owner site. rc.21's dev `createComponent` runs the component under its own transparent root, so Chrome is quiet at module scope and the checker says nothing.",
       "code": "import { Loading } from \"solid-js\";\nexport const Orphan = <Loading>{null}</Loading>;\n"
     },
     {
@@ -552,7 +591,7 @@
       "expect": "silent",
       "checker": "reports",
       "why": "`resolve` returns a Promise and is called correctly; the claim is that the runtime's observer guard throws when it runs directly in a tracked scope.",
-      "code": "import { createMemo, resolve } from \"solid-js\";\nexport const value = createMemo(() => resolve(() => 1));\n"
+      "code": "import { createMemo, resolve } from \"solid-js\";\nexport function Value() {\n  const value = createMemo(() => resolve(() => 1));\n  return <div>{String(value())}</div>;\n}\n"
     },
     {
       "rule": "sync-computation-received-async",
@@ -800,8 +839,8 @@
       "sourceExtension": "ts",
       "expect": "silent",
       "checker": "silent",
-      "why": "The compiler proves the alias contains only strings, booleans, null, and finite numeric literals. Those values are all faithfully JSON-serializable, so no transport obligation remains.",
-      "code": "type Safe = string | boolean | null | 0 | 1.5;\ndeclare const safe: Safe;\nexport async function save(value: Safe) {\n  \"use server\";\n  return value;\n}\nvoid save(safe);\n"
+      "why": "The compiler proves the alias contains only strings, booleans, and null. Those values are all faithfully JSON-serializable, so no transport obligation remains. A numeric domain stays open: it does not say whether it holds `0`, and TypeScript types `-0` as `0` (ADR 0707).",
+      "code": "type Safe = string | boolean | null;\ndeclare const safe: Safe;\nexport async function save(value: Safe) {\n  \"use server\";\n  return value;\n}\nvoid save(safe);\n"
     },
     {
       "rule": "server-function-rich-argument",
@@ -1125,9 +1164,20 @@
       "sourceExtension": "ts",
       "expect": "silent",
       "checker": "reports",
-      "checkerCount": 9,
+      "checkerCount": 5,
       "why": "SC2003's in-place array arm (ADR 0425). All nine `Array.prototype` mutators on a store that is itself the array type-check on the audited rc.17 (`Store<T> = T`), while the proxy's `set` trap returns without storing outside a setter (rc.17 `dist/dev.js:5691-5700`; probed: every mutator dropped, STORE_WRITE_OUTSIDE_SETTER warned). The call must resolve to the standard library's `Array` method: the project fixture `store-mutators` pins the silent spellings. The receiver reads no link past the root, so the finding is a violation in both passes; a mutator through a link (`store.items.push(1)`) is a violation only under strictNullChecks (ADR 0465), so its kinds differ by pass and it is pinned by the fixtures `store-mutators`, `store-write-chain-links` and `store-write-chain-links-loose`.",
-      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutators() {\n  list.push(1);\n  list.pop();\n  list.shift();\n  list.unshift(0);\n  list.splice(0, 1);\n  list.sort();\n  list.reverse();\n  list.fill(7);\n  list.copyWithin(0, 1);\n}\n"
+      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutators() {\n  list.push(1);\n  list.pop();\n  list.shift();\n  list.unshift(0);\n  list.splice(0, 1);\n}\n"
+    },
+        {
+      "rule": "no-store-mutation-outside-setter",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 4,
+    "checkerKind": "uncertifiable",
+      "why": "SC2003's in-place array arm, the four mutators with no length fact (ADR 0718): `sort`, `reverse`, `fill` and `copyWithin` write nothing on an empty or short array, so with no fact for the array's length the finding is uncertifiable, `store-operation-may-not-write`, in both passes. The five that always write are the case before this one.",
+      "code": "import { createStore } from \"solid-js\";\nconst [list] = createStore([3, 1, 2]);\nexport function Mutators() {\n  list.sort();\n  list.reverse();\n  list.fill(7);\n  list.copyWithin(0, 1);\n}\n"
     },
     {
       "rule": "no-store-mutation-outside-setter",
@@ -1182,11 +1232,15 @@
       "sourceExtension": "ts",
       "expect": "removed-because-redundant",
       "checker": "silent",
+      "checkerByPass": {
+        "loose": "reports"
+      },
+      "checkerKind": "uncertifiable",
       "allow": [
         2790
       ],
-      "why": "`delete store.path` on a property TypeScript rejects (ADR 0461 keeps it out). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's. `nick` below type-checks here (its type includes `undefined`) but is TS2790 under `exactOptionalPropertyTypes`, so the checker reports only a property the Type Fact `writableOptionalProperty` marks optional and not readonly, and stays silent on both. Not strict-only in the checker's favour: a non-strict project is silent in `tsc` too, and the checker's silence there is the fail-closed default.",
-      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 }, user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.req.id;\n  delete store.user.nick;\n}\n"
+      "why": "`delete store.path` on a property TypeScript rejects (ADR 0461 keeps it out). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's and the checker is silent in the strict project. Without strictNullChecks `tsc` accepts the same bytes, so silence there would be a false clean: the producer's `deleteOperandRejected` answers no and the checker reports it uncertifiable, `delete-operand-unproven` (ADR 0829), hence `checkerByPass.loose`. `nick`, which type-checks in both projects, is its own case at the end of this file.",
+      "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 } });\nexport function Remove() {\n  delete store.req.id;\n}\n"
     },
     {
       "rule": "no-store-mutation-outside-setter",
@@ -1229,6 +1283,19 @@
       "checkerCount": 3,
       "why": "SC7006's module-level arm (ADR 0427): under a module-level directive a module-scope call to a client-side declaration wrapper never runs on the client (`GET` here, imported from the real `@solidjs/web/server-functions`), a literal export makes `registerServerReference` throw at server boot (rc.17 `server-functions/dist/server.js:1567-1571`), and a re-export is a compiler error. TypeScript types all three without comment; a wrapped server-side export (`withValidation(schema, fn)`) is not a defect and is not here.",
       "code": "\"use server\";\nimport { GET } from \"@solidjs/web/server-functions\";\nexport const getUser = GET(async (id: string) => ({ id }));\nexport const LIMIT = 10;\nexport { createSignal } from \"solid-js\";\nexport async function ok() {\n  return 1;\n}\n"
-    }
+    },
+    {"rule": "loading-on-accessor", "dialect": "v2", "expect": "silent", "checker": "reports", "why": "`Loading`'s `on` is typed `any`, so a function there type-checks; rc.21 warns LOADING_ON_ACCESSOR on the boundary's first run (ADR 0624).", "code": "import { Loading, createSignal } from \"solid-js\";\nexport const Case = () => {\n  const [route] = createSignal(0);\n  return <Loading on={route} fallback=\"x\"><div /></Loading>;\n};\n"},
+    {"rule": "on-flush-in-owned-scope", "dialect": "v2", "expect": "silent", "checker": "reports", "why": "`onFlush(callback: () => void)` is well typed anywhere; the claim is where it runs: rc.21 warns ON_FLUSH_IN_OWNED_SCOPE under a children-capable owner (ADR 0625).", "code": "import { onFlush } from \"solid-js\";\nexport const Case = () => {\n  onFlush(() => {});\n  return <div />;\n};\n"},
+    {"rule": "strict-read-untracked", "dialect": "v2", "expect": "silent", "checker": "reports", "why": "ADRs 0620, 0621: `deep`, `Object.values` and an iteration of a store are well typed; the claim is that they read it outside tracking, and rc.21 warns STRICT_READ_UNTRACKED in the body.", "code": "import { createStore, deep } from \"solid-js\";\nexport const Case = () => {\n  const [row] = createStore({ a: 1 });\n  const [list] = createStore<number[]>([1]);\n  const copy = deep(row);\n  const items = [...list];\n  return <div>{copy.a}{items.length}</div>;\n};\n", "checkerCount": 2},
+    {"rule": "pending-async-unsuspendable-read", "dialect": "v2", "expect": "silent", "checker": "reports", "why": "ADR 0619: `untrack` of a memo is well typed; rc.21 keeps the pending throw for a source the strict body itself created.", "code": "import { createMemo, untrack } from \"solid-js\";\nexport const Case = () => {\n  const m = createMemo(async () => 1);\n  const v = untrack(() => m());\n  return <div>{v}</div>;\n};\n"},
+    {"rule": "optimistic-write-before-load", "dialect": "v2", "expect": "silent", "checker": "reports", "why": "ADR 0636's keystone. `createOptimistic(async () => 1)` and a call of its setter are well typed against the published rc.21 typings. The claim is about time: the setter of an async source that has not answered throws OPTIMISTIC_WRITE_BEFORE_LOAD, and no type says whether the first answer has landed.", "code": "import { createOptimistic } from \"solid-js\";\nexport const Case = () => {\n  const [value, setValue] = createOptimistic(async () => 1);\n  setValue(2);\n  return <div>{value()}</div>;\n};\n"},
+    {"rule": "optimistic-write-before-load", "dialect": "v2", "expect": "silent", "checker": "silent", "why": "The negative beside the keystone: the same call with a plain value has its answer from the start, so the write is legal, and the two spellings differ only in a value no type marks.", "code": "import { createOptimistic } from \"solid-js\";\nexport const Case = () => {\n  const [value, setValue] = createOptimistic(1);\n  setValue(2);\n  return <div>{value()}</div>;\n};\n"},
+    {"rule": "caught-reactive-read", "dialect": "v2", "expect": "silent", "checker": "reports", "why": "ADR 0637's keystone. A `try` around an accessor read is well typed, and `catch` takes whatever is thrown. The claim is the runtime's: the pending read's throw is the compute's suspension, the catch swallows it and the compute completes, so rc.21 warns CAUGHT_REACTIVE_READ. No type describes a read's throw.", "code": "import { createMemo } from \"solid-js\";\nexport const Case = () => {\n  const memo = createMemo(async () => 1);\n  const safe = createMemo(() => {\n    try {\n      return memo();\n    } catch {\n      return 0;\n    }\n  });\n  return <div>{safe()}</div>;\n};\n"},
+    {"rule": "caught-reactive-read", "dialect": "v2", "expect": "silent", "checker": "silent", "why": "The negative beside the keystone: the catch rethrows, so the suspension goes on and rc.21 reports nothing, with the same types.", "code": "import { createMemo } from \"solid-js\";\nexport const Case = () => {\n  const memo = createMemo(async () => 1);\n  const safe = createMemo(() => {\n    try {\n      return memo();\n    } catch (error) {\n      throw error;\n    }\n  });\n  return <div>{safe()}</div>;\n};\n"},
+    {"rule": "no-store-mutation-outside-setter", "dialect": "v2", "sourceExtension": "ts", "expect": "silent", "checker": "reports", "checkerKind": "uncertifiable", "why": "Split from the `req.id` case above (ADR 0829). `nick`'s type includes `undefined`, so `delete store.user.nick` type-checks in both projects, but the property is not declared optional, so it is TS2790 under `exactOptionalPropertyTypes` and the Type Fact `writableOptionalProperty` does not mark it. The proxy drops the delete outside a setter (rc.17 `deleteProperty` trap), and nothing proves it optional or rejected, so the checker reports it uncertifiable, `delete-operand-unproven`, in both projects, never silent.", "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.user.nick;\n}\n"},
+    {"rule": "missing-effect-function", "dialect": "v2", "sourceExtension": "ts", "expect": "silent", "checker": "reports", "why": "ADR 0830's keystone for a suppressed rejection. The one-argument call is TS2554 at the callee (case 9), but a `// @ts-ignore` on the line above silences it in both compilers, so nothing reports the call, and the rc.21 client runtime throws MISSING_EFFECT_FN there (probed). The rule's claim is then its own: a violation, because the directive is exact on the diagnostic's line.", "code": "import { createEffect } from \"solid-js\";\nexport function inOwner() {\n  // @ts-ignore\n  createEffect(() => 1);\n}\n"},
+    {"rule": "missing-effect-function", "dialect": "v2", "sourceExtension": "ts", "expect": "removed-because-redundant", "checker": "silent", "allow": [2554], "why": "ADR 0830's negative: the same call with the directive on another line. `// @ts-ignore` covers only the line below it (`const unused`), and a non-comment line ends the walk upwards, so TS2554 stands on the call and the claim is TypeScript's: silent, and no other finding shares its subject.", "code": "import { createEffect } from \"solid-js\";\nexport function inOwner() {\n  // @ts-ignore\n  const unused: number = \"a\";\n  createEffect(() => 1);\n}\n"},
+    {"rule": "no-store-mutation-outside-setter", "dialect": "v2", "sourceExtension": "ts", "expect": "silent", "checker": "reports", "why": "ADR 0830: `delete store.v!` is TS2703 at the operand (case 129), but a `// @ts-ignore` on the line above silences it in both compilers. The emitted delete is `delete store.v`, which reaches the proxy's `deleteProperty` trap outside a setter and warns STORE_WRITE_OUTSIDE_SETTER (probed): a violation, the operand judged as the optional member under the assertion.", "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  // @ts-ignore\n  delete store.v!;\n}\n"},
+    {"rule": "no-store-mutation-outside-setter", "dialect": "v2", "sourceExtension": "ts", "expect": "removed-because-redundant", "checker": "silent", "allow": [2703], "why": "ADR 0830's negative beside it: the directive covers `const unused` only, so TS2703 stands on the asserted operand, the delete is TypeScript's, and the checker is silent.", "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  // @ts-ignore\n  const unused: number = \"a\";\n  delete store.v!;\n}\n"}
   ]
 }

@@ -5,6 +5,7 @@
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
+      "blocker": "dialect-detection",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc9-reexport-gap-namespace-escape/node_modules/solid-js/package.json",
       "start": 0,

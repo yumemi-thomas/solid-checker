@@ -135,6 +135,7 @@
       "rule": "valid-use-server",
       "code": "SC7006",
       "kind": "uncertifiable",
+      "blocker": "server-export-value-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/valid-use-server-wrappers/exports.ts",
       "start": 526,

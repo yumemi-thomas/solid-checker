@@ -5,6 +5,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 408,
@@ -15,6 +16,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 563,
@@ -22,9 +24,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 690,
+      "end": 708,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 699,
@@ -32,9 +46,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 788,
+      "end": 806,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 797,
@@ -42,9 +68,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 925,
+      "end": 943,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 934,
@@ -52,9 +90,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1075,
+      "end": 1093,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 1084,
@@ -62,9 +112,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1246,
+      "end": 1279,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 1255,
@@ -72,9 +134,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1410,
+      "end": 1428,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 1419,
@@ -82,9 +156,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1548,
+      "end": 1566,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 1557,
@@ -92,9 +178,21 @@
       "fixes": 0
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
+      "start": 1664,
+      "end": 1682,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-declared-keys-open/App.tsx",
       "start": 1673,

@@ -29,18 +29,44 @@ use typefacts::Location;
 pub(crate) struct Emission {
     pub(super) requirements: Vec<OwnerRequirement>,
     pub(super) gates: Vec<((String, u64, u64), LeafGateDecision)>,
-    /// The provider-free verdict of each context a `useContext` read named
-    /// (`Some(proven)`: provider-free, its lack of a default proven or not).
-    pub(super) provider: Vec<(Location, Option<bool>)>,
+    /// The census's verdict for each context a `useContext` read named
+    /// (`None`: no project context with no default).
+    pub(super) provider: Vec<(Location, Option<ContextVerdict>)>,
+    /// ADR 0713: reads of an open context no provider is proven above.
+    pub(super) static_violations: Vec<crate::StaticViolation>,
     /// Each `onSettled` cleanup's resolved callback node and its file's hash.
     pub(super) callbacks: Vec<(OwnerTarget, Option<NodeId>, Option<SourceHash>)>,
+    /// ADR 0886: each silent site and the closed proof that ended it, for
+    /// the check-once pass (`unaccounted_owner_sites`).
+    pub(super) accounted: Vec<(Span, ContextProof)>,
+}
+
+/// ADR 0886: why an owner-requiring site is silent. Each names a reviewed
+/// premise; a silent site with none is `execution-context-unaccounted`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ContextProof {
+    /// ADR 0458's never-runs proof (`SiteReach`), or a dormant export under
+    /// ADR 0347's closed-program census.
+    NeverRuns,
+    /// ADR 0534: a providing region answers, its chain proven to run in it.
+    SynchronousRegion,
+    /// Every edge into the site's function is owned (the context holds no
+    /// unowned bit; ADR 0868 closed the entries).
+    OwnedContext,
+    /// An owned context whose only other bit is a leaf: the site runs under
+    /// a leaf owner, SC3001's claim, not an unowned run (ADR 0347 amendment).
+    LeafOwned,
+    /// ADR 0867: the settled callback is proven to return no cleanup.
+    NoCleanupReturned,
+    /// ADR 0867: tsc rejects the call; nothing runs.
+    TscRejectedCall,
 }
 
 pub(super) struct EmissionInputs<'a, 'f, 'i> {
     pub(super) facts: &'a ProjectFacts,
     pub(super) lookup: &'a SemanticLookup<'f>,
     pub(super) indexes: &'a ProjectIndexes<'i>,
-    pub(super) provider_free: &'a HashMap<Location, bool>,
+    pub(super) provider_free: &'a HashMap<Location, ContextVerdict>,
 }
 
 impl EmissionInputs<'_, '_, '_> {
@@ -49,7 +75,7 @@ impl EmissionInputs<'_, '_, '_> {
         emission
             .provider
             .iter()
-            .all(|(key, free)| self.provider_free.get(key).copied() == *free)
+            .all(|(key, verdict)| self.provider_free.get(key).copied() == *verdict)
             && emission.callbacks.iter().all(|(target, node, hash)| {
                 graph.resolve_target(pid, target) == *node
                     && self.callback_hash(graph, *node) == *hash
@@ -114,6 +140,24 @@ pub(super) fn emit_file(
             .context(pid, *span)
             .unwrap_or(OWNER_CONTEXT_LEAVES_REGION)
     };
+    // ADR 0868: the function making a run at `at` holds context zero (no
+    // edge reaches it) and is not proven never to run.
+    let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
+        lookup.note_file_read(caller_file);
+        graph
+            .path_id(caller_file.path.as_str())
+            .is_some_and(|caller_pid| {
+                caller_file
+                    .ast
+                    .innermost_function_owning(at)
+                    .is_some_and(|caller| {
+                        graph
+                            .node_context(caller_pid, caller.span)
+                            .is_some_and(|(_, context)| context == 0)
+                            && reach.function_runs(caller_file, caller)
+                    })
+            })
+    };
     for candidate in &entry.fragment.requirements {
         let owner = candidate
             .owner
@@ -137,6 +181,9 @@ pub(super) fn emit_file(
                     leaf_gate_decision(owner),
                 ));
             }
+            emission
+                .accounted
+                .push((candidate.operation_span, ContextProof::NeverRuns));
             continue;
         }
         // The role log's answer for this candidate (ADR 0533): which arm set
@@ -205,14 +252,12 @@ pub(super) fn emit_file(
         // it was handed to, the holder of a member it was assigned to, a
         // timer constructing its class, a getter's reader) is not followed,
         // and no region it is written in answers for it. The operation is
-        // unplaced, never certified. A JSX boundary (`allow_uncertain` false)
-        // keeps today's answer.
+        // unplaced, never certified.
         let unplaced_callback = context
             & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED | OWNER_CONTEXT_PROVEN_UNOWNED)
             == 0
             && !candidate.in_parameter_list
             && !returned_unplaced
-            && candidate.allow_uncertain
             && !region_answers
             && !exported_seed
             && candidate.owner.is_some_and(|span| !unreached(&span));
@@ -222,12 +267,12 @@ pub(super) fn emit_file(
             context = OWNER_CONTEXT_UNOWNED;
         }
         // As in the fragment: effects, cleanups, context reads and boundary
-        // calls, never a JSX boundary or `onSettled`'s returned cleanup. A
+        // calls, never `onSettled`'s returned cleanup. A
         // context read after an `await` is unowned (ADR 0352), and so is a
         // `Loading(props)` call (ADR 0462).
         let continuation_placed = matches!(
             candidate.operation,
-            "effect" | "cleanup" | "context-read" | "boundary-call"
+            "effect" | "jsx-effect" | "cleanup" | "context-read" | "boundary-call"
         );
         // ADR 0488: a settled cleanup's operation span is its callback; the
         // `onSettled` call that takes it runs after the await when its callee
@@ -303,12 +348,28 @@ pub(super) fn emit_file(
         let step_resumption = possible_site
             .filter(|_| !after_await && context != 0)
             .and_then(|site| action_step_resumption(file, site, lookup));
-        let after_yield = step_resumption == Some(StepResumption::Proven);
+        // ADR 0851: the same past a `yield` of a generator its async caller
+        // steps across one of its suspensions (`for await`, a loop that
+        // awaits): that step is called from the caller's continuation.
+        let generator_resumed = possible_site
+            .filter(|_| !after_await && context != 0 && step_resumption.is_none())
+            .and_then(|site| crate::execution_role::generator_step_resumption(file, site, lookup));
+        // ADR 0852: a throw in the step rejects the async caller's flight.
+        // Its owner context proves the guard, not propagation to an observed
+        // read or error boundary. Keep the context-read obligation open.
+        let flight_error_unobserved = candidate.operation == "context-read"
+            && generator_resumed.is_some()
+            && possible_site.is_some_and(|site| {
+                crate::execution_role::generator_flight_stepped(file, site, lookup)
+            });
+        let after_yield =
+            step_resumption == Some(StepResumption::Proven) || generator_resumed == Some(true);
         let after_await = after_await || after_yield;
         let possible_continuation = possible_site.filter(|_| !after_await).and_then(|site| {
             possible_await_continuation_context(file, site, context).or_else(|| {
-                (step_resumption == Some(StepResumption::Possible))
-                    .then(|| owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
+                (step_resumption == Some(StepResumption::Possible)
+                    || generator_resumed == Some(false))
+                .then(|| owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
             })
         });
         let context = if after_await {
@@ -331,36 +392,100 @@ pub(super) fn emit_file(
         }
         // A read of a provider-free context under an owner throws
         // `ContextNotFoundError` (ADR 0352).
-        let provider_verdict = (candidate.operation == "context-read")
+        // `Some(None)`: the argument names no binding exactly (ADR 0713).
+        let context_key = (candidate.operation == "context-read")
             .then_some(candidate.context_argument)
             .flatten()
-            .and_then(|argument| context_key_at(lookup, file, argument))
-            .and_then(|key| {
-                let free = inputs.provider_free.get(&key).copied();
-                emission.provider.push((key, free));
-                free
-            });
+            .map(|argument| context_key_at(lookup, file, argument));
+        let verdict = context_key.as_ref().and_then(|key| {
+            let key = key.as_ref()?;
+            let verdict = inputs.provider_free.get(key).copied();
+            emission.provider.push((key.clone(), verdict));
+            verdict
+        });
+        let provider_verdict = match verdict {
+            Some(ContextVerdict::Free(proven)) => Some(proven),
+            _ => None,
+        };
         let provider_free_read = provider_verdict.is_some();
+        // ADR 0713: a read of a context a provider may supply somewhere, run
+        // under an owner, throws `ContextNotFoundError` unless a provider is
+        // above it: proven only by every render of its function sitting
+        // under one (`provided_above`), else an obligation.
+        // A key the census does not know (an alias, a parameter, an
+        // unresolved import) is open too: nothing proves a default.
+        let open_key = match &context_key {
+            Some(None) => Some(None),
+            Some(Some(key)) if matches!(verdict, None | Some(ContextVerdict::Open)) => {
+                Some(Some(key))
+            }
+            _ => None,
+        };
+        if let Some(key) = open_key
+            && !after_await
+            && possible_continuation.is_none()
+            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+            && !key.is_some_and(|key| {
+                // A `let` may hold another context at the provider than at
+                // the read: the binding's identity proves nothing then.
+                let constant = candidate.context_argument.is_some_and(|argument| {
+                    lookup
+                        .binding_at_reference(
+                            file.path.as_str(),
+                            file.ast.peel_ts_sugar_span(argument),
+                        )
+                        .is_some_and(|(_, binding, _)| binding.immutable)
+                });
+                constant
+                    && containing_ast_function(&file.ast, candidate.operation_span)
+                        .is_some_and(|reading| provided_above(lookup, file, reading, key))
+            })
+        {
+            let here = location(file.path.shared(), candidate.operation_span);
+            if !emission
+                .static_violations
+                .iter()
+                .any(|known| known.location == here)
+            {
+                emission.static_violations.push(crate::StaticViolation {
+                    id: "SC4002".into(),
+                    rule: "missing-context-provider".into(),
+                    // ADR 0792: true of every open key. An open context may
+                    // have a default the syntax cannot rule out, or be only
+                    // exported or handed on, and an unknown key names none.
+                    message: "this read runs under an owner, and nothing proves a default for \
+                              its context or a provider above every render of the function \
+                              reading it; Solid throws `ContextNotFoundError` where a context \
+                              with no default has no provider above"
+                        .into(),
+                    hint: "Render a provider above every use of this component, or give the \
+                           context a default."
+                        .into(),
+                    location: here,
+                    analysis_context: crate::blockers::PROVIDER_NOT_PROVEN_ABOVE.into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+        }
         // ADR 0575: a default the syntax does not prove is not `undefined`.
         let default_unproven = provider_verdict == Some(false);
-        // A JSX boundary keeps the answer by detaching bits alone (ADR 0534
-        // scopes the proven-run requirement to the operations that can be
-        // obligations).
-        // ADR 0612: and a region's owner is the synchronous run's: past an await
+        // ADR 0612: a region's owner is the synchronous run's: past an await
         // of its compute (`createMemo(async () => { await p; createEffect(…) })`)
         // none is current, whatever the region provides.
         let root_owned = !after_await
             && possible_continuation.is_none()
             && !candidate.in_parameter_list
             && !returned_unplaced
-            && if candidate.allow_uncertain {
-                region_answers
-            } else {
-                root_owned_at(candidate.providing_region_chain.as_deref(), context_of)
-            };
+            && region_answers;
         // A providing region owns its reads, so a provider-free read there is
         // a provider finding, not an owner question (ADR 0352).
-        let provider = provider_free_read && (root_owned || owned_on_every_path(context));
+        // ADR 0866 amendment: a read under `if (getOwner())` in the same
+        // invocation runs only with an owner, past any suspension or pass.
+        let probe_owned = provider_free_read
+            && crate::owners::guarded_by_owner_probe(file, candidate.operation_span, lookup);
+        let provider =
+            provider_free_read && (root_owned || owned_on_every_path(context) || probe_owned);
         // ADR 0577: a provider-free read whose function runs under an owner
         // on some path and with none on another throws `ContextNotFoundError`
         // on every owned run. That is SC4002's claim; SC4001's unowned run is
@@ -372,18 +497,74 @@ pub(super) fn emit_file(
             && possible_continuation.is_none()
             && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0;
         if root_owned && !provider {
+            // ADR 0868: the region answers for the run its chain proves, not
+            // for a run through a named layer's other entries.
+            let entry_open = named_layer_entry_open(
+                file,
+                candidate.operation_span,
+                candidate.providing_region,
+                lookup,
+                caller_unplaced,
+            );
             crate::role_log::owner(
                 candidate.operation,
                 path,
                 candidate.operation_span,
-                arm_id!("owner_emission.root-owned"),
+                if entry_open {
+                    arm_id!("owner_emission.root-owned-entry-open")
+                } else {
+                    arm_id!("owner_emission.root-owned")
+                },
                 context,
-                true,
+                !entry_open,
             );
+            if entry_open {
+                push_owner_requirement(
+                    &mut emission.requirements,
+                    &mut seen,
+                    candidate.operation,
+                    file,
+                    candidate.operation_span,
+                    OwnerRequirementStatus {
+                        uncertain: true,
+                        runtime_uncertain: false,
+                        caller_uncertain: true,
+                        unplaced_callback: false,
+                        conditional_owner: false,
+                        owner_varies_by_caller: false,
+                        later_run_unowned: false,
+                        component_uncertain: false,
+                        provider_open: false,
+                        default_unproven: false,
+                        owned_run_throws: false,
+                        after_await: false,
+                        after_yield: false,
+                        flight_error_unobserved: false,
+                        context_unaccounted: false,
+                        report: true,
+                    },
+                    lookup,
+                );
+            } else {
+                emission
+                    .accounted
+                    .push((candidate.operation_span, ContextProof::SynchronousRegion));
+            }
             continue;
         }
         if provider {
             arm = arm_id!("owner_emission.provider-free-read");
+            // ADR 0886: SC4002 takes this read because an owner is proven
+            // current on every run of it; that is SC4001's proof too, not
+            // SC4002's row (reviewer D34 keys on the rule).
+            emission.accounted.push((
+                candidate.operation_span,
+                if root_owned {
+                    ContextProof::SynchronousRegion
+                } else {
+                    ContextProof::OwnedContext
+                },
+            ));
         }
         let (operation, report_hit) = if provider {
             ("context-provider", true)
@@ -420,14 +601,16 @@ pub(super) fn emit_file(
                     inputs.callback_hash(graph, target),
                 ));
             }
-            let settled_call_valid = file.ast.calls.iter().any(|call| {
+            // ADR 0867: only a call tsc rejects has nothing to place. A call
+            // with no resolved fact (an `any` callee, a held value) still runs.
+            let settled_call_rejected = file.ast.calls.iter().any(|call| {
                 call.arguments
                     .first()
                     .is_some_and(|argument| argument.span == candidate.operation_span)
                     && lookup
                         .resolved_callee_call(file, call.callee)
                         .is_some_and(|resolved| {
-                            resolved.validity == typefacts::ResolvedCallValidity::Valid
+                            resolved.validity == typefacts::ResolvedCallValidity::Recovery
                         })
             });
             let cleanup_skipped = |arm| {
@@ -443,6 +626,9 @@ pub(super) fn emit_file(
             match cleanup_proof.unwrap_or(CleanupReturnProof::Unresolved) {
                 CleanupReturnProof::NoFunction => {
                     cleanup_skipped(arm_id!("owner_emission.cleanup-no-function"));
+                    emission
+                        .accounted
+                        .push((candidate.operation_span, ContextProof::NoCleanupReturned));
                     continue;
                 }
                 CleanupReturnProof::Function => {}
@@ -450,9 +636,12 @@ pub(super) fn emit_file(
                     // The callback may return a cleanup. Preserve that as
                     // runtime uncertainty instead of certifying it absent.
                 }
-                CleanupReturnProof::Unresolved if settled_call_valid => {}
+                CleanupReturnProof::Unresolved if !settled_call_rejected => {}
                 CleanupReturnProof::Unresolved => {
                     cleanup_skipped(arm_id!("owner_emission.cleanup-unresolved-call"));
+                    emission
+                        .accounted
+                        .push((candidate.operation_span, ContextProof::TscRejectedCall));
                     continue;
                 }
             }
@@ -469,8 +658,26 @@ pub(super) fn emit_file(
             && !later_run_unowned
             && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
             && context & OWNER_CONTEXT_UNOWNED != 0;
-        let caller_uncertain = candidate.allow_uncertain
-            && !proven_unowned
+        // ADR 0687: a `runWithOwner` callback has a nullable owner to name;
+        // anywhere else the callers differ.
+        let owner_varies_by_caller = conditional_owner
+            && !file
+                .ast
+                .arguments_containing(candidate.operation_span)
+                .any(|(call, index)| {
+                    inputs
+                        .lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            inputs
+                                .lookup
+                                .dialect
+                                .callback_semantics_at(primitive, index, call.arguments.len())
+                                .owner
+                                == Some(solid_dialect::CallbackOwner::Conditional)
+                        })
+                });
+        let caller_uncertain = !proven_unowned
             && !unplaced_callback
             && (exported_seed
                 || owner.is_some_and(|(node, _)| open_world_unowned_only(context, node)));
@@ -490,7 +697,8 @@ pub(super) fn emit_file(
         let provider_open = provider && !inputs.lookup.program_closed;
         let default_unproven = provider && default_unproven;
         let unplaced_callback = unplaced_callback && !proven_unowned;
-        let uncertain = runtime_uncertain
+        let uncertain = flight_error_unobserved
+            || runtime_uncertain
             || conditional_owner
             || later_run_unowned
             || caller_uncertain
@@ -505,8 +713,11 @@ pub(super) fn emit_file(
             let default_unproven = provider_verdict == Some(false);
             let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                 || owner.is_some_and(|(node, _)| node.component_uncertain);
-            let uncertain =
-                runtime_uncertain || component_uncertain || provider_open || default_unproven;
+            let uncertain = flight_error_unobserved
+                || runtime_uncertain
+                || component_uncertain
+                || provider_open
+                || default_unproven;
             crate::role_log::owner(
                 "context-provider",
                 path,
@@ -522,11 +733,13 @@ pub(super) fn emit_file(
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
+                    flight_error_unobserved,
                     uncertain,
                     runtime_uncertain,
                     caller_uncertain: false,
                     unplaced_callback: false,
                     conditional_owner: false,
+                    owner_varies_by_caller: false,
                     later_run_unowned: false,
                     component_uncertain,
                     provider_open,
@@ -534,6 +747,7 @@ pub(super) fn emit_file(
                     owned_run_throws: false,
                     after_await: false,
                     after_yield: false,
+                    context_unaccounted: false,
                     report: true,
                 },
                 lookup,
@@ -545,6 +759,72 @@ pub(super) fn emit_file(
             || (candidate.operation == "cleanup"
                 && context & OWNER_CONTEXT_LEAF != 0
                 && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0);
+        // ADR 0868: an owned context is the edges the graph holds. A named
+        // layer entered some other way (assigned, stored, handed on, a
+        // method) may run with no owner, and that run has no edge.
+        // ADR 0902: an operation that is already uncertain (an attributed
+        // alias, a callback whose cleanup return is unproven) and not reported
+        // in its owned context would otherwise go unseen: the open entry is
+        // what reports it.
+        let entry_open = !report
+            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+            && named_layer_entry_open(
+                file,
+                candidate.operation_span,
+                candidate.providing_region,
+                lookup,
+                caller_unplaced,
+            );
+        if entry_open {
+            arm = arm_id!("owner_emission.named-layer-entry-open");
+        }
+        let caller_uncertain = caller_uncertain || entry_open;
+        let uncertain = uncertain || entry_open;
+        // An obligation is a reported requirement, as every other one.
+        let report = report || entry_open;
+        // ADR 0866 amendment (F5's yield half): past a `yield` of a generator
+        // around the site, the site runs on a later `.next()`, wherever that
+        // step is called (a timer, a handler). No owner edge follows a step,
+        // so the context the generator's call gave is no proof.
+        let later_step = !report
+            && !uncertain
+            && context != 0
+            && later_generator_step(file, candidate.operation_span, lookup);
+        if later_step {
+            arm = arm_id!("owner_emission.later-generator-step");
+        }
+        let unplaced_callback = unplaced_callback || later_step;
+        let uncertain = uncertain || later_step;
+        let report = report || later_step;
+        // ADR 0886: a silent end names its proof. Context zero is one only
+        // where SiteReach proves the function never runs (reviewer D34). An
+        // unreported site is silent whatever else is unproven about it (an
+        // owned `onSettled`'s cleanup return), so the context decides.
+        if !report {
+            // Owned only: an owned bit beside any other (unowned, a later
+            // run, a resumption, a leaf, an uncertain component) is no proof
+            // (reviewer on the step 1 WIP).
+            let owned = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0;
+            let owned_only =
+                owned && context & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0;
+            // A leaf is an owner too: there the runtime raises the forbidden
+            // scope code, SC3001's claim (ADR 0347 amendment), never NO_OWNER_*.
+            let leaf_owned = owned
+                && context & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED | OWNER_CONTEXT_LEAF)
+                    == 0;
+            let proof = if owned_only {
+                Some(ContextProof::OwnedContext)
+            } else if leaf_owned {
+                Some(ContextProof::LeafOwned)
+            } else if context == 0 && candidate.owner.is_some_and(|span| unreached(&span)) {
+                Some(ContextProof::NeverRuns)
+            } else {
+                None
+            };
+            if let Some(proof) = proof {
+                emission.accounted.push((candidate.operation_span, proof));
+            }
+        }
         crate::role_log::owner(
             operation,
             path,
@@ -560,11 +840,13 @@ pub(super) fn emit_file(
             file,
             candidate.operation_span,
             OwnerRequirementStatus {
+                flight_error_unobserved,
                 uncertain,
                 runtime_uncertain,
                 caller_uncertain,
                 unplaced_callback,
                 conditional_owner,
+                owner_varies_by_caller,
                 later_run_unowned,
                 component_uncertain,
                 provider_open,
@@ -572,6 +854,7 @@ pub(super) fn emit_file(
                 owned_run_throws,
                 after_await: after_await && !after_yield,
                 after_yield,
+                context_unaccounted: false,
                 report,
             },
             lookup,
@@ -623,4 +906,290 @@ fn returned_unreached_function(
     // ADR 0532: the functions past the bound are unread; context zero there
     // is no proof, so the operation stays unplaced.
     true
+}
+
+/// ADR 0868: whether a function between `span` and the component around it
+/// may be entered by a way the owner graph holds no edge for, so that the
+/// owned context its edges give is no proof of every run:
+///
+/// - a method, or a function value no binding names (an object slot, an array
+///   element, a class field), unless it is invoked in place or is a whole
+///   argument of a call (that call gives it its edge, or leaves it unplaced);
+/// - a named function whose entry census is open
+///   ([`crate::execution_role::entry_census_complete`]), or a reference to
+///   which, here or in another file, is anything but a direct call or an
+///   inline run. A value-only argument counts too: the callee may keep it
+///   (`keep.call(f)`, an `object` parameter, an `EventTarget` subclass's
+///   `removeEventListener`);
+/// - any layer at all when the program calls direct `eval`, which reaches a
+///   binding by name.
+///
+/// The walk ends at a function a tag is proven to render, whose entries are
+/// renders, and at the innermost owner-creating region around `span`. A function that only may be a component is a layer like any other.
+/// `caller_unplaced` answers whether the function making a run at a span holds
+/// no owner context and may run (the emission's ADR 0534 question).
+fn named_layer_entry_open(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    region: Option<Span>,
+    lookup: &SemanticLookup<'_>,
+    caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
+) -> bool {
+    let mut walked = HashSet::default();
+    layer_entry_open(
+        file,
+        span,
+        region,
+        lookup,
+        &caller_unplaced,
+        &mut walked,
+        LAYER_CALLER_DEPTH,
+    )
+}
+
+/// How many calls [`layer_entry_open`] follows out through a closed layer's
+/// callers. Past it the entries are unread: open.
+const LAYER_CALLER_DEPTH: usize = 8;
+
+/// Whether `function` is the whole argument the dialect gives an owner it
+/// creates (`CallbackOwner::Creates`): who enters what is around that call
+/// changes nothing inside.
+fn creates_owner_for(
+    file: &solid_facts::FileFacts,
+    function: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function)
+        .any(|(call, index)| {
+            !call.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_owner_at(primitive, index, call.arguments.len())
+                            == Some(solid_dialect::CallbackOwner::Creates)
+                    })
+        })
+}
+
+fn layer_entry_open(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    region: Option<Span>,
+    lookup: &SemanticLookup<'_>,
+    caller_unplaced: &dyn Fn(&solid_facts::FileFacts, Span) -> bool,
+    walked: &mut HashSet<(String, Span)>,
+    depth: usize,
+) -> bool {
+    use crate::local_access::HandOff;
+    let escapes = |hand_off: &HandOff| !matches!(hand_off, HandOff::Call | HandOff::Inline(_));
+    // Innermost first: the span index yields its owners in span order.
+    let mut layers = file.ast.functions_owning(span).collect::<Vec<_>>();
+    layers.sort_by_key(|function| function.span.end - function.span.start);
+    for function in layers {
+        // The innermost region whose primitive creates the owner its
+        // callback runs under (`CallbackOwner::Creates`: a memo, a root, an
+        // effect's compute, a tracked JSX expression): who enters a layer
+        // around it changes nothing inside.
+        if region.is_some_and(|region| !region.contains(function.span)) {
+            return false;
+        }
+        if lookup.function_proven_component(file, function) {
+            return false;
+        }
+        // Reached through a caller, no candidate names the region.
+        if creates_owner_for(file, function.span, lookup)
+            || is_control_flow_child(file, function, lookup)
+        {
+            return false;
+        }
+        if lookup.program_has_eval() || function.method_name.is_some() {
+            return true;
+        }
+        if function_binding_name(file, function).is_none() {
+            let in_place = file
+                .ast
+                .calls_with_peeled_callee(function.span)
+                .next()
+                .is_some();
+            let argument = file.ast.calls.iter().any(|call| {
+                call.arguments.iter().any(|argument| {
+                    !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == function.span
+                })
+            });
+            if in_place || argument {
+                continue;
+            }
+            return true;
+        }
+        let Some(local) = crate::local_access::function_reference_hand_offs(file, function, lookup)
+        else {
+            return true;
+        };
+        // A whole argument the dialect gives an owner is a position the owner
+        // graph places (`createRoot(helper)`): its edge is in the context.
+        // `action(gen)` keeps its argument and `createContext(f)` holds a
+        // value: no edge follows either (R29).
+        let primitive_position = |at: Span| {
+            file.ast.arguments_containing(at).any(|(call, index)| {
+                !call.arguments[index].spread
+                    && file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
+                    && lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            lookup
+                                .dialect
+                                .callback_owner_at(primitive, index, call.arguments.len())
+                                .is_some()
+                        })
+            })
+        };
+        if local
+            .iter()
+            .any(|(at, hand_off)| escapes(hand_off) && !primitive_position(*at))
+            || crate::local_access::foreign_reference_hand_offs(file, function, lookup)
+                .iter()
+                .any(|(_, _, hand_off)| escapes(hand_off))
+        {
+            return true;
+        }
+        // A call or an inline run is an entry only as placed as the code
+        // making it: from a function no edge reaches that may still run
+        // (assigned to `onclick`, say), the run has no owner edge either.
+        let run_at = |(at, hand_off): &(Span, HandOff)| match hand_off {
+            HandOff::Inline(carrier) => *carrier,
+            _ => *at,
+        };
+        if local
+            .iter()
+            .any(|reference| caller_unplaced(file, run_at(reference)))
+        {
+            return true;
+        }
+        let inline = local
+            .iter()
+            .filter(|(_, hand_off)| matches!(hand_off, HandOff::Inline(_)))
+            .map(|(at, _)| *at)
+            .collect::<Vec<_>>();
+        if !crate::execution_role::entry_census_complete_except(file, function, lookup, &inline) {
+            return true;
+        }
+        // A closed layer is entered only by its callers, and each is entered
+        // as it is: `wrapUse` called from an `f` that escapes runs with no
+        // owner on `f`'s other entries too.
+        if !walked.insert((file.path.as_str().to_owned(), function.span)) {
+            continue;
+        }
+        if depth == 0 {
+            return true;
+        }
+        for reference in &local {
+            let run = run_at(reference);
+            if layer_entry_open(file, run, None, lookup, caller_unplaced, walked, depth - 1) {
+                return true;
+            }
+        }
+        for (caller, callee) in
+            lookup.function_call_site_references(file.path.as_str(), function.span)
+        {
+            if caller.path != file.path
+                && (caller_unplaced(caller, callee)
+                    || layer_entry_open(
+                        caller,
+                        callee,
+                        None,
+                        lookup,
+                        caller_unplaced,
+                        walked,
+                        depth - 1,
+                    ))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// ADR 0866 amendment: whether `span`, or the call its in-place layers climb
+/// to (an IIFE, a closure or helper called once), follows a `yield` of a
+/// generator written around it: written before it in that generator's body,
+/// or in a loop of the body that runs it again. An action's stepped
+/// generator is the action's (`action_step_resumption`).
+fn later_generator_step(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
+        .filter(|climb| !climb.exhausted)
+        .map(|climb| climb.at);
+    std::iter::once(span)
+        .chain(climbed)
+        .any(|at| crate::owners::past_generator_yield(file, at, lookup))
+}
+
+/// ADR 0886's ratchet: every arm of [`emit_file`], and how a site leaving
+/// through it ends. `Row` arms end in a reported requirement or an
+/// obligation; the others name the [`ContextProof`] recorded there (`"final"`:
+/// the final push decides between `OwnedContext`, `LeafOwned` and `NeverRuns`, else the
+/// check-once pass gives U). A new arm must be added here, with its ending.
+#[cfg(test)]
+const ARM_ENDINGS: &[(&str, &str)] = &[
+    ("owner_emission.no-owner-node", "final"),
+    ("owner_emission.region-context", "final"),
+    ("owner_emission.context-0", "final"),
+    ("owner_emission.parameter-list", "row"),
+    ("owner_emission.returned-unplaced", "row"),
+    ("owner_emission.after-yield", "row"),
+    ("owner_emission.after-await", "row"),
+    ("owner_emission.possible-continuation", "final"),
+    ("owner_emission.root-owned", "SynchronousRegion"),
+    ("owner_emission.root-owned-entry-open", "row"),
+    (
+        "owner_emission.provider-free-read",
+        "OwnedContext|SynchronousRegion",
+    ),
+    ("owner_emission.cleanup-no-function", "NoCleanupReturned"),
+    ("owner_emission.cleanup-unresolved-call", "TscRejectedCall"),
+    ("owner_emission.owned-run-throws", "row"),
+    ("owner_emission.named-layer-entry-open", "row"),
+    ("owner_emission.later-generator-step", "row"),
+];
+
+#[cfg(test)]
+mod arm_ratchet {
+    /// Every `owner_emission.*` arm the source names has an ending in
+    /// [`super::ARM_ENDINGS`], and every listed arm still exists.
+    #[test]
+    fn every_emission_arm_names_its_ending() {
+        let source = include_str!("owner_emission.rs");
+        let mut arms = std::collections::BTreeSet::new();
+        // Split so `scripts/fuzz/roles.mjs`, which scans for the macro, does not
+        // read this literal as an arm.
+        let marker = concat!("arm_", "id!(");
+        let mut rest = source;
+        while let Some(at) = rest.find(marker) {
+            rest = &rest[at + marker.len()..];
+            let Some(open) = rest.find('"') else { break };
+            let after = &rest[open + 1..];
+            let Some(close) = after.find('"') else { break };
+            let name = &after[..close];
+            if name.starts_with("owner_emission.") {
+                arms.insert(name.to_owned());
+            }
+            rest = &after[close..];
+        }
+        let listed = super::ARM_ENDINGS
+            .iter()
+            .map(|(arm, _)| (*arm).to_owned())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            arms, listed,
+            "an emission arm with no ending in ARM_ENDINGS, or a listed arm that is gone"
+        );
+    }
 }

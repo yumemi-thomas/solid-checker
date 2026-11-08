@@ -12,16 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-helper-callback/App.tsx",
-      "start": 751,
-      "end": 754,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -32,19 +22,10 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-helper-callback/App.tsx",
-      "start": 1041,
-      "end": 1044,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-helper-callback/App.tsx",
       "start": 1292,
@@ -55,30 +36,11 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-helper-callback/App.tsx",
       "start": 1292,
       "end": 1297,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-helper-callback/App.tsx",
-      "start": 1343,
-      "end": 1346,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-helper-callback/App.tsx",
-      "start": 1621,
-      "end": 1624,
       "fixes": 0
     }
   ]

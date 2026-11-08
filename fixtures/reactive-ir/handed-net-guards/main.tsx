@@ -1,0 +1,24 @@
+import { render } from "@solidjs/web";
+import { App as Aa10 } from "./a10";
+import { App as Aa12 } from "./a12";
+import { App as Ac15 } from "./c15";
+import { App as Ac16 } from "./c16";
+import { App as Ag1a } from "./g1a";
+import { App as Ag1b } from "./g1b";
+import { App as Ag1c } from "./g1c";
+import { App as Ag1d } from "./g1d";
+import { App as Ag2a } from "./g2a";
+import { App as Ag2b } from "./g2b";
+import { App as Ag2d_empty } from "./g2d-empty";
+import { App as Ag2d_handler } from "./g2d-handler";
+import { App as Ag2d_under_loading } from "./g2d-under-loading";
+import { App as Ag4b } from "./g4b";
+import { App as Ag4c } from "./g4c";
+import { App as Ag5b } from "./g5b";
+import { App as An7 } from "./n7";
+import { App as Ap8 } from "./p8";
+import { App as Ar8 } from "./r8";
+import { App as Ar9 } from "./r9";
+
+const host = document.body;
+for (const app of [Aa10, Aa12, Ac15, Ac16, Ag1a, Ag1b, Ag1c, Ag1d, Ag2a, Ag2b, Ag2d_empty, Ag2d_handler, Ag2d_under_loading, Ag4b, Ag4c, Ag5b, An7, Ap8, Ar8, Ar9]) render(app, host);

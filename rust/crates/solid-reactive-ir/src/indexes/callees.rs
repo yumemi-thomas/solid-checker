@@ -365,7 +365,9 @@ impl<'a> SemanticLookup<'a> {
             return Some(root);
         }
         let peeled = file.ast.peel_ts_sugar_span(callee);
-        let named = super::callee_world::namespace_member_property(file, peeled).unwrap_or(peeled);
+        let named = super::callee_world::namespace_member_property(file, peeled)
+            .or_else(|| super::callee_world::imported_member_property(file, peeled))
+            .unwrap_or(peeled);
         if file.ast.call_at(named).is_some() {
             return None;
         }
@@ -391,12 +393,117 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
+        let resolved = resolved_callee_call_in(
+            file,
+            self.ast_indexes.get(file.path.as_str()),
+            callee,
+            |span| self.entity_at(file.path.as_str(), span),
+        )?;
+        let Some(name) = crate::runtime_semantics::standard_call_name(resolved) else {
+            return Some(resolved);
+        };
+        // ADR 0683: a method a project subclass may have replaced is not the
+        // standard one: no proof reads it. ADR 0781: nor is one a patch
+        // replaced, or an assertion alone says the receiver has.
+        let vetoed = crate::base::contributions::subclass_veto(file, callee, name).is_some_and(|hazards| {
+                hazards
+                    .into_iter()
+                    .any(|hazard| self.hazard_present(hazard))
+            }) || crate::base::contributions::patch_vetoed(name, &|hazard| {
+                self.hazard_present(hazard)
+            })
+                || crate::base::contributions::unproven_assertion(file, callee, name, |span| {
+                    self.entity_at(file.path.as_str(), span)
+                })
+                // ADR 0840: nor is one an object of the program's own may be.
+                || crate::base::contributions::impostor_veto(
+                    file,
+                    callee,
+                    name,
+                    |hazard| self.hazard_present(hazard),
+                    |member| self.property_may_be_defined_reflectively_as(member),
+                );
+        (!vetoed).then_some(resolved)
+    }
+
+    /// ADR 0874: the call [`Self::resolved_callee_call`] answers for `callee`
+    /// but for the impostor census: what it would be were the receiver real.
+    /// It places a row, and proves nothing: a row placed through a withheld
+    /// call is uncertifiable.
+    pub(crate) fn placing_callee_call(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a ResolvedCall> {
+        self.resolved_callee_call(file, callee).or_else(|| {
+            self.standard_call_withheld(file, callee)
+                .then(|| {
+                    resolved_callee_call_in(
+                        file,
+                        self.ast_indexes.get(file.path.as_str()),
+                        callee,
+                        |span| self.entity_at(file.path.as_str(), span),
+                    )
+                })
+                .flatten()
+        })
+    }
+
+    /// [`Self::standard_library_declaration`] by [`Self::placing_callee_call`].
+    pub(crate) fn placing_standard_declaration(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<&'a typefacts::ResolvedDeclaration> {
+        standard_library_declaration_of(
+            self.placing_callee_call(file, call.callee),
+            typefacts::CallKind::Call,
+        )
+    }
+
+    /// ADR 0874, ADR 0876: whether the standard call at `callee` keeps no
+    /// resolution for a reason that may be false of it: the census withholds
+    /// it, or a write some chain reaches may have replaced any member. Either
+    /// way its rows stand at their sites, uncertain; only the first has an
+    /// impostor's row. A patch that names this member is ADR 0781's.
+    pub(crate) fn standard_call_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        self.impostor_withheld(file, callee) || self.reached_patch_withheld(file, callee)
+    }
+
+    /// ADR 0876: whether a write some chain reaches may have replaced the
+    /// standard call at `callee`.
+    pub(crate) fn reached_patch_withheld(&self, file: &FileFacts, callee: Span) -> bool {
         resolved_callee_call_in(
             file,
             self.ast_indexes.get(file.path.as_str()),
             callee,
             |span| self.entity_at(file.path.as_str(), span),
         )
+        .and_then(crate::runtime_semantics::standard_call_name)
+        .is_some_and(|name| {
+            crate::base::contributions::reached_patch(name, &|hazard| self.hazard_present(hazard))
+        })
+    }
+
+    /// ADR 0840: whether the impostor census withholds the standard call at
+    /// `callee` ([`crate::base::contributions::impostor_veto`]).
+    pub(crate) fn impostor_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        resolved_callee_call_in(
+            file,
+            self.ast_indexes.get(file.path.as_str()),
+            callee,
+            |span| self.entity_at(file.path.as_str(), span),
+        )
+        .and_then(crate::runtime_semantics::standard_call_name)
+        .is_some_and(|name| {
+            crate::base::contributions::impostor_veto(
+                file,
+                callee,
+                name,
+                |hazard| self.hazard_present(hazard),
+                |member| self.property_may_be_defined_reflectively_as(member),
+            )
+        })
     }
 
     pub(crate) fn ast_file_index(&self, path: &str) -> Option<&'a CachedAstFileIndex> {

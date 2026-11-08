@@ -964,6 +964,10 @@ impl EntityFact {
     }
 }
 
+/// The name in [`EntityFact::library_types`] that stands for a value constituent
+/// no library type describes. No library declares it: `<` starts no identifier.
+pub const LIBRARY_TYPE_OTHER: &str = "<other>";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EntityFact {
@@ -1018,6 +1022,10 @@ pub struct EntityFact {
     /// not the global one. Empty means nothing at the top level came from the
     /// standard library; it never means the type is unresolved.
     ///
+    /// [`LIBRARY_TYPE_OTHER`] joins a non-empty set when some top-level
+    /// constituent other than `undefined` and `null` is no library type: the
+    /// value may be that one instead (ADR 0781).
+    ///
     /// Held behind a thin `Arc` like the other large evidence on this row: it is
     /// demanded at few spans, and a fat slice pointer would cost every retained
     /// row 16 bytes to carry an absence.
@@ -1043,6 +1051,14 @@ pub struct EntityFact {
     /// required or readonly property), never evidence that `delete` errors.
     #[serde(default, skip_serializing_if = "is_false")]
     pub writable_optional_property: bool,
+    /// ADR 0829: `delete` of the demanded expression is a TypeScript error
+    /// under this program's options (TS18011, TS2704 or TS2790), by the
+    /// checker's own test of the access's resolved symbol. Answered under the
+    /// writable-optional-property demand. `false` is the absence of that
+    /// proof (not demanded, no resolved property symbol), never evidence that
+    /// `delete` type-checks.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub delete_operand_rejected: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -1106,6 +1122,15 @@ pub struct AsyncFunctionFact {
     pub target: Arc<str>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub can_return_async: bool,
+    /// ADR 0631: a call may also answer without a pending flight: a return
+    /// type with a constituent that is no `Promise`, or a custom thenable or
+    /// async iterable, which may settle on the call's stack.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub may_answer_sync: bool,
+    /// ADR 0654: a call signature returns `any`, `unknown`, an error type or a
+    /// type parameter, so the type states nothing about what comes back.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub return_open: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calls_after_await: Vec<Location>,
 }

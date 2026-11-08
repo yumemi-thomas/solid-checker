@@ -842,7 +842,17 @@ pub struct ReleaseNotice {
     /// distinct reach: why each scoped gap in `gaps` is due. Empty until the
     /// notice is scoped to a project's facts ([`ReleaseNotice::scoped_to`]).
     pub reaches: Vec<GapReach>,
+    /// The named blocker when the notice stands for an installation no
+    /// release classifies ([`SOLID_VERSION_UNCLASSIFIED`]); `None` for an
+    /// installation that classified and has open gaps.
+    pub blocker: Option<&'static str>,
 }
+
+/// The blocker of a notice for a `solid-js` manifest whose version names no
+/// release (`nightly`, `workspace:*`): the analysis ran under the default
+/// dialect, and which release the project runs is unknown (ADR 0700). The
+/// same name as `solid-reactive-ir`'s `blockers::SOLID_VERSION_UNCLASSIFIED`.
+pub const SOLID_VERSION_UNCLASSIFIED: &str = "solid-version-unclassified";
 
 /// One site that makes a scoped gap ([`solid_dialect::GapScope`]) due.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -875,7 +885,12 @@ pub fn release_notice(dialect: &'static Dialect, project: &Path) -> Option<Relea
         installed,
         releases,
         gaps,
-    } = detect_detailed(project)
+    } = (match detect_detailed(project) {
+        Detection::Defaulted {
+            manifest: Some(manifest),
+        } => return unclassified_release_notice(dialect, project, manifest),
+        detection => detection,
+    })
     else {
         return None;
     };
@@ -892,6 +907,43 @@ pub fn release_notice(dialect: &'static Dialect, project: &Path) -> Option<Relea
         gaps,
         audited,
         reaches: Vec::new(),
+        blocker: None,
+    })
+}
+
+/// ADR 0700: a `solid-js` manifest resolved and its version names no release
+/// (`nightly`, `workspace:*`). The analysis keeps the default dialect, as an
+/// absence does, but it is not an absence: the project runs *some* `solid-js`
+/// and nothing says which, so no answer the vocabulary gives was audited on
+/// it. Certifying it would be a clean without proof; the notice is due, with
+/// the blocker named. Only for the dialect the default selects: an explicit
+/// `--dialect` is a decision and gets no notice, as for an installed release.
+fn unclassified_release_notice(
+    dialect: &'static Dialect,
+    project: &Path,
+    manifest: PathBuf,
+) -> Option<ReleaseNotice> {
+    if dialect.id != default_dialect().id {
+        return None;
+    }
+    let (_, installed, _) = resolved_solid_version(project)?;
+    let language = by_version(dialect.vocabulary.version())?;
+    let releases = resolved_releases(language.vocabulary, project, &manifest, &installed);
+    Some(ReleaseNotice {
+        gaps: vec![solid_dialect::InstallationGap {
+            gap: format!(
+                "solid-js {installed:?} names no release this build classifies, so which \
+                 release the project runs is unknown ({SOLID_VERSION_UNCLASSIFIED})"
+            ),
+            review: None,
+            scope: None,
+        }],
+        installed,
+        manifest,
+        releases,
+        audited: language.vocabulary.audited_installation(),
+        reaches: Vec::new(),
+        blocker: Some(SOLID_VERSION_UNCLASSIFIED),
     })
 }
 

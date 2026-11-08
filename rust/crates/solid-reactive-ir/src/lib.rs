@@ -41,6 +41,7 @@
 mod argument_values;
 mod attribution;
 mod base;
+mod blockers;
 mod boundary_defects;
 mod cache;
 mod callback_return;
@@ -48,6 +49,7 @@ mod carrier_runs;
 mod cleanup;
 mod development_feedback;
 mod directives;
+mod execution_paths;
 pub use development_feedback::{
     DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
 };
@@ -58,8 +60,10 @@ mod execution_role;
 mod findings;
 mod identity;
 mod indexes;
+mod installed_members;
 mod interproc;
 mod late_chunks;
+mod listener_reach;
 mod literal_member_slots;
 mod loading_hold;
 pub(crate) mod local_access;
@@ -74,6 +78,7 @@ pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHash
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
 pub mod package_boundary;
+mod pending_accounting;
 mod pipeline;
 mod projection;
 mod reachability;
@@ -88,16 +93,20 @@ mod runtime_semantics;
 pub mod shadow;
 pub use runtime_configuration::RuntimeConfigurationPremise;
 mod object_members;
+mod once_guard;
 mod server_rules;
 mod source_discovery;
 mod static_api;
 mod static_rules;
+mod stored_throw;
 pub mod summary_semantics;
 mod symbols;
 mod timings;
 mod upstream_compat;
 mod valid_use_server;
 mod value_identity;
+mod value_use;
+mod walk_memo;
 
 pub use owners::function_binding_name;
 
@@ -283,10 +292,11 @@ impl RuntimeEnvironment {
     }
 
     /// Whether the selection names a server build of the Solid packages: a
-    /// Node-family target, or server rendering. There an effect's apply never
-    /// runs and `flush` is empty, so a rule about what the *client* runtime
-    /// does with them claims nothing. No selection is the client default, as
-    /// everywhere else the audited release is assumed.
+    /// Node-family target, or server rendering. `flush` is empty there, and an
+    /// apply does not run but for `createRenderEffect`'s. What that says about a
+    /// client rule depends on whether a client root exists too (ADR 0659,
+    /// [`ExecutionPaths`]). No selection is the client default, as everywhere
+    /// else the audited release is assumed.
     #[must_use]
     pub fn selects_server_build(&self) -> bool {
         matches!(
@@ -319,6 +329,9 @@ pub enum RuntimeRendering {
     Csr,
     StringSsr,
     StreamingSsr,
+    /// ADR 0659: a server pass and a client pass of one app. Packages resolve as
+    /// the client's.
+    Hydrated,
 }
 
 /// The export-map conditions that name a host runtime. At most one of them
@@ -349,13 +362,22 @@ impl RuntimeEnvironment {
         {
             return Err("SSR cannot be selected with the browser runtime".into());
         }
+        if matches!(self.rendering, Some(RuntimeRendering::Hydrated))
+            && self.target == Some(RuntimeTarget::Node)
+        {
+            return Err(
+                "hydrated selects the server and the client, and resolves packages as the \
+                 client: it cannot be selected with the node runtime"
+                    .into(),
+            );
+        }
         let selected = self.selected_conditions();
         for (label, alternatives) in [
             ("runtime target", HOST_TARGET_CONDITIONS),
             ("build mode", &["development", "production"][..]),
             (
                 "rendering mode",
-                &["csr", "string-ssr", "streaming-ssr"][..],
+                &["csr", "string-ssr", "streaming-ssr", "hydrated"][..],
             ),
         ] {
             let present = alternatives
@@ -402,9 +424,13 @@ impl RuntimeEnvironment {
                     RuntimeRendering::Csr => "csr",
                     RuntimeRendering::StringSsr => "string-ssr",
                     RuntimeRendering::StreamingSsr => "streaming-ssr",
+                    RuntimeRendering::Hydrated => "hydrated",
                 }
                 .into(),
             );
+            if rendering == RuntimeRendering::Hydrated {
+                conditions.insert("browser".into());
+            }
         }
         conditions.extend(self.framework_transforms.iter().cloned());
         conditions
@@ -472,6 +498,15 @@ pub struct ReactiveRead {
     /// than a proven violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub uncertain: bool,
+    /// `uncertain` because the read may meet its getter's source pending, not
+    /// because its backing is open: the read is reactive either way (ADR 0665).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub pending_open: bool,
+    /// ADR 0803: the read's source, or the source backing it, is a slot a
+    /// visible write to array iteration withdrew: the read is held, never a
+    /// proven read.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub withdrawn_slot: bool,
     /// The untracked-rendering role rests on a *missing* compiler fact: the
     /// narrowest JSX region containing the read carries no census entry, so
     /// the producer never reported how — or whether — that expression is
@@ -746,6 +781,24 @@ pub struct LeafOwnerOperation {
     /// helper body may have other, legal callers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub via: Option<String>,
+    /// The attribution rests on the primitive's identity, and the binder does
+    /// not confirm the callee is that primitive (ADR 0711): a named blocker.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub identity_unproven: bool,
+    /// ADR 0893: the throw reaches no proven report.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub computation_error_unobserved: bool,
+}
+
+impl LeafOwnerOperation {
+    /// ADR 0641: the call throws the observer guard's code here. Only
+    /// `createTrackedEffect` has an observer: `onSettled` runs its callback under
+    /// `untrack`, so the same call there throws the leaf owner's.
+    #[must_use]
+    pub fn observer_guarded(&self) -> bool {
+        matches!(self.kind, LeafOwnerOperationKind::ObserverGuarded(_))
+            && self.owner == "createTrackedEffect"
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -758,6 +811,8 @@ pub enum LeafOwnerOperationKind {
     Cleanup,
     Flush,
     Primitive(String),
+    /// A call whose throw here is the observer guard's (`resolve`, `until`).
+    ObserverGuarded(String),
     /// The leaf owner receives a callback whose exact synchronous body is not
     /// available. It may contain any of the forbidden operations above, so
     /// the leaf scope is a proof obligation rather than a clean result.
@@ -829,6 +884,12 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// …)`): the calls it reaches are not followed. Its `callee` is the
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
+/// ADR 0645: a listener whose code a dispatch may run under an owner or in a
+/// strict-read window, and which calls what no rule follows from it.
+pub const LISTENER_REACH: &str = "listener-reach";
+/// ADR 0643: a prototype or an accessor installed where no Get or write of the
+/// object is followed to it.
+pub const INSTALLED_MEMBER: &str = "installed-member";
 /// ADR 0368 review: a project call the dependency-source program answers as
 /// a call error and the project's own program does not
 /// (`ProjectFacts::dependency_source_call_errors`).
@@ -890,6 +951,9 @@ pub enum AfterAwaitObligation {
     /// A promise handler that runs only on one settlement, or on a receiver
     /// not proven to hold the computation's flight.
     HandlerMayNotRun,
+    /// The callee is a parameter: what a caller hands may be an accessor
+    /// (ADR 0669).
+    HandedParameter,
     /// An `async` function returned without `await` whose first await is not
     /// proven pending: its continuation may run before the computation holds
     /// its promise.
@@ -1247,6 +1311,14 @@ pub struct OwnerRequirement {
     pub operation: OwnerRequirementOperation,
     pub location: Location,
     pub uncertain: bool,
+    /// ADR 0852: the throw rejects an async generator stepper's flight; no
+    /// proof follows the rejection to an observed read or error boundary.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub flight_error_unobserved: bool,
+    /// ADR 0893: the throw ends stored on a computation, or in a `try` or a
+    /// handling boundary, and no read that reports it is proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub computation_error_unobserved: bool,
     /// Allocation itself depends on a runtime fact not available to the
     /// analyzer (for example server-entry selection or spread arity).
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1259,6 +1331,11 @@ pub struct OwnerRequirement {
     /// `runWithOwner`, rather than an exported function's unknown callers.
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
+    /// `conditional_owner` with no nullable owner to name: the function runs
+    /// under an owner on some paths and with none on others, and no fact
+    /// proves an unowned one runs (ADR 0687).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub owner_varies_by_caller: bool,
     /// The uncertainty comes from a callback that runs under its caller's
     /// owner only on its first run, and with no owner on every later run --
     /// 2.0 `createRenderEffect`'s apply. The first run is owned exactly as the
@@ -1289,6 +1366,10 @@ pub struct OwnerRequirement {
     /// whatever owner the action was called under.
     #[serde(default, skip_serializing_if = "is_false")]
     pub after_yield: bool,
+    /// ADR 0886: no row and no named proof ended this site's execution
+    /// context: the check-once pass makes it an obligation.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub context_unaccounted: bool,
     /// The operation sits in a source-level JSX region for which the compiler
     /// emitted no execution census. The absence of an owner region is not a
     /// proof that a live operation runs unowned: the compiler may have deleted
@@ -1337,7 +1418,7 @@ impl OwnerRequirementOperation {
     #[must_use]
     pub(crate) fn from_internal(operation: &str) -> Self {
         match operation {
-            "effect" => Self::Effect,
+            "effect" | "jsx-effect" => Self::Effect,
             "cleanup" => Self::Cleanup,
             // ADR 0462: a boundary component called as a function.
             "boundary" | "boundary-call" => Self::Boundary,
@@ -1383,6 +1464,20 @@ pub struct AsyncRead {
     /// refuted; SC5001 downgrades from proven violation to uncertifiable.
     #[serde(default)]
     pub options_opaque: bool,
+    /// ADR 0665: `options_opaque`, because no fact says the source is async.
+    #[serde(default)]
+    pub provenance_open: bool,
+    /// The read sits in a `try`, or (ADR 0855) runs while a module with a
+    /// handler evaluates. In a strict-read window rc.21 emits the untracked-read
+    /// diagnostic before it throws, so SC5001 stands; while a module evaluates
+    /// it emits nothing, so SC5001 is open. A boundary warning needs the throw
+    /// to reach it, which a `catch` may stop.
+    #[serde(default)]
+    pub caught: bool,
+    /// The read is the value of a component's prop or children: a getter, which
+    /// runs where the child reads it, if it does (ADR 0641).
+    #[serde(default)]
+    pub component_prop: bool,
     /// The source provably declares `ssrSource: "client"` with no
     /// `loadingValue`/`seedLoadingValue`, and the project server-renders:
     /// reading it during SSR outside a `Loading` boundary throws
@@ -1452,6 +1547,11 @@ pub struct AsyncRead {
     /// (SC5003), so both are uncertifiable, never proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub creation_pass_unproven: bool,
+    /// ADR 0661: the first run of this read is not proven inside a `render()`
+    /// call. SC5003's warning fires only there; a pending source alone is not
+    /// enough.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub root_pass_unproven: bool,
     /// ADR 0504: the read is in the first run of an effect apply that is
     /// proven to run while its async source is still pending
     /// ([`crate::execution_role::pending_apply_first_read`]), so rc.17 throws
@@ -1468,12 +1568,33 @@ pub struct AsyncRead {
     /// strict read withdrawn through [`Self::pending_origin`] lies in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_apply: Option<Location>,
+    /// ADR 0838: the read this row stands for, where the row sits elsewhere
+    /// (a call-attributed row at the call of the function that reads): the
+    /// pending-read accounting finds the read's row through it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Location>,
+    /// ADR 0838: the pending-read accounting added this row for a claim no
+    /// producer accounted for (`async-read-unaccounted`): never a violation.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unaccounted: bool,
+    /// ADR 0891: the unaccounted read's source is created from an import that
+    /// resolves to nothing (`source-module-unresolved`): the blocker names the
+    /// missing module's value, not the read.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub source_module_unresolved: bool,
+    /// ADR 0835, review R1/R6: an unplaced row a call-attributed walk left at
+    /// its read because it cut a path; the rows it placed at calls then
+    /// account for no path but their own.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub walk_cut: bool,
 }
 
 fn default_async_provenance() -> bool {
     true
 }
 
+pub use blockers::with_detail as blocked_context;
+pub use execution_paths::{ArmSide, BuildArm, ClientPath, ExecutionPaths};
 pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -1490,6 +1611,9 @@ pub struct Program {
     pub runtime_configuration: RuntimeConfigurationPremise,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub development_feedback: Vec<development_feedback::DevelopmentFile>,
+    /// ADR 0659: which build runs what.
+    #[serde(default)]
+    pub execution_paths: ExecutionPaths,
     pub reads: Vec<ReactiveRead>,
     pub writes: Vec<ReactiveWrite>,
     pub actions: Vec<ActionInvocation>,
@@ -1529,6 +1653,10 @@ pub struct UnreachedSite {
     /// literal test rules out); else the function running it never runs.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dead_code: bool,
+    /// ADR 0696: proved silent: it runs only behind a prop no caller passes,
+    /// every caller being in view.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub absent_prop: bool,
     /// Unreached only because the runtime refuses a creation on the way: a
     /// root, primitive or component created in an effect apply or a leaf
     /// callback (ADR 0475).
@@ -2453,7 +2581,9 @@ fn referenced_primitive(
     if let Some(declaration) = ast.reference_declaration(span) {
         // `const { onCleanup: cleanup } = Solid` (ADR 0459): the slot's
         // symbol carries the member's name (`add_solid_import_names`).
-        if ast.namespace_member_binding(declaration).is_some() {
+        if ast.namespace_member_binding(declaration).is_some()
+            || crate::symbols::import_alias_source(file, declaration).is_some()
+        {
             return known(primitive_name(
                 file.path.as_str(),
                 declaration,
@@ -2528,6 +2658,28 @@ fn namespace_member_primitive(
 /// `dynamic(source, { static: true })`) is the same form in every pass. The
 /// spelling stays the callee's: a form is a call of the export, not another
 /// name.
+/// Whether `element`'s tag is the dialect export spelled `name`, the same answer
+/// a primitive's tag gets, for an export with no [`Primitive`].
+pub(crate) fn jsx_tag_is(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    name: &str,
+) -> bool {
+    jsx_primitive_name_cached(
+        lookup,
+        file,
+        element,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup.dialect,
+    )
+    .is_some_and(|primitive| match primitive {
+        PrimitiveName::Known(_, spelled) => spelled == name,
+        PrimitiveName::Other(spelled) => &*spelled == name,
+    })
+}
+
 /// [`jsx_primitive_name`], answered from `lookup`'s per-file memo under the
 /// same exact-identity conditions as [`call_primitive_name_cached`]: the
 /// element is the file's own fact, found by its place in that slice.
