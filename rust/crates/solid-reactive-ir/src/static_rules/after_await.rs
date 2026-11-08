@@ -169,9 +169,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     fn new(ctx: &'f AnalysisContext<'a>) -> Self {
         Reach {
             ctx,
-            files: ctx
-                .facts
-                .files
+            files: crate::base::reads::all_files(ctx.facts)
                 .iter()
                 .map(|file| (file.path.as_str(), file))
                 .collect(),
@@ -212,9 +210,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             done: HashSet::default(),
             walks: HashMap::default(),
             pre: PreAwait::new(ctx),
-            has_generators: ctx
-                .facts
-                .files
+            has_generators: crate::base::reads::all_files(ctx.facts)
                 .iter()
                 .any(|file| file.ast.functions.iter().any(|function| function.generator)),
             generator_calls: std::cell::RefCell::default(),
@@ -367,7 +363,7 @@ fn unlisted_async_computations(
     reach: &Reach<'_, '_>,
     draft: &mut ProgramDraft,
 ) {
-    for file in &ctx.facts.files {
+    for file in crate::base::reads::all_files(ctx.facts) {
         let path = file.path.as_str();
         for call in &file.ast.calls {
             let Some(argument) = call.arguments.first() else {
@@ -1187,12 +1183,29 @@ impl<'f, 'a> Reach<'f, 'a> {
                         &crate::local_access::HandedTables {
                             lookup: ctx.semantic_lookup,
                             entities: ctx.entities,
-                            prop_sources: ctx.prop_sources,
-                            source_kinds: ctx.source_kinds,
-                            accessors: ctx.accessors,
-                            setters: ctx.setters,
-                            actions: ctx.actions,
-                            props_reactivity: ctx.props_reactivity,
+                            prop_sources: crate::late_chunks::Noted::new(
+                                crate::late_chunks::TableId::PropSources,
+                                ctx.prop_sources,
+                            ),
+                            source_kinds: crate::late_chunks::Noted::new(
+                                crate::late_chunks::TableId::SourceKinds,
+                                ctx.source_kinds,
+                            ),
+                            accessors: crate::late_chunks::Noted::new(
+                                crate::late_chunks::TableId::Accessors,
+                                ctx.accessors,
+                            ),
+                            setters: crate::late_chunks::Noted::new(
+                                crate::late_chunks::TableId::Setters,
+                                ctx.setters,
+                            ),
+                            actions: crate::late_chunks::Noted::new(
+                                crate::late_chunks::TableId::Actions,
+                                ctx.actions,
+                            ),
+                            props_reactivity: crate::late_chunks::NotedProps::new(
+                                ctx.props_reactivity,
+                            ),
                             accessors_that_count: None,
                         },
                         file,
@@ -2714,12 +2727,27 @@ impl<'f, 'a> Reach<'f, 'a> {
                 &crate::local_access::HandedTables {
                     lookup: ctx.semantic_lookup,
                     entities: ctx.entities,
-                    prop_sources: ctx.prop_sources,
-                    source_kinds: ctx.source_kinds,
-                    accessors: ctx.accessors,
-                    setters: ctx.setters,
-                    actions: ctx.actions,
-                    props_reactivity: ctx.props_reactivity,
+                    prop_sources: crate::late_chunks::Noted::new(
+                        crate::late_chunks::TableId::PropSources,
+                        ctx.prop_sources,
+                    ),
+                    source_kinds: crate::late_chunks::Noted::new(
+                        crate::late_chunks::TableId::SourceKinds,
+                        ctx.source_kinds,
+                    ),
+                    accessors: crate::late_chunks::Noted::new(
+                        crate::late_chunks::TableId::Accessors,
+                        ctx.accessors,
+                    ),
+                    setters: crate::late_chunks::Noted::new(
+                        crate::late_chunks::TableId::Setters,
+                        ctx.setters,
+                    ),
+                    actions: crate::late_chunks::Noted::new(
+                        crate::late_chunks::TableId::Actions,
+                        ctx.actions,
+                    ),
+                    props_reactivity: crate::late_chunks::NotedProps::new(ctx.props_reactivity),
                     accessors_that_count: None,
                 },
                 file,

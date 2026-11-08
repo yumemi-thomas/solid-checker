@@ -136,7 +136,7 @@ fn chunked<T: Clone>(
 fn unique_paths(lookup: &SemanticLookup<'_>) -> bool {
     let mut seen = HashSet::default();
     lookup
-        .files()
+        .file_slots()
         .iter()
         .all(|file| seen.insert(file.path.as_str()))
 }
@@ -146,7 +146,7 @@ pub(crate) fn calls(lookup: &SemanticLookup<'_>) -> ApplyCallRows {
     lookup.with_kept_state::<DeferScans, _>(DEFER_SCANS, |scans, kept| {
         let kept = kept && unique;
         let mut result = ApplyCallRows::default();
-        for file in lookup.files() {
+        for file in lookup.file_slots() {
             let candidates = chunked(&mut scans.0, file, lookup, kept, || {
                 file.ast
                     .calls
@@ -187,7 +187,7 @@ pub(crate) fn calls(lookup: &SemanticLookup<'_>) -> ApplyCallRows {
         }
         if kept {
             let current = lookup
-                .files()
+                .file_slots()
                 .iter()
                 .map(|file| file.path.as_str())
                 .collect::<HashSet<_>>();
@@ -446,7 +446,7 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegionRows {
         let kept = kept && unique;
         let mut targets: HashMap<(String, Span), Vec<Site>> = HashMap::default();
         let mut escaped = Vec::new();
-        for file in lookup.files() {
+        for file in lookup.file_slots() {
             let sites = chunked(&mut chunks.0, file, lookup, kept, || {
                 file_region_sites(file, lookup)
             });
@@ -471,7 +471,7 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegionRows {
         }
         if kept {
             let current = lookup
-                .files()
+                .file_slots()
                 .iter()
                 .map(|file| file.path.as_str())
                 .collect::<HashSet<_>>();

@@ -254,7 +254,7 @@ fn kept_refresh(
         ..
     } = context;
     let mut ids = HashMap::<&str, FileId>::default();
-    for (slot, file) in facts.files.iter().enumerate() {
+    for (slot, file) in crate::base::reads::file_slots(facts).iter().enumerate() {
         let (id, rank) = lookup.memo_slot_of(slot);
         if rank != 0 || ids.insert(file.path.as_str(), id).is_some() {
             return false;
@@ -275,8 +275,7 @@ fn kept_refresh(
         }
         node_keys.push(key);
     }
-    let jobs = facts
-        .files
+    let jobs = crate::base::reads::file_slots(facts)
         .iter()
         .map(|file| {
             (
@@ -486,8 +485,7 @@ fn fresh_refresh(
         .iter()
         .map(|list| vec![0; list.len()])
         .collect::<Vec<_>>();
-    let mut exclusions = facts
-        .files
+    let mut exclusions = crate::base::reads::file_slots(facts)
         .iter()
         .map(|file| SiteExclusions::new(file, entities, symbol_names, lookup))
         .collect::<Vec<_>>();
@@ -496,7 +494,7 @@ fn fresh_refresh(
             .get(file.path.as_str())
             .map_or(&[][..], Vec::as_slice)
     };
-    for (slot, file) in facts.files.iter().enumerate() {
+    for (slot, file) in crate::base::reads::file_slots(facts).iter().enumerate() {
         for owner in owners_of(file) {
             for (invocation, decided_by) in direct[*owner].iter_mut().zip(&mut slots[*owner]) {
                 invocation.exclusion = exclusions[slot].at(invocation.invocation.site);
@@ -504,7 +502,7 @@ fn fresh_refresh(
             }
         }
     }
-    for (slot, file) in facts.files.iter().enumerate() {
+    for (slot, file) in crate::base::reads::file_slots(facts).iter().enumerate() {
         let owners = owners_of(file);
         let mut aligned = owners
             .iter()
@@ -526,7 +524,7 @@ fn fresh_refresh(
         }
     }
     let mut edges = Vec::new();
-    for (slot, file) in facts.files.iter().enumerate() {
+    for (slot, file) in crate::base::reads::file_slots(facts).iter().enumerate() {
         let owners = owners_of(file);
         edges.extend(
             forward_edges(
@@ -551,7 +549,7 @@ fn fresh_refresh(
                 invocation.dispatch_read_excluded = decide(
                     &mut consumers,
                     direct.exclusion,
-                    &facts.files[slot],
+                    &crate::base::reads::file_slots(facts)[slot],
                     invocation.site,
                 );
                 invocation
@@ -575,7 +573,7 @@ fn fresh_refresh(
                 excluded: decide(
                     &mut consumers,
                     edge.exclusion,
-                    &facts.files[slot],
+                    &crate::base::reads::file_slots(facts)[slot],
                     edge.site,
                 ),
             };

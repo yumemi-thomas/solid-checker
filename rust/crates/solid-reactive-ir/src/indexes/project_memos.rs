@@ -299,7 +299,7 @@ impl Memo<BuildSchema> for ParameterCompletionSlot {
             table
                 .slots_of(*id)
                 .get(*rank as usize)
-                .and_then(|slot| lookup.files().get(*slot))
+                .and_then(|slot| lookup.file_slots().get(*slot))
                 .map(|file| Arc::new(lookup.parameter_completion_slot(file)))
                 .unwrap_or_default()
         }))

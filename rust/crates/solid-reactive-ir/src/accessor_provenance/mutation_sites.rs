@@ -2493,7 +2493,7 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
     if lookup.visible_string_code() {
         return true;
     }
-    lookup.files().iter().any(|file| {
+    lookup.file_slots().iter().any(|file| {
         let targets = file
             .ast
             .write_targets
@@ -2624,7 +2624,7 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
 /// construction, including source slots and returned gateway values.
 pub(crate) fn visible_string_code(lookup: &SemanticLookup<'_>) -> bool {
     lookup.program_has_eval()
-        || lookup.files().iter().any(|file| {
+        || lookup.file_slots().iter().any(|file| {
             file.ast.calls.iter().any(|call| {
                 string_code_reference(file, call.callee, lookup, 24, false)
                     || tuple_mutation_method(file, call, lookup) == Some("stringCode")
@@ -3082,7 +3082,7 @@ pub(super) fn string_code_slot(
         // A method body can expose/replace its slot through `this`, without a
         // reference to the object binding. Refuse possible slot replacement
         // before using an own source method as negative gateway evidence.
-        if lookup.files().iter().any(|candidate| {
+        if lookup.file_slots().iter().any(|candidate| {
             candidate.ast.write_targets.iter().chain(&candidate.ast.deleted_targets).any(|target| {
                 candidate.ast.members.iter().any(|member| member.span == candidate.ast.peel_ts_sugar_span(*target)
                     && member_key(candidate, member).is_none_or(|written| written == key || written == "__proto__"))
@@ -3224,7 +3224,7 @@ pub(super) fn invocation_property_write(lookup: &SemanticLookup<'_>) -> bool {
                     .any(|property| invocation_key(Some(property.key.as_str())))
             })
     };
-    lookup.files().iter().any(|file| {
+    lookup.file_slots().iter().any(|file| {
         file.ast
             .write_targets
             .iter()
@@ -3319,7 +3319,7 @@ pub(super) fn intrinsic_disjoint_proxy_creation(
     {
         return false;
     }
-    !lookup.files().iter().any(|candidate| {
+    !lookup.file_slots().iter().any(|candidate| {
         candidate
             .ast
             .write_targets

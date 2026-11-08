@@ -398,8 +398,7 @@ pub(crate) fn scan_retained(
             }
         }
     }
-    let scanned_paths = facts
-        .files
+    let scanned_paths = crate::base::reads::file_slots(facts)
         .iter()
         .filter(|file| !is_dependency_source(facts, file))
         .map(|file| file.path.as_str())
@@ -421,8 +420,7 @@ pub(crate) fn scan_retained(
         .collect::<HashSet<_>>();
     let mut premise = RuntimeConfigurationPremise::Assumed;
     let mut counts = (0, 0);
-    for file in facts
-        .files
+    for file in crate::base::reads::file_slots(facts)
         .iter()
         .filter(|file| !is_dependency_source(facts, file))
     {

@@ -553,7 +553,7 @@ impl Memo<BuildSchema> for ReturnedSourceCalls {
             let Some(file) = table
                 .slots_of(*id)
                 .first()
-                .and_then(|slot| lookup.files().get(*slot))
+                .and_then(|slot| lookup.file_slots().get(*slot))
             else {
                 return Arc::default();
             };
@@ -622,8 +622,12 @@ impl<'a> SemanticLookup<'a> {
         empty: V,
     ) -> V {
         let index = self.file_index(file);
-        let slots =
-            slots.get_or_init(|| self.facts.files.iter().map(|_| Recorded::new()).collect());
+        let slots = slots.get_or_init(|| {
+            crate::base::reads::file_slots(self.facts)
+                .iter()
+                .map(|_| Recorded::new())
+                .collect()
+        });
         slots[index]
             .get_or_init(|| match self.memos.table().id_of(file.path.as_str()) {
                 Some(id) => answer(id),
@@ -705,7 +709,7 @@ impl<'a> SemanticLookup<'a> {
         let answer = answers[found];
         let slot = *self.memos.table().slots_of(answer.origin).first()?;
         let facts: &'a ProjectFacts = self.facts;
-        let origin = facts.files.get(slot)?;
+        let origin = crate::base::reads::file_slots(facts).get(slot)?;
         let created = origin.ast.call_at(answer.created)?;
         Some((origin, created, answer.primitive))
     }

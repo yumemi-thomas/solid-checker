@@ -160,7 +160,7 @@ impl SemanticLookup<'_> {
     /// Whether some analyzed file holds a JSX member tag (`<Split.Panel>`):
     /// the only way a holder renders anything.
     pub(super) fn program_has_member_tag(&self) -> bool {
-        self.files().iter().any(|file| {
+        self.file_slots().iter().any(|file| {
             file.ast
                 .jsx_elements
                 .iter()
@@ -653,25 +653,27 @@ impl SemanticLookup<'_> {
         {
             return true;
         }
-        self.facts.files.iter().any(|file| {
-            self.computed_write_may_reach_object(file)
-                || file.ast.calls.iter().any(|call| {
-                    let Some(target) = call.arguments.first() else {
-                        return false;
-                    };
-                    let reflective = self.reflective_write_name(file, call);
-                    if call.construct || reflective.is_none() {
-                        return false;
-                    }
-                    // `Object.assign(target, …)` is everywhere; only a target
-                    // that is `Object` itself (or its alias) patches it. The
-                    // reflective writes that take a descriptor or a key
-                    // refuse any target that may be `Object`, unresolved ones
-                    // included.
-                    let strict = reflective == Some(ReflectiveWrite::Assign);
-                    target.spread || self.may_be_object(file, target.span, !strict, 8)
-                })
-        })
+        crate::base::reads::file_slots(self.facts)
+            .iter()
+            .any(|file| {
+                self.computed_write_may_reach_object(file)
+                    || file.ast.calls.iter().any(|call| {
+                        let Some(target) = call.arguments.first() else {
+                            return false;
+                        };
+                        let reflective = self.reflective_write_name(file, call);
+                        if call.construct || reflective.is_none() {
+                            return false;
+                        }
+                        // `Object.assign(target, …)` is everywhere; only a target
+                        // that is `Object` itself (or its alias) patches it. The
+                        // reflective writes that take a descriptor or a key
+                        // refuse any target that may be `Object`, unresolved ones
+                        // included.
+                        let strict = reflective == Some(ReflectiveWrite::Assign);
+                        target.spread || self.may_be_object(file, target.span, !strict, 8)
+                    })
+            })
     }
 
     /// Whether a computed member write whose key is not a literal (or a

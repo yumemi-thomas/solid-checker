@@ -380,7 +380,7 @@ pub(crate) fn attribute_dependency_requirements(
             let Some(node_function) = node_file.ast.function_at(nodes[node].span) else {
                 continue;
             };
-            for file in &facts.files {
+            for file in crate::base::reads::all_files(facts) {
                 if facts.dependency_source_root(file.path.as_str()).is_some() {
                     continue;
                 }

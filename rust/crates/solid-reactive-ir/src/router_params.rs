@@ -181,7 +181,7 @@ pub fn router_params_status(
     let mut reached: Vec<Reached> = Vec::new();
     let mut uses_params = false;
     let mut replaced: Option<&'static str> = None;
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         for import in &file.ast.imports {
             if import.module.as_str() != ROUTER_PACKAGE
                 || import.type_only
@@ -305,7 +305,7 @@ pub fn router_params_status(
         .first()
         .and_then(|entry| entry.version.clone())
         .unwrap_or_default();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         if file
             .path
             .as_str()
@@ -380,7 +380,7 @@ pub(crate) fn runtime_agrees(
 fn history_not_stock(facts: &ProjectFacts) -> Option<&'static str> {
     let mut accepted_values: BTreeSet<(String, Span)> = BTreeSet::new();
     let mut constants: Vec<(usize, Span)> = Vec::new();
-    for (index, file) in facts.files.iter().enumerate() {
+    for (index, file) in crate::base::reads::file_slots(facts).iter().enumerate() {
         if file
             .path
             .as_str()
@@ -490,7 +490,7 @@ fn history_not_stock(facts: &ProjectFacts) -> Option<&'static str> {
         }
     }
     for (index, declaration) in constants {
-        let file = &facts.files[index];
+        let file = &crate::base::reads::file_slots(facts)[index];
         let ast = &*file.ast;
         if ast.exports.iter().any(|export| {
             export
@@ -540,7 +540,10 @@ pub(crate) fn router_context_as_this(
     skip: &dyn Fn(&FileFacts) -> bool,
 ) -> Option<&'static str> {
     let mut called = false;
-    for file in facts.files.iter().filter(|file| !skip(file)) {
+    for file in crate::base::reads::file_slots(facts)
+        .iter()
+        .filter(|file| !skip(file))
+    {
         let ast = &*file.ast;
         let locals = ActionLocals::of(file);
         for namespace in &locals.namespaces {
@@ -575,7 +578,10 @@ pub(crate) fn router_context_as_this(
     if !called {
         return None;
     }
-    for file in facts.files.iter().filter(|file| !skip(file)) {
+    for file in crate::base::reads::file_slots(facts)
+        .iter()
+        .filter(|file| !skip(file))
+    {
         let ast = &*file.ast;
         if ast.members.iter().any(|member| {
             matches!(
@@ -814,8 +820,7 @@ fn imported_action<'f>(
     if path != landed {
         return None;
     }
-    let declaring = facts
-        .files
+    let declaring = crate::base::reads::file_slots(facts)
         .iter()
         .find(|candidate| candidate.path.as_str() == path)?;
     const_binding_at(declaring, declaration).map(|_| (declaring, declaration))
@@ -871,7 +876,10 @@ fn exported_action_keeps_this(
         .flat_map(|export| export.specifiers.iter().chain(&export.declarations))
         .map(|specifier| specifier.local.span)
         .collect::<Vec<_>>();
-    for file in facts.files.iter().filter(|file| !skip(file)) {
+    for file in crate::base::reads::file_slots(facts)
+        .iter()
+        .filter(|file| !skip(file))
+    {
         let ast = &*file.ast;
         if file.source.contains("import.meta.glob") {
             return false;
@@ -955,8 +963,7 @@ fn exported_action_keeps_this(
         return false;
     }
     symbol.references().all(|reference| {
-        let Some(file) = facts
-            .files
+        let Some(file) = crate::base::reads::file_slots(facts)
             .iter()
             .find(|file| file.path.as_str() == reference.path.as_ref())
         else {

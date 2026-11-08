@@ -373,7 +373,7 @@ pub(super) fn path_file<'l>(
     id: FileId,
 ) -> Option<&'l FileFacts> {
     let slot = *table.slots_of(id).first()?;
-    lookup.files().get(slot)
+    lookup.file_slots().get(slot)
 }
 
 /// What the census and the walks ask of the lookup about one file's
@@ -1169,7 +1169,7 @@ pub(super) fn build<'a, 'facts: 'a>(
     // The build's files in file order, each with its memo id and slot rank:
     // the order the folds keep, and the keys of the stage memos.
     let files = lookup
-        .files()
+        .file_slots()
         .iter()
         .enumerate()
         .map(|(slot, file)| (lookup.memo_slot_of(slot), file))

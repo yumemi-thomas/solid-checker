@@ -30,7 +30,7 @@ pub(crate) type Targets = HashMap<Location, (String, Span)>;
 pub(crate) fn index(lookup: &SemanticLookup<'_>) -> Targets {
     let world = lookup.memo_world();
     let mut targets = HashMap::default();
-    for (slot, file) in lookup.files().iter().enumerate() {
+    for (slot, file) in lookup.file_slots().iter().enumerate() {
         let key = lookup.memo_slot_of(slot);
         for (read, path, function) in world.answer::<ObjectMemberTargets>(&key) {
             targets.insert(
@@ -47,7 +47,7 @@ pub(crate) fn index(lookup: &SemanticLookup<'_>) -> Targets {
 pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> SpreadTargets {
     let world = lookup.memo_world();
     let mut spreads = HashMap::default();
-    for (slot, file) in lookup.files().iter().enumerate() {
+    for (slot, file) in lookup.file_slots().iter().enumerate() {
         let key = lookup.memo_slot_of(slot);
         for (argument, targets) in world.answer::<SpreadTargetsAt>(&key) {
             spreads.insert(
@@ -89,7 +89,7 @@ pub(crate) fn literal_receiver_members(lookup: &SemanticLookup<'_>) -> LiteralRe
     let world = lookup.memo_world();
     let mut found = HashSet::default();
     let mut across_files = Vec::new();
-    for (slot, file) in lookup.files().iter().enumerate() {
+    for (slot, file) in lookup.file_slots().iter().enumerate() {
         let key = lookup.memo_slot_of(slot);
         for (span, across) in world.answer::<LiteralReceivers>(&key) {
             found.insert((file.path.to_string(), span));

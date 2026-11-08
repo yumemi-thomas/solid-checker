@@ -302,7 +302,7 @@ impl<'a> SemanticLookup<'a> {
                     continue;
                 };
                 for ((start, end), resolution) in references {
-                    let declaring = &self.facts.files[resolution.file];
+                    let declaring = &crate::base::reads::file_slots(self.facts)[resolution.file];
                     let binding = &declaring.ast.bindings[resolution.binding];
                     // ADR 0459's namespace primitive slots are pattern
                     // bindings, so `decided` holds them already.
@@ -352,7 +352,7 @@ impl<'a> SemanticLookup<'a> {
             // 0464 review): its same-file mentions, from the binder, are
             // withheld and unordered. Another module's mention of it has no
             // such fallback (docs/open-work.md).
-            for file in &self.facts.files {
+            for file in crate::base::reads::file_slots(self.facts) {
                 let path = file.path.as_str();
                 for binding in file.ast.bindings.iter().filter(|binding| decided(binding)) {
                     let listed = binding.names.iter().any(|name| {
@@ -580,8 +580,8 @@ impl<'a> SemanticLookup<'a> {
         binding: usize,
         visiting: &mut Proving,
     ) -> bool {
-        let declaring_file = &self.facts.files[declaring];
-        let caller_file = &self.facts.files[caller];
+        let declaring_file = &crate::base::reads::file_slots(self.facts)[declaring];
+        let caller_file = &crate::base::reads::file_slots(self.facts)[caller];
         let binding_fact = &declaring_file.ast.bindings[binding];
         let Some(initializer) = binding_fact.initializer else {
             return false;
@@ -748,7 +748,7 @@ impl<'a> SemanticLookup<'a> {
         if visiting.assumed(&(file, function.span)) {
             return true;
         }
-        let facts = &self.facts.files[file];
+        let facts = &crate::base::reads::file_slots(self.facts)[file];
         let Some(name) = function.name.as_ref() else {
             return false;
         };
@@ -805,7 +805,7 @@ impl<'a> SemanticLookup<'a> {
             // arrow does.
             return true;
         }
-        let facts = &self.facts.files[file];
+        let facts = &crate::base::reads::file_slots(self.facts)[file];
         let own = *scratch
             .function_bindings
             .entry((file, arrow))

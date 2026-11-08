@@ -27,7 +27,7 @@ pub(super) fn discover_boundary_defects(
     dialect: &dyn Dialect,
 ) -> Vec<StaticDefect> {
     let mut defects = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         for import in &file.ast.imports {
             if import.type_only || solid_dialect::core_runtime_reference("", &import.module) {
                 continue;

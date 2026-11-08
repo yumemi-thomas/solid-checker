@@ -59,7 +59,7 @@ pub(crate) fn apply_compute_reads(
             })
     };
     let mut pairs = HashMap::<(String, Span), Vec<Option<(String, Span)>>>::default();
-    for file in &facts.files {
+    for file in crate::base::reads::all_files(facts) {
         for call in &file.ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;
@@ -99,7 +99,7 @@ pub(crate) fn apply_compute_reads(
     // A declaration site can allocate several sources (two calls of a
     // factory). Correlate immutable getter values, not allocation templates.
     let mut values = HashMap::<SymbolId, Option<(Option<SymbolId>, bool)>>::default();
-    for file in &facts.files {
+    for file in crate::base::reads::all_files(facts) {
         for binding in file.ast.bindings.iter().filter(|binding| binding.immutable) {
             for name in &binding.names {
                 let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span).cloned()
@@ -201,7 +201,7 @@ pub(crate) fn apply_compute_reads(
         .filter_map(Clone::clone)
         .collect::<HashSet<_>>();
     let mut guaranteed = HashMap::<(String, Span), HashSet<Span>>::default();
-    for file in &facts.files {
+    for file in crate::base::reads::all_files(facts) {
         for call in file
             .ast
             .calls

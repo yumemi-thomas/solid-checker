@@ -26,7 +26,7 @@ pub(crate) fn unresolved_handler_defects<'a>(
     lookup: &SemanticLookup<'a>,
 ) -> Vec<crate::StaticDefect> {
     let mut defects = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::all_files(facts) {
         let members = file
             .ast
             .members

@@ -24,7 +24,7 @@ pub(crate) fn loading_on_outside_hold_obligations(
     lookup: &SemanticLookup<'_>,
 ) -> Vec<StaticViolation> {
     let mut obligations = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::all_files(facts) {
         loading_on_accessor_violations(file, lookup, &mut obligations);
         let primitives = lookup.primitives(file);
         for (index, element) in file.ast.jsx_elements.iter().enumerate() {

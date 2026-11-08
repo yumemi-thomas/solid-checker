@@ -103,7 +103,7 @@ fn push_view_candidates(
 /// (`Accessor<T>`, `Store<T>`) that nothing else proves to be a source.
 /// `Accessor<T>` is `() => T`, which every plain function satisfies, so the
 /// type alone never supplies the reactive-read premise.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct TypedSource {
     pub(crate) name: SymbolId,
     /// The alias declaration the type names.

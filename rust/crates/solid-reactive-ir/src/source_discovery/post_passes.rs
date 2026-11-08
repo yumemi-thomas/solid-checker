@@ -404,7 +404,7 @@ pub(super) fn run(
             ..KeptPasses::default()
         };
     }
-    let (keys, duplicated) = slot_keys(&mut state.slot_keys, &facts.files);
+    let (keys, duplicated) = slot_keys(&mut state.slot_keys, crate::base::reads::file_slots(facts));
     let order = FileOrder::new(&keys);
     let slots = keys
         .iter()
@@ -475,7 +475,7 @@ pub(super) fn run(
     let own_gate = |(_, file): &(usize, &FileFacts)| unchanged_paths.contains(file.path.as_str());
     let items = keys
         .iter()
-        .zip(facts.files.iter().enumerate())
+        .zip(crate::base::reads::file_slots(facts).iter().enumerate())
         .map(|(key, item)| (*key, item))
         .collect::<Vec<_>>();
     // Every file's rows that read no source table.
@@ -836,7 +836,7 @@ pub(super) fn run(
             HashSet::default()
         };
         let inputs = ComponentInputs {
-            files: &facts.files,
+            files: crate::base::reads::file_slots(facts),
             accessors: &tables.accessors,
             source_kinds: &tables.source_kinds,
             prop_sources: &tables.prop_sources,

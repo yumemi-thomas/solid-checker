@@ -112,8 +112,11 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
         if !served_this_build(store) {
             return self.calls();
         }
-        let mut files = Vec::with_capacity(self.facts.files.len());
-        for (slot, file) in self.facts.files.iter().enumerate() {
+        let mut files = Vec::with_capacity(crate::base::reads::file_slots(self.facts).len());
+        for (slot, file) in crate::base::reads::file_slots(self.facts)
+            .iter()
+            .enumerate()
+        {
             let (id, rank) = lookup.memo_slot_of(slot);
             if rank != 0 {
                 return self.calls();
@@ -139,7 +142,8 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             );
         }
         if store.check_solvers() {
-            let (fresh_calls, fresh_unavailable) = self.calls();
+            // The check's reads are not the answer's: it reads every file.
+            let (fresh_calls, fresh_unavailable) = crate::base::reads::suppress(|| self.calls());
             if fresh_calls != calls || fresh_unavailable != unavailable {
                 store.poison(
                     "IR transport verify mismatch: the transported calls on memos differ from the resolver's",
