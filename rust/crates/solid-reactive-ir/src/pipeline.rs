@@ -305,6 +305,12 @@ pub(crate) struct AnalysisContext<'a> {
     /// (source discovery's): a per-file chunk of such a file may be kept
     /// ([`crate::late_chunks`]).
     pub(crate) unchanged_paths: &'a HashSet<String>,
+    /// Where each reference of an accessor source lies
+    /// ([`crate::symbols::source_reference_locations`]): built once per
+    /// build for both compatibility contexts (the census's member writes and
+    /// the compatibility pass).
+    pub(crate) source_reference_locations:
+        std::sync::OnceLock<std::sync::Arc<crate::cache::SourceReferenceLocations>>,
 }
 
 /// What one analysis is given about the code it cannot read: the package
@@ -731,6 +737,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         symbols_by_root: &typescript_indexes.symbols_by_root,
         rule_options,
         unchanged_paths: &source_discovery.unchanged_paths,
+        source_reference_locations: std::sync::OnceLock::new(),
     };
     // The two after-await rules, the prepass's and the one over calls the
     // interprocedural pass attributed, ask the same project-wide index: it is

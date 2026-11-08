@@ -174,14 +174,20 @@ pub(crate) fn execution_paths(
     let client = client_path(facts, runtime, dialect);
     let files = crate::base::reads::all_files(facts);
     let hydrates = hydrating_pass_present(files, runtime, dialect);
-    let mut arms = Vec::new();
-    for file in files {
+    // Each file's arms read that file and the build: found on the workers,
+    // in file order.
+    let mut arms = crate::pipeline::parallel_file_results(files, |file| {
+        let mut arms = Vec::new();
         file_arms(file, dialect, &mut arms);
         deferred_mount_arms(facts, file, runtime, dialect, &mut arms);
         if hydrates {
             no_hydration_arms(file, lookup, &mut arms);
         }
-    }
+        arms
+    })
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
     arm_only_functions(files, runtime, lookup, &mut arms);
     ExecutionPaths { client, arms }
 }

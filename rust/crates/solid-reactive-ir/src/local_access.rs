@@ -10340,16 +10340,18 @@ pub(crate) fn member_receiver_alias(
 pub(crate) fn longer_path_objects(
     file: &solid_facts::FileFacts,
 ) -> crate::HashSet<solid_facts::core::Span> {
+    // The iteration targets, peeled, asked of every member below.
+    let iterated = file
+        .ast
+        .iteration_targets
+        .iter()
+        .map(|target| file.ast.peel_ts_sugar_span(*target))
+        .collect::<crate::HashSet<_>>();
     file.ast
         .members
         .iter()
         .filter(|candidate| {
-            !(file.ast.is_no_get_target(candidate.span)
-                || file
-                    .ast
-                    .iteration_targets
-                    .iter()
-                    .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span))
+            !(file.ast.is_no_get_target(candidate.span) || iterated.contains(&candidate.span))
         })
         .map(|candidate| file.ast.peel_ts_sugar_span(candidate.object))
         .collect()

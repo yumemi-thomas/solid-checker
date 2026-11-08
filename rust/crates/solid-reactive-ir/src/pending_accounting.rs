@@ -271,7 +271,7 @@ struct Site {
 pub(crate) fn account_pending_reads(
     ctx: &AnalysisContext<'_>,
     pending: &dyn Fn(&str) -> bool,
-    declared: &dyn Fn(&str) -> bool,
+    declared: &(dyn Fn(&str) -> bool + Sync),
     walk_decided: &HashSet<Location>,
     draft: &mut ProgramDraft,
 ) {
@@ -466,9 +466,32 @@ pub(crate) fn account_pending_reads(
             .or_default()
             .push((violation.location.start_byte, violation.location.end_byte));
     }
+    // What each site asks of the build alone (its reasons, the caught claim,
+    // a loose match): asked on the workers, in the sites' order.
+    let asked = crate::pipeline::parallel_balanced_results(&sites, |site| {
+        let file = lookup.file_by_path(site.location.path.as_ref());
+        let span = span_of(&site.location);
+        let mut reasons = site_reasons(ctx, declared, file, span, site);
+        let caught_claim = match (file, span) {
+            (Some(file), Some(span)) => caught_claim(ctx, file, span, &mut reasons),
+            _ => false,
+        };
+        let loose_match = file.zip(span).is_some_and(|(file, span)| {
+            crate::owners::read_in_loose_match(
+                file,
+                span,
+                ctx.entities,
+                ctx.symbol_names,
+                lookup.dialect,
+            )
+        });
+        (file, span, reasons, caught_claim, loose_match)
+    });
     let mut added = Vec::new();
     let mut caught_rows = Vec::new();
-    for site in sites {
+    for (site, (file, span, site_reasons, caught_claim, loose_match)) in
+        sites.into_iter().zip(asked)
+    {
         // Review R6: a row a walk placed at a call stands for its read only
         // when that walk placed every path; a cut walk left its read rows of
         // its own, and those account for it.
@@ -496,17 +519,13 @@ pub(crate) fn account_pending_reads(
         if held {
             continue;
         }
-        let file = lookup.file_by_path(site.location.path.as_ref());
-        let span = span_of(&site.location);
-        let mut reasons = site_reasons(ctx, declared, file, span, &site);
+        // The site's reasons and the caught claim's (asked above), and the
+        // walk's: a set the rules below only search.
+        let mut reasons = site_reasons;
         // A row at the read, or a walk that cut it, keeps the row logic.
         if rows.is_empty() && !cut && walk_decided.contains(&site.location) {
             reasons.push(PendingSafe::WalkDecided);
         }
-        let caught_claim = match (file, span) {
-            (Some(file), Some(span)) => caught_claim(ctx, file, span, &mut reasons),
-            _ => false,
-        };
         let caught_row = caught_spans
             .get(site.location.path.as_ref())
             .is_some_and(|spans| {
@@ -514,15 +533,6 @@ pub(crate) fn account_pending_reads(
                     *start < site.location.end_byte && site.location.start_byte < *end
                 })
             });
-        let loose_match = file.zip(span).is_some_and(|(file, span)| {
-            crate::owners::read_in_loose_match(
-                file,
-                span,
-                ctx.entities,
-                ctx.symbol_names,
-                lookup.dialect,
-            )
-        });
         for rule in PendingRule::ALL {
             if rule == PendingRule::Caught && (!caught_claim || caught_row) {
                 continue;
@@ -631,7 +641,7 @@ fn unaccounted_caught(site: &Site) -> crate::StaticViolation {
 /// Reasons evaluable at the read itself, whatever row stands there.
 fn site_reasons(
     ctx: &AnalysisContext<'_>,
-    declared: &dyn Fn(&str) -> bool,
+    declared: &(dyn Fn(&str) -> bool + Sync),
     file: Option<&solid_facts::FileFacts>,
     span: Option<Span>,
     site: &Site,

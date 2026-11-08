@@ -845,7 +845,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// every source's reference list per identifier is quadratic in project
     /// size. Owned: the reference lists it is built from live shorter than
     /// this struct's borrows.
-    pub(super) source_reference_index: HashMap<String, HashMap<(u64, u64), SymbolId>>,
+    pub(super) source_reference_index: std::sync::Arc<crate::cache::SourceReferenceLocations>,
     /// The imported symbols a dependency-source summary describes.
     ///
     /// Read as the negative: a callee absent from here, absent from the
@@ -968,11 +968,15 @@ fn compat_context<'a>(
         setters: ctx.setters,
         actions: ctx.actions,
         reactive_reads,
-        source_reference_index: crate::symbols::source_reference_locations(
-            &ctx.facts.typescript,
-            ctx.symbols_by_root,
-            ctx.accessors.keys(),
-        ),
+        source_reference_index: std::sync::Arc::clone(ctx.source_reference_locations.get_or_init(
+            || {
+                std::sync::Arc::new(crate::symbols::source_reference_locations(
+                    &ctx.facts.typescript,
+                    ctx.symbols_by_root,
+                    ctx.accessors.keys(),
+                ))
+            },
+        )),
         prefer_for_enabled,
         prefer_show_enabled,
         forwarded_uncaptured: shared_reactivity::ForwardedUncaptured::default(),

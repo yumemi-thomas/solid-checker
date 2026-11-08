@@ -86,6 +86,7 @@ pub(super) fn add_solid_import_names(
         }
         // Review D36: a `const` holding a named import of a primitive exactly
         // (`const r = refresh`, or `box.key` of a closed holder) names it.
+        let aliases = ConstAliases::of(file);
         for binding in &file.ast.bindings {
             let [name] = binding.names.as_slice() else {
                 continue;
@@ -93,7 +94,7 @@ pub(super) fn add_solid_import_names(
             if !binding.immutable {
                 continue;
             }
-            let Some(source) = import_alias_source(file, name.span) else {
+            let Some(source) = aliases.alias_source(name.span) else {
                 continue;
             };
             let Some((import, imported)) = file.ast.imports.iter().find_map(|import| {
@@ -170,12 +171,53 @@ fn alias_const(
     file.ast
         .bindings
         .iter()
-        .find(|binding| {
-            binding.immutable
-                && binding.shape == solid_facts::ast::BindingShape::Identifier
-                && matches!(binding.names.as_slice(), [name] if name.span == declaration)
-        })
+        .find(|binding| alias_const_at(binding).is_some_and(|name| name == declaration))
         .filter(|binding| !crate::argument_values::binding_is_exported(file, binding, declaration))
+}
+
+/// The one name of `binding` when it is an immutable identifier binding:
+/// what [`alias_const`] looks for.
+fn alias_const_at(binding: &solid_facts::ast::BindingFact) -> Option<solid_facts::core::Span> {
+    match binding.names.as_slice() {
+        [name]
+            if binding.immutable && binding.shape == solid_facts::ast::BindingShape::Identifier =>
+        {
+            Some(name.span)
+        }
+        _ => None,
+    }
+}
+
+/// [`alias_const`] for every declaration of `file` at once: the first such
+/// binding of each name span, in file order (the export filter is applied
+/// where it is read, [`ConstAliases::alias_source`]). A loop over a file's
+/// bindings that asks of each reads this instead of scanning them again.
+struct ConstAliases<'f> {
+    file: &'f solid_facts::FileFacts,
+    first: HashMap<solid_facts::core::Span, &'f solid_facts::ast::BindingFact>,
+}
+
+impl<'f> ConstAliases<'f> {
+    fn of(file: &'f solid_facts::FileFacts) -> Self {
+        let mut first = HashMap::default();
+        for binding in &file.ast.bindings {
+            if let Some(name) = alias_const_at(binding) {
+                first.entry(name).or_insert(binding);
+            }
+        }
+        Self { file, first }
+    }
+
+    /// [`import_alias_source`] of `declaration`.
+    fn alias_source(
+        &self,
+        declaration: solid_facts::core::Span,
+    ) -> Option<solid_facts::core::Span> {
+        let binding = self.first.get(&declaration).copied().filter(|binding| {
+            !crate::argument_values::binding_is_exported(self.file, binding, declaration)
+        });
+        import_alias_source_of(self.file, binding)
+    }
 }
 
 /// `holder.key` at `span` (non-optional; a static key, or a literal computed
@@ -263,8 +305,16 @@ pub(crate) fn import_alias_source(
     file: &solid_facts::FileFacts,
     declaration: solid_facts::core::Span,
 ) -> Option<solid_facts::core::Span> {
+    import_alias_source_of(file, alias_const(file, declaration))
+}
+
+/// [`import_alias_source`] of the binding [`alias_const`] found.
+fn import_alias_source_of(
+    file: &solid_facts::FileFacts,
+    alias: Option<&solid_facts::ast::BindingFact>,
+) -> Option<solid_facts::core::Span> {
     let ast = &file.ast;
-    let initializer = ast.peel_ts_sugar_span(alias_const(file, declaration)?.initializer?);
+    let initializer = ast.peel_ts_sugar_span(alias?.initializer?);
     let value = if crate::source_discovery::named_runtime_import(file, initializer) {
         initializer
     } else {
@@ -327,11 +377,12 @@ pub(crate) fn copied_into_primitive_binding(
             }
         });
     }
+    let aliases = ConstAliases::of(file);
     ast.bindings.iter().any(|binding| {
         let [name] = binding.names.as_slice() else {
             return false;
         };
-        if !binding.immutable || import_alias_source(file, name.span).is_none() {
+        if !binding.immutable || aliases.alias_source(name.span).is_none() {
             return false;
         }
         let Some(initializer) = binding.initializer.map(|init| ast.peel_ts_sugar_span(init)) else {
