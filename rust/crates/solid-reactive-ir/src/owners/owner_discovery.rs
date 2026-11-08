@@ -1048,11 +1048,13 @@ pub(crate) fn find_missing_owners_incremental(
         }
     }
     let mut recomputed = Vec::new();
+    // One check pass: each memo is asked once (`reads::PassAnswers`).
+    let answers = crate::base::reads::PassAnswers::new(lookup);
     for (file, pid) in files.iter().zip(&order) {
         if unchanged_paths.contains(file.path.as_str())
             && let Some(entry) = graph.file(*pid)
             && entry.fragment.source_hash == file.source_hash
-            && entry.fragment.proof.holds(lookup)
+            && entry.fragment.proof.holds(&answers)
             && (Arc::ptr_eq(&entry.fragment.compiler, &file.compiler)
                 || same_compiler_semantics(&entry.fragment.compiler, &file.compiler))
         {
@@ -1062,7 +1064,7 @@ pub(crate) fn find_missing_owners_incremental(
         recomputed.push(*file);
         timings.recomputed_files += 1;
     }
-    let discovered = parallel_slice_results(&recomputed, |file| {
+    let discovered = crate::pipeline::parallel_balanced_results_from(2, &recomputed, |file| {
         // What the fragment read of other files is its proof.
         let (mut discovered, reads) = crate::base::reads::record(|| {
             discover_owner_file(file, indexes, entities, symbol_names, lookup)

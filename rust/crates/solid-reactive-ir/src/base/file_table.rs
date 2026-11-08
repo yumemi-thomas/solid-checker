@@ -221,19 +221,35 @@ impl FileItems {
 pub(crate) type ReferenceRows = HashMap<Arc<str>, Vec<(Arc<str>, Span)>>;
 
 pub(crate) fn reference_rows(typescript: &TypeScriptTable) -> ReferenceRows {
+    // Contiguous runs of the symbols on the workers, each run's rows by path,
+    // then the runs appended in order: each path's rows in symbol order.
+    let symbols = typescript.symbols().collect::<Vec<_>>();
+    let workers = crate::pipeline::available_analysis_workers().max(1);
+    let runs = symbols
+        .chunks(symbols.len().div_ceil(workers * 4).max(1024))
+        .collect::<Vec<_>>();
     let mut rows = ReferenceRows::default();
-    for symbol in typescript.symbols() {
-        let id: Arc<str> = Arc::from(symbol.id());
-        for reference in symbol.references() {
-            let (Ok(start), Ok(end)) = (
-                u32::try_from(reference.start_byte),
-                u32::try_from(reference.end_byte),
-            ) else {
-                continue;
-            };
-            rows.entry(Arc::clone(&reference.path))
-                .or_default()
-                .push((Arc::clone(&id), Span::new(start, end)));
+    for run in crate::pipeline::parallel_balanced_results_from(2, &runs, |run| {
+        let mut rows = ReferenceRows::default();
+        for symbol in *run {
+            let id: Arc<str> = Arc::from(symbol.id());
+            for reference in symbol.references() {
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(reference.start_byte),
+                    u32::try_from(reference.end_byte),
+                ) else {
+                    continue;
+                };
+                rows.entry(Arc::clone(&reference.path))
+                    .or_default()
+                    .push((Arc::clone(&id), Span::new(start, end)));
+            }
+        }
+        rows
+    }) {
+        // Appended in run order; the order of the paths is the map's.
+        for (path, mut run_rows) in run {
+            rows.entry(path).or_default().append(&mut run_rows);
         }
     }
     rows

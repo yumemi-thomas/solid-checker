@@ -738,19 +738,102 @@ pub(crate) trait ReadAnswers {
     fn memo_changed_at(&self, store: u64, read: MemoRead) -> Option<Revision>;
     /// The identity of the memo store this build reads.
     fn memo_store_id(&self) -> u64;
+    /// How many markings that store has made: answers kept within a pass
+    /// hold while it is unchanged ([`PassAnswers`]). Required, with no
+    /// default: an implementor answering a constant would let a pass serve
+    /// a memo answer a marking moved.
+    fn memo_marks(&self) -> u64;
+    /// The revision `read`'s memo last changed in, brought up to date in
+    /// this build (`None`: gone, or another store), or `Undecided` while
+    /// bringing it up to date needs a derived table its pass has not
+    /// published (`base::memo::derived::deferring`).
+    fn memo_answer(&self, store: u64, read: MemoRead) -> MemoAnswer {
+        MemoAnswer::Decided(self.memo_changed_at(store, read))
+    }
     /// [`Self::memo_changed_at`], telling apart a read this build cannot
-    /// answer yet: bringing the memo up to date needs a derived table its
-    /// pass has not published (`base::memo::derived::deferring`).
+    /// answer yet ([`Self::memo_answer`]).
     fn memo_check(&self, store: u64, read: MemoRead) -> MemoCheck {
-        if self.memo_changed_at(store, read) == Some(read.changed_at) {
-            MemoCheck::Same
-        } else {
-            MemoCheck::Moved
+        match self.memo_answer(store, read) {
+            MemoAnswer::Decided(changed_at) if changed_at == Some(read.changed_at) => {
+                MemoCheck::Same
+            }
+            MemoAnswer::Decided(_) => MemoCheck::Moved,
+            MemoAnswer::Undecided => MemoCheck::Undecided,
         }
     }
     /// A memo read, named for a diagnostic.
     fn describe_memo(&self, read: MemoRead) -> String {
         format!("{read:?}")
+    }
+}
+
+/// A memo's answer in the current build ([`ReadAnswers::memo_answer`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MemoAnswer {
+    Decided(Option<Revision>),
+    Undecided,
+}
+
+/// [`ReadAnswers`] that asks each memo once: one worker's view of a build
+/// while it checks many proofs in one pass. A memo brought up to date keeps
+/// its answer until the store marks it again (a derived table published
+/// after `begin`), and every marking empties the kept answers, so a proof
+/// checked here answers as against `inner`; an undecided answer is asked
+/// again. Checking
+/// the same popular memos once per proof was most of a revalidation's time
+/// (2.95M memo reads per app-game edit), in contention on their entries.
+pub(crate) struct PassAnswers<'a> {
+    inner: &'a dyn ReadAnswers,
+    /// The store's markings when `memos` was filled: a marking (a derived
+    /// table published during the pass) empties it.
+    marks: std::cell::Cell<u64>,
+    memos: std::cell::RefCell<crate::HashMap<(u64, TableId, QueryId), Option<Revision>>>,
+}
+
+impl<'a> PassAnswers<'a> {
+    pub(crate) fn new(inner: &'a dyn ReadAnswers) -> Self {
+        Self {
+            inner,
+            marks: std::cell::Cell::new(inner.memo_marks()),
+            memos: std::cell::RefCell::default(),
+        }
+    }
+}
+
+impl ReadAnswers for PassAnswers<'_> {
+    fn section_fingerprint(&self, section: Section) -> [u8; 32] {
+        self.inner.section_fingerprint(section)
+    }
+    fn memo_changed_at(&self, store: u64, read: MemoRead) -> Option<Revision> {
+        match self.memo_answer(store, read) {
+            MemoAnswer::Decided(changed_at) => changed_at,
+            MemoAnswer::Undecided => self.inner.memo_changed_at(store, read),
+        }
+    }
+    fn memo_store_id(&self) -> u64 {
+        self.inner.memo_store_id()
+    }
+    fn memo_marks(&self) -> u64 {
+        self.inner.memo_marks()
+    }
+    fn memo_answer(&self, store: u64, read: MemoRead) -> MemoAnswer {
+        let marks = self.inner.memo_marks();
+        if marks != self.marks.get() {
+            self.memos.borrow_mut().clear();
+            self.marks.set(marks);
+        }
+        let key = (store, read.table, read.query);
+        if let Some(changed_at) = self.memos.borrow().get(&key) {
+            return MemoAnswer::Decided(*changed_at);
+        }
+        let answer = self.inner.memo_answer(store, read);
+        if let MemoAnswer::Decided(changed_at) = answer {
+            self.memos.borrow_mut().insert(key, changed_at);
+        }
+        answer
+    }
+    fn describe_memo(&self, read: MemoRead) -> String {
+        self.inner.describe_memo(read)
     }
 }
 
@@ -1012,6 +1095,9 @@ mod tests {
         fn memo_store_id(&self) -> u64 {
             1
         }
+        fn memo_marks(&self) -> u64 {
+            0
+        }
         fn memo_check(&self, store: u64, read: MemoRead) -> MemoCheck {
             if self.undecided.borrow().contains(&read.query.0) {
                 return MemoCheck::Undecided;
@@ -1022,6 +1108,60 @@ mod tests {
                 MemoCheck::Moved
             }
         }
+    }
+
+    /// Answers whose memo revisions and markings a test moves.
+    struct Moving {
+        revisions: std::cell::RefCell<std::collections::BTreeMap<u32, Revision>>,
+        undecided: std::cell::RefCell<BTreeSet<u32>>,
+        marks: std::cell::Cell<u64>,
+        asked: std::cell::Cell<u32>,
+    }
+
+    impl ReadAnswers for Moving {
+        fn section_fingerprint(&self, _: Section) -> [u8; 32] {
+            [0; 32]
+        }
+        fn memo_changed_at(&self, _: u64, read: MemoRead) -> Option<Revision> {
+            self.revisions.borrow().get(&read.query.0).copied()
+        }
+        fn memo_store_id(&self) -> u64 {
+            1
+        }
+        fn memo_marks(&self) -> u64 {
+            self.marks.get()
+        }
+        fn memo_answer(&self, store: u64, read: MemoRead) -> MemoAnswer {
+            self.asked.set(self.asked.get() + 1);
+            if self.undecided.borrow().contains(&read.query.0) {
+                return MemoAnswer::Undecided;
+            }
+            MemoAnswer::Decided(self.memo_changed_at(store, read))
+        }
+    }
+
+    /// A pass asks each memo once; a marking of the store empties what it
+    /// kept, and an undecided answer is never kept.
+    #[test]
+    fn a_pass_asks_each_memo_once_until_the_store_marks() {
+        let inner = Moving {
+            revisions: std::cell::RefCell::new([(1, 1), (2, 1)].into_iter().collect()),
+            undecided: std::cell::RefCell::new([2].into_iter().collect()),
+            marks: std::cell::Cell::new(0),
+            asked: std::cell::Cell::new(0),
+        };
+        let pass = PassAnswers::new(&inner);
+        assert_eq!(pass.memo_check(1, read(1)), MemoCheck::Same);
+        assert_eq!(pass.memo_check(1, read(1)), MemoCheck::Same);
+        assert_eq!(inner.asked.get(), 1, "a decided answer is kept");
+        assert_eq!(pass.memo_check(1, read(2)), MemoCheck::Undecided);
+        assert_eq!(pass.memo_check(1, read(2)), MemoCheck::Undecided);
+        assert_eq!(inner.asked.get(), 3, "an undecided one is asked again");
+        // The memo moves, unseen until the store marks.
+        inner.revisions.borrow_mut().insert(1, 5);
+        assert_eq!(pass.memo_check(1, read(1)), MemoCheck::Same);
+        inner.marks.set(1);
+        assert_eq!(pass.memo_check(1, read(1)), MemoCheck::Moved);
     }
 
     /// A proof checked before a pass publishes what some of its memos read

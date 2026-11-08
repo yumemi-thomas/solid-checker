@@ -76,7 +76,15 @@ function cli(arm, project) {
     if (!line.startsWith("{")) return false;
     try { return JSON.parse(line).mode === "retained-daemon"; } catch { return false; }
   });
-  const answer = (result.stdout ?? "").split(project.root).join("<root>");
+  // The answer as data: arms whose reports differ only in whitespace (a
+  // pretty and a compact build) give the same answer.
+  let stdout = result.stdout ?? "";
+  try {
+    stdout = JSON.stringify(JSON.parse(stdout));
+  } catch {
+    // Not one JSON document: compared as written.
+  }
+  const answer = stdout.split(project.root).join("<root>");
   return { ms, retained, hash: createHash("sha256").update(answer).digest("hex").slice(0, 16), findings: findingCount(result.stdout) };
 }
 

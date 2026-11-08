@@ -40,7 +40,7 @@
     "typescript-table": 1
   },
   "rust/crates/solid-reactive-ir/src/base/index.rs": {
-    "hashmap-iteration": 4
+    "hashmap-iteration": 6
   },
   "rust/crates/solid-reactive-ir/src/base/memo.rs": {
     "hashmap-iteration": 1

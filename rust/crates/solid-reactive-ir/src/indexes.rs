@@ -1133,6 +1133,7 @@ impl<'a> SemanticLookup<'a> {
                 self,
                 crate::cache::typescript_unchanged(self.facts),
                 redirects,
+                self.memos.ticket(),
             )
         });
         world
@@ -2010,7 +2011,7 @@ impl<'a> SemanticLookup<'a> {
                 )]);
                 let mut keys = self
                     .base
-                    .definers(|| self.base_views())
+                    .definers(|| self.base_views(), || None)
                     .keys()
                     .map(|key| format!("{key:?}"))
                     .collect::<Vec<_>>();
@@ -2033,13 +2034,58 @@ impl<'a> SemanticLookup<'a> {
     /// fills its own once-per-build cache, so the answers are the ones a
     /// sequential run computes; nothing records them here.
     // Threads only with a second analysis worker; otherwise the lanes run inline (wasm32-wasip1).
+    /// The memo begin, with the build's tables its probes ask (and its
+    /// fingerprints read) filled beside it: asked from the probes, each was
+    /// filled on one worker while the others waited, one table after another.
+    /// Each is a function of the build alone, filled once wherever it is
+    /// first asked. A store no later build reads has no probes to repoll.
+    #[allow(clippy::disallowed_methods)]
+    fn begin_with_warm_tables(&self) {
+        if !self.memos.store().retained() || crate::pipeline::available_analysis_workers() <= 1 {
+            let _ = self.memo_world();
+            return;
+        }
+        std::thread::scope(|scope| {
+            let warm = |work: &(dyn Fn() + Sync)| {
+                let _limit = crate::pipeline::AnalysisWorkerLimit::enter(
+                    crate::pipeline::analysis_worker_limit_for_lanes(4),
+                );
+                work();
+            };
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.reference_rows.get_or_init(|| {
+                        crate::base::file_table::reference_rows(&self.facts.typescript)
+                    });
+                })
+            });
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.bindings_by_reference();
+                })
+            });
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.functions_by_symbol();
+                })
+            });
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.module_census();
+                    let _ = self.member_stability();
+                })
+            });
+            let _ = self.memo_world();
+        });
+    }
+
     #[allow(clippy::disallowed_methods)]
     pub(crate) fn begin_memos(&self) {
         if memo_probes::probing() {
             return;
         }
         crate::base::reads::suppress(|| {
-            let _ = self.memo_world();
+            self.begin_with_warm_tables();
             if crate::pipeline::available_analysis_workers() <= 1 {
                 return;
             }
@@ -2093,6 +2139,25 @@ impl<'a> SemanticLookup<'a> {
                         let _ = self.uninitialized_references();
                     })
                 });
+                // The whole-program tables the component census's per-file
+                // answers ask: asked from those answers, each was filled on
+                // one worker while the others waited, one after another.
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.entities_by_symbol();
+                        let _ = self.project_has_component_type();
+                    })
+                });
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.bindings_by_symbol();
+                    })
+                });
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.route_component_values();
+                    })
+                });
                 // The components lane is the last to finish once the others
                 // are done, so it takes the whole pool, not its share of lanes.
                 let _whole_pool = crate::pipeline::AnalysisWorkerLimit::enter(
@@ -2123,25 +2188,28 @@ impl crate::base::reads::ReadAnswers for SemanticLookup<'_> {
         self.memos.store().id()
     }
 
-    fn memo_check(
+    fn memo_marks(&self) -> u64 {
+        self.memos.store().marks()
+    }
+
+    fn memo_answer(
         &self,
         store: u64,
         read: crate::base::reads::MemoRead,
-    ) -> crate::base::reads::MemoCheck {
-        use crate::base::reads::MemoCheck;
+    ) -> crate::base::reads::MemoAnswer {
+        use crate::base::reads::MemoAnswer;
         if store != self.memos.store().id() {
-            return MemoCheck::Moved;
+            return MemoAnswer::Decided(None);
         }
         if !crate::interproc::accessor_provenance::memo_read_decidable(
             self.memos.store(),
             read.table,
         ) {
-            return MemoCheck::Undecided;
+            return MemoAnswer::Undecided;
         }
         match self.memo_world().changed_at_checked(read.table, read.query) {
-            (_, true) => MemoCheck::Undecided,
-            (Some(changed_at), false) if changed_at == read.changed_at => MemoCheck::Same,
-            _ => MemoCheck::Moved,
+            (_, true) => MemoAnswer::Undecided,
+            (changed_at, false) => MemoAnswer::Decided(changed_at),
         }
     }
 
@@ -2522,7 +2590,32 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn base_hazards(&self) -> &crate::base::BaseIndex<crate::base::Hazard, u32> {
         crate::base::reads::note(crate::base::reads::Section::SynchronousDispatch);
         crate::base::reads::note(crate::base::reads::Section::ReflectiveDefinition);
-        self.base.hazards(|| self.base_views())
+        self.hazards_index()
+    }
+
+    /// The hazards index over this lookup's file table: the memo store's
+    /// kept index when this build's begin updated it (ADR 0909; the begin
+    /// checks it against a refold in shadow and verify-reused modes), under
+    /// this table's ids, else a fold of this build's views.
+    fn hazards_index(&self) -> &crate::base::BaseIndex<crate::base::Hazard, u32> {
+        self.base.hazards(
+            || self.base_views(),
+            || {
+                let kept = self.memos.kept_hazards()?;
+                let memo_table = self.memos.table();
+                let index = kept.rekeyed(|id| self.file_table.id_of(memo_table.path_of(id)))?;
+                let store = self.memos.store();
+                if store.checks_indexes()
+                    && index != self.base_views().fold(crate::base::contributions::hazards)
+                {
+                    store.poison(
+                        "IR memo mismatch: index `hazards`: the kept index under the lookup's ids differs from a fold",
+                    );
+                    return None;
+                }
+                Some(index)
+            },
+        )
     }
 
     /// Whether some analyzed file has `hazard`.
@@ -2532,16 +2625,14 @@ impl<'a> SemanticLookup<'a> {
         self.note_probe_read(crate::base::memo::probes::Probe::Hazard(hazard), || {
             crate::base::memo::probes::PolledKey::Unit
         });
-        self.base
-            .hazards(|| self.base_views())
-            .contains_key(&hazard)
+        self.hazards_index().contains_key(&hazard)
     }
 
     /// L1: module edges by specifier.
     pub(crate) fn base_modules(
         &self,
     ) -> &crate::base::BaseIndex<crate::base::ModuleKey, crate::base::ModuleEdge> {
-        self.base.modules(|| self.base_views())
+        self.base.modules(|| self.base_views(), || None)
     }
 
     /// L1: member uses by name.
@@ -2561,13 +2652,13 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn base_members(
         &self,
     ) -> &crate::base::BaseIndex<crate::base::MemberName, crate::base::MemberUse> {
-        self.base.members(|| self.base_views())
+        self.base.members(|| self.base_views(), || None)
     }
 
     /// L1: reflective-definer keys.
     pub(crate) fn base_definers(&self) -> &crate::base::BaseIndex<crate::base::DefinerKey, ()> {
         crate::base::reads::note(crate::base::reads::Section::ReflectiveDefinition);
-        self.base.definers(|| self.base_views())
+        self.base.definers(|| self.base_views(), || None)
     }
 
     /// Every slot of the analyzed files in file order, with the entries

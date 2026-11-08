@@ -126,8 +126,14 @@ macro_rules! base_indexes {
         impl BaseIndexes {
             $(
                 $(#[$doc])*
-                pub(crate) fn $name<'v>(&self, views: impl FnOnce() -> Views<'v>) -> &BaseIndex<$key, $value> {
-                    self.$name.get_or_init(|| views().fold($contribute))
+                /// `kept`: the index another source already holds for this
+                /// build's views (ADR 0909), else the fold.
+                pub(crate) fn $name<'v>(
+                    &self,
+                    views: impl FnOnce() -> Views<'v>,
+                    kept: impl FnOnce() -> Option<BaseIndex<$key, $value>>,
+                ) -> &BaseIndex<$key, $value> {
+                    self.$name.get_or_init(|| kept().unwrap_or_else(|| views().fold($contribute)))
                 }
             )*
         }

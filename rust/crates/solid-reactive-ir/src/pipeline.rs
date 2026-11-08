@@ -28,6 +28,9 @@ use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;
 
+/// A filed row's exact span key ([`ProgramDraft::push_defect`]).
+pub(crate) type SpanKey = (&'static str, Arc<str>, u64, u64);
+
 /// The program under assembly: every table and obligation counter the
 /// pipeline's stages fill, owned in one place so a stage's writes are part
 /// of its signature rather than ambient mutation of a shared function body.
@@ -64,11 +67,17 @@ pub(crate) struct ProgramDraft {
     /// in a withheld call's start (`t.slice(0, i).trim()` in `t.slice`)
     /// keeps its row.
     seen_spans: HashSet<(&'static str, Arc<str>, u64, u64)>,
+    /// ADR 0909: while a speculative walk files rows, each `seen_spans`
+    /// answer that decided whether a row was kept, with the answer.
+    span_log: Option<Vec<(SpanKey, bool)>>,
     /// ADR 0874: where a call the impostor census withholds starts, by path.
     pub(crate) withheld_starts: HashSet<(Arc<str>, u64)>,
     /// ADR 0874: each withheld call's callee span, by path. A row there is
     /// about the call's target, never a Get of the value on its chain.
     pub(crate) withheld_callees: HashSet<(Arc<str>, u64, u64)>,
+    /// ADR 0840: per file (in `facts.files` order), the positions of the
+    /// calls the impostor census withholds, asked once per call.
+    pub(crate) withheld_calls: Vec<Vec<usize>>,
 }
 
 impl ProgramDraft {
@@ -83,6 +92,38 @@ impl ProgramDraft {
     /// [`Self::push_defect`], where a proven row replaces an obligation at the
     /// same site (ADR 0871): another walk of the function proved what this one
     /// could not.
+    /// ADR 0909: an empty draft for a speculative walk: it files rows as
+    /// this draft would after taking its rows and seen starts, minus the
+    /// spans this one has seen, whose answers it logs ([`Self::spans_agree`]).
+    pub(crate) fn speculative(&self) -> Self {
+        Self {
+            withheld_starts: self.withheld_starts.clone(),
+            span_log: Some(Vec::new()),
+            ..Self::default()
+        }
+    }
+
+    /// Whether a speculative walk's span answers are this draft's: each span
+    /// it found unseen is unseen here too (one it had seen, it had filed
+    /// itself, so it is seen here as well once its spans are added).
+    pub(crate) fn spans_agree(&self, log: &[(SpanKey, bool)]) -> bool {
+        log.iter()
+            .all(|(key, unseen)| !*unseen || !self.seen_spans.contains(key))
+    }
+
+    /// A speculative walk's spans and span log, taken out of its draft.
+    pub(crate) fn take_spans(&mut self) -> (HashSet<SpanKey>, Vec<(SpanKey, bool)>) {
+        (
+            std::mem::take(&mut self.seen_spans),
+            self.span_log.take().unwrap_or_default(),
+        )
+    }
+
+    /// Adds the spans a walk filed, as filing them here would have.
+    pub(crate) fn add_seen_spans(&mut self, spans: HashSet<SpanKey>) {
+        self.seen_spans.extend(spans);
+    }
+
     pub(crate) fn push_defect_or_strengthen(&mut self, defect: StaticDefect) {
         if !defect.uncertain
             && let Some(row) = self.static_defects.iter_mut().find(|row| {
@@ -125,13 +166,23 @@ impl ProgramDraft {
         // A violation keeps one row per start. At a withheld call's start,
         // an uncertain row names its own use (the call's row stands beside
         // the use it starts), so only its exact span deduplicates it.
-        if first_at_start
-            || (defect.uncertain
-                && first_at_span
-                && self
-                    .withheld_starts
-                    .contains(&(defect.location.path.clone(), defect.location.start_byte)))
-        {
+        let at_withheld = !first_at_start
+            && defect.uncertain
+            && self
+                .withheld_starts
+                .contains(&(defect.location.path.clone(), defect.location.start_byte));
+        if at_withheld && let Some(log) = &mut self.span_log {
+            log.push((
+                (
+                    identity,
+                    defect.location.path.clone(),
+                    defect.location.start_byte,
+                    defect.location.end_byte,
+                ),
+                first_at_span,
+            ));
+        }
+        if first_at_start || (at_withheld && first_at_span) {
             self.static_defects.push(defect);
         }
     }
@@ -529,6 +580,29 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     if let Some(slot) = late_stage_cache.as_deref_mut() {
         slot.get_or_insert_with(Default::default);
     }
+    // ADR 0840: each file's withheld calls, asked once per call on the
+    // workers (the draft's withheld starts and callees, and the census's
+    // impostor rows, read them).
+    let withheld_calls = parallel_balanced_results(&facts.files, |file| {
+        file.ast
+            .calls
+            .iter()
+            .enumerate()
+            .filter(|(_, call)| semantic_lookup.impostor_withheld(file, call.callee))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>()
+    });
+    let withheld = || {
+        facts
+            .files
+            .iter()
+            .zip(&withheld_calls)
+            .flat_map(|(file, calls)| {
+                calls
+                    .iter()
+                    .map(move |index| (file, &file.ast.calls[*index]))
+            })
+    };
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
@@ -538,35 +612,20 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             Vec::new()
         },
         static_defects: boundary_defects,
-        withheld_starts: facts
-            .files
-            .iter()
-            .flat_map(|file| {
-                file.ast
-                    .calls
-                    .iter()
-                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
-                    .map(|call| (file.path.shared(), u64::from(call.span.start)))
+        withheld_starts: withheld()
+            .map(|(file, call)| (file.path.shared(), u64::from(call.span.start)))
+            .collect(),
+        withheld_callees: withheld()
+            .map(|(file, call)| {
+                let callee = file.ast.peel_ts_sugar_span(call.callee);
+                (
+                    file.path.shared(),
+                    u64::from(callee.start),
+                    u64::from(callee.end),
+                )
             })
             .collect(),
-        withheld_callees: facts
-            .files
-            .iter()
-            .flat_map(|file| {
-                file.ast
-                    .calls
-                    .iter()
-                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
-                    .map(|call| {
-                        let callee = file.ast.peel_ts_sugar_span(call.callee);
-                        (
-                            file.path.shared(),
-                            u64::from(callee.start),
-                            u64::from(callee.end),
-                        )
-                    })
-            })
-            .collect(),
+        withheld_calls: withheld_calls.clone(),
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
@@ -1091,6 +1150,54 @@ where
     })
 }
 
+/// [`parallel_slice_results`] with a state each worker builds once (`init`)
+/// for its slice: what a worker learns while checking one item (a memo's
+/// answer in this build) serves its next ones. Results come back in input
+/// order and do not depend on the state.
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn parallel_slice_with_state<T, S, R, I, F>(items: &[T], init: I, analyze: F) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    I: Fn() -> S + Sync,
+    F: Fn(&S, &T) -> R + Sync,
+{
+    let workers = available_analysis_workers().min(items.len());
+    if workers <= 1 || items.len() < 256 {
+        let state = init();
+        return items.iter().map(|item| analyze(&state, item)).collect();
+    }
+    let chunk_size = items.len().div_ceil(workers);
+    let recording = WorkerContext::of_caller();
+    std::thread::scope(|scope| {
+        let handles = items
+            .chunks(chunk_size)
+            .map(|chunk| {
+                let (init, analyze) = (&init, &analyze);
+                scope.spawn(move || {
+                    on_worker(recording, || {
+                        let state = init();
+                        chunk
+                            .iter()
+                            .map(|item| analyze(&state, item))
+                            .collect::<Vec<_>>()
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .flat_map(|handle| {
+                joined(
+                    handle
+                        .join()
+                        .expect("parallel Reactive IR analysis worker panicked"),
+                )
+            })
+            .collect()
+    })
+}
+
 /// What a parallel helper's workers inherit from the spawning thread:
 /// whether it records its reads ([`crate::base::reads`]), and whether it is
 /// checking a proof ([`crate::base::memo::derived::deferring`]).
@@ -1146,6 +1253,69 @@ where
     F: Fn(&T) -> R + Sync,
 {
     parallel_balanced_results_from(64, items, analyze)
+}
+
+/// [`parallel_balanced_results`] with a state each worker builds once
+/// (`init`) and carries from item to item: per-build caches whose answers
+/// depend on the build alone, so an item's result does not depend on which
+/// worker ran it or what it ran before. Without threads, or for a short
+/// slice, one state runs the items in order on the caller's thread.
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn parallel_balanced_with_state<T, S, R, I, F>(
+    items: &[T],
+    init: I,
+    analyze: F,
+) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    I: Fn() -> S + Sync,
+    F: Fn(&mut S, &T) -> R + Sync,
+{
+    let limit = available_analysis_workers();
+    let workers = limit.min(items.len());
+    if workers <= 1 || items.len() < 64 {
+        let mut state = init();
+        return items.iter().map(|item| analyze(&mut state, item)).collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let recording = WorkerContext::of_caller();
+    std::thread::scope(|scope| {
+        let handles = (0..workers)
+            .map(|_| {
+                let (init, analyze, next) = (&init, &analyze, &next);
+                scope.spawn(move || {
+                    let _limit = AnalysisWorkerLimit::enter(limit);
+                    on_worker(recording, || {
+                        let mut state = init();
+                        let mut done = Vec::new();
+                        loop {
+                            let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some(item) = items.get(index) else {
+                                break;
+                            };
+                            done.push((index, analyze(&mut state, item)));
+                        }
+                        done
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
+        for handle in handles {
+            for (index, result) in joined(
+                handle
+                    .join()
+                    .expect("parallel Reactive IR analysis worker panicked"),
+            ) {
+                results[index] = Some(result);
+            }
+        }
+        results
+            .into_iter()
+            .map(|result| result.expect("every item is claimed by one worker"))
+            .collect()
+    })
 }
 
 /// [`parallel_balanced_results`] for items each costly enough (milliseconds)

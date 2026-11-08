@@ -48,6 +48,9 @@ use std::cell::{Cell, RefCell};
 
 use super::*;
 
+/// A function by its file's path and its span.
+type FunctionKey = (std::sync::Arc<str>, Span);
+
 /// What [`SiteReach::site`] proves.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Reach {
@@ -79,8 +82,8 @@ pub(crate) struct SiteReach<'l, 'a> {
     lookup: &'l SemanticLookup<'a>,
     /// Whether each function may run, by `(path, span)`. A `false` derived
     /// while a function in progress was assumed not to run is not kept.
-    functions: RefCell<HashMap<(String, Span), bool>>,
-    visiting: RefCell<HashSet<(String, Span)>>,
+    functions: RefCell<HashMap<FunctionKey, bool>>,
+    visiting: RefCell<HashSet<FunctionKey>>,
     /// Set when a derivation met a function in progress.
     assumed: Cell<bool>,
     /// Whether a refused creation enters nothing (ADR 0475).
@@ -117,9 +120,9 @@ impl Drop for SiteReach<'_, '_> {
 /// A least fixed point being iterated: each function met so far, with
 /// whether it runs under the current approximation (all start `false`).
 struct Approximation<'a> {
-    values: HashMap<(String, Span), bool>,
+    values: HashMap<FunctionKey, bool>,
     order: Vec<(
-        (String, Span),
+        FunctionKey,
         &'a solid_facts::FileFacts,
         &'a solid_facts::ast::FunctionFact,
     )>,
@@ -351,7 +354,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         if self.limited.get() {
             return true;
         }
-        let key = (file.path.to_string(), function.span);
+        let key = (file.path.shared(), function.span);
         if let Some(runs) = self.functions.borrow().get(&key) {
             return *runs;
         }
@@ -440,7 +443,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         let Some(own) = self.lookup.own_file(file) else {
             return false;
         };
-        let mut seen = HashSet::from_iter([(own.path.to_string(), function.span)]);
+        let mut seen = HashSet::from_iter([(own.path.shared(), function.span)]);
         let mut stack = vec![(own, function.span)];
         while let Some((file, span)) = stack.pop() {
             let Some(function) = file.ast.function_at(span) else {
@@ -472,7 +475,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                 }
             }
             for (file, span) in sites {
-                if seen.insert((file.path.to_string(), span)) {
+                if seen.insert((file.path.shared(), span)) {
                     if seen.len() >= DEPTH_LIMIT {
                         return false;
                     }
@@ -497,7 +500,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
     /// `true` there too.
     fn least_fixed_point(
         &self,
-        key: (String, Span),
+        key: FunctionKey,
         file: &'a solid_facts::FileFacts,
         function: &'a solid_facts::ast::FunctionFact,
         exact: bool,

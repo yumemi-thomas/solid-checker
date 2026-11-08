@@ -1327,17 +1327,24 @@ impl LocalAccessContext<'_, '_> {
             // time it was most of the stage on a large project.
             let kept = &cache.files;
             let files = &self.facts.files;
-            let reusable = parallel_slice_results(files, |file| {
-                exact_typescript_delta
-                    && kept.get(file.path.as_str()).is_some_and(|cached| {
-                        self.cached_matches(
-                            file,
-                            cached,
-                            unchanged_paths.contains(file.path.as_str()),
-                            &changed_dependencies,
-                        )
-                    })
-            });
+            // Each worker asks a memo once for its whole slice
+            // (`reads::PassAnswers`): the chunks' proofs share most reads.
+            let reusable = crate::pipeline::parallel_slice_with_state(
+                files,
+                || crate::base::reads::PassAnswers::new(self.lookup),
+                |answers, file| {
+                    exact_typescript_delta
+                        && kept.get(file.path.as_str()).is_some_and(|cached| {
+                            self.cached_matches(
+                                file,
+                                cached,
+                                unchanged_paths.contains(file.path.as_str()),
+                                &changed_dependencies,
+                                answers,
+                            )
+                        })
+                },
+            );
             let mut recompute = Vec::new();
             for (file, reusable) in files.iter().zip(reusable) {
                 if reusable {
@@ -1349,7 +1356,7 @@ impl LocalAccessContext<'_, '_> {
             // Each file's contribution reads only this build's facts and
             // lookup, so the files are discovered in parallel and recorded in
             // their order.
-            let fresh = parallel_slice_results(&recompute, |file| {
+            let fresh = crate::pipeline::parallel_balanced_results_from(2, &recompute, |file| {
                 crate::base::reads::record(|| {
                     (
                         self.discover(file),
@@ -1559,10 +1566,11 @@ impl LocalAccessContext<'_, '_> {
         cached: &CachedLocalAccessFile,
         unchanged_path: bool,
         changed_dependencies: &HashSet<SymbolId>,
+        answers: &dyn crate::base::reads::ReadAnswers,
     ) -> bool {
         unchanged_path
             && cached.source_hash == file.source_hash
-            && cached.proof.holds(self.lookup)
+            && cached.proof.holds(answers)
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
             // A file's async reads depend on the whole program's async
@@ -10324,6 +10332,27 @@ pub(crate) fn member_receiver_alias(
 /// instead. ADR 0498: a member that is the object of a written, deleted or
 /// iterated member (`store.a` in `store.a.v = 1`) is read on its own: the
 /// longer path is no read, so the Get of this one is the chain's.
+/// The spans [`read_as_part_of_longer_path`] answers `true` for, at once:
+/// the peeled object of each member that is read (not written, deleted or
+/// iterated).
+pub(crate) fn longer_path_objects(
+    file: &solid_facts::FileFacts,
+) -> crate::HashSet<solid_facts::core::Span> {
+    file.ast
+        .members
+        .iter()
+        .filter(|candidate| {
+            !(file.ast.is_no_get_target(candidate.span)
+                || file
+                    .ast
+                    .iteration_targets
+                    .iter()
+                    .any(|target| file.ast.peel_ts_sugar_span(*target) == candidate.span))
+        })
+        .map(|candidate| file.ast.peel_ts_sugar_span(candidate.object))
+        .collect()
+}
+
 pub(crate) fn read_as_part_of_longer_path(
     file: &solid_facts::FileFacts,
     member: &solid_facts::ast::MemberFact,

@@ -1,4 +1,4 @@
-//! The machine report (`--format json`): Go-compatible pretty JSON, with the
+//! The machine report (`--format json`): Go-compatible compact JSON, with the
 //! position of every finding recorded as it is written, so an answer can
 //! carry the findings of one file without being parsed (ADR 0400).
 
@@ -99,7 +99,7 @@ fn go_escape(raw: Vec<u8>, marks: &mut [usize]) -> Vec<u8> {
 pub(crate) struct FindingIndex {
     /// Just past the `[` that opens the findings array.
     open: usize,
-    /// The end of the last finding (the array's closing line follows).
+    /// The end of the last finding (the array's `]` follows).
     close: usize,
     /// The byte range of each finding's object, from its `{` to its `}`.
     spans: Vec<(usize, usize)>,
@@ -166,14 +166,16 @@ impl FindingIndex {
             if !concerns(slot) {
                 continue;
             }
-            out.extend_from_slice(if first { b"\n    " } else { b",\n    " });
+            if !first {
+                out.push(b',');
+            }
             out.extend_from_slice(&body[*start..*end]);
             first = false;
         }
         if first {
             // `[]`, as serde writes an empty array.
             out.push(b']');
-            out.extend_from_slice(body.get(self.close + 4..)?);
+            out.extend_from_slice(body.get(self.close + 1..)?);
         } else {
             out.extend_from_slice(&body[self.close..]);
         }
@@ -195,8 +197,8 @@ struct Marked<'a> {
 
 impl Serialize for Marked<'_> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        // The separator and indentation are written before the value, so the
-        // buffer ends where the finding's `{` goes.
+        // The separator is written before the value, so the buffer ends where
+        // the finding's `{` goes.
         let start = self.buffer.borrow().len();
         let done = self.finding.serialize(serializer)?;
         self.spans
@@ -269,12 +271,13 @@ impl Serialize for Report<'_> {
     }
 }
 
-/// The pretty machine report of `snapshot`, with its findings indexed.
+/// The machine report of `snapshot`, with its findings indexed. Compact:
+/// every consumer parses it, and the whitespace was most of its bytes.
 pub(crate) fn go_compatible_report(snapshot: &Snapshot) -> Result<JsonReport, serde_json::Error> {
     let buffer = Rc::new(RefCell::new(Vec::with_capacity(1 << 16)));
     let spans = RefCell::new(Vec::with_capacity(snapshot.findings.len()));
     let open = RefCell::new(0);
-    serde_json::to_writer_pretty(
+    serde_json::to_writer(
         Shared(Rc::clone(&buffer)),
         &Report {
             snapshot,

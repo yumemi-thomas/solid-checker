@@ -326,15 +326,25 @@ fn handed_server_function_values(
 ) {
     let ast = &file.ast;
     let mut handed = Vec::new();
+    // The file's callees and, per object, its first member read, peeled:
+    // asked of every reference below.
+    let callees = ast
+        .calls
+        .iter()
+        .map(|call| ast.peel_ts_sugar_span(call.callee))
+        .collect::<crate::HashSet<_>>();
+    let mut first_member = crate::HashMap::default();
+    for member in &ast.members {
+        first_member
+            .entry(ast.peel_ts_sugar_span(member.object))
+            .or_insert(member);
+    }
     for identifier in &ast.identifiers {
         if identifier.role != solid_facts::ast::IdentifierRole::Reference {
             continue;
         }
         let span = identifier.span;
-        if ast
-            .calls
-            .iter()
-            .any(|call| ast.peel_ts_sugar_span(call.callee) == span)
+        if callees.contains(&span)
             || ast.type_queries.iter().any(|query| query.contains(span))
             || ast.type_names.iter().any(|name| name.contains(span))
             || crate::indexes::reference_is_declaration_or_module_surface(file, span)
@@ -349,10 +359,7 @@ fn handed_server_function_values(
         // invokes it with other arguments (`.call`, `.apply`, `.bind`); an
         // unresolved member is the call loop's obligation already
         // (`member_of_server_function`), a resolved one another declaration.
-        if let Some(member) = ast
-            .members
-            .iter()
-            .find(|member| ast.peel_ts_sugar_span(member.object) == span)
+        if let Some(member) = first_member.get(&span)
             && !matches!(
                 file.source_text(member.property),
                 Some("call" | "apply" | "bind")

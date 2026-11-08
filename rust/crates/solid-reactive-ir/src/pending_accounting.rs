@@ -426,32 +426,73 @@ pub(crate) fn account_pending_reads(
     if sites.is_empty() {
         return;
     }
+    // What each site asks of the draft, indexed once: the async read rows by
+    // location, pending origin and origin (by position, so a site's rows keep
+    // the draft's order), the cut locations, the uncertain dispatch rows'
+    // locations, and SC5008's spans by path. None of them changes below.
+    let mut at = crate::HashMap::<&Location, Vec<usize>>::default();
+    let mut by_pending_origin = crate::HashMap::<&Location, Vec<usize>>::default();
+    let mut by_origin = crate::HashMap::<&Location, Vec<usize>>::default();
+    let mut cut_at = crate::HashSet::<&Location>::default();
+    for (index, row) in draft.async_reads.iter().enumerate() {
+        at.entry(&row.location).or_default().push(index);
+        if let Some(origin) = &row.pending_origin {
+            by_pending_origin.entry(origin).or_default().push(index);
+        }
+        if let Some(origin) = &row.origin {
+            by_origin.entry(origin).or_default().push(index);
+        }
+        if row.walk_cut {
+            cut_at.insert(&row.location);
+        }
+    }
+    let held_at = draft
+        .static_defects
+        .iter()
+        .filter(|defect| {
+            defect.uncertain
+                && defect.kind.family() == crate::StaticDefectFamily::ReactiveDispatchUnresolved
+        })
+        .map(|defect| &defect.location)
+        .collect::<crate::HashSet<_>>();
+    let mut caught_spans = crate::HashMap::<&str, Vec<(u64, u64)>>::default();
+    for violation in draft
+        .static_violations
+        .iter()
+        .filter(|violation| violation.id == "SC5008")
+    {
+        caught_spans
+            .entry(violation.location.path.as_ref())
+            .or_default()
+            .push((violation.location.start_byte, violation.location.end_byte));
+    }
     let mut added = Vec::new();
     let mut caught_rows = Vec::new();
     for site in sites {
         // Review R6: a row a walk placed at a call stands for its read only
         // when that walk placed every path; a cut walk left its read rows of
         // its own, and those account for it.
-        let cut = draft
-            .async_reads
-            .iter()
-            .any(|row| row.walk_cut && row.location == site.location);
-        let rows = draft
-            .async_reads
-            .iter()
-            .filter(|row| {
-                row.location == site.location
-                    || (!cut
-                        && (row.pending_origin.as_ref() == Some(&site.location)
-                            || row.origin.as_ref() == Some(&site.location)))
-            })
+        let cut = cut_at.contains(&site.location);
+        let mut positions = at.get(&site.location).cloned().unwrap_or_default();
+        if !cut {
+            for index in [&by_pending_origin, &by_origin]
+                .into_iter()
+                .filter_map(|index| index.get(&site.location))
+            {
+                positions.extend(index);
+            }
+            positions.sort_unstable();
+            positions.dedup();
+        }
+        let rows = positions
+            .into_iter()
+            .map(|index| &draft.async_reads[index])
             .collect::<Vec<_>>();
-        let held = draft.static_defects.iter().any(|defect| {
-            defect.uncertain
-                && defect.kind.family() == crate::StaticDefectFamily::ReactiveDispatchUnresolved
-                && (defect.location == site.location
-                    || site.through.as_ref() == Some(&defect.location))
-        });
+        let held = held_at.contains(&site.location)
+            || site
+                .through
+                .as_ref()
+                .is_some_and(|through| held_at.contains(through));
         if held {
             continue;
         }
@@ -466,12 +507,13 @@ pub(crate) fn account_pending_reads(
             (Some(file), Some(span)) => caught_claim(ctx, file, span, &mut reasons),
             _ => false,
         };
-        let caught_row = draft.static_violations.iter().any(|violation| {
-            violation.id == "SC5008"
-                && violation.location.path == site.location.path
-                && violation.location.start_byte < site.location.end_byte
-                && site.location.start_byte < violation.location.end_byte
-        });
+        let caught_row = caught_spans
+            .get(site.location.path.as_ref())
+            .is_some_and(|spans| {
+                spans.iter().any(|(start, end)| {
+                    *start < site.location.end_byte && site.location.start_byte < *end
+                })
+            });
         let loose_match = file.zip(span).is_some_and(|(file, span)| {
             crate::owners::read_in_loose_match(
                 file,

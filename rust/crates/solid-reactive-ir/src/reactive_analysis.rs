@@ -415,21 +415,8 @@ pub(crate) fn collect_project<'facts>(
         .collect::<Vec<_>>();
     callables.sort_unstable();
     callables.dedup();
-    // ADR 0811: a store member write SC2003 decides is that use's row
-    // (`holder.store.count = 5`); its pass runs after this one.
-    let member_writes = upstream_compat::MemberWrites::new(ctx);
-    let decided_writes = |file: &solid_facts::FileFacts| member_writes.decided(file);
-    let mut census = crate::value_use::Census::new(
-        ctx.semantic_lookup,
-        ctx.entities,
-        ctx.symbol_names,
-        callables.iter().map(|symbol| symbol.as_ref()).collect(),
-        &interprocedural.source_call_targets,
-        crate::attribution::ExportedCallers::new(
-            ctx.semantic_lookup,
-            ctx.aliases,
-            ctx.symbols_by_root,
-        ),
+    // The rows a census walk asks about: built once, shared by every worker.
+    let census_rows = crate::value_use::row_index(
         draft
             .reads
             .iter()
@@ -452,8 +439,79 @@ pub(crate) fn collect_project<'facts>(
                     location.end_byte,
                 ))
             }),
-    )
-    .with_member_writes(&decided_writes);
+    );
+    // Every start in the order the rows below are filed: each reference of
+    // each source, then (P13) each creating call no binding holds.
+    let mut starts = Vec::new();
+    for symbol in callables.iter().copied() {
+        for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
+            starts.push(CensusStart::Reference(symbol, reference));
+        }
+    }
+    for file in ctx.semantic_lookup.files() {
+        for call in &file.ast.calls {
+            let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            if !ctx.dialect.creates_reactive_source(primitive) {
+                continue;
+            }
+            starts.push(CensusStart::Created {
+                file,
+                call: call.span,
+                store: ctx.dialect.returns_store(primitive),
+                tuple: ctx.dialect.returns_reactive_tuple(primitive),
+            });
+        }
+    }
+    // ADR 0909: a start's answer is a function of the build and the start
+    // alone (`Census::begin_start`), so the starts are walked on the workers,
+    // each with a census of its own, and filed below in order. ADR 0878's
+    // step budget is per start, inside its walk.
+    let census_sources = callables
+        .iter()
+        .map(|symbol| symbol.as_ref())
+        .collect::<crate::HashSet<&str>>();
+    let answers = crate::pipeline::parallel_balanced_with_state(
+        &starts,
+        || {
+            // ADR 0811: a store member write SC2003 decides is that use's row
+            // (`holder.store.count = 5`); its pass runs after this one.
+            let member_writes = upstream_compat::MemberWrites::new(ctx);
+            crate::value_use::Census::new(
+                ctx.semantic_lookup,
+                ctx.entities,
+                ctx.symbol_names,
+                census_sources.clone(),
+                &interprocedural.source_call_targets,
+                crate::attribution::ExportedCallers::new(
+                    ctx.semantic_lookup,
+                    ctx.aliases,
+                    ctx.symbols_by_root,
+                ),
+                &census_rows,
+            )
+            .with_member_writes(Box::new(move |file| member_writes.decided(file)))
+        },
+        |census, start| match start {
+            CensusStart::Reference(symbol, reference) => {
+                let root = ctx.prop_sources.contains_key(*symbol)
+                    || ctx.source_kinds.get(*symbol) == Some(&crate::ReactiveSourceKind::Store);
+                let pending = ctx.async_sources.contains(*symbol);
+                if root {
+                    census.root_start(reference, pending)
+                } else {
+                    census.callable_start(reference, ctx.accessors.contains_key(*symbol), pending)
+                }
+            }
+            CensusStart::Created {
+                file,
+                call,
+                store,
+                tuple,
+            } => census.created_start(file, *call, *store, *tuple),
+        },
+    );
     let census_obligation =
         |callee: &str, location: typefacts::Location, blocker: &str| crate::StaticDefect {
             kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
@@ -484,102 +542,87 @@ pub(crate) fn collect_project<'facts>(
     // The census's own rows at its references, in walk order: put in an
     // order of their own before they are pushed.
     let mut census_handed = Vec::new();
-    for symbol in callables.iter().copied() {
-        for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
-            let root = ctx.prop_sources.contains_key(symbol)
-                || ctx.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store);
-            let pending = ctx.async_sources.contains(symbol);
-            let open = if root {
-                census.root_use(&reference, pending)
-            } else {
-                census.callable_use(&reference, ctx.accessors.contains_key(symbol), pending)
-            };
-            let callee = ctx
-                .symbol_names
-                .get(symbol)
-                .map_or_else(|| "this value".to_owned(), ToString::to_string);
-            let cut = census.take_cut();
-            if cut {
-                budget_rows.push(budget(&callee, reference.clone()));
-                if let Some(package) = ctx.facts.dependency_source_root(reference.path.as_ref()) {
-                    let mut project = ctx
-                        .semantic_lookup
-                        .symbol_references(symbol.as_str())
-                        .into_iter()
-                        .filter(|other| {
-                            ctx.facts
-                                .dependency_source_root(other.path.as_ref())
-                                .is_none()
-                        })
-                        .collect::<Vec<_>>();
-                    // Review D33: a dependency source the project never names
-                    // still reaches it; its imports of the package carry the row.
-                    if project.is_empty() {
-                        project = project_imports_of(ctx, package);
-                    }
-                    budget_rows.extend(project.into_iter().map(|other| budget(&callee, other)));
-                }
-            }
-            // The obligation sits at each use the walk ended at, too.
-            for (location, blocker) in census.take_uses() {
-                use_rows.keep_least(census_obligation(&callee, location, blocker));
-            }
-            for (location, blocker) in census.take_escaped_uses() {
-                escaped_rows.keep_least(census_obligation(&callee, location, blocker));
-            }
-            let Some(blocker) = open else {
-                continue;
-            };
-            // The budget row stands for a reference the cut left open.
-            if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
-                continue;
-            }
-            census_handed.push(census_obligation(&callee, reference, blocker));
-        }
-    }
-    // P13: a source with no name has no reference to start from.
-    for file in ctx.semantic_lookup.files() {
-        for call in &file.ast.calls {
-            let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
-                continue;
-            };
-            if !ctx.dialect.creates_reactive_source(primitive) {
-                continue;
-            }
-            let open = census.created_use(
-                file,
-                call.span,
-                ctx.dialect.returns_store(primitive),
-                ctx.dialect.returns_reactive_tuple(primitive),
-            );
-            let cut = census.take_cut();
-            if cut {
-                budget_rows.push(budget("this value", call.span.location(file.path.as_str())));
-                if let Some(package) = ctx.facts.dependency_source_root(file.path.as_str()) {
-                    budget_rows.extend(
-                        project_imports_of(ctx, package)
+    for (start, answer) in starts.iter().zip(answers) {
+        let crate::value_use::StartAnswer {
+            open,
+            cut,
+            uses,
+            escaped_uses,
+        } = answer;
+        match start {
+            CensusStart::Reference(symbol, reference) => {
+                let callee = ctx
+                    .symbol_names
+                    .get(*symbol)
+                    .map_or_else(|| "this value".to_owned(), ToString::to_string);
+                if cut {
+                    budget_rows.push(budget(&callee, reference.clone()));
+                    if let Some(package) = ctx.facts.dependency_source_root(reference.path.as_ref())
+                    {
+                        let mut project = ctx
+                            .semantic_lookup
+                            .symbol_references(symbol.as_str())
                             .into_iter()
-                            .map(|import| budget("this value", import)),
-                    );
+                            .filter(|other| {
+                                ctx.facts
+                                    .dependency_source_root(other.path.as_ref())
+                                    .is_none()
+                            })
+                            .collect::<Vec<_>>();
+                        // Review D33: a dependency source the project never names
+                        // still reaches it; its imports of the package carry the row.
+                        if project.is_empty() {
+                            project = project_imports_of(ctx, package);
+                        }
+                        budget_rows.extend(project.into_iter().map(|other| budget(&callee, other)));
+                    }
                 }
+                // The obligation sits at each use the walk ended at, too.
+                for (location, blocker) in uses {
+                    use_rows.keep_least(census_obligation(&callee, location, blocker));
+                }
+                for (location, blocker) in escaped_uses {
+                    escaped_rows.keep_least(census_obligation(&callee, location, blocker));
+                }
+                let Some(blocker) = open else {
+                    continue;
+                };
+                // The budget row stands for a reference the cut left open.
+                if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
+                    continue;
+                }
+                census_handed.push(census_obligation(&callee, reference.clone(), blocker));
             }
-            for (location, blocker) in census.take_uses() {
-                use_rows.keep_least(census_obligation("this value", location, blocker));
+            // P13: a source with no name has no reference to start from.
+            CensusStart::Created { file, call, .. } => {
+                if cut {
+                    budget_rows.push(budget("this value", call.location(file.path.as_str())));
+                    if let Some(package) = ctx.facts.dependency_source_root(file.path.as_str()) {
+                        budget_rows.extend(
+                            project_imports_of(ctx, package)
+                                .into_iter()
+                                .map(|import| budget("this value", import)),
+                        );
+                    }
+                }
+                for (location, blocker) in uses {
+                    use_rows.keep_least(census_obligation("this value", location, blocker));
+                }
+                for (location, blocker) in escaped_uses {
+                    escaped_rows.keep_least(census_obligation("this value", location, blocker));
+                }
+                let Some(blocker) = open else {
+                    continue;
+                };
+                if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
+                    continue;
+                }
+                census_handed.push(census_obligation(
+                    "this value",
+                    call.location(file.path.as_str()),
+                    blocker,
+                ));
             }
-            for (location, blocker) in census.take_escaped_uses() {
-                escaped_rows.keep_least(census_obligation("this value", location, blocker));
-            }
-            let Some(blocker) = open else {
-                continue;
-            };
-            if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
-                continue;
-            }
-            census_handed.push(census_obligation(
-                "this value",
-                call.span.location(file.path.as_str()),
-                blocker,
-            ));
         }
     }
     // ADR 0840: a standard call the impostor census withholds may run any
@@ -587,30 +630,50 @@ pub(crate) fn collect_project<'facts>(
     // well as a method: the call is the use, and its row names the census.
     // ADR 0875: the row names the site that holds it.
     let mut holders = None;
-    for file in ctx.semantic_lookup.files() {
-        for call in file.ast.calls.iter().filter(|call| !call.construct) {
-            if ctx.semantic_lookup.impostor_withheld(file, call.callee) {
-                let holders = holders.get_or_insert_with(|| {
-                    crate::base::contributions::impostor_holders(ctx.semantic_lookup.files())
-                });
-                let mut row = census_obligation(
-                    file.source_text(call.callee).unwrap_or("this call"),
-                    call.callee.location(file.path.as_str()),
+    let files = ctx.semantic_lookup.files();
+    // The draft's withheld calls (asked once per call); a draft built without
+    // them asks here.
+    let mut withheld_calls = std::mem::take(&mut draft.withheld_calls);
+    if withheld_calls.len() != files.len() {
+        withheld_calls = files
+            .iter()
+            .map(|file| {
+                file.ast
+                    .calls
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, call)| ctx.semantic_lookup.impostor_withheld(file, call.callee))
+                    .map(|(index, _)| index)
+                    .collect()
+            })
+            .collect();
+    }
+    for (file, calls) in files.iter().zip(&withheld_calls) {
+        for call in calls
+            .iter()
+            .map(|index| &file.ast.calls[*index])
+            .filter(|call| !call.construct)
+        {
+            let holders = holders.get_or_insert_with(|| {
+                crate::base::contributions::impostor_holders(ctx.semantic_lookup.files())
+            });
+            let mut row = census_obligation(
+                file.source_text(call.callee).unwrap_or("this call"),
+                call.callee.location(file.path.as_str()),
+                crate::blockers::STANDARD_MEMBER_IMPOSTOR,
+            );
+            if let Some(detail) = file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .and_then(|member| file.source_text(member.property))
+                .and_then(|member| crate::base::contributions::impostor_detail(member, holders))
+            {
+                row.analysis_context = crate::blockers::with_detail(
                     crate::blockers::STANDARD_MEMBER_IMPOSTOR,
+                    &detail,
                 );
-                if let Some(detail) = file
-                    .ast
-                    .member_at(file.ast.peel_ts_sugar_span(call.callee))
-                    .and_then(|member| file.source_text(member.property))
-                    .and_then(|member| crate::base::contributions::impostor_detail(member, holders))
-                {
-                    row.analysis_context = crate::blockers::with_detail(
-                        crate::blockers::STANDARD_MEMBER_IMPOSTOR,
-                        &detail,
-                    );
-                }
-                handed.push(row);
             }
+            handed.push(row);
         }
     }
     census_handed.sort_by(|a, b| census_row_order(a).cmp(&census_row_order(b)));
@@ -618,30 +681,63 @@ pub(crate) fn collect_project<'facts>(
     handed.extend(use_rows.into_rows());
     // A row any other producer placed over the call (a read, a write, an
     // action) already speaks for it.
+    // Only a row whose role is reported speaks for the call; a read row
+    // only for an obligation raised for a possible read. Those rows' spans by
+    // path, sorted by start: a row over a span starts at or before it.
+    let mut reported_reads = crate::HashMap::<std::sync::Arc<str>, Vec<(u64, u64)>>::default();
+    for read in draft
+        .reads
+        .iter()
+        .filter(|read| read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+    {
+        reported_reads
+            .entry(std::sync::Arc::clone(&read.location.path))
+            .or_default()
+            .push((read.location.start_byte, read.location.end_byte));
+    }
+    let mut reported_writes = crate::HashMap::<std::sync::Arc<str>, Vec<(u64, u64)>>::default();
+    for location in draft
+        .writes
+        .iter()
+        .filter(|write| {
+            write.execution.reports_disallowed_write() || write.execution.reports_unplaced()
+        })
+        .map(|write| &write.location)
+        .chain(
+            draft
+                .action_invocations
+                .iter()
+                .filter(|action| {
+                    action.execution.reports_disallowed_write()
+                        || action.execution.reports_unplaced()
+                })
+                .map(|action| &action.location),
+        )
+    {
+        reported_writes
+            .entry(std::sync::Arc::clone(&location.path))
+            .or_default()
+            .push((location.start_byte, location.end_byte));
+    }
+    for spans in reported_reads
+        .values_mut()
+        .chain(reported_writes.values_mut())
+    {
+        spans.sort_unstable();
+    }
+    let over = |rows: &crate::HashMap<std::sync::Arc<str>, Vec<(u64, u64)>>,
+                at: &typefacts::Location| {
+        rows.get(at.path.as_ref()).is_some_and(|spans| {
+            spans[..spans.partition_point(|(start, _)| *start <= at.start_byte)]
+                .iter()
+                .any(|(_, end)| at.end_byte <= *end)
+        })
+    };
     let covered = |obligation: &crate::StaticDefect| {
         let at = &obligation.location;
-        let over = |location: &typefacts::Location| {
-            location.path == at.path
-                && location.start_byte <= at.start_byte
-                && at.end_byte <= location.end_byte
-        };
-        // Only a row whose role is reported speaks for the call; a read row
-        // only for an obligation raised for a possible read.
         let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ
             || obligation.analysis_context.starts_with("value-");
-        draft.reads.iter().any(|read| {
-            read_only
-                && over(&read.location)
-                && (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
-        }) || draft.writes.iter().any(|write| {
-            over(&write.location)
-                && (write.execution.reports_disallowed_write()
-                    || write.execution.reports_unplaced())
-        }) || draft.action_invocations.iter().any(|action| {
-            over(&action.location)
-                && (action.execution.reports_disallowed_write()
-                    || action.execution.reports_unplaced())
-        })
+        (read_only && over(&reported_reads, at)) || over(&reported_writes, at)
     };
     let handed = handed
         .into_iter()
@@ -701,10 +797,10 @@ pub(crate) fn collect_project<'facts>(
         .reads
         .iter()
         .filter(|read| {
-            (read.execution.reports_untracked_read()
-                || read.execution.reports_unplaced()
-                || attributed_at_tracked(read))
-                && !async_rows.contains(&read.location)
+            // Every condition is a question about the build; the loading-cover
+            // walk (`attributed_at_tracked`) is asked last, of the reads the
+            // others keep.
+            !async_rows.contains(&read.location)
                 // Local access decided the rows of a component's own source;
                 // these are the sources it could not see: transported, in
                 // another file, or at module scope, and a read a local
@@ -762,6 +858,9 @@ pub(crate) fn collect_project<'facts>(
                         ))
                     })
                     .unwrap_or(false)
+                && (read.execution.reports_untracked_read()
+                    || read.execution.reports_unplaced()
+                    || attributed_at_tracked(read))
         })
         .map(|read| crate::AsyncRead {
             accessor: read.accessor.clone(),
@@ -1465,6 +1564,19 @@ fn project_imports_of(ctx: &AnalysisContext<'_>, package: &str) -> Vec<typefacts
         found.push(solid_facts::core::Span::new(0, 0).location(file.path.as_str()));
     }
     found
+}
+
+/// One start of the value-use census (ADR 0909).
+enum CensusStart<'s, 'a> {
+    /// A reference of a source.
+    Reference(&'s crate::SymbolId, typefacts::Location),
+    /// P13: a creating call no binding holds.
+    Created {
+        file: &'a solid_facts::FileFacts,
+        call: solid_facts::core::Span,
+        store: bool,
+        tuple: bool,
+    },
 }
 
 /// The census's rows, one per span. Walks run in the order of their sources'

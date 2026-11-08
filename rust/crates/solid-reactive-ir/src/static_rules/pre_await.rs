@@ -126,7 +126,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
     /// the time it first suspends, in any of the windows.
     pub(super) fn accessor(
         &self,
-        windows: &[std::rc::Rc<AsyncFunctionFact>],
+        windows: &[std::sync::Arc<AsyncFunctionFact>],
         symbol: &SymbolId,
     ) -> Tracking {
         windows
@@ -150,7 +150,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
     /// plain path, when it has one) is a dependency already.
     pub(super) fn store_key(
         &self,
-        windows: &[std::rc::Rc<AsyncFunctionFact>],
+        windows: &[std::sync::Arc<AsyncFunctionFact>],
         symbol: &SymbolId,
         text: Option<&str>,
     ) -> Tracking {

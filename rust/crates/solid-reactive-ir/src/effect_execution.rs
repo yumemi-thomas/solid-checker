@@ -419,12 +419,12 @@ fn mutable_accessor(file: &FileFacts, callee: Span, lookup: &SemanticLookup<'_>)
 pub(crate) fn at_span(file: &FileFacts, span: Span, lookup: &SemanticLookup<'_>) -> ApplyExecution {
     let regions = lookup.effect_apply_regions();
     let mut answer = ApplyExecution::Proven;
-    for (_, execution) in regions
-        .get(file.path.as_str())
-        .into_iter()
-        .flatten()
-        .filter(|(region, _)| region.contains(span))
-    {
+    // A path's regions are sorted by span ([`regions`]): one that starts
+    // after `span` does not contain it.
+    let regions = regions.get(file.path.as_str()).map_or(&[][..], |regions| {
+        &regions[..regions.partition_point(|(region, _)| region.start <= span.start)]
+    });
+    for (_, execution) in regions.iter().filter(|(region, _)| region.contains(span)) {
         match execution {
             ApplyExecution::Absent => return ApplyExecution::Absent,
             ApplyExecution::Unknown => answer = ApplyExecution::Unknown,

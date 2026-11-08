@@ -2608,6 +2608,12 @@ pub(crate) fn impostor_veto(
         )
 }
 
+/// The memo begin keeps this index between builds and updates it with the
+/// changed files only (`MemoStore::kept_hazards`, ADR 0909): a file's
+/// contribution must stay a function of its view. It reads no
+/// [`BuildConstants`] (the parameter is unused); the kept index is also
+/// stamped with the constants it was folded under and refolds when they
+/// differ, and shadow and verify-reused modes compare it with a refold.
 pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
     let file = view.file;
     let mut entries = Vec::new();

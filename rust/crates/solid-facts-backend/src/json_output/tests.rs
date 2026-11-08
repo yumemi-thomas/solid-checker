@@ -2,10 +2,10 @@ use solid_facts_backend::Snapshot;
 
 use super::go_compatible_report;
 
-/// What the report was before it was indexed: serde's pretty string with the
+/// What the report was before it was indexed: serde's compact string with the
 /// Go escapes applied as replacements.
 fn reference(snapshot: &Snapshot) -> Vec<u8> {
-    serde_json::to_string_pretty(snapshot)
+    serde_json::to_string(snapshot)
         .unwrap()
         .replace('&', "\\u0026")
         .replace('<', "\\u003c")

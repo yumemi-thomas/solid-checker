@@ -71,7 +71,7 @@ impl<'a> SemanticLookup<'a> {
 
     /// Every entity with a symbol, by symbol, in table order. Its fill reads the
     /// whole table and records nothing: its readers note the per-symbol probe.
-    fn entities_by_symbol(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
+    pub(super) fn entities_by_symbol(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
         self.entities_by_symbol.get_or_init(|| {
             crate::base::reads::suppress(|| {
                 let mut by_symbol: HashMap<&'a str, Vec<&'a EntityFact>> = HashMap::default();

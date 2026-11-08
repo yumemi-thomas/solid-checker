@@ -48,7 +48,9 @@ impl FlushSite {
 /// Debug-build tripwire: the census the flush veto is computed from must not
 /// read the veto (a reentrant `get_or_init`).
 #[cfg(debug_assertions)]
-struct FlushVetoComputation;
+struct FlushVetoComputation {
+    outer: bool,
+}
 
 #[cfg(debug_assertions)]
 thread_local! {
@@ -57,9 +59,11 @@ thread_local! {
 
 #[cfg(debug_assertions)]
 impl FlushVetoComputation {
+    /// Marks this thread, the census's own or one of its workers'.
     fn enter() -> Self {
-        FLUSH_VETO_COMPUTING.set(true);
-        Self
+        Self {
+            outer: FLUSH_VETO_COMPUTING.replace(true),
+        }
     }
 
     fn assert_not_computing() {
@@ -73,7 +77,7 @@ impl FlushVetoComputation {
 #[cfg(debug_assertions)]
 impl Drop for FlushVetoComputation {
     fn drop(&mut self) {
-        FLUSH_VETO_COMPUTING.set(false);
+        FLUSH_VETO_COMPUTING.set(self.outer);
     }
 }
 
@@ -124,7 +128,13 @@ impl<'a> SemanticLookup<'a> {
                 .and_then(crate::PrimitiveName::primitive)
                 .is_some_and(|primitive| self.dialect.drains_queue_on_caller_stack(primitive))
         };
-        for file in self.files() {
+        // Each file's sites read only that file and this build's lookup, so
+        // the files are classified in parallel; the sites are sorted below.
+        let files: &'a [solid_facts::FileFacts] = self.files();
+        let per_file = |file: &'a solid_facts::FileFacts| -> Vec<FlushSite> {
+            #[cfg(debug_assertions)]
+            let _guard = FlushVetoComputation::enter();
+            let mut sites = Vec::new();
             // A package analyzed as source (ADRs 0284, 0300) is dependency
             // code: its flush calls are the documented premise, not the
             // census's.
@@ -133,7 +143,7 @@ impl<'a> SemanticLookup<'a> {
                 .dependency_source_root(file.path.as_str())
                 .is_some()
             {
-                continue;
+                return sites;
             }
             let path = file.path.as_str();
             let callees = file
@@ -188,7 +198,14 @@ impl<'a> SemanticLookup<'a> {
                     drains_nothing: false,
                 });
             }
-        }
+            sites
+        };
+        let slots = (0..files.len()).collect::<Vec<_>>();
+        sites.extend(
+            crate::pipeline::parallel_balanced_results(&slots, |slot| per_file(&files[*slot]))
+                .into_iter()
+                .flatten(),
+        );
         sites.sort_by(|left, right| (&left.path, left.span).cmp(&(&right.path, right.span)));
         sites.dedup();
         sites

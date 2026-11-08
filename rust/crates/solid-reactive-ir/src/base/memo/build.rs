@@ -897,6 +897,15 @@ fn nanos(duration: Duration) -> u64 {
 
 /// The memo store a retained session keeps between builds, and a one-shot
 /// build owns for itself.
+/// The identity of the build constants an index was folded under: the
+/// dialect's address (compared, never dereferenced).
+fn constants_key(constants: &super::super::BuildConstants<'_>) -> usize {
+    std::ptr::from_ref(constants.dialect).cast::<()>().addr()
+}
+
+/// The hazards index a begin keeps ([`MemoStore::kept_hazards`]).
+pub(crate) type KeptHazards = Arc<BaseIndex<crate::base::Hazard, u32>>;
+
 pub(crate) struct MemoStore {
     store: Store<BuildSchema>,
     /// Unique in the process: a chunk's recorded memo reads name the store
@@ -917,6 +926,16 @@ pub(crate) struct MemoStore {
     /// is nothing to compare them with.
     retained: bool,
     builds: AtomicU64,
+    /// The next lookup's ticket ([`LookupMemos::ticket`]).
+    tickets: AtomicU64,
+    /// The hazards index (`contributions::hazards`) kept between builds and
+    /// updated by `begin` with the files whose views changed, as the census
+    /// indexes are; stamped with the ticket of the lookup whose begin
+    /// updated it, so no other build reads it ([`LookupMemos::kept_hazards`]).
+    /// Also stamped with the build constants it was folded under
+    /// ([`constants_key`]): a contribution that one day reads them refolds
+    /// when they change instead of keeping a stale index.
+    kept_hazards: std::sync::RwLock<Option<(u64, usize, KeptHazards)>>,
     /// Project passes' kept solvers and published outputs.
     derived: super::derived::DerivedTables,
     /// This build's begin costs, when measured ([`crate::base::reads::cost`]).
@@ -958,6 +977,8 @@ impl MemoStore {
             check_indexes: check_indexes || verify_reused,
             retained: true,
             builds: AtomicU64::new(0),
+            tickets: AtomicU64::new(1),
+            kept_hazards: std::sync::RwLock::new(None),
             derived: super::derived::DerivedTables::default(),
             cost: std::sync::Mutex::new(None),
             deferred_end: std::sync::Mutex::new(None),
@@ -998,6 +1019,32 @@ impl MemoStore {
         self.id
     }
 
+    /// The kept hazards index, whatever begin stamped it.
+    #[cfg(test)]
+    pub(crate) fn kept_hazards_any(&self) -> Option<KeptHazards> {
+        self.kept_hazards
+            .read()
+            .expect("kept hazards lock")
+            .as_ref()
+            .map(|(_, _, index)| Arc::clone(index))
+    }
+
+    /// Whether a later build reads this store (a retained daemon's).
+    pub(crate) fn retained(&self) -> bool {
+        self.retained
+    }
+
+    /// Shadow or verify-reused mode: kept indexes are compared with a refold.
+    pub(crate) fn checks_indexes(&self) -> bool {
+        self.check_indexes
+    }
+
+    /// How many markings the store has made: a pass's kept memo answers
+    /// hold while this is unchanged (`reads::PassAnswers`).
+    pub(crate) fn marks(&self) -> u64 {
+        self.store.marks()
+    }
+
     /// A query of `table`, named for a diagnostic.
     pub(crate) fn describe(&self, table: TableId, query: super::QueryId) -> String {
         self.store.describe(table, query)
@@ -1019,7 +1066,7 @@ impl MemoStore {
         program_closed: bool,
         probes: &dyn super::probes::Probes,
     ) -> BeginReport {
-        self.begin_with(views, program_closed, probes, false, false)
+        self.begin_with(views, program_closed, probes, false, false, 0)
     }
 
     /// [`Self::begin`], told whether the producer says the TypeScript table
@@ -1033,6 +1080,7 @@ impl MemoStore {
         probes: &dyn super::probes::Probes,
         typescript_unchanged: bool,
         runtime_redirects: bool,
+        ticket: u64,
     ) -> BeginReport {
         // The last build's sweep comes first: a build reads the store as the
         // sweep left it.
@@ -1318,6 +1366,48 @@ impl MemoStore {
         // Polled inputs: every recorded one is asked again, and the ones
         // whose answer moved are changed inputs.
         drop(base);
+        // The hazards index the lookup reads (and the hazard probes below
+        // ask): updated from the last build's with the changed and removed
+        // files, refolded on a fresh store. Shadow and verify-reused modes
+        // compare it with a refold every build.
+        let started = Instant::now();
+        {
+            let mut kept = self.kept_hazards.write().expect("kept hazards lock");
+            let constants = constants_key(&views.constants);
+            let previous = kept.take().filter(|(_, folded_under, _)| {
+                !fresh && self.retained && *folded_under == constants
+            });
+            let mut index = match previous {
+                Some((_, _, index)) => {
+                    let mut index = Arc::unwrap_or_clone(index);
+                    index.update(
+                        crate::pipeline::parallel_slice_results(&changed_files, |id| {
+                            (
+                                *id,
+                                Some(views.contribution(*id, crate::base::contributions::hazards)),
+                            )
+                        })
+                        .into_iter()
+                        .chain(removed.iter().map(|id| (*id, None))),
+                    );
+                    index
+                }
+                None => views.fold(crate::base::contributions::hazards),
+            };
+            if check {
+                let fold = views.fold(crate::base::contributions::hazards);
+                if index != fold {
+                    self.store.poison(&format!(
+                        "IR memo mismatch: index `hazards`: the update of {} changed and {} removed files differs from a refold",
+                        changed_files.len(),
+                        removed.len()
+                    ));
+                    index = fold;
+                }
+            }
+            *kept = Some((ticket, constants, Arc::new(index)));
+        }
+        report.index_ns += nanos(started.elapsed());
         let recorded = self
             .polled
             .iter()
@@ -2192,6 +2282,8 @@ pub(crate) struct LookupMemos<'a> {
     store: StoreRef<'a>,
     table: FileTable,
     begun: crate::once_guard::Once<BeginReport>,
+    /// This lookup's ticket: what its begin stamps the kept indexes with.
+    ticket: u64,
 }
 
 impl<'a> LookupMemos<'a> {
@@ -2201,10 +2293,12 @@ impl<'a> LookupMemos<'a> {
         let mut store = Box::new(MemoStore::from_env());
         store.retained = false;
         let table = store.table(table);
+        let ticket = store.tickets.fetch_add(1, Ordering::Relaxed);
         Self {
             store: StoreRef::Owned(store),
             table,
             begun: crate::once_guard::Once::new(),
+            ticket,
         }
     }
 
@@ -2212,6 +2306,7 @@ impl<'a> LookupMemos<'a> {
     pub(crate) fn shared(store: &'a MemoStore, table: &FileTable) -> Self {
         Self {
             table: store.table(table),
+            ticket: store.tickets.fetch_add(1, Ordering::Relaxed),
             store: StoreRef::Shared(store),
             begun: crate::once_guard::Once::new(),
         }
@@ -2226,6 +2321,20 @@ impl<'a> LookupMemos<'a> {
 
     pub(crate) fn table(&self) -> &FileTable {
         &self.table
+    }
+
+    /// This lookup's ticket, for its begin ([`MemoStore::begin_with`]).
+    pub(crate) fn ticket(&self) -> u64 {
+        self.ticket
+    }
+
+    /// The hazards index this lookup's begin updated (over [`Self::table`]'s
+    /// ids), or `None` before it ran: another build's is never answered.
+    pub(crate) fn kept_hazards(&self) -> Option<KeptHazards> {
+        let kept = self.store().kept_hazards.read().expect("kept hazards lock");
+        kept.as_ref()
+            .filter(|(ticket, _, _)| *ticket == self.ticket)
+            .map(|(_, _, index)| Arc::clone(index))
     }
 
     /// Runs `begin` once, before the build's first memo read.
