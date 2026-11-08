@@ -911,9 +911,13 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         ReactiveReadIndex::default()
     };
     let mut context = compat_context(ctx, reactive_reads, prefer_for_enabled, prefer_show_enabled);
-    context.forwarded_uncaptured =
-        shared_reactivity::ForwardedUncaptured::build(&ctx.facts.files, &context);
-    for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
+    context.forwarded_uncaptured = shared_reactivity::ForwardedUncaptured::build(
+        crate::base::reads::file_slots(ctx.facts),
+        &context,
+    );
+    for diagnostics in parallel_file_results(crate::base::reads::file_slots(ctx.facts), |file| {
+        check_file(file, &context)
+    }) {
         draft.static_violations.extend(diagnostics.violations);
         draft.static_defects.extend(diagnostics.defects);
     }

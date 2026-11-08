@@ -661,13 +661,12 @@ pub fn browser_callback_invocations(
     let (indexes, _, _) = crate::cache::build_typescript_indexes(
         &facts.typescript,
         dialect,
-        facts.files.len(),
+        crate::base::reads::file_slots(facts).len(),
         &facts.runtime_symbol_redirects,
     );
     let mut names = indexes.symbol_names.clone();
     crate::symbols::add_solid_import_names(facts, &indexes.entities, dialect, &mut names);
-    let ast = facts
-        .files
+    let ast = crate::base::reads::all_files(facts)
         .iter()
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
@@ -677,7 +676,7 @@ pub fn browser_callback_invocations(
     }
     let lookup = SemanticLookup::new(facts, &ast, &indexes.entities, &names, dialect, false);
     let mut result = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::all_files(facts) {
         let dead_children = file
             .ast
             .jsx_elements
@@ -960,8 +959,7 @@ pub fn browser_callback_invocations(
     }
     for fact in &mut result {
         if let CallbackDelivery::FeasibleHostTrigger(trigger) = fact.delivery
-            && let Some(file) = facts
-                .files
+            && let Some(file) = crate::base::reads::all_files(facts)
                 .iter()
                 .find(|file| file.path.as_str() == fact.supplied.path)
         {

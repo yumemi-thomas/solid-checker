@@ -46,7 +46,7 @@ impl<'a> SemanticLookup<'a> {
 /// expression and valued by the function's span.
 fn closed_members<'a>(lookup: &SemanticLookup<'a>) -> HashMap<(&'a str, Span), Span> {
     let mut found = HashMap::default();
-    for file in lookup.files() {
+    for file in lookup.file_slots() {
         // Built once per file: the member and reference indexes every binding
         // of the file needs.
         let members: HashMap<Span, &MemberFact> = file

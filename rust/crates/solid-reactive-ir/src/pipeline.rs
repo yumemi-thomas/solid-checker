@@ -197,8 +197,7 @@ impl ProgramDraft {
     /// a merely untracked one: there is no call, handler, mutation, directive
     /// application, or callback obligation in the emitted program to report.
     pub(crate) fn discard_deleted_static_diagnostics(&mut self, facts: &ProjectFacts) {
-        let files = facts
-            .files
+        let files = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| (file.path.as_str(), file))
             .collect::<HashMap<_, _>>();
@@ -432,13 +431,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let substage_started = Instant::now();
     let owned_ast_indexes;
     let ast_indexes = if let Some(cache) = ast_indexes_cache {
-        let current_paths = facts
-            .files
+        let current_paths = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| file.path.as_str())
             .collect::<HashSet<_>>();
         cache.retain(|path, _| current_paths.contains(path.as_str()));
-        for file in &facts.files {
+        for file in crate::base::reads::file_slots(facts) {
             if cache
                 .get(file.path.as_str())
                 .is_some_and(|index| Arc::ptr_eq(&index.ast, &file.ast))
@@ -449,8 +447,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         }
         &*cache
     } else {
-        owned_ast_indexes = facts
-            .files
+        owned_ast_indexes = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
             .collect::<HashMap<_, _>>();
@@ -490,7 +487,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             let (indexes, alias_roots, entity_symbols) = build_typescript_indexes(
                 &facts.typescript,
                 dialect,
-                facts.files.len(),
+                crate::base::reads::file_slots(facts).len(),
                 &facts.runtime_symbol_redirects,
             );
             build_timings.alias_roots = alias_roots;
@@ -506,7 +503,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         let (indexes, alias_roots, entity_symbols) = build_typescript_indexes(
             &facts.typescript,
             dialect,
-            facts.files.len(),
+            crate::base::reads::file_slots(facts).len(),
             &facts.runtime_symbol_redirects,
         );
         build_timings.alias_roots = alias_roots;
@@ -583,7 +580,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // ADR 0840: each file's withheld calls, asked once per call on the
     // workers (the draft's withheld starts and callees, and the census's
     // impostor rows, read them).
-    let withheld_calls = parallel_balanced_results(&facts.files, |file| {
+    let withheld_calls = parallel_balanced_results(crate::base::reads::file_slots(facts), |file| {
         file.ast
             .calls
             .iter()
@@ -593,8 +590,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             .collect::<Vec<_>>()
     });
     let withheld = || {
-        facts
-            .files
+        crate::base::reads::file_slots(facts)
             .iter()
             .zip(&withheld_calls)
             .flat_map(|(file, calls)| {
@@ -914,8 +910,7 @@ fn dependency_source_call_error_defects(facts: &ProjectFacts) -> Vec<StaticDefec
                 (Ok(start), Ok(end)) => Some(Span::new(start, end)),
                 _ => None,
             };
-            let file = facts
-                .files
+            let file = crate::base::reads::file_slots(facts)
                 .iter()
                 .find(|file| file.path.as_str() == location.path.as_ref());
             let call = file.zip(span).and_then(|(file, span)| {
@@ -987,7 +982,7 @@ fn check_retained_base(
     timings: &mut BuildTimings,
     emit_timings: bool,
 ) {
-    let table = crate::base::retained::table(retained, lookup.files());
+    let table = crate::base::retained::table(retained, lookup.file_slots());
     let views = lookup.base_views_over(&table);
     let Some(check) = crate::base::retained::check(retained, &views) else {
         return;

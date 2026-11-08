@@ -195,7 +195,7 @@ fn path_file<'l>(
     id: FileId,
 ) -> Option<&'l FileFacts> {
     let slot = *table.slots_of(id).first()?;
-    lookup.files().get(slot)
+    lookup.file_slots().get(slot)
 }
 
 adapter! {
@@ -420,7 +420,7 @@ adapter! {
     cycle: Arc::default(),
     |lookup, table, _key| {
         let mut calls = Vec::new();
-        for (slot, file) in lookup.files().iter().enumerate() {
+        for (slot, file) in lookup.file_slots().iter().enumerate() {
             let id = table.slot_id(slot);
             let rank = u32::try_from(table.slot_rank(slot)).expect("fewer than 2^32 slots");
             for (ordinal, call) in file.ast.calls.iter().enumerate() {
@@ -1846,7 +1846,7 @@ impl<'a> State<'a> {
         lookup: &SemanticLookup<'a>,
     ) -> &HashMap<&'a str, FunctionSymbolsBySpan> {
         self.function_symbols.get_or_init(|| {
-            let files = lookup.files();
+            let files = lookup.file_slots();
             let mut inverted = HashMap::<&'a str, FunctionSymbolsBySpan>::default();
             for (symbol, function) in lookup.functions_by_symbol() {
                 if let SymbolFunction::Resolved { file, function, .. } = function {
@@ -1871,7 +1871,7 @@ impl<'a> State<'a> {
 
     fn call_result_symbols(&self, lookup: &SemanticLookup<'a>) -> &HashMap<&'a str, Vec<Arc<str>>> {
         self.call_result_symbols.get_or_init(|| {
-            let files = lookup.files();
+            let files = lookup.file_slots();
             let mut by_path = HashMap::<&'a str, Vec<Arc<str>>>::default();
             for (symbol, function) in lookup.functions_by_symbol() {
                 if let SymbolFunction::Resolved {

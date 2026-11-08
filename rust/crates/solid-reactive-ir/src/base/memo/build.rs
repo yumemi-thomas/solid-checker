@@ -1050,6 +1050,36 @@ impl MemoStore {
         self.store.describe(table, query)
     }
 
+    /// The whole program as [`crate::base::reads::Section::Files`] reads it:
+    /// each slot's path and its file's section fingerprints, in slot order,
+    /// as the begin over `table` computed them (call after that begin). A
+    /// file with no fingerprints digests a marker, never nothing.
+    pub(crate) fn files_digest(&self, table: &FileTable) -> [u8; 32] {
+        let base = self.base.read().expect("memo base lock");
+        let mut hasher = Sha256::new();
+        hasher.update(
+            u64::try_from(table.slot_count())
+                .unwrap_or(u64::MAX)
+                .to_le_bytes(),
+        );
+        for slot in 0..table.slot_count() {
+            let id = table.slot_id(slot);
+            let path = table.path_of(id);
+            hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(path.as_bytes());
+            match base.files.get(&id) {
+                Some(file) => {
+                    hasher.update([1]);
+                    for section in SECTIONS {
+                        hasher.update(file.section(section));
+                    }
+                }
+                None => hasher.update([0]),
+            }
+        }
+        hasher.finalize().into()
+    }
+
     /// A build's file table under this store's interner, so every id the
     /// store holds keeps its meaning.
     pub(crate) fn table(&self, table: &FileTable) -> FileTable {

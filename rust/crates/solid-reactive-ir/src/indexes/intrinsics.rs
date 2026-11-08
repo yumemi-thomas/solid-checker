@@ -90,7 +90,7 @@ impl SemanticLookup<'_> {
 pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
     // Each file clears premises of its own; a premise holds where no file
     // clears it, so the files are read on the workers and the answers met.
-    let per_file = crate::pipeline::parallel_balanced_results(lookup.files(), |file| {
+    let per_file = crate::pipeline::parallel_balanced_results(lookup.file_slots(), |file| {
         let mut found = Intrinsics {
             promise: true,
             array_iteration: true,

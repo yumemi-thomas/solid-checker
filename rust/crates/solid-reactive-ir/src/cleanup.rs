@@ -39,7 +39,7 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
     let action_symbols = ctx.actions.keys().cloned().collect::<HashSet<_>>();
     let source_call_targets = &draft.source_call_targets;
     draft.leaf_operations.extend(
-        parallel_file_results(&ctx.facts.files, |file| {
+        parallel_file_results(crate::base::reads::file_slots(ctx.facts), |file| {
             leaf_owner_operations_for_file(
                 file,
                 ctx.symbol_names,

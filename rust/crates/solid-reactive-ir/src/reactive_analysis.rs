@@ -100,8 +100,8 @@ pub(crate) fn collect_project<'facts>(
     // where the host has a second worker: a wasm32-wasip1 reactor build has no
     // thread support and `Scope::spawn` panics there instead of degrading to
     // an inline call.
-    let overlap =
-        ctx.facts.files.len() >= PARALLEL_INDEX_FILE_THRESHOLD && available_analysis_workers() > 1;
+    let overlap = crate::base::reads::file_slots(ctx.facts).len() >= PARALLEL_INDEX_FILE_THRESHOLD
+        && available_analysis_workers() > 1;
     let interprocedural_context = InterproceduralContext {
         facts: ctx.facts,
         project_indexes,
@@ -448,7 +448,7 @@ pub(crate) fn collect_project<'facts>(
             starts.push(CensusStart::Reference(symbol, reference));
         }
     }
-    for file in ctx.semantic_lookup.files() {
+    for file in ctx.semantic_lookup.file_slots() {
         for call in &file.ast.calls {
             let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
                 continue;
@@ -630,7 +630,7 @@ pub(crate) fn collect_project<'facts>(
     // well as a method: the call is the use, and its row names the census.
     // ADR 0875: the row names the site that holds it.
     let mut holders = None;
-    let files = ctx.semantic_lookup.files();
+    let files = ctx.semantic_lookup.file_slots();
     // The draft's withheld calls (asked once per call); a draft built without
     // them asks here.
     let mut withheld_calls = std::mem::take(&mut draft.withheld_calls);
@@ -655,7 +655,7 @@ pub(crate) fn collect_project<'facts>(
             .filter(|call| !call.construct)
         {
             let holders = holders.get_or_insert_with(|| {
-                crate::base::contributions::impostor_holders(ctx.semantic_lookup.files())
+                crate::base::contributions::impostor_holders(ctx.semantic_lookup.file_slots())
             });
             let mut row = census_obligation(
                 file.source_text(call.callee).unwrap_or("this call"),

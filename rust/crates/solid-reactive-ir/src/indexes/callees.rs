@@ -81,7 +81,7 @@ impl<'a> SemanticLookup<'a> {
         self.note_binding_at(path);
         let resolution = self.binding_resolution_at(path, span)?;
         self.note_slot_read(resolution.file);
-        let file = &self.facts.files[resolution.file];
+        let file = &crate::base::reads::file_slots(self.facts)[resolution.file];
         Some((
             file,
             &file.ast.bindings[resolution.binding],
@@ -133,7 +133,10 @@ impl<'a> SemanticLookup<'a> {
             // Each file's binding names, and the spans each resolves, read on
             // several workers in the order the table is written: a key's
             // first writer in that order is its resolution.
-            let slots = self.facts.files.iter().enumerate().collect::<Vec<_>>();
+            let slots = crate::base::reads::file_slots(self.facts)
+                .iter()
+                .enumerate()
+                .collect::<Vec<_>>();
             let names = crate::pipeline::parallel_slice_results(&slots, |&(_, file)| {
                 let path = file.path.as_str();
                 let mut names = Vec::new();
@@ -309,8 +312,7 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn context_symbols(&self) -> &HashSet<&'a str> {
         self.context_symbols.get_or_init(|| {
-            self.facts
-                .files
+            crate::base::reads::file_slots(self.facts)
                 .iter()
                 .flat_map(|file| {
                     let primitives = self.primitives(file);
@@ -564,7 +566,7 @@ impl<'a> SemanticLookup<'a> {
         match self.functions_by_symbol().get(symbol)? {
             SymbolFunction::Resolved { file, function, .. } => {
                 self.note_slot_read(*file);
-                let file = &self.facts.files[*file];
+                let file = &crate::base::reads::file_slots(self.facts)[*file];
                 Some((file, &file.ast.functions[*function]))
             }
             SymbolFunction::Aborted => None,

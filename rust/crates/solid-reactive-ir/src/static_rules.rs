@@ -863,12 +863,11 @@ pub(crate) fn reactive_read_after_await_through_calls<'a>(
     computations: &SharedAsyncComputations<'a>,
     draft: &mut ProgramDraft,
 ) {
-    let files_by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> = ctx
-        .facts
-        .files
-        .iter()
-        .map(|file| (file.path.as_str(), file))
-        .collect();
+    let files_by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> =
+        crate::base::reads::all_files(ctx.facts)
+            .iter()
+            .map(|file| (file.path.as_str(), file))
+            .collect();
     let mut attributed = std::collections::HashMap::<(&str, u64, u64), Vec<&ReactiveRead>>::new();
     for read in draft.reads.iter().filter(|read| read.origin.is_some()) {
         attributed
@@ -1521,10 +1520,14 @@ fn tracked_async_computation_context(
         .map(|(start, end)| Span::new(start, end));
     // A range that does not fit a span cannot be compared, which refused every
     // call of the function's own file, semantic or not.
-    let own_file =
-        |file_index: usize| *ctx.facts.files[file_index].path.as_str() == *function.expression.path;
+    let own_file = |file_index: usize| {
+        *crate::base::reads::file_slots(ctx.facts)[file_index]
+            .path
+            .as_str()
+            == *function.expression.path
+    };
     if let Some(range) = range {
-        for (file_index, file) in ctx.facts.files.iter().enumerate() {
+        for (file_index, file) in crate::base::reads::all_files(ctx.facts).iter().enumerate() {
             if !own_file(file_index) {
                 continue;
             }
@@ -1563,7 +1566,7 @@ fn tracked_async_computation_context(
         );
     }
     candidates.into_iter().find_map(|(file_index, call_index)| {
-        let file = &ctx.facts.files[file_index];
+        let file = &crate::base::reads::file_slots(ctx.facts)[file_index];
         let candidate = &file.ast.calls[call_index];
         let primitive = crate::call_primitive_name_cached(
             ctx.semantic_lookup,
@@ -1617,7 +1620,7 @@ impl<'t> AsyncComputations<'t> {
     fn new(ctx: &AnalysisContext<'_>, table: &'t solid_facts::TypeScriptTable) -> Self {
         let roots = AsyncSymbolRoots::new(table);
         let mut by_argument_root = std::collections::HashMap::<String, Vec<(usize, usize)>>::new();
-        for (file_index, file) in ctx.facts.files.iter().enumerate() {
+        for (file_index, file) in crate::base::reads::all_files(ctx.facts).iter().enumerate() {
             for (call_index, call) in file.ast.calls.iter().enumerate() {
                 let Some(symbol) = call
                     .arguments
@@ -1819,7 +1822,7 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                 read.is_uncertifiable(),
             ));
     }
-    for file in &ctx.facts.files {
+    for file in crate::base::reads::all_files(ctx.facts) {
         // The arguments of the file's primitive calls, peeled.
         let mut primitive_arguments = None;
         for function in &file.ast.functions {
@@ -1990,7 +1993,7 @@ fn jsx_structure_within(file: &solid_facts::FileFacts, span: Span) -> bool {
 pub(crate) fn result_access_callbacks(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let lookup = ctx.semantic_lookup;
     let mut obligations = Vec::new();
-    for file in &ctx.facts.files {
+    for file in crate::base::reads::all_files(ctx.facts) {
         for call in &file.ast.calls {
             let count = call.arguments.len();
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {

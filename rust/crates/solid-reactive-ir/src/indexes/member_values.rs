@@ -238,7 +238,7 @@ impl<'a> SemanticLookup<'a> {
             // write any member of whatever `t` is, unless `t` is proven a
             // built-in value (`xs[i] = v` on an array), which no project
             // instance is.
-            let unknown_key_write = self.files().iter().any(|file| {
+            let unknown_key_write = self.file_slots().iter().any(|file| {
                 file.ast.assignments.iter().any(|assignment| {
                     let target = file.ast.peel_ts_sugar_span(assignment.target);
                     file.ast.computed_members.binary_search(&target).is_ok()
@@ -263,7 +263,7 @@ impl<'a> SemanticLookup<'a> {
                 })
             });
             unknown_key_write
-                || self.files().iter().any(|file| {
+                || self.file_slots().iter().any(|file| {
                     let fresh_first = |member: Span| {
                         file.ast.calls.iter().any(|call| {
                             file.ast.peel_ts_sugar_span(call.callee) == member
@@ -803,7 +803,7 @@ impl<'a> SemanticLookup<'a> {
         let resolution = self.bindings_by_symbol().get(symbol)?;
         // A hand-out (`hand_outs`): the binding's file.
         self.note_slot_read(resolution.file);
-        let file = &self.facts.files[resolution.file];
+        let file = &crate::base::reads::file_slots(self.facts)[resolution.file];
         Some((file, &file.ast.bindings[resolution.binding]))
     }
 
@@ -816,7 +816,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn direct_value_aliases(&self) -> &HashSet<SymbolId> {
         self.direct_value_aliases.get_or_init(|| {
             let mut aliases = HashSet::default();
-            for file in &self.facts.files {
+            for file in crate::base::reads::file_slots(self.facts) {
                 for binding in &file.ast.bindings {
                     let conditional_initializer = binding.initializer.is_some_and(|initializer| {
                         let initializer = file.ast.peel_ts_sugar_span(initializer);
@@ -845,7 +845,10 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn bindings_by_symbol(&self) -> &HashMap<SymbolId, BindingResolution> {
         self.bindings_by_symbol.get_or_init(|| {
             let mut bindings = HashMap::default();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
+            for (file_index, file) in crate::base::reads::file_slots(self.facts)
+                .iter()
+                .enumerate()
+            {
                 for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
                     for name in &binding.names {
                         let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {

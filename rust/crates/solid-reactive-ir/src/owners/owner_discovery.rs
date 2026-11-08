@@ -471,9 +471,7 @@ pub(crate) fn discover_owner_file(
             };
             for (target, kind) in targets {
                 let source = lookup
-                    .files()
-                    .iter()
-                    .find(|candidate| candidate.path.as_str() == edge.source_path)
+                    .first_file_by_path(&edge.source_path)
                     .and_then(|source_file| {
                         containing_ast_function(&source_file.ast, edge.source).map(|function| {
                             OwnerSource {
@@ -1025,11 +1023,10 @@ pub(crate) fn find_missing_owners_incremental(
     // The files of the build, each path once: a path listed twice is the
     // later slot's.
     let mut last_slot = HashMap::<&str, usize>::default();
-    for (slot, file) in facts.files.iter().enumerate() {
+    for (slot, file) in crate::base::reads::file_slots(facts).iter().enumerate() {
         last_slot.insert(file.path.as_str(), slot);
     }
-    let files = facts
-        .files
+    let files = crate::base::reads::file_slots(facts)
         .iter()
         .enumerate()
         .filter(|(slot, file)| last_slot.get(file.path.as_str()) == Some(slot))

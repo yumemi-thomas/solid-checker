@@ -47,7 +47,7 @@ pub(crate) fn provider_free_contexts(
     // Each candidate's name, whether its file exports it, and whether its
     // lack of a default is proven.
     let mut candidates = HashMap::<Location, (String, bool, bool)>::default();
-    for found in parallel_balanced_results(&facts.files, |file| {
+    for found in parallel_balanced_results(crate::base::reads::file_slots(facts), |file| {
         file_candidates(facts, lookup, symbol_names, entities, file)
     }) {
         for (key, candidate, verdict) in found {
@@ -67,7 +67,7 @@ pub(crate) fn provider_free_contexts(
     if candidates.is_empty() {
         return free;
     }
-    let reaches_unnamed = facts.files.iter().any(|file| {
+    let reaches_unnamed = crate::base::reads::file_slots(facts).iter().any(|file| {
         !file.ast.module_loads.is_empty()
             || file.ast.imports.iter().any(|import| {
                 import
@@ -104,7 +104,7 @@ pub(crate) fn provider_free_contexts(
     // attributed, so that name is blocked.
     let mut escaped = HashSet::<Location>::default();
     let mut blocked_names = HashSet::<String>::default();
-    for census in parallel_balanced_results(&facts.files, |file| {
+    for census in parallel_balanced_results(crate::base::reads::file_slots(facts), |file| {
         file_census(
             lookup,
             symbol_names,

@@ -20,7 +20,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
     pub fn calls(&self) -> (HashMap<Location, Callable>, HashSet<Location>) {
         let mut calls = HashMap::default();
         let mut unavailable = HashSet::default();
-        for call_file in &self.facts.files {
+        for call_file in crate::base::reads::all_files(self.facts) {
             let path = call_file.path.shared();
             fold_transport_rows(
                 &mut calls,

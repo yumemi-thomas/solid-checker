@@ -79,25 +79,26 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
     /// a checked build compares the memo build with.
     pub(super) fn fresh(mut self, timer: &mut ResolverTimer) -> Self {
         let facts = self.facts;
-        let bindings = facts
-            .files
+        let bindings = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| binding_rows(&self, file))
             .collect::<Vec<_>>();
         {
             let binding_locations = Arc::make_mut(&mut self.binding_locations);
             let declarations = Arc::make_mut(&mut self.declarations);
-            for (file, rows) in facts.files.iter().zip(&bindings) {
+            for (file, rows) in crate::base::reads::file_slots(facts).iter().zip(&bindings) {
                 apply_binding_rows(file, rows, binding_locations, declarations);
             }
         }
         timer.lap("bindings");
-        let parameters = facts
-            .files
+        let parameters = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| parameter_rows(&self, file))
             .collect::<Vec<_>>();
-        for (file, rows) in facts.files.iter().zip(&parameters) {
+        for (file, rows) in crate::base::reads::file_slots(facts)
+            .iter()
+            .zip(&parameters)
+        {
             for (pattern, argument) in &rows.inputs {
                 self.parameter_inputs.insert(
                     location(file.path.shared(), *pattern),
@@ -115,8 +116,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             .values()
             .map(|(path, span)| location(path.as_str(), *span))
             .collect::<HashSet<_>>();
-        let census = facts
-            .files
+        let census = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| {
                 census_rows(&self, file, &|span| {
@@ -182,8 +182,7 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             .filter(|context| object_context(&self, context))
             .cloned()
             .collect::<HashSet<_>>();
-        let origins = facts
-            .files
+        let origins = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| {
                 origin_rows(

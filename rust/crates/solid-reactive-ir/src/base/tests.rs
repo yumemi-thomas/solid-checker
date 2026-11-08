@@ -1363,6 +1363,62 @@ fn a_component_question_reads_only_its_files_part_of_the_census() {
     assert_eq!(second[1].0, first[1].0);
 }
 
+/// A scan of the file list is a whole-program read (`Section::Files`): its
+/// proof holds while every file is unchanged and moves on a same-length edit
+/// of any file; the file list read as positions records nothing.
+#[test]
+fn a_scan_of_the_file_list_moves_on_any_files_edit() {
+    use crate::base::reads::{ReadProof, Section, record};
+    let store = super::memo::build::MemoStore::new(false, true);
+    // The scan's proof in a build of `project`, and whether `kept` holds there.
+    let scan = |project: &Project, kept: Option<&ReadProof>| -> (ReadProof, Option<bool>) {
+        let facts = facts(project).expect("the project parses");
+        let ast_indexes = facts
+            .files
+            .iter()
+            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+            .collect::<HashMap<_, _>>();
+        let symbols = entity_symbols(&facts);
+        let names = HashMap::default();
+        let lookup = crate::indexes::SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &symbols,
+            &names,
+            &solid_dialect::Solid2,
+            false,
+        )
+        .with_memo_store(&store);
+        lookup.begin_memos();
+        let ((), positional) = record(|| {
+            let _ = lookup.file_slots().len();
+            let _ = crate::base::reads::file_slots(&facts).first();
+        });
+        assert!(positional.is_empty(), "positions are no read");
+        let (count, reads) = record(|| {
+            lookup
+                .files()
+                .iter()
+                .filter(|file| !file.source.is_empty())
+                .count()
+        });
+        assert_eq!(count, project.files.len());
+        assert!(reads.reads_section(Section::Files));
+        let held = kept.map(|proof| proof.holds(&lookup));
+        let proof = ReadProof::new(reads, &lookup);
+        let _ = lookup.end_memos();
+        (proof, held)
+    };
+    let mut project = census_project();
+    let (first, _) = scan(&project, None);
+    let (second, held) = scan(&project, Some(&first));
+    assert_eq!(held, Some(true), "nothing moved");
+    // A same-length body edit of one file, which no span of another moves.
+    project.files[2].1 = project.files[2].1.replace("\"x\"", "\"y\"");
+    let (_, held) = scan(&project, Some(&second));
+    assert_eq!(held, Some(false), "a file of the scan moved");
+}
+
 /// Through random edits (the base property test's kinds, TypeFacts-only
 /// changes included), the retained store's census answers exactly as a
 /// fresh store's, with verify-reused mode on: no reused answer missed a read.

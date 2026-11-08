@@ -28,7 +28,7 @@ pub(super) fn add_solid_import_names(
     dialect: &dyn Dialect,
     names: &mut HashMap<SymbolId, SymbolName>,
 ) {
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         for import in &file.ast.imports {
             let primitives = dialect.namespace_import_primitives(import.module.as_str());
             if primitives.is_empty() {

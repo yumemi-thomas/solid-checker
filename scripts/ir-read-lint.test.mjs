@@ -15,6 +15,7 @@ test("each raw read kind is counted, comments and test modules are not", () => {
     fn a(lookup: &SemanticLookup, facts: &ProjectFacts) {
         for file in facts.files.iter() {}
         for file in lookup.files() {}
+        let _ = lookup.file_slots().get(3);
         let _ = lookup.file_by_path("x");
         let _ = self.symbols_by_id().get("x");
         let seen: HashSet<String> = HashSet::default();
@@ -36,7 +37,7 @@ test("each raw read kind is counted, comments and test modules are not", () => {
   `);
   assert.deepEqual(counts, {
     "facts.files": 1,
-    "files()": 1,
+    file_slots: 1,
     file_by_path: 1,
     symbols_by_id: 1,
     "typescript-table": 2,

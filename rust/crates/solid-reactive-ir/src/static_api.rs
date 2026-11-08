@@ -34,7 +34,9 @@ pub(super) struct StaticDirectiveFileResult {
 /// results into the program draft.
 pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let checker = context_of(ctx);
-    for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
+    for result in parallel_file_results(crate::base::reads::file_slots(ctx.facts), |file| {
+        checker.check_file(file)
+    }) {
         draft.static_defects.extend(result.defects);
         draft.static_violations.extend(result.violations);
         draft.writes.extend(result.writes);

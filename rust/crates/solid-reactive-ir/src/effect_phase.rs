@@ -600,7 +600,7 @@ impl<'l, 'a> Walk<'l, 'a> {
     fn files(&self) -> &HashMap<&'a str, &'a FileFacts> {
         self.files.get_or_init(|| {
             self.lookup
-                .files()
+                .file_slots()
                 .iter()
                 .map(|file| (file.path.as_str(), file))
                 .collect()

@@ -115,7 +115,7 @@ impl SemanticLookup<'_> {
         let slot = *self.memos.table().slots_of(used.file).last()?;
         // A hand-out (`hand_outs`): the use's file.
         self.note_slot_read(slot);
-        self.facts.files.get(slot)
+        crate::base::reads::file_slots(self.facts).get(slot)
     }
 }
 

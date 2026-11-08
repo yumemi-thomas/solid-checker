@@ -636,8 +636,8 @@ pub(super) fn reachability_stage(
     };
     let can_reuse = inputs.typescript_unchanged
         && cache.as_ref().is_some_and(|cached| {
-            cached.inputs.len() == facts.files.len()
-                && facts.files.iter().all(|file| {
+            cached.inputs.len() == crate::base::reads::file_slots(facts).len()
+                && crate::base::reads::file_slots(facts).iter().all(|file| {
                     cached
                         .inputs
                         .get(file.path.as_str())
@@ -649,7 +649,7 @@ pub(super) fn reachability_stage(
         });
     if can_reuse {
         let cached = cache.as_mut().expect("checked retained reachability");
-        for file in &facts.files {
+        for file in crate::base::reads::file_slots(facts) {
             if let Some((source_hash, _)) = cached.inputs.get_mut(file.path.as_str()) {
                 source_hash.clone_from(&file.source_hash);
             }
@@ -683,8 +683,7 @@ pub(super) fn reachability_stage(
         build_timings.reachability_reused_files = reused_files;
         build_timings.reachability_recomputed_files = recomputed_files;
         build_timings.reachability_visits = visits;
-        cached.inputs = facts
-            .files
+        cached.inputs = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| {
                 (
@@ -718,8 +717,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
         calls,
         function_symbols,
     } = state;
-    let current_paths = facts
-        .files
+    let current_paths = crate::base::reads::file_slots(facts)
         .iter()
         .map(|file| file.path.as_str())
         .collect::<HashSet<_>>();
@@ -737,7 +735,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
     let mut recomputed = Vec::new();
     // One check pass: each memo is asked once (`reads::PassAnswers`).
     let answers = crate::base::reads::PassAnswers::new(lookup);
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         let reusable = (typescript_unchanged || typescript_delta.is_some())
             && cache.get(file.path.as_str()).is_some_and(|cached| {
                 source_discovery_identity_matches(
@@ -781,8 +779,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
             !removed_paths.contains(location.path.as_ref())
                 && !recomputed_paths.contains(location.path.as_ref())
         });
-        for file in facts
-            .files
+        for file in crate::base::reads::file_slots(facts)
             .iter()
             .filter(|file| recomputed_paths.contains(file.path.as_str()))
         {
@@ -829,7 +826,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
     }
 
     let mut functions = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         if let Some(cached) = cache.get(file.path.as_str()) {
             functions.extend(cached.functions.iter().cloned());
         }
@@ -856,7 +853,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
     };
     let mut edges = vec![Vec::new(); functions.len()];
     let mut roots = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         let Some(cached) = cache.get(file.path.as_str()) else {
             continue;
         };
@@ -901,7 +898,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
     let multiplicity = path_counts(&roots, &edges, &mut visits);
     multiplicity_by_path.clear();
     let mut offset = 0;
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         let count = cache
             .get(file.path.as_str())
             .map_or(0, |cached| cached.functions.len());
@@ -912,7 +909,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
         offset += count;
     }
     calls.clear();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         let Some(cached) = cache.get(file.path.as_str()) else {
             continue;
         };

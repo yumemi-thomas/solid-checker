@@ -6,8 +6,14 @@
 // tsrs-plan/p5-ir-incremental-study.md, section 3.4). The raw ways to read
 // "the rest of the project" are the ones a recorded-read layer will replace:
 //
-//   facts.files       the project's file list
-//   files()           SemanticLookup::files(), the same list behind the lookup
+//   facts.files       the project's file list, read past its accessors: a scan
+//                     goes through `reads::all_files` or `SemanticLookup::files`,
+//                     which record a whole-program read (`Section::Files`) for a
+//                     recording computation, so none is left
+//   file_slots        `reads::file_slots` / `SemanticLookup::file_slots`: the
+//                     file list as positions, recorded by nothing. A caller
+//                     notes the one file it reads by slot (a hand-out) or reads
+//                     no file's facts; each is a reviewed site
 //   file_by_path      another file's facts by path
 //   symbols_by_id     SemanticLookup::symbols_by_id(): a symbol's alias target
 //                     and declarations in any file (a project declaration
@@ -134,7 +140,7 @@ export function codeLines(text) {
 export function countReads(text) {
   const counts = {
     "facts.files": 0,
-    "files()": 0,
+    file_slots: 0,
     file_by_path: 0,
     symbols_by_id: 0,
     "typescript-table": 0,
@@ -172,7 +178,7 @@ export function readSites(text) {
     const add = (kind, count) => {
       for (let n = 0; n < count; n += 1) sites.push({ line: index + 1, kind });
     };
-    add("files()", (line.match(/\.\s*files\s*\(\s*\)/g) ?? []).length);
+    add("file_slots", (line.match(/\bfile_slots\s*\(/g) ?? []).length);
     add("file_by_path", (line.match(/\bfile_by_path\b/g) ?? []).length);
     add("symbols_by_id", (line.match(/\bsymbols_by_id\s*\(\s*\)/g) ?? []).length);
     add("placing-call", (line.match(/\.placing_callee_call\s*\(/g) ?? []).length);

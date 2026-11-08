@@ -104,7 +104,7 @@ flow_tables! {
 /// listed twice is one source: its first slot stands for it.
 pub(super) fn file_keys(lookup: &SemanticLookup<'_>) -> Vec<(FileId, String)> {
     lookup
-        .files()
+        .file_slots()
         .iter()
         .enumerate()
         .filter_map(|(slot, file)| {
@@ -749,7 +749,7 @@ fn path_file<'l>(
     id: FileId,
 ) -> Option<&'l FileFacts> {
     let slot = *table.slots_of(id).first()?;
-    lookup.files().get(slot)
+    lookup.file_slots().get(slot)
 }
 
 /// ADR 0319: the one role every invocation of each function literal of a

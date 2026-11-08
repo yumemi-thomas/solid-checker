@@ -1313,9 +1313,7 @@ impl LocalAccessContext<'_, '_> {
                         .is_some_and(|previous| *previous != self.symbol_state(symbol))
                 })
                 .collect::<HashSet<_>>();
-            let current_paths = self
-                .facts
-                .files
+            let current_paths = crate::base::reads::file_slots(self.facts)
                 .iter()
                 .map(|file| file.path.as_str())
                 .collect::<HashSet<_>>();
@@ -1326,7 +1324,7 @@ impl LocalAccessContext<'_, '_> {
             // reads only its own entry and this build's lookup, and one at a
             // time it was most of the stage on a large project.
             let kept = &cache.files;
-            let files = &self.facts.files;
+            let files = crate::base::reads::file_slots(self.facts);
             // Each worker asks a memo once for its whole slice
             // (`reads::PassAnswers`): the chunks' proofs share most reads.
             let reusable = crate::pipeline::parallel_slice_with_state(
@@ -1410,21 +1408,25 @@ impl LocalAccessContext<'_, '_> {
                 }
             }
             let local_access_files = &cache.files;
-            for partial in parallel_file_chunk_results(&self.facts.files, |files| {
-                let mut partial = LocalAccessResult::default();
-                for file in files {
-                    if let Some(cached) = local_access_files.get(file.path.as_str()) {
-                        append_local_access_result(&mut partial, &cached.contribution);
+            for partial in
+                parallel_file_chunk_results(crate::base::reads::file_slots(self.facts), |files| {
+                    let mut partial = LocalAccessResult::default();
+                    for file in files {
+                        if let Some(cached) = local_access_files.get(file.path.as_str()) {
+                            append_local_access_result(&mut partial, &cached.contribution);
+                        }
                     }
-                }
-                partial
-            }) {
+                    partial
+                })
+            {
                 append_local_access_result_owned(&mut result, partial);
             }
             cache.sources = Some(sources);
         } else {
             for contribution in
-                parallel_slice_results(&self.facts.files, |file| self.discover(file))
+                parallel_slice_results(crate::base::reads::file_slots(self.facts), |file| {
+                    self.discover(file)
+                })
             {
                 append_local_access_result(&mut result, &contribution);
                 recomputed_files += 1;

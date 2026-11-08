@@ -130,7 +130,7 @@ impl<'a> SemanticLookup<'a> {
         };
         // Each file's sites read only that file and this build's lookup, so
         // the files are classified in parallel; the sites are sorted below.
-        let files: &'a [solid_facts::FileFacts] = self.files();
+        let files: &'a [solid_facts::FileFacts] = self.file_slots();
         let per_file = |file: &'a solid_facts::FileFacts| -> Vec<FlushSite> {
             #[cfg(debug_assertions)]
             let _guard = FlushVetoComputation::enter();

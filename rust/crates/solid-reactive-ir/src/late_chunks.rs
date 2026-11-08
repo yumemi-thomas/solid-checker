@@ -74,7 +74,7 @@ impl<'a, 'l> ChunkInputs<'a, 'l> {
         'l: 'a,
     {
         Self {
-            files: &ctx.facts.files,
+            files: crate::base::reads::file_slots(ctx.facts),
             unchanged_paths: ctx.unchanged_paths,
             lookup: ctx.semantic_lookup,
             discovery: DiscoveryTables::of(ctx),

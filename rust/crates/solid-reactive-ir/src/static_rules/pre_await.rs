@@ -111,9 +111,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
     pub(super) fn new(ctx: &'f AnalysisContext<'a>) -> Self {
         Self {
             ctx,
-            files: ctx
-                .facts
-                .files
+            files: crate::base::reads::all_files(ctx.facts)
                 .iter()
                 .map(|file| (file.path.as_str(), file))
                 .collect(),
@@ -950,7 +948,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         self.methods
             .get_or_init(|| {
                 let mut methods: HashMap<String, Vec<(&FileFacts, &FunctionFact)>> = HashMap::new();
-                for file in &self.ctx.facts.files {
+                for file in crate::base::reads::file_slots(self.ctx.facts) {
                     for shape in &file.ast.object_get_shapes {
                         for property in &shape.properties {
                             if let Some(getter) = property

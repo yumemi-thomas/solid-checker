@@ -169,9 +169,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     fn new(ctx: &'f AnalysisContext<'a>) -> Self {
         Reach {
             ctx,
-            files: ctx
-                .facts
-                .files
+            files: crate::base::reads::all_files(ctx.facts)
                 .iter()
                 .map(|file| (file.path.as_str(), file))
                 .collect(),
@@ -212,9 +210,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             done: HashSet::default(),
             walks: HashMap::default(),
             pre: PreAwait::new(ctx),
-            has_generators: ctx
-                .facts
-                .files
+            has_generators: crate::base::reads::all_files(ctx.facts)
                 .iter()
                 .any(|file| file.ast.functions.iter().any(|function| function.generator)),
             generator_calls: std::cell::RefCell::default(),
@@ -367,7 +363,7 @@ fn unlisted_async_computations(
     reach: &Reach<'_, '_>,
     draft: &mut ProgramDraft,
 ) {
-    for file in &ctx.facts.files {
+    for file in crate::base::reads::all_files(ctx.facts) {
         let path = file.path.as_str();
         for call in &file.ast.calls {
             let Some(argument) = call.arguments.first() else {
