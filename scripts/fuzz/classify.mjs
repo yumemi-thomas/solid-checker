@@ -112,7 +112,7 @@ export function sourceExprAt(lines, line, column) {
  * The coded errors the page logged (ADR 0907): an `<Errored>` boundary logs what it caught instead of rethrowing it, and a user effect
  * logs the throw of its compute or of a computation it read (`NoOwnerError: …`). Each is placed by the logged error's own frames
  * (`consoleErrorPositions`, index-aligned with `consoleErrors`), as a thrown one is; a logged value that is no error has none. Its cause's
- * frames (`consoleErrorCauses`) place it only where its own name no authored line, or where the cause carries the same code (review of
+ * frames (`consoleErrorCauses`) place it only where it has no frame of its own in the program (App.tsx or another case module), or where the cause carries the same code (review of
  * ADR 0907: a cause that is another code thrown elsewhere would put the outer code at the cause's site).
  */
 export function loggedEvents(runtime) {
@@ -121,7 +121,9 @@ export function loggedEvents(runtime) {
     if (!code) return [];
     const own = runtime.consoleErrorPositions?.[index] ?? [];
     const cause = runtime.consoleErrorCauses?.[index] ?? null;
-    const authored = own.some((position) => position.file === "App.tsx" || position.file === undefined);
+    // Review R66: every recorded frame is the program's own (the runners keep only the case's modules: App.tsx with a position, any other
+    // case module such as `helpers.ts` as `{ file }`); a package or runtime frame never reaches here.
+    const authored = own.length > 0;
     const takesCause = cause && (!authored || codeOfLogged(cause.message) === code);
     return [{ code, source: "thrown", positions: takesCause ? [...own, ...(cause.positions ?? [])] : own }];
   });

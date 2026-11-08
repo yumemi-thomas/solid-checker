@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appFrames } from "./frames.mjs";
+import { appFrames, programFrames } from "./frames.mjs";
 
 describe("appFrames", () => {
   const stack = [
@@ -23,5 +23,20 @@ describe("appFrames", () => {
   it("tolerates an empty or missing stack", () => {
     expect(appFrames("x", "")).toEqual([]);
     expect(appFrames("x", undefined)).toEqual([]);
+  });
+});
+
+describe("programFrames (review R66)", () => {
+  const stack = [
+    "Error: Context can only be accessed under a reactive root.",
+    "    at file:///work/node_modules/@solidjs/signals/dist/dev.js:120:9",
+    "    at read (/work/cases/fuzz-12/helpers.ts:4:3)",
+    "    at /work/cases/fuzz-12/App.tsx:14:5",
+    "    at /work/cases/fuzz-120/helpers.ts:3:3",
+  ].join("\n");
+  it("keeps every module of this case: App.tsx with its position, another module by name only; never a package frame", () => {
+    expect(programFrames("fuzz-12", stack)).toEqual([{ file: "helpers.ts" }, { file: "App.tsx", line: 14, column: 5 }]);
+    expect(programFrames("fuzz-120", stack)).toEqual([{ file: "helpers.ts" }]);
+    expect(programFrames("x", undefined)).toEqual([]);
   });
 });
