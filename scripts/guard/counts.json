@@ -33,7 +33,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 445,
+  "SC2001 function-run-unplaced": 448,
   "SC2001 function-unentered": 2,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 3,

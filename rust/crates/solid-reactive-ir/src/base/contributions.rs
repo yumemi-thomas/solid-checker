@@ -985,11 +985,48 @@ fn classic_script_globals(file: &FileFacts) -> Vec<&str> {
                 .flat_map(|binding| binding.names.iter().map(|name| name.span)),
         )
         .chain(ast.namespace_declarations.iter().map(|name| name.span))
+        .chain(declared_by_keyword(file))
         .filter(|span| top(*span))
         .filter_map(|span| file.source_text(span).map(str::trim))
         .collect::<Vec<_>>();
     names.sort_unstable();
     names.dedup();
+    names
+}
+
+/// ADR 0906 (review of ADR 0904): the names a TypeScript `enum` or an
+/// `import X = A.B` declares, which no fact records: each is a runtime `var`.
+/// Read from the text, `enum` or `import` then a name (then `=`), so a match in
+/// a comment or a string is a patch more, never one less.
+fn declared_by_keyword(file: &FileFacts) -> Vec<Span> {
+    let source: &str = &file.source;
+    let word = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+    let mut names = Vec::new();
+    for keyword in ["enum", "import"] {
+        for (at, _) in source.match_indices(keyword) {
+            if source[..at].chars().next_back().is_some_and(word) {
+                continue;
+            }
+            let rest = &source[at + keyword.len()..];
+            let name_at = rest.len() - rest.trim_start().len();
+            if name_at == 0 {
+                continue;
+            }
+            let name = &rest[name_at..];
+            let length = name.find(|c: char| !word(c)).unwrap_or(name.len());
+            if length == 0 {
+                continue;
+            }
+            let after = name[length..].trim_start();
+            if keyword == "import" && !(after.starts_with('=') && !after.starts_with("==")) {
+                continue;
+            }
+            let start = at + keyword.len() + name_at;
+            if let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(start + length)) {
+                names.push(Span::new(start, end));
+            }
+        }
+    }
     names
 }
 
