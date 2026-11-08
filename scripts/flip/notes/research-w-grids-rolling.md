@@ -10,8 +10,8 @@ Newest tip first. Each section starts with the tip, the wall time, the programs,
 - **New false positives**: 1 (Chrome reproduced 1)
 - **New false cleans**: 8290: **silent 0**, with an uncertifiable from another rule 8290 (Chrome reproduced 7811)
 - New wrong-rule rows: 0; other new problem rows: 34724; rows closed since `4c81fcc00`: 120
-- Lock held 523 min of the 611 min (the shared heavy lock, one unit per hold, 90 s gap before each take and a yield while another W agent waits)
-- Memory: VM 64 GiB, peak used 50018 MB (guard 20480 MB); largest single solid-checker 34 MB, solid-typefacts 71 MB (runaway guard 12 GB); guards: never tripped
+- Lock held 523 min of the 611 min (the shared heavy lock; units 1-43 one per hold with a 90 s gap, 5 s from 21:48; from 22:18 a pool of 3 units per hold; a yield while a fuzz request is pending or another W agent waits)
+- Memory: VM 64 GiB and a 20,480 MB guard until 20:22, then 16 vCPUs, 100 GiB and a 100 GB (95,367 MiB) guard (owner); peak used 50018 MiB; largest single solid-checker 34 MB, solid-typefacts 71 MB (runaway guard 12 GB); guards: never tripped
 - Earlier passes 77d80eefd (23/71 units), 72e9b2ff6 (51/71) and ad8cc68bd (45/71) were stopped incomplete and are not compared; the last complete recall baseline is 4c81fcc00 (research-w-grids-merged.md, 41ccacbc0).
 - Commands: every grid of focus-grids.mjs, nothing sampled. Recall grids: one unit per code and shard, focus.mjs --codes <code> --grids <grid> --split-codes [--shard i/N]; other grids: one unit per grid shard of about 40k programs (N from a counting run), focus.mjs --codes all --grids <grid> [--shard i/N]; all with --prune-cases --heap-mb 6000 --checker-bin/--typefacts (the clone release) -- --concurrency 12 --workers 12 --chrome-concurrency 8 --cache-dir <own host cache>; then every not-listed problem id again through matrix.mjs/legal.mjs --confirm-with-chrome --runtime-diff all --no-chrome-cache (no per-cell cap). Chrome `same` (mx) or `confirmed` (lg) means real Chrome reproduces the row; none of the rows is typed-away, so tsc accepts each program.
 
