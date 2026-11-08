@@ -350,5 +350,6 @@ export async function mapPositions(server, { TraceMap, originalPositionFor }, id
     ...record,
     diagnostics: (record.diagnostics ?? []).map((d) => ({ ...d, positions: original(d.positions) })),
     errors: (record.errors ?? []).map((e) => ({ ...e, positions: original(e.positions) })),
+    ...(record.consoleErrorPositions ? { consoleErrorPositions: record.consoleErrorPositions.map(original) } : {}),
   };
 }

@@ -29,8 +29,8 @@ import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
 import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
 import { registrationPositions } from "./registration.mjs";
-import { partlySilentRules, besideCode, codeOfLogged, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
-import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
+import { partlySilentRules, besideCode, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
+import { loggedEvents, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
 import { hitCount } from "./hits.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
@@ -154,12 +154,9 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
     const tag = /^\[([A-Z][A-Z_]+)\]/.exec(String(error.message ?? ""));
     return tag ? [{ code: tag[1], source: "thrown", positions: error.positions ?? [] }] : [];
   });
-  // A thrown code an `<Errored>` boundary caught: the boundary logs it (`console.error(err())`, solid-js rc.17 `solid.dev.js:1647-1652`)
-  // instead of rethrowing it, with no position, so it judges as unplaced.
-  const loggedTags = (runtime.consoleErrors ?? []).flatMap((text) => {
-    const logged = codeOfLogged(text);
-    return logged ? [{ code: logged, source: "thrown", positions: [] }] : [];
-  });
+  // A thrown code an `<Errored>` boundary caught (`console.error(err())`, solid-js rc.17 `solid.dev.js:1647-1652`) or a user effect logged:
+  // placed by the logged error's own frames (ADR 0900, classify.mjs `loggedEvents`); one with none judges as unplaced.
+  const loggedTags = loggedEvents(runtime);
   // ADR 0858: an uncaught throw that names a Solid code is the program's own runtime result, where Chrome placed it; a page halted by one (a
   // later step found no element) carries that throw's code. Any other failure is the harness's.
   const failure = runtime.failure ?? null;
