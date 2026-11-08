@@ -142,7 +142,8 @@ impl<'a, 'facts: 'a> Resolver<'a, 'facts> {
             );
         }
         if store.check_solvers() {
-            let (fresh_calls, fresh_unavailable) = self.calls();
+            // The check's reads are not the answer's: it reads every file.
+            let (fresh_calls, fresh_unavailable) = crate::base::reads::suppress(|| self.calls());
             if fresh_calls != calls || fresh_unavailable != unavailable {
                 store.poison(
                     "IR transport verify mismatch: the transported calls on memos differ from the resolver's",
