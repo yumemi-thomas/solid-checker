@@ -7098,5 +7098,43 @@
   "found": "review R64 and the review of ADR 0904 (565cb75a7)",
   "fixed": "ADR 0906",
   "outside": "the generator prints one ES module per program and judges in one frame: no classic script, no sloppy `this`, and `top` is the window it already names; fixtures classic-script-this-patch, top-window-patch and classic-script-enum-global (certified on c538da427, uncertifiable on b6) and their twin top-window-local pin it"
+ },
+ {
+  "finding": "ADR 0903 (casts stage 3, exact part): a census site whose key syntax proves names no census member (a number, a counter, a foreign-prefixed template or concatenation), whose value is no function, or that copies a literal's own members, held `*` and withheld every census member of the program",
+  "found": "Scout casts stage 2-3, step 0; C2 design and review D35",
+  "fixed": "ADR 0903",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-key-num-mul-signal-direct-none",
+   "lg-strict-read-untracked-key-num-counter-signal-direct-none",
+   "lg-strict-read-untracked-key-num-const-signal-direct-none",
+   "lg-strict-read-untracked-key-num-math-signal-direct-none",
+   "lg-strict-read-untracked-key-num-length-signal-direct-none",
+   "lg-strict-read-untracked-key-template-signal-direct-none",
+   "lg-strict-read-untracked-key-concat-signal-direct-none",
+   "lg-strict-read-untracked-copy-entries-signal-direct-none",
+   "lg-strict-read-untracked-copy-keys-signal-direct-none",
+   "lg-strict-read-untracked-value-new-array-signal-direct-none"
+  ],
+  "rediscovered": "i7 (608c38e38): the ten legal twins uncertifiable (standard-member-impostor at kq(...).then), on STRICT_READ_UNTRACKED and REACTIVE_WRITE_IN_OWNED_SCOPE; s1 (ADR 0903): all ten clean, Chrome silent on all. The lies stay held on both builds: key-any-param, key-cast, key-json, key-tostring, key-let-written-string, key-plus-string, key-template-tail, key-length-patched, value-cast, value-new-proxy, value-new-object, copy-tostring-key, proto-object-literal, proto-template-key, key-math-patched, value-map-patched (recall, uncertifiable; on s1 the last two by the trusted function reopened) and proto-new-map, proto-object-literal-proto, copy-inherited, copy-different-source (legal, Chrome quiet by a TypeError, uncertifiable)."
+ },
+{
+ "finding": "ADR 0903 R65: named writes through Window aliases revoke numeric-key trust; cached counters retain trust dependencies",
+ "found": "review R65 and C2 cache audit",
+ "fixed": "ADR 0903",
+ "grid": "mx-recall",
+ "code": "STRICT_READ_UNTRACKED",
+ "ids": [
+  "mx-strict-read-untracked-key-math-window-alias-signal-direct-none",
+  "mx-strict-read-untracked-key-floor-window-alias-signal-direct-none", "mx-strict-read-untracked-key-counter-trust-reuse-signal-direct-none", "mx-strict-read-untracked-key-math-affix-alias-signal-direct-none"
+ ],
+ "rediscovered": "Earlier s1 already leaves claiming-rule U on these generated, Chrome-confirmed programs; no silent-clean closure claimed. a_window_alias_write_reopens_only_the_used_standard_trust pins the trust veto, including noncallable replacement, open writes, unrelated negative and failed-first-probe cache reuse."
+},
+ {
+  "finding": "ADR 0903 D35 A4: classic-script counters remain open",
+  "found": "review D35 A4",
+  "fixed": "ADR 0903",
+  "outside": "the generator emits ES modules; fixture impostor-census-key-open pins the classic-script counter another script may write"
  }
 ]

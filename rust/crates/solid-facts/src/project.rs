@@ -889,11 +889,14 @@ impl FileFacts {
         let sloppy_this =
             self.source_text(root).map(str::trim) == Some("this") && self.sloppy_this(root);
         let global = |name: &str| GLOBAL_ROOTS.contains(&name) || (sloppy_this && name == "this");
-        let text = GLOBAL_ROOTS
+        let mut text = text;
+        while let Some(rest) = GLOBAL_ROOTS
             .iter()
             .chain(sloppy_this.then_some(&"this"))
             .find_map(|name| text.strip_prefix(name)?.strip_prefix('.'))
-            .unwrap_or(text);
+        {
+            text = rest;
+        }
         if global(text) {
             return Some(StandardRoot::Global);
         }
