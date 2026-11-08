@@ -600,9 +600,20 @@ pub(crate) fn discover_owner_file(
                 "settled-cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 None,
-                call.arguments
-                    .first()
-                    .map_or(call.callee, |argument| argument.span),
+                // ADR 0902: `f.call(this, cb)` and `f.apply(this, [cb])` hold
+                // the callback past the receiver: the row goes at the callee.
+                if file
+                    .ast
+                    .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                    .is_some_and(|member| {
+                        matches!(file.source_text(member.property), Some("call" | "apply"))
+                    }) {
+                    call.callee
+                } else {
+                    call.arguments
+                        .first()
+                        .map_or(call.callee, |argument| argument.span)
+                },
                 true,
             )),
             (Some(OwnerRequirementRole::Effect), Some(primitive)) => {

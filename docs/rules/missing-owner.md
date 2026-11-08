@@ -367,3 +367,5 @@ A package function whose same-operation creation calls cover every exit between 
 
 A context read past an await in a compute that stores its error throws where only a read reports it; without a proven read it is `computation-error-unobserved`, not a violation (ADR 0893).
 A generator's body runs where its iterator is stepped. An owner operation after a `yield` of the generator around it runs on a later step, which the owner walk does not follow: uncertifiable, whatever owner the generator's call had (ADR 0866).
+
+An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||= f)(…)`) whose operand names the primitive is SC4001's uncertifiable where the direct call would be: an attribution, never a proof of invocation or owner; a local function of the same name is none. An operation that is already uncertain is still reported where its named layer has an open entry (ADR 0902).

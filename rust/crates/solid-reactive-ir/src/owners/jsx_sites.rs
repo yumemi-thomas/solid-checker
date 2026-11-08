@@ -296,6 +296,17 @@ pub(crate) fn aliased_primitive(
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<String> {
+    resolved_alias_primitive(file, call, lookup)
+        .or_else(|| indirect_primitive_operand(file, call.callee, lookup))
+}
+
+/// The resolved-declaration attribution of ADR 0884. It never proves an
+/// invocation; casts and replaced call/bind methods remain possible.
+fn resolved_alias_primitive(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
     let resolved = lookup.resolved_callee_call(file, call.callee)?;
     let declaration = resolved.declaration.as_ref()?;
     let (_, after) = declaration.source_file.rsplit_once("/node_modules/")?;
@@ -312,4 +323,66 @@ pub(crate) fn aliased_primitive(
             .primitive(declaration.name.as_ref())
             .is_some())
     .then(|| declaration.name.to_string())
+}
+
+/// ADR 0902: retain a claiming-rule obligation for an indirect call whose
+/// operand names a primitive exactly. This is attribution only: a custom
+/// call/apply/bind member or a logical assignment's previous value may win.
+fn indirect_primitive_operand(
+    file: &solid_facts::FileFacts,
+    mut span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    let mut seen = crate::HashSet::default();
+    loop {
+        span = file.ast.peel_ts_sugar_span(span);
+        if !seen.insert(span) {
+            return None;
+        }
+        if let Some(name) = crate::referenced_primitive(
+            file,
+            span,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup.dialect,
+        ) {
+            return Some(name.as_str().to_owned());
+        }
+        if let Some(member) = file.ast.member_at(span) {
+            // The name describes a transport shape, never a primitive.
+            if !file.ast.computed_members.contains(&member.span)
+                && matches!(file.source_text(member.property), Some("call" | "apply"))
+            {
+                span = member.object;
+                continue;
+            }
+        }
+        if let Some(inner) = file.ast.call_at(span)
+            && !inner.construct
+            && let Some(member) = file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(inner.callee))
+            && !file.ast.computed_members.contains(&member.span)
+            && file.source_text(member.property) == Some("bind")
+        {
+            span = member.object;
+            continue;
+        }
+        // AssignmentFact records the two endpoints of the expression. Exact
+        // equality, not a contained reference, selects the callee's RHS.
+        if let Some(assignment) = file.ast.assignments.iter().find(|assignment| {
+            assignment.target.start == span.start
+                && assignment.value_span.end == span.end
+                && (!assignment.reads_target || assignment.logical.is_some())
+        }) {
+            span = assignment.value_span;
+            continue;
+        }
+        let declaration = file.ast.reference_declaration(span)?;
+        let binding = file.ast.identifier_binding(declaration)?;
+        if !binding.immutable {
+            return None;
+        }
+        span = binding.initializer?;
+    }
 }

@@ -346,6 +346,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "primitive-alias-call",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
+      "start": 2652,
+      "end": 2667,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "package-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",

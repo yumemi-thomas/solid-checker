@@ -7217,5 +7217,27 @@
   "found": "review D36",
   "fixed": "ADR 0901 (facts schema 92)",
   "outside": "the generator emits no eval or with; solid-facts unit test local_alias_members_need_no_direct_eval_and_a_module and fixture primitive-namespace-aliases/variants/eval-box hold it"
+ },
+ {
+  "finding": "An onSettled call through bind, call or an or-assign callee, in a function the body calls and a handler also enters, had ADR 0884's SC9012 and no SC4001 row: the owner operation for an attributed onSettled is uncertain, and ADR 0868's open-entry check skipped uncertain operations, so nothing reported it in an owned context (the last 12 R-alias-owner rows)",
+  "found": "flip-final after ADR 0901 (R-alias-owner)",
+  "fixed": "ADR 0902: the open-entry check runs for an uncertain operation (uncertifiable only)",
+  "grid": "mx-recall",
+  "code": "SETTLED_CLEANUP_UNOWNED",
+  "ids": [
+   "mx-settled-cleanup-unowned-flw-owned-assigned-x-bind-helper",
+   "mx-settled-cleanup-unowned-flw-owned-assigned-x-call-helper",
+   "mx-settled-cleanup-unowned-flw-owned-member-x-bind-closure-helper",
+   "mx-settled-cleanup-unowned-flw-owned-member-x-or-assign-none",
+   "mx-settled-cleanup-unowned-flw-owned-lib-x-call-none",
+   "mx-settled-cleanup-unowned-flw-owned-keep-this-x-bind-module-helper",
+   "mx-settled-cleanup-unowned-flw-owned-keep-object-x-bind-helper",
+   "mx-settled-cleanup-unowned-flw-owned-remove-impostor-x-bind-closure",
+   "mx-settled-cleanup-unowned-flw-owned-eval-x-or-assign-closure",
+   "mx-settled-cleanup-unowned-flw-owned-action-x-call-closure",
+   "mx-settled-cleanup-unowned-flw-owned-action-x-or-assign-helper",
+   "mx-settled-cleanup-unowned-flw-owned-action-gen-x-call-none"
+  ],
+  "rediscovered": "the 12 ids, origin's judge, Chrome confirmed: o1 ad8cc68bd and rn4 (f2e74e79a's code) 12 false cleans; rn6 0, 12 uncertifiable (SC4001 at the call). The 529 alias ids: rn2 12 false cleans, rn6 0, the 268 agree unchanged id for id, 0 false positives"
  }
 ]

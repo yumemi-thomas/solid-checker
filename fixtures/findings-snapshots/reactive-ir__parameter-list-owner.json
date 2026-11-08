@@ -486,6 +486,17 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 2984,
+      "end": 2993,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
       "start": 3450,
       "end": 3459,
       "fixes": 0
