@@ -154,64 +154,7 @@ pub(crate) fn control_flow_execution_role(
         // Reviewer R57: it runs in the insert's tracked effect only where the
         // element's value is inserted; a value held and called (`shown()()`)
         // runs where it is called, which the position does not say.
-        // Reviewer R59: the element must be the inserted value itself, not
-        // a part of one (`{(h = <Show …/>, null)}`, `return { s: <Show …/> }`):
-        // the expression, or a branch of a conditional or logical one.
-        let ast = &file.ast;
-        let value_at = |expression: Span| {
-            let expression = ast.peel_ts_sugar_span(expression);
-            expression == element.span
-                || ast.conditional_expressions.iter().any(|conditional| {
-                    conditional.span == expression
-                        && [conditional.consequent, conditional.alternate]
-                            .into_iter()
-                            .any(|branch| ast.peel_ts_sugar_span(branch) == element.span)
-                })
-                || ast.logical_expressions.iter().any(|logical| {
-                    logical.span == expression
-                        && [logical.left, logical.right]
-                            .into_iter()
-                            .any(|branch| ast.peel_ts_sugar_span(branch) == element.span)
-                })
-        };
-        // A child of another element or a fragment: written as one, or the
-        // value of a child expression.
-        let direct_child = ast
-            .jsx_elements
-            .iter()
-            .any(|outer| outer.span != element.span && outer.children.contains(&element.span))
-            || ast.jsx_fragments.iter().any(|fragment| {
-                *fragment != element.span
-                    && fragment.contains(element.span)
-                    && !ast.jsx_elements.iter().any(|outer| {
-                        outer.span != element.span
-                            && fragment.contains(outer.span)
-                            && outer.span.contains(element.span)
-                    })
-                    && !ast.jsx_child_expressions.iter().any(|expression| {
-                        fragment.contains(*expression) && expression.contains(element.span)
-                    })
-            })
-            || ast
-                .jsx_child_expressions
-                .iter()
-                .any(|expression| value_at(*expression));
-        // Or a proven component's return, which the runtime renders (R59: a
-        // plain function's result may be held and called).
-        let owner_of = |span: Span| crate::owners::owning_function(ast, span);
-        let returned = ast
-            .returns
-            .iter()
-            .filter_map(|returned| Some((owner_of(returned.span)?, returned.argument?)))
-            .chain(ast.functions.iter().filter_map(|function| {
-                Some((function, function.expression_return.as_ref()?.argument?))
-            }))
-            .any(|(function, argument)| {
-                value_at(argument)
-                    && owner_of(element.span).is_some_and(|owner| owner.span == function.span)
-                    && lookup.function_proven_component(file, function)
-            });
-        let inserted = direct_child || returned;
+        let inserted = jsx_value_inserted(file, element.span, lookup, 8);
         return Some(if inserted {
             role_arm!(
                 "control_flow.control_flow_execution_role.tracked-jsx",
@@ -412,4 +355,103 @@ pub(super) fn jsx_child_expression(file: &solid_facts::FileFacts, child: Span) -
     let trailing = u32::try_from(inner.len() - inner.trim_end().len()).ok()?;
     let (start, end) = (child.start + 1 + leading, child.end - 1 - trailing);
     (start < end).then(|| file.ast.peel_ts_sugar_span(Span::new(start, end)))
+}
+
+/// Reviewer R57/R59/R62: whether the JSX value at `span` (an element or a
+/// fragment) is itself inserted, so a length-0 function child of it runs in
+/// the insert's tracked effect. It is when it is the inserted value itself,
+/// written as a child or the value of a child expression (or a branch of a
+/// conditional or logical one), of an intrinsic element (whose children
+/// compile to `insert`) or of a fragment that is itself inserted; or a
+/// proven component's return, which the runtime renders. A component
+/// element's children are a prop it may hold and call; a part of a value
+/// (`{(h = <Show/>, null)}`, `return { s: <Show/> }`), a plain function's
+/// return and a held fragment prove nothing.
+fn jsx_value_inserted(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let ast = &file.ast;
+    let value_at = |expression: Span| {
+        let expression = ast.peel_ts_sugar_span(expression);
+        expression == span
+            || ast.conditional_expressions.iter().any(|conditional| {
+                conditional.span == expression
+                    && [conditional.consequent, conditional.alternate]
+                        .into_iter()
+                        .any(|branch| ast.peel_ts_sugar_span(branch) == span)
+            })
+            || ast.logical_expressions.iter().any(|logical| {
+                logical.span == expression
+                    && [logical.left, logical.right]
+                        .into_iter()
+                        .any(|branch| ast.peel_ts_sugar_span(branch) == span)
+            })
+    };
+    // The innermost element or fragment holding `inner`: the element, or
+    // the fragment's span.
+    let container = |inner: Span| -> Option<(Span, Option<&solid_facts::ast::JsxElementFact>)> {
+        let element = ast
+            .jsx_elements
+            .iter()
+            .filter(|element| element.span != inner && element.span.contains(inner))
+            .min_by_key(|element| element.span.end - element.span.start);
+        let fragment = ast
+            .jsx_fragments
+            .iter()
+            .copied()
+            .filter(|fragment| *fragment != inner && fragment.contains(inner))
+            .min_by_key(|fragment| fragment.end - fragment.start);
+        match (element, fragment) {
+            (Some(element), Some(fragment))
+                if fragment.end - fragment.start < element.span.end - element.span.start =>
+            {
+                Some((fragment, None))
+            }
+            (Some(element), _) => Some((element.span, Some(element))),
+            (None, Some(fragment)) => Some((fragment, None)),
+            (None, None) => None,
+        }
+    };
+    let inserted_by =
+        |holder: Option<(Span, Option<&solid_facts::ast::JsxElementFact>)>| match holder {
+            Some((_, Some(element))) => super::events::intrinsic_element(file, element),
+            Some((fragment, None)) => jsx_value_inserted(file, fragment, lookup, depth - 1),
+            None => false,
+        };
+    let holder = container(span);
+    // The child expression in the same holder that contains the value, if any.
+    let expression = ast
+        .jsx_child_expressions
+        .iter()
+        .copied()
+        .find(|expression| {
+            expression.contains(span)
+                && container(*expression).map(|(holder, _)| holder)
+                    == holder.map(|(holder, _)| holder)
+        });
+    let as_child = match expression {
+        None => holder.is_some() && inserted_by(holder),
+        Some(expression) => value_at(expression) && inserted_by(holder),
+    };
+    if as_child {
+        return true;
+    }
+    let owner_of = |at: Span| crate::owners::owning_function(ast, at);
+    ast.returns
+        .iter()
+        .filter_map(|returned| Some((owner_of(returned.span)?, returned.argument?)))
+        .chain(ast.functions.iter().filter_map(|function| {
+            Some((function, function.expression_return.as_ref()?.argument?))
+        }))
+        .any(|(function, argument)| {
+            value_at(argument)
+                && owner_of(span).is_some_and(|owner| owner.span == function.span)
+                && lookup.function_proven_component(file, function)
+        })
 }

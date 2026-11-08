@@ -264,6 +264,20 @@ const FLOW_VALUES = {
     const [g, el] = [kit.name("g"), kit.name("el")];
     return { body: [decl(g, fn(stmts)), decl(el, domExpr(`(<Show when={1}>{(() => ${g}()) as any}</Show>) as any`, undefined, ["Show"])), expr(domExpr(`${el}()()`))], view: [] };
   },
+  // Reviewer R62: a held fragment is a value; its child runs where the body calls it.
+  "flw-flow-show-held-fragment": (stmts, kit) => {
+    const [g, fr] = [kit.name("g"), kit.name("fr")];
+    return { body: [decl(g, fn(stmts)), decl(fr, domExpr(`(<><span /><Show when={1}>{(() => ${g}()) as any}</Show></>) as any`, undefined, ["Show"])), expr(domExpr(`${fr}[1]()()`))], view: [] };
+  },
+  // Reviewer R62: a component element's children are a prop it calls in its body.
+  "flw-flow-show-kid-calls-children": (stmts, kit) => {
+    const g = kit.name("g");
+    return {
+      hoisted: [decl("Kid3", domExpr("(props: any) => { props.children()(); return <i />; }")), decl("Wrap3", domExpr("(props: { g: () => void }) => <Kid3>{<Show when={1}>{(() => props.g()) as any}</Show>}</Kid3>", undefined, ["Show"]))],
+      body: [decl(g, fn(stmts)), expr(domExpr(`void (<Wrap3 g={${g}} />)`))],
+      view: [],
+    };
+  },
   // Reviewer R59: a plain function's return is no insert; its caller runs the value in its body.
   "flw-flow-show-returned-plain": (stmts, kit) => {
     const [g, mk] = [kit.name("g"), kit.name("mk")];

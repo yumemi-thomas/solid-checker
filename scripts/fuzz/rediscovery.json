@@ -5977,5 +5977,17 @@
    "mx-no-owner-cleanup-flw-gen-step-helper-body-x-direct-none"
   ],
   "rediscovered": "flw-gen-step-helper(-body) ids (14, Chrome confirmed): b652545e2 7 -body ids with no row at the site; r60 SC4001 U at the site in all 14"
+ },
+ {
+  "finding": "R59's insertion proof accepted any parent: a `<Show>` under a component element (whose children are a prop it may call in its body) or inside a held fragment (a value run where the body calls it) kept the insert's tracked role, and the strict read had no row (reviewer R62)",
+  "found": "reviewer R62 on 938746773",
+  "fixed": "R62: the parent must insert (intrinsic element, or an inserted fragment)",
+  "grid": "mx-census",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-flw-flow-show-held-fragment-signal-direct-none",
+   "mx-strict-read-untracked-flw-flow-show-kid-calls-children-signal-direct-none"
+  ],
+  "rediscovered": "fixture show-named-child-length ComponentParent and HeldFragment: 8f07d4b92 no row at the read; r62 SC1001 U there; IntrinsicParent and ReturnedFragment stay tracked. The census twins (4, Chrome confirmed) are recall gaps on both builds: the kid twin's read already had a U, the held-fragment twin's U sits off the read's lines"
  }
 ]

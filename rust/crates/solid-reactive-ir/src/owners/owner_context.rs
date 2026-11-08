@@ -206,6 +206,11 @@ const fn leaf_body_context(source: u8) -> u8 {
     let unowned = source & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
     if source & OWNER_CONTEXT_OWNED != 0 {
         OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED | unowned
+    } else if unowned == 0 {
+        // A source with neither bit (provenance only) proves no owner: a
+        // bare leaf here, joined with an owned path, would read as an owned
+        // leaf (ADR 0886's LeafOwned; reviewer on 8f07d4b92).
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED
     } else {
         OWNER_CONTEXT_LEAF | unowned
     }
