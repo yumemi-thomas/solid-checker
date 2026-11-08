@@ -83,8 +83,9 @@ pub(crate) fn control_flow_execution_role(
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    let dialect = lookup.dialect;
     let element = file
         .ast
         .jsx_containing(span)
@@ -151,47 +152,66 @@ pub(crate) fn control_flow_execution_role(
             .is_some_and(|primitive| dialect.children_callback_requires_parameters(primitive))
     {
         // Reviewer R57: it runs in the insert's tracked effect only where the
-        // element's value is inserted. Proven for an element written inside
-        // another element's child or a fragment, or returned, with no
-        // function between; a value held and called (`shown()()`) runs where
-        // it is called, which the position does not say.
-        let between = |outer: Span| {
-            file.ast.functions.iter().any(|function| {
-                outer.contains(function.span) && function.span.contains(element.span)
-            })
+        // element's value is inserted; a value held and called (`shown()()`)
+        // runs where it is called, which the position does not say.
+        // Reviewer R59: the element must be the inserted value itself, not
+        // a part of one (`{(h = <Show …/>, null)}`, `return { s: <Show …/> }`):
+        // the expression, or a branch of a conditional or logical one.
+        let ast = &file.ast;
+        let value_at = |expression: Span| {
+            let expression = ast.peel_ts_sugar_span(expression);
+            expression == element.span
+                || ast.conditional_expressions.iter().any(|conditional| {
+                    conditional.span == expression
+                        && [conditional.consequent, conditional.alternate]
+                            .into_iter()
+                            .any(|branch| ast.peel_ts_sugar_span(branch) == element.span)
+                })
+                || ast.logical_expressions.iter().any(|logical| {
+                    logical.span == expression
+                        && [logical.left, logical.right]
+                            .into_iter()
+                            .any(|branch| ast.peel_ts_sugar_span(branch) == element.span)
+                })
         };
-        // Or returned (a component's return is rendered; reviewer R57's
-        // second proof), with no function between.
-        let returned = file
-            .ast
-            .returns
+        // A child of another element or a fragment: written as one, or the
+        // value of a child expression.
+        let direct_child = ast
+            .jsx_elements
             .iter()
-            .chain(
-                file.ast
-                    .functions
-                    .iter()
-                    .filter_map(|function| function.expression_return.as_ref()),
-            )
-            .filter_map(|returned| returned.argument)
-            .any(|argument| argument.contains(element.span) && !between(argument));
-        let inserted = returned
-            || file.ast.jsx_elements.iter().any(|outer| {
-                outer.span != element.span
-                    && outer
-                        .children
-                        .iter()
-                        .any(|child| child.contains(element.span) && !between(*child))
-            })
-            || file.ast.jsx_fragments.iter().any(|fragment| {
-                fragment.contains(element.span)
-                    && *fragment != element.span
-                    && !between(*fragment)
-                    && !file.ast.jsx_elements.iter().any(|outer| {
+            .any(|outer| outer.span != element.span && outer.children.contains(&element.span))
+            || ast.jsx_fragments.iter().any(|fragment| {
+                *fragment != element.span
+                    && fragment.contains(element.span)
+                    && !ast.jsx_elements.iter().any(|outer| {
                         outer.span != element.span
                             && fragment.contains(outer.span)
                             && outer.span.contains(element.span)
                     })
+                    && !ast.jsx_child_expressions.iter().any(|expression| {
+                        fragment.contains(*expression) && expression.contains(element.span)
+                    })
+            })
+            || ast
+                .jsx_child_expressions
+                .iter()
+                .any(|expression| value_at(*expression));
+        // Or a proven component's return, which the runtime renders (R59: a
+        // plain function's result may be held and called).
+        let owner_of = |span: Span| crate::owners::owning_function(ast, span);
+        let returned = ast
+            .returns
+            .iter()
+            .filter_map(|returned| Some((owner_of(returned.span)?, returned.argument?)))
+            .chain(ast.functions.iter().filter_map(|function| {
+                Some((function, function.expression_return.as_ref()?.argument?))
+            }))
+            .any(|(function, argument)| {
+                value_at(argument)
+                    && owner_of(element.span).is_some_and(|owner| owner.span == function.span)
+                    && lookup.function_proven_component(file, function)
             });
+        let inserted = direct_child || returned;
         return Some(if inserted {
             role_arm!(
                 "control_flow.control_flow_execution_role.tracked-jsx",
@@ -237,8 +257,9 @@ pub(crate) fn direct_control_flow_body_role(
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    let dialect = lookup.dialect;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.r#async
         || owner.generator
@@ -273,7 +294,7 @@ pub(crate) fn direct_control_flow_body_role(
     if !exact {
         return None;
     }
-    control_flow_execution_role(file, span, entities, symbol_names, dialect).filter(|role| {
+    control_flow_execution_role(file, span, entities, symbol_names, lookup).filter(|role| {
         matches!(
             role,
             ExecutionRole::UntrackedRendering | ExecutionRole::TrackedJsx

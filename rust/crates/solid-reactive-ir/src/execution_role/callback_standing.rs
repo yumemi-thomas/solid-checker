@@ -158,7 +158,7 @@ pub(super) fn literal_invocation_unproven(
         literal.body,
         lookup.entities(),
         lookup.symbol_names(),
-        lookup.dialect,
+        lookup,
     )
     .is_some()
     {

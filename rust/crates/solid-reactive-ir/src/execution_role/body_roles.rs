@@ -140,8 +140,7 @@ fn stored_function(
             .calls_with_peeled_callee(literal.span)
             .next()
             .is_some()
-        && control_flow_execution_role(file, literal.body, entities, symbol_names, lookup.dialect)
-            .is_none()
+        && control_flow_execution_role(file, literal.body, entities, symbol_names, lookup).is_none()
 }
 
 /// ADR 0452, reads: whether `span` sits in a function written strictly inside
@@ -909,7 +908,7 @@ pub(crate) fn nested_literal_runs_during_body(
                 span = call.span;
                 continue;
             }
-            return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
+            return control_flow_execution_role(file, span, entities, symbol_names, lookup)
                 .is_some_and(ExecutionRole::reports_disallowed_write);
         };
         match lookup.primitive_at_call(file, call.span) {
