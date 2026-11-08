@@ -235,6 +235,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect.analysis_context == crate::blockers::PRIMITIVE_ALIAS_CALL => (
+            format!(
+                "This call resolves to Solid's {callee} through a name solid-checker cannot follow, so no rule sees what {callee} does here"
+            ),
+            "Call the primitive directly by its imported name.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::blockers::IMPORT_UNRESOLVED => (
             format!(
                 "{callee} is imported, but the compiler did not resolve the import, so what the value is, and what a call, read or write through it does here, cannot be proven"

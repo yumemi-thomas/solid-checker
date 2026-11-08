@@ -1309,6 +1309,10 @@ impl Dialect for Solid2 {
 
     /// Source: `solid-reactive-ir/src/lib.rs` `read_is_under_loading` and
     /// `jsx_element_is_loading`. 2.0's error boundary is `Errored`.
+    fn declares_primitives_in(&self, package: &str) -> bool {
+        package == "@solidjs/signals" || self.owns_module(package)
+    }
+
     /// ADR 0883, read on rc.21: `For` and `Repeat` run the mapper as
     /// `runWithOwner(createOwner(), mapper)` (`@solidjs/signals` `dist/dev.js`
     /// `updateKeyedMap`, `updateRepeat`), at any arity. `Show`, and `Match` in

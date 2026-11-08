@@ -269,10 +269,9 @@ pub(crate) fn runs_as_child(
     !function.generator
         && match run {
             solid_dialect::FunctionChildRun::Always => true,
-            solid_dialect::FunctionChildRun::WithParameter => function
-                .parameters
-                .first()
-                .is_some_and(|parameter| parameter.initializer.is_none()),
+            solid_dialect::FunctionChildRun::WithParameter => {
+                crate::execution_role::function_length(function) > 0
+            }
         }
 }
 
@@ -288,4 +287,29 @@ pub(crate) fn is_control_flow_child(
             file.ast.peel_ts_sugar_span(expression) == function.span && runs_as_child(function, run)
         })
     })
+}
+
+/// ADR 0884: the primitive's exported name, when the resolved declaration of a
+/// call no rule reads is a dialect primitive in a package the dialect owns.
+pub(crate) fn aliased_primitive(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    let resolved = lookup.resolved_callee_call(file, call.callee)?;
+    let declaration = resolved.declaration.as_ref()?;
+    let (_, after) = declaration.source_file.rsplit_once("/node_modules/")?;
+    let mut segments = after.split('/');
+    let first = segments.next()?;
+    let package = if first.starts_with('@') {
+        format!("{first}/{}", segments.next()?)
+    } else {
+        first.to_owned()
+    };
+    (lookup.dialect.declares_primitives_in(&package)
+        && lookup
+            .dialect
+            .primitive(declaration.name.as_ref())
+            .is_some())
+    .then(|| declaration.name.to_string())
 }

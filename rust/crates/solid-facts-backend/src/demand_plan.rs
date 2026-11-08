@@ -92,10 +92,32 @@ fn plan_file(
         .filter_map(|returned| returned.callee)
         .collect::<HashSet<_>>();
     // ADR 0883: a child the compiler leaves static is an effect only if it
-    // may hold a function.
+    // may hold a function. The analysis reads callability only for a bare
+    // identifier child (`jsx_sites::cannot_hold_function`); a child in a
+    // tracked region is a site whatever its type.
     spans
         .callability_only_spans
-        .extend(file.ast.jsx_child_expressions.iter().copied());
+        .extend(
+            file.ast
+                .jsx_child_expressions
+                .iter()
+                .copied()
+                .filter(|&expression| {
+                    !file
+                        .compiler
+                        .tracked_regions
+                        .iter()
+                        .any(|region| region.span.contains(expression))
+                        && file
+                            .source_text(file.ast.peel_ts_sugar_span(expression))
+                            .is_some_and(|text| {
+                                !text.is_empty()
+                                    && text
+                                        .chars()
+                                        .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+                            })
+                }),
+        );
     let (import_bindings, import_references) = collect_symbol_spans(file, &mut spans);
     collect_call_result_binding_spans(dialect, file, &mut spans);
     collect_jsx_spans(dialect, file, &mut spans);

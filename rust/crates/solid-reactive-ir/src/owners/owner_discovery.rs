@@ -589,7 +589,22 @@ pub(crate) fn discover_owner_file(
         // `createRenderEffect`.
         let known = known_primitive(&call_primitives[call_index]);
         let role = known.and_then(|primitive| lookup.dialect.owner_requirement_role(primitive));
+        // ADR 0884: `onSettled` through a name no rule reads: SETTLED_CLEANUP_UNOWNED
+        // has no site line, so only the owner rule's own row covers it.
+        let alias_settled = known.is_none()
+            && aliased_primitive(file, call, lookup)
+                .and_then(|name| lookup.dialect.primitive(&name))
+                == Some(Primitive::OnSettled);
         let operation = match (role, known) {
+            (None, None) if alias_settled => Some((
+                "settled-cleanup",
+                OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
+                None,
+                call.arguments
+                    .first()
+                    .map_or(call.callee, |argument| argument.span),
+                true,
+            )),
             (Some(OwnerRequirementRole::Effect), Some(primitive)) => {
                 let registration =
                     crate::effect_api::classify_effect_call(file, call, primitive, lookup)

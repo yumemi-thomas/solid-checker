@@ -197,6 +197,7 @@ Every reference of a proven source is followed, or it is this rule's uncertifiab
 | `analysisContext` | Position |
 |---|---|
 | `value-held-in-binding` | a `let`, an assignment, or a name no row reads |
+| `primitive-alias-call` | a call the compiler resolves to a Solid primitive, through a name no rule reads (ADR 0884) |
 | `value-held-in-member` | a member assignment |
 | `value-through-logical` | a value of `? :`, `&&`, `\|\|`, `??` or a comma that goes on |
 | `value-in-class-field` | a class field or `this.x` |
@@ -275,3 +276,4 @@ cannot replace a named standard member. Mutable and destructured bindings,
 `Symbol.replace`, `Symbol.species`, and reflective definers retain the open
 key. A census that may replace `Symbol` or `Symbol.for` reopens symbol sites;
 this proof does not trust the spelling of a shadowed `Symbol`.
+A store put on an object as its prototype (`({ __proto__: store })`, `t.__proto__ = store`, a handed `"__proto__"` key) makes each Get and write of that object the store's. Besides the install, each access of the object this file writes is uncertifiable (`installed-member`) at the access, or at the call it is handed to (ADR 0643).

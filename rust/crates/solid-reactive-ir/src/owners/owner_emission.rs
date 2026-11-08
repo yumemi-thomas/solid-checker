@@ -729,6 +729,20 @@ pub(super) fn emit_file(
         let uncertain = uncertain || entry_open;
         // An obligation is a reported requirement, as every other one.
         let report = report || entry_open;
+        // ADR 0866 amendment (F5's yield half): past a `yield` of a generator
+        // around the site, the site runs on a later `.next()`, wherever that
+        // step is called (a timer, a handler). No owner edge follows a step,
+        // so the context the generator's call gave is no proof.
+        let later_step = !report
+            && !uncertain
+            && context != 0
+            && later_generator_step(file, candidate.operation_span, lookup);
+        if later_step {
+            arm = arm_id!("owner_emission.later-generator-step");
+        }
+        let unplaced_callback = unplaced_callback || later_step;
+        let uncertain = uncertain || later_step;
+        let report = report || later_step;
         crate::role_log::owner(
             operation,
             path,
@@ -1015,4 +1029,39 @@ fn layer_entry_open(
         }
     }
     false
+}
+
+/// ADR 0866 amendment: whether `span`, or the call its in-place layers climb
+/// to (an IIFE, a closure or helper called once), follows a `yield` of a
+/// generator written around it: written before it in that generator's body,
+/// or in a loop of the body that runs it again. An action's stepped
+/// generator is the action's (`action_step_resumption`).
+fn later_generator_step(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
+        .filter(|climb| !climb.exhausted)
+        .map(|climb| climb.at);
+    std::iter::once(span).chain(climbed).any(|at| {
+        file.ast
+            .functions_owning(at)
+            .filter(|generator| {
+                generator.generator
+                    && crate::owners::stepped_action_generator(file, generator, lookup).is_none()
+            })
+            .any(|generator| {
+                file.ast.yields.iter().any(|fact| {
+                    crate::owners::owning_function(&file.ast, fact.span)
+                        .is_some_and(|owner| owner.span == generator.span)
+                        && (fact.span.start < at.start
+                            || file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                                repeated.contains(at)
+                                    && looped.contains(fact.span)
+                                    && generator.body.contains(looped)
+                            }))
+                })
+            })
+    })
 }

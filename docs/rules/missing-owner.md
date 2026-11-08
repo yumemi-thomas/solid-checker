@@ -366,3 +366,4 @@ A package function whose same-operation creation calls cover every exit between 
   a violation in a timer.
 
 A context read past an await in a compute that stores its error throws where only a read reports it; without a proven read it is `computation-error-unobserved`, not a violation (ADR 0893).
+A generator's body runs where its iterator is stepped. An owner operation after a `yield` of the generator around it runs on a later step, which the owner walk does not follow: uncertifiable, whatever owner the generator's call had (ADR 0866).

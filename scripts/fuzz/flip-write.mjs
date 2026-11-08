@@ -266,6 +266,11 @@ const FLOW_VALUES = {
     const [g, el] = [kit.name("g"), kit.name("el")];
     return { body: [decl(g, fn(stmts)), decl(el, domExpr(`(<Show when={1}>{${g} as any}</Show>) as any`, undefined, ["Show"]))], view: [button(kit.name("b"), [expr(domExpr(`${el}()()`))])] };
   },
+  // Reviewer R57: an inline `length` 0 child is a value too; held, and run in the body, it runs there, not in an insert.
+  "flw-flow-show-inline-body": (stmts, kit) => {
+    const [g, el] = [kit.name("g"), kit.name("el")];
+    return { body: [decl(g, fn(stmts)), decl(el, domExpr(`(<Show when={1}>{(() => ${g}()) as any}</Show>) as any`, undefined, ["Show"])), expr(domExpr(`${el}()()`))], view: [] };
+  },
   // Reviewer's R48: `Kid`'s function child is Kid's to run, here on a timer: the flow tag around it says nothing.
   "flw-flow-show-kid": (stmts, kit) => ({
     hoisted: [decl("Kid1", domExpr("(props: { children: (v: number) => unknown }) => { setTimeout(() => props.children(1), 0); return <i />; }"))],
@@ -298,6 +303,8 @@ export const FLIP_WRITE_CONTEXTS = {
 };
 
 for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES), ...Object.keys(FLOW_VALUES), ...Object.keys(APPLY_AND_TIMER)];
+// The async child's Promise crashes `insert` and halts the reactive system, so `onSettled`'s callback never runs: this code cannot fire there.
+FLIP_WRITE_CONTEXTS.SETTLED_CLEANUP_UNOWNED = FLIP_WRITE_CONTEXTS.SETTLED_CLEANUP_UNOWNED.filter((context) => context !== "flw-flow-for-async");
 
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];

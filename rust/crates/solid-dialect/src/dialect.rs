@@ -1923,6 +1923,12 @@ pub trait Dialect: Sync {
         self.primitive(name).is_some()
     }
 
+    /// ADR 0884: whether a primitive's declaration may live in `package`, which
+    /// may re-export it under a module of its own.
+    fn declares_primitives_in(&self, package: &str) -> bool {
+        self.owns_module(package)
+    }
+
     /// Whether this dialect owns the module a name was imported from.
     fn owns_module(&self, module: &str) -> bool {
         self.modules().contains(&module)

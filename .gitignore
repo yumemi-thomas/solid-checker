@@ -1210,3 +1210,12 @@ packages/wasm/owned/
 
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/**
+!fixtures/reactive-ir/primitive-alias-call/node_modules/
+!fixtures/reactive-ir/primitive-alias-call/node_modules/**
+
+!fixtures/reactive-ir/show-named-child-length/node_modules/
+!fixtures/reactive-ir/show-named-child-length/node_modules/**
+!fixtures/reactive-ir/owner-generator-step/node_modules/
+!fixtures/reactive-ir/owner-generator-step/node_modules/**
+!fixtures/reactive-ir/installed-object-accesses/node_modules/
+!fixtures/reactive-ir/installed-object-accesses/node_modules/**

@@ -39,6 +39,8 @@ pub(super) struct NamedCallbackRole {
     /// as untracked rendering. Answering None instead defers such reads to
     /// compiler facts and the returned-adapter classifiers.
     pub(super) admitted: bool,
+    /// A `Show` or `Match` child of `length` 0: a value, run where it is read.
+    pub(super) value_child: bool,
     pub(super) untracked_callback: bool,
     /// The function is a map function: untracked in no window (ADR 0443).
     pub(super) untracked_unwindowed: bool,
@@ -590,12 +592,40 @@ pub(crate) fn named_callback_roles(
             index.named_at(file, entities, identifier.span, &mut named);
             for candidate in &named {
                 let function = index.functions[*candidate];
-                roles.entry(function).admitted = true;
+                // `Show` and `Match` call a function child only when its
+                // `length` is above 0; else it is a value, run wherever it is
+                // read: no untrack of theirs says anything about that run.
+                let value =
+                    known_primitive(&primitives.jsx[element_index]).is_some_and(|primitive| {
+                        dialect.children_callback_requires_parameters(primitive)
+                    }) && file
+                        .ast
+                        .function_at(function)
+                        .is_some_and(|function| function_length(function) == 0);
+                let entry = roles.entry(function);
+                entry.admitted = true;
+                entry.value_child |= value;
                 roles.admit_at(function, identifier.span);
             }
         }
     }
     roles
+}
+
+/// A function's runtime `length`: the parameters before the first default or
+/// the rest parameter.
+pub(crate) fn function_length(function: &solid_facts::ast::FunctionFact) -> usize {
+    function
+        .parameters
+        .iter()
+        .take_while(|parameter| parameter.initializer.is_none())
+        .count()
+        .min(
+            function
+                .parameters
+                .len()
+                .saturating_sub(usize::from(function.rest_parameter)),
+        )
 }
 
 /// The innermost function around `span` that a callback position of its file
@@ -790,6 +820,11 @@ pub(crate) fn named_callback_execution_role(
         Some(role_arm!(
             "named_callbacks.named_callback_execution_role.tracked-jsx-2",
             ExecutionRole::TrackedJsx
+        ))
+    } else if role.value_child {
+        Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.value-child",
+            ExecutionRole::Unknown
         ))
     } else {
         Some(role_arm!(
