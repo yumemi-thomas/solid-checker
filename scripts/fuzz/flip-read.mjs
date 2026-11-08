@@ -475,7 +475,7 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["aw-mixed-cont", "aw-mixed-late", "aw-forward-await", "aw-forward-direct", "aw-forward-fan-run", "then-named", "then-withheld", "then-withheld-named", "then-withheld-chain", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
+  UNTRACKED_READ_AFTER_AWAIT: ["aw-pre-pick", "aw-mixed-cont", "aw-mixed-late", "aw-forward-await", "aw-forward-direct", "aw-forward-fan-run", "then-named", "then-withheld", "then-withheld-named", "then-withheld-chain", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
@@ -498,7 +498,7 @@ FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT = [...(FLIP_READ_CONTEXTS.NO_OWNER_CONTEXT ?
 // no window, so a pending read retries. Under `<Loading>`: no placeless boundary warning leaves the program unjudged.
 export const FLIP_READ_LEGAL = {
   // ADR 0820: the generator's first segment on the compute's stack, a tracked read; a loop that drains a sync generator before any suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["aw-helper-late-pick", "aw-forward-timer", "aw-forward-onclick", "aw-forward-return", "aw-forward-cond", "aw-forward-cond-hop", "aw-forward-fan", "gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
+  UNTRACKED_READ_AFTER_AWAIT: ["aw-pre-or", "aw-helper-late-pick", "aw-forward-timer", "aw-forward-onclick", "aw-forward-return", "aw-forward-cond", "aw-forward-cond-hop", "aw-forward-fan", "gen-prefix", "gen-drain", "await-object-then", ...COND_AWAITS_LEGAL, "aw-wrapper-untracked", "aw-inplace-stmt", "aw-catch-member", "aw-then-calls-async"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["show-false-later", "ternary-later", "and-later", "dyn-jsx-later"],
   PENDING_ASYNC_UNTRACKED_READ: ["dyn-jsx-body-l", "dyn-fn-body-l"],
   // Review R6's twins with the other path in a handler: only the placed call reads during a pass.
@@ -928,6 +928,9 @@ export const AWAIT_USES = {
   // ADR 0897: a composite callee whose first token is the source and whose value is not (`n.length` is the accessor's arity, 0): no read
   // runs, in the helper's prefix or past its await. Legal; the build before read the first token as the callee.
   "use-len-pick": { kind: "plain", only: true, bindings: ["direct"], contexts: [], legal: ["aw-helper-late-pick"], text: (o) => `(${o}.length > 5 ? ${o} : (() => 0))();` },
+  // ADR 0898: before the await, a composite whose first token is the source; `aw-pre-pick` calls `() => 0` (n.length is the accessor's
+  // arity, 0), so the read past the await is untracked; `aw-pre-or` calls the source (`||` takes the truthy accessor), so it is tracked.
+  "use-pre-pick": { kind: "plain", only: true, bindings: ["direct"], contexts: ["aw-pre-pick"], legal: ["aw-pre-or"], text: (o) => `${o}();` },
   "use-mixed-tracked": { kind: "plain", only: true, bindings: ["direct"], contexts: ["aw-mixed-cont", "aw-mixed-late"], importLines: ["const [emx] = createSignal(4);"], text: (o) => `(Math.random() < 0 ? ${o} : emx)();` },
 };
 
@@ -981,6 +984,15 @@ function freshCopy(stmts, kit) {
 }
 
 export function flipReadContext(context, stmts, kit) {
+  if (context === "aw-pre-pick" || context === "aw-pre-or") {
+    // ADR 0898: the site's source, through a composite before the computation's first await.
+    let source = null;
+    JSON.stringify(stmts, (key, value) => { if (value?.k === "use" && value.site) source ??= value.sigs?.[0] ?? null; return value; });
+    const m = kit.name("m");
+    const before = expr(domExpr(context === "aw-pre-pick" ? `(${source}.length > 5 ? ${source} : (() => 0))();` : `(${source} || (() => 0))();`));
+    const watch = expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }));
+    return { body: [decl(m, prim("memo", fn([before, expr(domExpr(`${P_AWAIT};`)), ...stmts, ret(num(1))], { async: true }))), watch], view: [] };
+  }
   if (context === "aw-mixed-cont" || context === "aw-mixed-late") {
     // The site's own source, read by the computation before its first await (ADR 0897's mixed composite).
     let source = null;

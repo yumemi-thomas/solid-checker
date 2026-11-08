@@ -2568,14 +2568,9 @@ impl<'f, 'a> Reach<'f, 'a> {
             u64::from(call.callee.start),
             u64::from(call.callee.end),
         );
-        // ADR 0897: the entity at a composite callee's span is its first
-        // token's (`(n.length > 5 ? n : plain)` answers `n`), not the value
-        // called: a composite is read through its operands below.
-        let symbol = if file.ast.composite_callee_operands(call.callee).is_empty() {
-            call_accessor_symbol(ctx, file, call)
-        } else {
-            None
-        };
+        // A composite callee names no symbol (ADR 0898): it is read through its
+        // operands below (ADR 0897).
+        let symbol = call_accessor_symbol(ctx, file, call);
         // ADR 0516: as on the dominance path (ADR 0509), a callee that is a
         // value a caller supplied (a prop, a context or hook member) may be an
         // accessor: after an implicit suspension its read is an obligation too.

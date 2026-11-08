@@ -171,8 +171,32 @@ export function Ends() {
     return 1;
   });
 
+  // B10 (ADR 0898): a composite before the await proves tracking only when
+  // exact. `n.length` is the arity (0): the call takes `plain`, so `n()` past
+  // the await is a possible read (U), never a silent one. Exact: tracked, no row.
+  const ninth = createMemo(async () => {
+    (n.length > 5 ? n : plain)();
+    await p;
+    n();
+    return 1;
+  });
+  const tenth = createMemo(async () => {
+    (flag ? n : n)();
+    await p;
+    n();
+    return 1;
+  });
+  // B10 (review D32): a composite whose first token is an accessor, past the
+  // await, calls a helper that reads `u`: a row at the read, never silent.
+  const readsU = () => u();
+  const eleventh = createMemo(async () => {
+    await p;
+    (n.length > 5 ? readsU : readsU)();
+    return 1;
+  });
+
   createEffect(
-    () => [first(), second(), third(), fourth(), query(), fifth(), viaMember(), viaAsync(), viaAny(), viaNull(), sixth(), seventh(), eighth()],
+    () => [first(), second(), third(), fourth(), query(), fifth(), viaMember(), viaAsync(), viaAny(), viaNull(), sixth(), seventh(), eighth(), ninth(), tenth(), eleventh()],
     () => {}
   );
   return <p />;
