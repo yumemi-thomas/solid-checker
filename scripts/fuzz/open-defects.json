@@ -134,6 +134,7 @@
    "variantPrefix": "refresh",
    "outcome": "false-clean",
    "item": "R-call-arg",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-reactive-write-in-owned-scope-effect-compute-refresh-ns-default-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -184,6 +185,7 @@
    "variantPrefix": "errored",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-boundary-timer-errored-ns-default-module-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -213,6 +215,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-flush-in-effect-callback-effect-apply-shared-x-ns-default-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -259,6 +262,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-cleanup-timer-x-ns-default-module-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -267,6 +271,7 @@
    "variantPrefix": "effect",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-effect-timer-effect-extracted-closure-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -299,6 +304,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-context-handler-x-extracted-closure. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -307,6 +313,7 @@
    "variantPrefix": "render",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-effect-then-render-ns-default-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -315,6 +322,7 @@
    "variantPrefix": "memo",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-sync-node-received-async-root-memo-ns-default-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -331,6 +339,7 @@
    "variantPrefix": "loading",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-boundary-handler-loading-extracted-iife. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -346,6 +355,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-context-not-found-lst-body-shared-x-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -354,6 +364,7 @@
    "variantPrefix": "effect",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-sync-node-received-async-body-effect-extracted-iife. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -402,6 +413,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-resolve-in-reactive-scope-memo-x-ns-member-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -450,6 +462,7 @@
    "variantPrefix": "effect",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-effect-callback-effect-apply-rerun-effect-ns-default-module-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -487,6 +500,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-until-in-reactive-scope-render-compute-x-extracted-module-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -500,6 +514,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-flush-in-action-action-x-extracted-module-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -508,6 +523,7 @@
    "variantPrefix": "memo",
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-effect-callback-effect-apply-rerun-memo-ns-member-iife. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -545,6 +561,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-on-flush-in-owned-scope-body-x-ns-member-closure. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -565,6 +582,7 @@
    ],
    "outcome": "false-clean",
    "item": "R-alias-call",
+   "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-dynamic-static-promise-root-x-ns-default-closure-helper. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
@@ -949,29 +967,26 @@
    "note": "lost since ADR 0840: `result.filter` is withheld (a `*` census site), and the row naming the function filter runs goes with the call's resolution; the call's standard-member-impostor row stands on the same statement (3895-3908), not at the same start; the predicate's reads keep their SC1001 and SC1002 rows"
   }
  ],
+ "causeOwners": {
+  "R-alias-owner": "R1f",
+  "R-alias-call": "R1f",
+  "R-call-arg": "R1f"
+ },
  "owners": {
-  "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-direct-handoff-reflect": "R5",
-  "mx-recall/mx-on-flush-in-owned-scope-pos-handler-owner-x-namespace-handoff-tagged": "R5",
-  "mx-census/mx-loading-on-accessor-flw-flow-show-value-accessor-direct-none": "R5",
-  "mx-census/mx-loading-on-accessor-flw-flow-show-value-arrow-direct-none": "R5",
-  "mx-census/mx-loading-on-accessor-flw-flow-show-value-memo-direct-none": "R5",
-  "mx-census/mx-strict-read-untracked-flw-flow-show-value-memo-direct-none": "R5",
-  "mx-census/mx-strict-read-untracked-flw-flow-show-value-signal-direct-none": "R5",
-  "mx-census/mx-untracked-read-after-await-flw-flow-show-value-x-direct-none": "R5",
-  "mx-recall/mx-settled-cleanup-unowned-flw-flow-for-async-x-ns-exported-none": "R5",
   "mx-census/mx-action-called-in-owned-scope-aw-forward-fan-run-x-direct-none": "R3e",
   "mx-census/mx-on-flush-in-owned-scope-aw-forward-fan-run-x-direct-none": "R3e",
   "mx-census/mx-reactive-write-in-owned-scope-aw-forward-fan-run-refresh-direct-none": "R3e",
   "mx-census/mx-reactive-write-in-owned-scope-aw-forward-fan-run-signal-direct-none": "R3e",
   "mx-census/mx-reactive-write-in-owned-scope-aw-forward-fan-run-store-direct-none": "R3e",
   "mx-census/mx-resolve-in-reactive-scope-aw-forward-fan-run-x-direct-none": "R3e",
-  "mx-census/mx-until-in-reactive-scope-aw-forward-fan-run-x-direct-none": "R3e"
+  "mx-census/mx-until-in-reactive-scope-aw-forward-fan-run-x-direct-none": "R3e",
+  "mx-census/mx-settled-cleanup-unowned-flw-flow-for-async-x-direct-none": "R5"
  },
  "corpusBlockers": [],
  "ratchet": {
-  "certified": 4,
+  "certified": 2,
   "certifiedF2": 0,
-  "falsePositive": 14,
+  "falsePositive": 8,
   "stackedClaim": 194,
   "stackedPairs": {
    "NO_OWNER_CONTEXT|missing-context-provider": 6,
@@ -987,23 +1002,21 @@
   "unjudgedClaim": 6,
   "causes": {
    "R-not-legal": 2107,
-   "false-positive": 14,
+   "false-positive": 8,
    "createRoot inside onCleanup inside createRoot": 2,
    "R-unplaced": 173,
    "R-unjudged-unplaced": 6,
    "R-stacked": 194,
-   "R-other": 34,
+   "R-other": 32,
    "R-neighbour-U": 79,
    "R-misplaced": 33,
-   "R-carrier": 190,
+   "R-carrier": 139,
    "census": 93,
    "g2d named hand-off": 34,
-   "R-alias-call": 242,
-   "R-F1-open": 7,
-   "R-alias-owner": 81,
-   "R-stop-named-U": 422,
-   "R-call-arg": 80,
-   "R-placeless": 53,
+   "R-alias-call": 30,
+   "R-stop-named-U": 320,
+   "R-placeless": 9,
+   "R-alias-owner": 22,
    "R-near": 9
   }
  }
