@@ -108,3 +108,73 @@ export function ReturnedInObject(props: { name: number }) {
   (makeHolder(props).s as any)()();
   return <span />;
 }
+
+// Reviewer R62: a component element's children are a prop it may call in its
+// body: no insert (Chrome: a strict read in Comp's body).
+function Comp(props: any) {
+  props.children()();
+  return <span />;
+}
+export function ComponentParent(props: { name: number }) {
+  return (
+    <Comp>
+      {
+        <Show when={1}>
+          {
+            (() => {
+              props.name;
+            }) as any
+          }
+        </Show>
+      }
+    </Comp>
+  );
+}
+
+// Reviewer R62: a held fragment is a value (an array): its child runs where
+// the body calls it.
+export function HeldFragment(props: { name: number }) {
+  const f = (
+    <>
+      <span />
+      <Show when={1}>
+        {
+          (() => {
+            props.name;
+          }) as any
+        }
+      </Show>
+    </>
+  ) as any;
+  f[1]()();
+  return <span />;
+}
+
+// Inserted, and the tracked role stands: an intrinsic parent, and a
+// fragment a component returns.
+export function IntrinsicParent(props: { name: number }) {
+  return (
+    <div>
+      <Show when={1}>
+        {
+          (() => {
+            props.name;
+          }) as any
+        }
+      </Show>
+    </div>
+  );
+}
+export function ReturnedFragment(props: { name: number }) {
+  return (
+    <>
+      <Show when={1}>
+        {
+          (() => {
+            props.name;
+          }) as any
+        }
+      </Show>
+    </>
+  );
+}
