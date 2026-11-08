@@ -762,8 +762,11 @@ pub(super) fn emit_file(
         // ADR 0868: an owned context is the edges the graph holds. A named
         // layer entered some other way (assigned, stored, handed on, a
         // method) may run with no owner, and that run has no edge.
+        // ADR 0902: an operation that is already uncertain (an attributed
+        // alias, a callback whose cleanup return is unproven) and not reported
+        // in its owned context would otherwise go unseen: the open entry is
+        // what reports it.
         let entry_open = !report
-            && !uncertain
             && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
             && named_layer_entry_open(
                 file,

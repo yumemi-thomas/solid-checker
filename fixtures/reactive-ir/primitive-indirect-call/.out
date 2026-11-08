@@ -1,0 +1,808 @@
+{
+  "premises": [
+    "standard runtime configuration (ADRs 0266/0268)",
+    "dependency flush (ADR 0613): no dependency drains Solid's queue synchronously from a stack with an owner"
+  ],
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "Solid primitive onSettled is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked",
+      "hint": "Call the primitive directly by its imported name, so solid-checker can see each call.",
+      "analysisContext": "primitive-value",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 90,
+        "endByte": 99,
+        "line": 3,
+        "column": 15
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 90,
+            "endByte": 99,
+            "line": 3,
+            "column": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "Solid primitive onSettled is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked",
+      "hint": "Call the primitive directly by its imported name, so solid-checker can see each call.",
+      "analysisContext": "primitive-value",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 324,
+        "endByte": 333,
+        "line": 9,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 324,
+            "endByte": 333,
+            "line": 9,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's onSettled through a name solid-checker cannot follow, so no rule sees what onSettled does here",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 324,
+        "endByte": 344,
+        "line": 9,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 324,
+            "endByte": 344,
+            "line": 9,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC4001",
+      "rule": "missing-owner",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run; available runtime facts do not prove whether this callback returns a cleanup that requires owner registration; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead. Resolve the callback's runtime return value to a definite cleanup or definite void before treating this as a violation. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+      "analysisContext": "owner-callers-unenumerated",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 345,
+        "endByte": 359,
+        "line": 9,
+        "column": 24
+      },
+      "evidence": [
+        {
+          "message": "no containing component, computation, or root owner dominates this operation",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 345,
+            "endByte": 359,
+            "line": 9,
+            "column": 24
+          }
+        },
+        {
+          "message": "cleanup registration depends on an unresolved callback return value",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 345,
+            "endByte": 359,
+            "line": 9,
+            "column": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC4001",
+      "rule": "missing-owner",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run; available runtime facts do not prove whether this callback returns a cleanup that requires owner registration; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead. Resolve the callback's runtime return value to a definite cleanup or definite void before treating this as a violation. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+      "analysisContext": "owner-callers-unenumerated",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 364,
+        "endByte": 378,
+        "line": 10,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "no containing component, computation, or root owner dominates this operation",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 364,
+            "endByte": 378,
+            "line": 10,
+            "column": 3
+          }
+        },
+        {
+          "message": "cleanup registration depends on an unresolved callback return value",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 364,
+            "endByte": 378,
+            "line": 10,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "Solid primitive onSettled is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked",
+      "hint": "Call the primitive directly by its imported name, so solid-checker can see each call.",
+      "analysisContext": "primitive-value",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 364,
+        "endByte": 373,
+        "line": 10,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 364,
+            "endByte": 373,
+            "line": 10,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's onSettled through a name solid-checker cannot follow, so no rule sees what onSettled does here",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 364,
+        "endByte": 378,
+        "line": 10,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 364,
+            "endByte": 378,
+            "line": 10,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC4001",
+      "rule": "missing-owner",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run; available runtime facts do not prove whether this callback returns a cleanup that requires owner registration; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead. Resolve the callback's runtime return value to a definite cleanup or definite void before treating this as a violation. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+      "analysisContext": "owner-callers-unenumerated",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 404,
+        "endByte": 419,
+        "line": 11,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "no containing component, computation, or root owner dominates this operation",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 404,
+            "endByte": 419,
+            "line": 11,
+            "column": 3
+          }
+        },
+        {
+          "message": "cleanup registration depends on an unresolved callback return value",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 404,
+            "endByte": 419,
+            "line": 11,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "Solid primitive onSettled is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked",
+      "hint": "Call the primitive directly by its imported name, so solid-checker can see each call.",
+      "analysisContext": "primitive-value",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 404,
+        "endByte": 413,
+        "line": 11,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 404,
+            "endByte": 413,
+            "line": 11,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's onSettled through a name solid-checker cannot follow, so no rule sees what onSettled does here",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 404,
+        "endByte": 419,
+        "line": 11,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 404,
+            "endByte": 419,
+            "line": 11,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's onSettled through a name solid-checker cannot follow, so no rule sees what onSettled does here",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 448,
+        "endByte": 466,
+        "line": 12,
+        "column": 4
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 448,
+            "endByte": 466,
+            "line": 12,
+            "column": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "Solid primitive onSettled is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked",
+      "hint": "Call the primitive directly by its imported name, so solid-checker can see each call.",
+      "analysisContext": "primitive-value",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 457,
+        "endByte": 466,
+        "line": 12,
+        "column": 13
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 457,
+            "endByte": 466,
+            "line": 12,
+            "column": 13
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC4001",
+      "rule": "missing-owner",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run; available runtime facts do not prove whether this callback returns a cleanup that requires owner registration; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead. Resolve the callback's runtime return value to a definite cleanup or definite void before treating this as a violation. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+      "analysisContext": "owner-callers-unenumerated",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 468,
+        "endByte": 482,
+        "line": 12,
+        "column": 24
+      },
+      "evidence": [
+        {
+          "message": "no containing component, computation, or root owner dominates this operation",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 468,
+            "endByte": 482,
+            "line": 12,
+            "column": 24
+          }
+        },
+        {
+          "message": "cleanup registration depends on an unresolved callback return value",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 468,
+            "endByte": 482,
+            "line": 12,
+            "column": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's onSettled through a name solid-checker cannot follow, so no rule sees what onSettled does here",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 487,
+        "endByte": 492,
+        "line": 13,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 487,
+            "endByte": 492,
+            "line": 13,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "the runtime target of bound cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior",
+      "hint": "Narrow the value to one exact implementation, or wrap the alternatives in an adapter whose body is available to solid-checker and has one explicit reactive behavior.",
+      "analysisContext": "handed-member-dispatch",
+      "coverageFamily": "call-target",
+      "coverageSubject": "bound",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 487,
+        "endByte": 492,
+        "line": 13,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 487,
+            "endByte": 492,
+            "line": 13,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC4001",
+      "rule": "missing-owner",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run; available runtime facts do not prove whether this callback returns a cleanup that requires owner registration; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead. Resolve the callback's runtime return value to a definite cleanup or definite void before treating this as a violation. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+      "analysisContext": "owner-callers-unenumerated",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 493,
+        "endByte": 507,
+        "line": 13,
+        "column": 9
+      },
+      "evidence": [
+        {
+          "message": "no containing component, computation, or root owner dominates this operation",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 493,
+            "endByte": 507,
+            "line": 13,
+            "column": 9
+          }
+        },
+        {
+          "message": "cleanup registration depends on an unresolved callback return value",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 493,
+            "endByte": 507,
+            "line": 13,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC4001",
+      "rule": "missing-owner",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run; available runtime facts do not prove whether this callback returns a cleanup that requires owner registration; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead. Resolve the callback's runtime return value to a definite cleanup or definite void before treating this as a violation. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+      "analysisContext": "owner-callers-unenumerated",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 512,
+        "endByte": 528,
+        "line": 14,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "no containing component, computation, or root owner dominates this operation",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 512,
+            "endByte": 528,
+            "line": 14,
+            "column": 3
+          }
+        },
+        {
+          "message": "cleanup registration depends on an unresolved callback return value",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 512,
+            "endByte": 528,
+            "line": 14,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's onSettled through a name solid-checker cannot follow, so no rule sees what onSettled does here",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 512,
+        "endByte": 528,
+        "line": 14,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 512,
+            "endByte": 528,
+            "line": 14,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "Solid primitive onSettled is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked",
+      "hint": "Call the primitive directly by its imported name, so solid-checker can see each call.",
+      "analysisContext": "primitive-value",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 514,
+        "endByte": 523,
+        "line": 14,
+        "column": 5
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 514,
+            "endByte": 523,
+            "line": 14,
+            "column": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC4001",
+      "rule": "missing-owner",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
+      "analysisContext": "owner-callers-unenumerated",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 586,
+        "endByte": 600,
+        "line": 17,
+        "column": 13
+      },
+      "evidence": [
+        {
+          "message": "no containing component, computation, or root owner dominates this operation",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 586,
+            "endByte": 600,
+            "line": 17,
+            "column": 13
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC2006",
+      "rule": "flush-in-action",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "message": "This call resolves to Solid's flush through a name solid-checker cannot follow, so whether flush-in-action applies here cannot be proven",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 922,
+        "endByte": 932,
+        "line": 31,
+        "column": 20
+      },
+      "evidence": [
+        {
+          "message": "the flush() call runs directly in an action body, inside a step, where the installed @solidjs/signals throws FLUSH_IN_ACTION in dev",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 922,
+            "endByte": 932,
+            "line": 31,
+            "column": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC2008",
+      "rule": "flush-in-effect-callback",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's flush through a name solid-checker cannot follow, so whether flush-in-effect-callback applies here cannot be proven",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 922,
+        "endByte": 932,
+        "line": 31,
+        "column": 20
+      },
+      "evidence": [
+        {
+          "message": "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 922,
+            "endByte": 932,
+            "line": 31,
+            "column": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "Solid primitive flush is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked",
+      "hint": "Call the primitive directly by its imported name, so solid-checker can see each call.",
+      "analysisContext": "primitive-value",
+      "coverageFamily": "call-target",
+      "coverageSubject": "flush",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 922,
+        "endByte": 927,
+        "line": 31,
+        "column": 20
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 922,
+            "endByte": 927,
+            "line": 31,
+            "column": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "This call resolves to Solid's flush through a name solid-checker cannot follow, so no rule sees what flush does here",
+      "hint": "Call the primitive directly by its imported name.",
+      "analysisContext": "primitive-alias-call",
+      "coverageFamily": "call-target",
+      "coverageSubject": "flush",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 922,
+        "endByte": 932,
+        "line": 31,
+        "column": 20
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 922,
+            "endByte": 932,
+            "line": 31,
+            "column": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC9012",
+      "rule": "reactive-dispatch-unresolved",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "message": "the runtime target of onSettled.bind(null) cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior",
+      "hint": "Narrow the value to one exact implementation, or wrap the alternatives in an adapter whose body is available to solid-checker and has one explicit reactive behavior.",
+      "analysisContext": "handed-member-dispatch",
+      "coverageFamily": "call-target",
+      "coverageSubject": "onSettled.bind(null)",
+      "primaryLocation": {
+        "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+        "startByte": 1108,
+        "endByte": 1128,
+        "line": 38,
+        "column": 3
+      },
+      "evidence": [
+        {
+          "message": "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven",
+          "location": {
+            "path": "/Users/thomas/dev/sc-worktrees.noindex/r1e-wip/fixtures/reactive-ir/primitive-indirect-call/App.tsx",
+            "startByte": 1108,
+            "endByte": 1128,
+            "line": 38,
+            "column": 3
+          }
+        }
+      ]
+    }
+  ],
+  "metrics": {
+    "filesAnalyzed": 1,
+    "functionsAnalyzed": 16,
+    "proofObligations": 25,
+    "cachedSummaries": 0,
+    "unresolvedObligations": 16
+  }
+}

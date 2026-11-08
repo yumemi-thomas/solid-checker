@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "primitive-alias-call",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-namespace-aliases/variants/tdz/App.tsx",
+      "start": 249,
+      "end": 260,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",

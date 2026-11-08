@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "primitive-alias-call",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 761,
+      "end": 772,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -67,6 +78,17 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "blocker": "primitive-value",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
+      "start": 1974,
+      "end": 1982,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "primitive-alias-call",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-destructured-api/App.tsx",
       "start": 1974,

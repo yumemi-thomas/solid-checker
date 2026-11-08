@@ -1247,3 +1247,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-census-trust-alias/node_modules/**
 !fixtures/reactive-ir/impostor-census-trust-member/node_modules/
 !fixtures/reactive-ir/impostor-census-trust-member/node_modules/**
+!fixtures/reactive-ir/primitive-indirect-call/node_modules/
+!fixtures/reactive-ir/primitive-indirect-call/node_modules/**
