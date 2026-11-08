@@ -1064,7 +1064,7 @@ pub(crate) fn find_missing_owners_incremental(
         recomputed.push(*file);
         timings.recomputed_files += 1;
     }
-    let discovered = parallel_slice_results(&recomputed, |file| {
+    let discovered = crate::pipeline::parallel_balanced_results_from(2, &recomputed, |file| {
         // What the fragment read of other files is its proof.
         let (mut discovered, reads) = crate::base::reads::record(|| {
             discover_owner_file(file, indexes, entities, symbol_names, lookup)

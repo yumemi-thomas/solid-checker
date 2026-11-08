@@ -2,7 +2,7 @@
 //! owners are provided, and the requirement/fix emission around them.
 
 use crate::cache::{CachedLateStages, same_compiler_semantics};
-use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_slice_results};
+use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::{
     BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement,
     OwnerRequirementOperation, PrimitiveName, TextEdit, function_indices_by_path,

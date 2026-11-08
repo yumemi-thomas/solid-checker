@@ -17,7 +17,6 @@ use crate::execution_role::function_symbol;
 use crate::owners::{
     callback_execution_at_call, function_is_solid_callback, returned_callback_execution_at_call,
 };
-use crate::pipeline::parallel_slice_results;
 use crate::source_discovery::{source_discovery_identity, source_discovery_identity_matches};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -760,14 +759,16 @@ pub(super) fn reachable_call_multiplicity_incremental(
         recomputed_paths.insert(file.path.to_string());
         recomputed.push(file);
     }
-    for (path, discovered) in parallel_slice_results(&recomputed, |file| {
-        // What the file's roots and edges read of other files is its proof.
-        let (mut discovered, reads) = crate::base::reads::record(|| {
-            discover_reachability_file(file, indexes, entities, symbol_names, lookup)
-        });
-        discovered.proof = crate::base::reads::ReadProof::new(reads, lookup);
-        (file.path.clone(), discovered)
-    }) {
+    for (path, discovered) in
+        crate::pipeline::parallel_balanced_results_from(2, &recomputed, |file| {
+            // What the file's roots and edges read of other files is its proof.
+            let (mut discovered, reads) = crate::base::reads::record(|| {
+                discover_reachability_file(file, indexes, entities, symbol_names, lookup)
+            });
+            discovered.proof = crate::base::reads::ReadProof::new(reads, lookup);
+            (file.path.clone(), discovered)
+        })
+    {
         topology_unchanged &= cache.get(path.as_str()).is_some_and(|previous| {
             effective_reachability_topology(&previous.topology, function_symbols)
                 == effective_reachability_topology(&discovered.topology, function_symbols)

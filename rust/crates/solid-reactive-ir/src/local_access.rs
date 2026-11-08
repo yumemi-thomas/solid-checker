@@ -1356,7 +1356,7 @@ impl LocalAccessContext<'_, '_> {
             // Each file's contribution reads only this build's facts and
             // lookup, so the files are discovered in parallel and recorded in
             // their order.
-            let fresh = parallel_slice_results(&recompute, |file| {
+            let fresh = crate::pipeline::parallel_balanced_results_from(2, &recompute, |file| {
                 crate::base::reads::record(|| {
                     (
                         self.discover(file),

@@ -681,30 +681,63 @@ pub(crate) fn collect_project<'facts>(
     handed.extend(use_rows.into_rows());
     // A row any other producer placed over the call (a read, a write, an
     // action) already speaks for it.
+    // Only a row whose role is reported speaks for the call; a read row
+    // only for an obligation raised for a possible read. Those rows' spans by
+    // path, sorted by start: a row over a span starts at or before it.
+    let mut reported_reads = crate::HashMap::<std::sync::Arc<str>, Vec<(u64, u64)>>::default();
+    for read in draft
+        .reads
+        .iter()
+        .filter(|read| read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+    {
+        reported_reads
+            .entry(std::sync::Arc::clone(&read.location.path))
+            .or_default()
+            .push((read.location.start_byte, read.location.end_byte));
+    }
+    let mut reported_writes = crate::HashMap::<std::sync::Arc<str>, Vec<(u64, u64)>>::default();
+    for location in draft
+        .writes
+        .iter()
+        .filter(|write| {
+            write.execution.reports_disallowed_write() || write.execution.reports_unplaced()
+        })
+        .map(|write| &write.location)
+        .chain(
+            draft
+                .action_invocations
+                .iter()
+                .filter(|action| {
+                    action.execution.reports_disallowed_write()
+                        || action.execution.reports_unplaced()
+                })
+                .map(|action| &action.location),
+        )
+    {
+        reported_writes
+            .entry(std::sync::Arc::clone(&location.path))
+            .or_default()
+            .push((location.start_byte, location.end_byte));
+    }
+    for spans in reported_reads
+        .values_mut()
+        .chain(reported_writes.values_mut())
+    {
+        spans.sort_unstable();
+    }
+    let over = |rows: &crate::HashMap<std::sync::Arc<str>, Vec<(u64, u64)>>,
+                at: &typefacts::Location| {
+        rows.get(at.path.as_ref()).is_some_and(|spans| {
+            spans[..spans.partition_point(|(start, _)| *start <= at.start_byte)]
+                .iter()
+                .any(|(_, end)| at.end_byte <= *end)
+        })
+    };
     let covered = |obligation: &crate::StaticDefect| {
         let at = &obligation.location;
-        let over = |location: &typefacts::Location| {
-            location.path == at.path
-                && location.start_byte <= at.start_byte
-                && at.end_byte <= location.end_byte
-        };
-        // Only a row whose role is reported speaks for the call; a read row
-        // only for an obligation raised for a possible read.
         let read_only = obligation.analysis_context == crate::local_access::UNRESOLVED_HANDED_READ
             || obligation.analysis_context.starts_with("value-");
-        draft.reads.iter().any(|read| {
-            read_only
-                && over(&read.location)
-                && (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
-        }) || draft.writes.iter().any(|write| {
-            over(&write.location)
-                && (write.execution.reports_disallowed_write()
-                    || write.execution.reports_unplaced())
-        }) || draft.action_invocations.iter().any(|action| {
-            over(&action.location)
-                && (action.execution.reports_disallowed_write()
-                    || action.execution.reports_unplaced())
-        })
+        (read_only && over(&reported_reads, at)) || over(&reported_writes, at)
     };
     let handed = handed
         .into_iter()
@@ -764,10 +797,10 @@ pub(crate) fn collect_project<'facts>(
         .reads
         .iter()
         .filter(|read| {
-            (read.execution.reports_untracked_read()
-                || read.execution.reports_unplaced()
-                || attributed_at_tracked(read))
-                && !async_rows.contains(&read.location)
+            // Every condition is a question about the build; the loading-cover
+            // walk (`attributed_at_tracked`) is asked last, of the reads the
+            // others keep.
+            !async_rows.contains(&read.location)
                 // Local access decided the rows of a component's own source;
                 // these are the sources it could not see: transported, in
                 // another file, or at module scope, and a read a local
@@ -825,6 +858,9 @@ pub(crate) fn collect_project<'facts>(
                         ))
                     })
                     .unwrap_or(false)
+                && (read.execution.reports_untracked_read()
+                    || read.execution.reports_unplaced()
+                    || attributed_at_tracked(read))
         })
         .map(|read| crate::AsyncRead {
             accessor: read.accessor.clone(),

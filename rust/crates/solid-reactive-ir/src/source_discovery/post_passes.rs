@@ -162,11 +162,12 @@ impl<T: Eq + Send + Sync> ChunkSet<T> {
             .iter()
             .filter(|(key, _)| dirty.contains(key))
             .collect::<Vec<_>>();
-        let recomputed = crate::pipeline::parallel_balanced_results(&todo, |(key, item)| {
-            let ((value, deps), reads) =
-                crate::base::reads::record(|| trace::record(own(item), || compute(item)));
-            (*key, value, deps, reads)
-        });
+        let recomputed =
+            crate::pipeline::parallel_balanced_results_from(2, &todo, |(key, item)| {
+                let ((value, deps), reads) =
+                    crate::base::reads::record(|| trace::record(own(item), || compute(item)));
+                (*key, value, deps, reads)
+            });
         let count = recomputed.len();
         for (key, value, deps, reads) in recomputed {
             let proof = ReadProof::new(reads, lookup);

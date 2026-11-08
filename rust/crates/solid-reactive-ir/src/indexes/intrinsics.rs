@@ -88,12 +88,14 @@ impl SemanticLookup<'_> {
 }
 
 pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
-    let mut found = Intrinsics {
-        promise: true,
-        array_iteration: true,
-        visible_iteration: true,
-    };
-    for file in lookup.files() {
+    // Each file clears premises of its own; a premise holds where no file
+    // clears it, so the files are read on the workers and the answers met.
+    let per_file = crate::pipeline::parallel_balanced_results(lookup.files(), |file| {
+        let mut found = Intrinsics {
+            promise: true,
+            array_iteration: true,
+            visible_iteration: true,
+        };
         if crate::interproc::accessor_provenance::visible_iteration_write(file, lookup) {
             found.visible_iteration = false;
         }
@@ -142,6 +144,17 @@ pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
                 found.array_iteration = false;
             }
         }
+        found
+    });
+    let mut found = Intrinsics {
+        promise: true,
+        array_iteration: true,
+        visible_iteration: true,
+    };
+    for file in per_file {
+        found.promise &= file.promise;
+        found.array_iteration &= file.array_iteration;
+        found.visible_iteration &= file.visible_iteration;
     }
     found
 }
