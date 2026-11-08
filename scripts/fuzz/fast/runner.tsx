@@ -68,7 +68,7 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   const outDir = (outDirOverride ?? process.env.FUZZ_FAST_OUT) as string;
   const settings = { eventPasses: 2, pauseMs: Number(process.env.FUZZ_PAUSE_MS ?? 60), finalMs: Number(process.env.FUZZ_FINAL_MS ?? 150) };
   const diagnostics: any[] = [], errors: any[] = [], disposers: (() => void)[] = [];
-  // Each logged line, with the stacks of the errors it logged (ADR 0900; chrome-host/runner.tsx).
+  // Each logged line, with the stacks of the errors it logged (ADR 0907; chrome-host/runner.tsx).
   const consoleErrors: { text: string, stacks: string[] }[] = [];
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
   const halted: string[] = [];

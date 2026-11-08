@@ -17,7 +17,7 @@ describe("judge", () => {
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-context-provider", "violation")] }, runtime: logged }).outcome).toBe("unplaced");
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: run([], { consoleErrors: ["unrelated"] }) }).outcome).toBe("not-fired");
   });
-  it("places a logged code by the logged error's own frames (ADR 0900)", () => {
+  it("places a logged code by the logged error's own frames (ADR 0907)", () => {
     const at = (line) => run([], { consoleErrors: ["ContextNotFoundError: Context has no provider above this read and no default value."], consoleErrorPositions: [line === null ? [] : [{ file: "App.tsx", line, column: 1 }]] });
     const claim = { ok: true, findings: [finding("missing-context-provider", "violation")] };
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: claim, runtime: at(10) }).outcome).toBe("agree");

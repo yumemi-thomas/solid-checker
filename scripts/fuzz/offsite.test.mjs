@@ -67,7 +67,7 @@ describe("offSiteVerdicts", () => {
     // Thrown on another line: nothing stands on these, a false positive.
     expect(verdictsOf([finding("missing-owner", 20)], run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 10)], undefined, threw(null)))).toEqual(["false-positive(disturbed)"]);
   });
-  // ADR 0900: a logged error is placed by its own frames (`consoleErrorPositions`, index-aligned), as a thrown one; with none it is unplaced.
+  // ADR 0907: a logged error is placed by its own frames (`consoleErrorPositions`, index-aligned), as a thrown one; with none it is unplaced.
   const logged = (text, ...lines) => ({ consoleErrors: [text], consoleErrorPositions: [lines.map((line) => ({ file: "App.tsx", line, column: 1 }))] });
   it("a logged code substantiates the rule's finding at its line; unplaced it judges nothing; another rule's logged code first is a stacked claim (ADR 0887)", () => {
     const ctx = "ContextNotFoundError: Context has no provider above this read and no default value.";

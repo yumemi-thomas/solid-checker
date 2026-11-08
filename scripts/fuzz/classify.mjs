@@ -109,7 +109,7 @@ export function sourceExprAt(lines, line, column) {
 
 /** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
 /**
- * The coded errors the page logged (ADR 0900): an `<Errored>` boundary logs what it caught instead of rethrowing it, and a user effect
+ * The coded errors the page logged (ADR 0907): an `<Errored>` boundary logs what it caught instead of rethrowing it, and a user effect
  * logs the throw of its compute or of a computation it read (`NoOwnerError: …`). Each is placed by the logged error's own frames and its
  * cause's (`consoleErrorPositions`, index-aligned with `consoleErrors`), as a thrown one is; a logged value that is no error has none.
  */

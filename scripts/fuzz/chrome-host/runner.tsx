@@ -69,7 +69,7 @@ function settle() {
 async function runCase() {
   const started = performance.now();
   const diagnostics: any[] = [], errors: any[] = [], disposers: (() => void)[] = [];
-  // Each logged line, with the stacks of the errors it logged (ADR 0900): a user effect logs the throw of its compute or of a computation
+  // Each logged line, with the stacks of the errors it logged (ADR 0907): a user effect logs the throw of its compute or of a computation
   // it read (`NoOwnerError: …`) and an `<Errored>` boundary logs what it caught; the error's own frames place it as a thrown one is placed.
   const consoleErrors: { text: string, stacks: string[] }[] = [];
   const logged = (text: string, stacks: string[] = []) => { consoleErrors.push({ text, stacks }); };
