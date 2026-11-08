@@ -48,24 +48,44 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// The type descriptor of the last entity, in table order, that names
-    /// `symbol` and carries one, in any file. Unrecorded: a reader notes
-    /// [`crate::base::memo::probes::Probe::SymbolDescriptor`].
+    /// `symbol` and carries one, in any file, skipping a member expression
+    /// carrying its receiver's symbol (ADR 0663). Unrecorded: a reader notes
+    /// [`crate::base::memo::probes::Probe::SymbolDescriptor`], whose answer is
+    /// this function on the new build, so nothing here records a read
+    /// (`suppress`). A `Recorded` cell replays its fill's reads to each reader:
+    /// the member test reading every entity's file made every reader depend on
+    /// every file and rerun on any edit. The member test runs only for the
+    /// asked symbol's entities, last first (latency fix): the same answer as
+    /// filtering the whole table and keeping the last.
     pub(super) fn descriptor_by_symbol(&self, symbol: &str) -> Option<&'a TypeDescriptor> {
-        self.descriptors_by_symbol
-            .get_or_init(|| {
-                self.facts
-                    .typescript
-                    .entities()
-                    .filter(|entity| !self.entity_types_a_member_of_its_symbol(entity))
-                    .filter_map(|entity| {
-                        (!entity.symbol.is_empty())
-                            .then_some(entity.symbol.as_ref())
-                            .zip(entity.type_descriptor.as_deref())
-                    })
-                    .collect()
+        let candidates = self.entities_by_symbol().get(symbol)?;
+        crate::base::reads::suppress(|| {
+            candidates
+                .iter()
+                .rev()
+                .filter(|entity| entity.type_descriptor.is_some())
+                .find(|entity| !self.entity_types_a_member_of_its_symbol(entity))
+                .and_then(|entity| entity.type_descriptor.as_deref())
+        })
+    }
+
+    /// Every entity with a symbol, by symbol, in table order. Its fill reads the
+    /// whole table and records nothing: its readers note the per-symbol probe.
+    fn entities_by_symbol(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
+        self.entities_by_symbol.get_or_init(|| {
+            crate::base::reads::suppress(|| {
+                let mut by_symbol: HashMap<&'a str, Vec<&'a EntityFact>> = HashMap::default();
+                for entity in self.facts.typescript.entities() {
+                    if !entity.symbol.is_empty() {
+                        by_symbol
+                            .entry(entity.symbol.as_ref())
+                            .or_default()
+                            .push(entity);
+                    }
+                }
+                by_symbol
             })
-            .get(symbol)
-            .copied()
+        })
     }
 
     /// Whether `entity` is a member expression carrying its receiver's symbol:
@@ -90,23 +110,18 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// [`Self::descriptor_by_symbol`] for callability; a reader notes
-    /// [`crate::base::memo::probes::Probe::SymbolCallability`].
+    /// [`crate::base::memo::probes::Probe::SymbolCallability`], and nothing here
+    /// records a read, as there.
     pub(super) fn callability_by_symbol(&self, symbol: &str) -> Option<Callability> {
-        self.callability_by_symbol
-            .get_or_init(|| {
-                self.facts
-                    .typescript
-                    .entities()
-                    .filter(|entity| !self.entity_types_a_member_of_its_symbol(entity))
-                    .filter_map(|entity| {
-                        (!entity.symbol.is_empty())
-                            .then_some(entity.symbol.as_ref())
-                            .zip(entity.callability)
-                    })
-                    .collect()
-            })
-            .get(symbol)
-            .copied()
+        let candidates = self.entities_by_symbol().get(symbol)?;
+        crate::base::reads::suppress(|| {
+            candidates
+                .iter()
+                .rev()
+                .filter(|entity| entity.callability.is_some())
+                .find(|entity| !self.entity_types_a_member_of_its_symbol(entity))
+                .and_then(|entity| entity.callability)
+        })
     }
 
     /// Whether a function is proven to be a Solid component by a JSX call
