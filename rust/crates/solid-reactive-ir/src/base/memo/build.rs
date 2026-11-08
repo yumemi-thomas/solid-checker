@@ -1020,6 +1020,11 @@ impl MemoStore {
             .map(|(_, index)| Arc::clone(index))
     }
 
+    /// Whether a later build reads this store (a retained daemon's).
+    pub(crate) fn retained(&self) -> bool {
+        self.retained
+    }
+
     /// Shadow or verify-reused mode: kept indexes are compared with a refold.
     pub(crate) fn checks_indexes(&self) -> bool {
         self.check_indexes

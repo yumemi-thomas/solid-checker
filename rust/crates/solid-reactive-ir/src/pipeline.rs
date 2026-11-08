@@ -75,6 +75,9 @@ pub(crate) struct ProgramDraft {
     /// ADR 0874: each withheld call's callee span, by path. A row there is
     /// about the call's target, never a Get of the value on its chain.
     pub(crate) withheld_callees: HashSet<(Arc<str>, u64, u64)>,
+    /// ADR 0840: per file (in `facts.files` order), the positions of the
+    /// calls the impostor census withholds, asked once per call.
+    pub(crate) withheld_calls: Vec<Vec<usize>>,
 }
 
 impl ProgramDraft {
@@ -577,6 +580,29 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     if let Some(slot) = late_stage_cache.as_deref_mut() {
         slot.get_or_insert_with(Default::default);
     }
+    // ADR 0840: each file's withheld calls, asked once per call on the
+    // workers (the draft's withheld starts and callees, and the census's
+    // impostor rows, read them).
+    let withheld_calls = parallel_balanced_results(&facts.files, |file| {
+        file.ast
+            .calls
+            .iter()
+            .enumerate()
+            .filter(|(_, call)| semantic_lookup.impostor_withheld(file, call.callee))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>()
+    });
+    let withheld = || {
+        facts
+            .files
+            .iter()
+            .zip(&withheld_calls)
+            .flat_map(|(file, calls)| {
+                calls
+                    .iter()
+                    .map(move |index| (file, &file.ast.calls[*index]))
+            })
+    };
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
@@ -586,35 +612,20 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             Vec::new()
         },
         static_defects: boundary_defects,
-        withheld_starts: facts
-            .files
-            .iter()
-            .flat_map(|file| {
-                file.ast
-                    .calls
-                    .iter()
-                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
-                    .map(|call| (file.path.shared(), u64::from(call.span.start)))
+        withheld_starts: withheld()
+            .map(|(file, call)| (file.path.shared(), u64::from(call.span.start)))
+            .collect(),
+        withheld_callees: withheld()
+            .map(|(file, call)| {
+                let callee = file.ast.peel_ts_sugar_span(call.callee);
+                (
+                    file.path.shared(),
+                    u64::from(callee.start),
+                    u64::from(callee.end),
+                )
             })
             .collect(),
-        withheld_callees: facts
-            .files
-            .iter()
-            .flat_map(|file| {
-                file.ast
-                    .calls
-                    .iter()
-                    .filter(|call| semantic_lookup.impostor_withheld(file, call.callee))
-                    .map(|call| {
-                        let callee = file.ast.peel_ts_sugar_span(call.callee);
-                        (
-                            file.path.shared(),
-                            u64::from(callee.start),
-                            u64::from(callee.end),
-                        )
-                    })
-            })
-            .collect(),
+        withheld_calls: withheld_calls.clone(),
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;

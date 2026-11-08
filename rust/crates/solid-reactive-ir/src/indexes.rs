@@ -2034,13 +2034,58 @@ impl<'a> SemanticLookup<'a> {
     /// fills its own once-per-build cache, so the answers are the ones a
     /// sequential run computes; nothing records them here.
     // Threads only with a second analysis worker; otherwise the lanes run inline (wasm32-wasip1).
+    /// The memo begin, with the build's tables its probes ask (and its
+    /// fingerprints read) filled beside it: asked from the probes, each was
+    /// filled on one worker while the others waited, one table after another.
+    /// Each is a function of the build alone, filled once wherever it is
+    /// first asked. A store no later build reads has no probes to repoll.
+    #[allow(clippy::disallowed_methods)]
+    fn begin_with_warm_tables(&self) {
+        if !self.memos.store().retained() || crate::pipeline::available_analysis_workers() <= 1 {
+            let _ = self.memo_world();
+            return;
+        }
+        std::thread::scope(|scope| {
+            let warm = |work: &(dyn Fn() + Sync)| {
+                let _limit = crate::pipeline::AnalysisWorkerLimit::enter(
+                    crate::pipeline::analysis_worker_limit_for_lanes(4),
+                );
+                work();
+            };
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.reference_rows.get_or_init(|| {
+                        crate::base::file_table::reference_rows(&self.facts.typescript)
+                    });
+                })
+            });
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.bindings_by_reference();
+                })
+            });
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.functions_by_symbol();
+                })
+            });
+            scope.spawn(move || {
+                warm(&|| {
+                    let _ = self.module_census();
+                    let _ = self.member_stability();
+                })
+            });
+            let _ = self.memo_world();
+        });
+    }
+
     #[allow(clippy::disallowed_methods)]
     pub(crate) fn begin_memos(&self) {
         if memo_probes::probing() {
             return;
         }
         crate::base::reads::suppress(|| {
-            let _ = self.memo_world();
+            self.begin_with_warm_tables();
             if crate::pipeline::available_analysis_workers() <= 1 {
                 return;
             }
@@ -2092,6 +2137,25 @@ impl<'a> SemanticLookup<'a> {
                 scope.spawn(move || {
                     warm(&|| {
                         let _ = self.uninitialized_references();
+                    })
+                });
+                // The whole-program tables the component census's per-file
+                // answers ask: asked from those answers, each was filled on
+                // one worker while the others waited, one after another.
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.entities_by_symbol();
+                        let _ = self.project_has_component_type();
+                    })
+                });
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.bindings_by_symbol();
+                    })
+                });
+                scope.spawn(move || {
+                    warm(&|| {
+                        let _ = self.route_component_values();
                     })
                 });
                 // The components lane is the last to finish once the others

@@ -842,7 +842,7 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    fn bindings_by_symbol(&self) -> &HashMap<SymbolId, BindingResolution> {
+    pub(super) fn bindings_by_symbol(&self) -> &HashMap<SymbolId, BindingResolution> {
         self.bindings_by_symbol.get_or_init(|| {
             let mut bindings = HashMap::default();
             for (file_index, file) in self.facts.files.iter().enumerate() {

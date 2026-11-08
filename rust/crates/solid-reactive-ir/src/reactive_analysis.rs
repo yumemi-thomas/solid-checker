@@ -630,30 +630,50 @@ pub(crate) fn collect_project<'facts>(
     // well as a method: the call is the use, and its row names the census.
     // ADR 0875: the row names the site that holds it.
     let mut holders = None;
-    for file in ctx.semantic_lookup.files() {
-        for call in file.ast.calls.iter().filter(|call| !call.construct) {
-            if ctx.semantic_lookup.impostor_withheld(file, call.callee) {
-                let holders = holders.get_or_insert_with(|| {
-                    crate::base::contributions::impostor_holders(ctx.semantic_lookup.files())
-                });
-                let mut row = census_obligation(
-                    file.source_text(call.callee).unwrap_or("this call"),
-                    call.callee.location(file.path.as_str()),
+    let files = ctx.semantic_lookup.files();
+    // The draft's withheld calls (asked once per call); a draft built without
+    // them asks here.
+    let mut withheld_calls = std::mem::take(&mut draft.withheld_calls);
+    if withheld_calls.len() != files.len() {
+        withheld_calls = files
+            .iter()
+            .map(|file| {
+                file.ast
+                    .calls
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, call)| ctx.semantic_lookup.impostor_withheld(file, call.callee))
+                    .map(|(index, _)| index)
+                    .collect()
+            })
+            .collect();
+    }
+    for (file, calls) in files.iter().zip(&withheld_calls) {
+        for call in calls
+            .iter()
+            .map(|index| &file.ast.calls[*index])
+            .filter(|call| !call.construct)
+        {
+            let holders = holders.get_or_insert_with(|| {
+                crate::base::contributions::impostor_holders(ctx.semantic_lookup.files())
+            });
+            let mut row = census_obligation(
+                file.source_text(call.callee).unwrap_or("this call"),
+                call.callee.location(file.path.as_str()),
+                crate::blockers::STANDARD_MEMBER_IMPOSTOR,
+            );
+            if let Some(detail) = file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .and_then(|member| file.source_text(member.property))
+                .and_then(|member| crate::base::contributions::impostor_detail(member, holders))
+            {
+                row.analysis_context = crate::blockers::with_detail(
                     crate::blockers::STANDARD_MEMBER_IMPOSTOR,
+                    &detail,
                 );
-                if let Some(detail) = file
-                    .ast
-                    .member_at(file.ast.peel_ts_sugar_span(call.callee))
-                    .and_then(|member| file.source_text(member.property))
-                    .and_then(|member| crate::base::contributions::impostor_detail(member, holders))
-                {
-                    row.analysis_context = crate::blockers::with_detail(
-                        crate::blockers::STANDARD_MEMBER_IMPOSTOR,
-                        &detail,
-                    );
-                }
-                handed.push(row);
             }
+            handed.push(row);
         }
     }
     census_handed.sort_by(|a, b| census_row_order(a).cmp(&census_row_order(b)));
