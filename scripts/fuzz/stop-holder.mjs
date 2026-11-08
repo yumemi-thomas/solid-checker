@@ -3,7 +3,9 @@ import { join } from "node:path";
 
 // A stop row (open-rows.mjs, R-stop-named-U) clears on a named U in its statement. That U can be raised by a holder the generator adds, not by the
 // site: remove the holder and the same site may be certified while Chrome fires (the coordinator's audit, ADR 0815). So every stop row with a holder
-// must keep a finding with the holder removed. A row a file other than App.tsx holds is reported unchecked, with a count, never as passing.
+// must keep a finding with the holder removed. Every source file of the program is copied and transformed (coordinator, Part 17: the 43 multi-file
+// rows were unchecked): the holder may sit in any of them, and a file the transform leaves alone goes in unchanged. A program with no App.tsx (nothing
+// to mount) is reported unchecked, with a count, never as passing.
 
 /** The variants whose rows may stop, and each one's holder-free form: the site the holder wraps, written directly. */
 export const HOLDER_FREE = {
@@ -28,18 +30,18 @@ export function holderFree(variant, text) {
 }
 
 /**
- * The stop rows with a holder, sorted: `checked` programs, `unmatched` (fails the check), `unchecked` (a file beside App.tsx: counted, never passing).
- * `rows`: `{ id, grid, variant }`. `read(row)`: `{ text, others }`, the App.tsx text and how many other source files the program has.
+ * The stop rows with a holder, sorted: `checked` programs (each with every source file, the holder removed), `unmatched` (no file matched: fails the
+ * check), `unchecked` (no App.tsx: counted, never passing). `rows`: `{ id, grid, variant }`. `read(row)`: `{ files }`, every source file's text by name.
  */
 export function stopPlan(rows, read) {
   const plan = { checked: [], unmatched: [], unchecked: [] };
   for (const row of rows) {
     if (!row.variant || !HOLDER_FREE[row.variant]) continue;
-    const { text, others } = read(row);
-    if (others > 0) { plan.unchecked.push(row.id); continue; }
-    const free = holderFree(row.variant, text);
-    if (free === null) plan.unmatched.push(row.id);
-    else plan.checked.push({ ...row, text: free });
+    const { files } = read(row);
+    if (typeof files?.["App.tsx"] !== "string") { plan.unchecked.push(row.id); continue; }
+    const freed = Object.fromEntries(Object.entries(files).map(([name, text]) => [name, holderFree(row.variant, text)]));
+    if (Object.values(freed).every((text) => text === null)) { plan.unmatched.push(row.id); continue; }
+    plan.checked.push({ ...row, files: Object.fromEntries(Object.entries(files).map(([name, text]) => [name, freed[name] ?? text])) });
   }
   return plan;
 }
@@ -53,7 +55,10 @@ export function stopProblems(plan, findings) {
   ];
 }
 
-/** Discover the program files from disk so a multi-file case cannot pass as a single-file check. */
+/** A source file of a program: what the checker reads beside App.tsx (any JS or TS module; App.run.txt and the oracle's JSON are not). */
+export const isSourceFile = (name) => /\.[cm]?[jt]sx?$/.test(name);
+
+/** Every source file of the case folder by name, from disk, so no file of a multi-file program is left out of the check. */
 export function readStopSource(folder) {
-  return { text: readFileSync(join(folder, "App.tsx"), "utf8"), others: readdirSync(folder).filter((name) => /\.[cm]?[jt]sx?$/.test(name) && name !== "App.tsx").length };
+  return { files: Object.fromEntries(readdirSync(folder).filter(isSourceFile).sort().map((name) => [name, readFileSync(join(folder, name), "utf8")])) };
 }

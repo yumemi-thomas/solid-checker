@@ -135,11 +135,16 @@ async function stopHolderCheck(dir, rows, args) {
     return readStopSource(folder);
   });
   const root = mkdtempSync(join(tmpdir(), "stop-holder-"));
-  const cases = plan.checked.map(({ id, text }) => { const folder = join(root, "src", id); mkdirSync(folder, { recursive: true }); writeFileSync(join(folder, "App.tsx"), text.replace("export function C1()", "export function App()")); return { id, dir: folder }; });
+  // Every source file of the program, the holder removed where it was (stop-holder.mjs); App.tsx's component mounts as App.
+  const cases = plan.checked.map(({ id, files }) => {
+    const folder = join(root, "src", id); mkdirSync(folder, { recursive: true });
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(folder, name), name === "App.tsx" ? text.replace("export function C1()", "export function App()") : text);
+    return { id, dir: folder };
+  });
   const { runChecker } = await import("./patterns.mjs");
   const findings = await runChecker(cases, join(root, "work"), { checker, typefacts });
   rmSync(root, { recursive: true, force: true });
-  return { checked: plan.checked.length, unchecked: plan.unchecked.length, uncheckedIds: plan.unchecked, noHolder: stop.length - plan.checked.length - plan.unchecked.length - plan.unmatched.length, problems: stopProblems(plan, findings) };
+  return { checked: plan.checked.length, multiFile: plan.checked.filter(({ files }) => Object.keys(files).length > 1).length, unchecked: plan.unchecked.length, uncheckedIds: plan.unchecked, noHolder: stop.length - plan.checked.length - plan.unchecked.length - plan.unmatched.length, problems: stopProblems(plan, findings) };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -170,7 +175,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`stop rule blockers: ${JSON.stringify(blockers)}`);
   // The stop rows must keep a finding with the generator's holder removed (stop-holder.mjs). Needs the build the run judged.
   const stopRun = await stopHolderCheck(dir, out, args);
-  console.log(`stop holder check: ${stopRun.checked} checked, ${stopRun.unchecked} unchecked (a file beside App.tsx), ${stopRun.noHolder} with no holder`);
+  console.log(`stop holder check: ${stopRun.checked} checked (${stopRun.multiFile} of them multi-file), ${stopRun.unchecked} unchecked (no App.tsx), ${stopRun.noHolder} with no holder`);
   for (const problem of stopRun.problems) console.log(`stop holder ${problem}`);
   if (stopRun.problems.length) throw new Error(`${stopRun.problems.length} stop rows fail the holder-free check: a U that was the holder's is a false clean, back to its owner`);
   if (added.length && !args.includes("--allow-new")) throw new Error(`${added.length} new rows: a new failing row is a defect to read, not to list. Pass --allow-new to list them`);
