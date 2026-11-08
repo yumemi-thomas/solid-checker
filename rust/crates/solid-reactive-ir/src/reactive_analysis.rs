@@ -1174,7 +1174,14 @@ pub(crate) fn collect_project<'facts>(
     // negative proof is that none of them lies inside the predicate.
     static_rules::result_access_callbacks(ctx, draft);
     let compat_started = Instant::now();
-    upstream_compat::check_project(ctx, draft);
+    upstream_compat::check_project(
+        ctx,
+        caches
+            .late_stages
+            .as_deref_mut()
+            .map(|cache| &mut cache.chunks.upstream),
+        draft,
+    );
     timings.upstream_compat = compat_started.elapsed();
     // ADR 0692: upstream's `package-callee` row, pushed last, holds the same
     // reference open as the census row before it (`observe(count)`): one

@@ -218,11 +218,13 @@ pub(crate) const HANDED_DEPTH: usize = 6;
 pub(crate) struct HandedTables<'a, 'l> {
     pub(crate) lookup: &'a SemanticLookup<'l>,
     pub(crate) entities: &'a EntitySymbols,
-    pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(crate) setters: &'a HashMap<
-        SymbolId,
+    // The source tables, read through recorded lookups: a late chunk that
+    // walks a handed value records each entry it asked (`late_chunks`).
+    pub(crate) prop_sources: crate::late_chunks::Noted<'a, (SymbolId, Location)>,
+    pub(crate) source_kinds: crate::late_chunks::Noted<'a, ReactiveSourceKind>,
+    pub(crate) accessors: crate::late_chunks::Noted<'a, (SymbolId, Location)>,
+    pub(crate) setters: crate::late_chunks::Noted<
+        'a,
         (
             SymbolId,
             Location,
@@ -230,8 +232,8 @@ pub(crate) struct HandedTables<'a, 'l> {
             ReactiveSourceKind,
         ),
     >,
-    pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(crate) props_reactivity: &'a PropsReactivityIndex,
+    pub(crate) actions: crate::late_chunks::Noted<'a, (SymbolId, Location)>,
+    pub(crate) props_reactivity: crate::late_chunks::NotedProps<'a>,
     /// ADR 0771: at a tracked position a read of a settled accessor is legal,
     /// so the accessors that count are these. `None`: every one.
     pub(crate) accessors_that_count: Option<&'a dyn Fn(&str) -> bool>,
@@ -409,8 +411,7 @@ pub(crate) fn handed_value(
                     .iter()
                     .any(|slot| slot.local.span == declaration)
                 && t.props_reactivity
-                    .for_declaration(&location(file.path.shared(), parameter.pattern))
-                    .is_some()
+                    .declared(&location(file.path.shared(), parameter.pattern))
         })
     }) {
         return true;
@@ -1250,12 +1251,27 @@ impl<'facts> LocalAccessContext<'_, 'facts> {
         HandedTables {
             lookup: self.lookup,
             entities: self.entities,
-            prop_sources: self.prop_sources,
-            source_kinds: self.source_kinds,
-            accessors: self.accessors,
-            setters: self.setters,
-            actions: self.actions,
-            props_reactivity: self.props_reactivity,
+            prop_sources: crate::late_chunks::Noted::new(
+                crate::late_chunks::TableId::PropSources,
+                self.prop_sources,
+            ),
+            source_kinds: crate::late_chunks::Noted::new(
+                crate::late_chunks::TableId::SourceKinds,
+                self.source_kinds,
+            ),
+            accessors: crate::late_chunks::Noted::new(
+                crate::late_chunks::TableId::Accessors,
+                self.accessors,
+            ),
+            setters: crate::late_chunks::Noted::new(
+                crate::late_chunks::TableId::Setters,
+                self.setters,
+            ),
+            actions: crate::late_chunks::Noted::new(
+                crate::late_chunks::TableId::Actions,
+                self.actions,
+            ),
+            props_reactivity: crate::late_chunks::NotedProps::new(self.props_reactivity),
             accessors_that_count,
         }
     }

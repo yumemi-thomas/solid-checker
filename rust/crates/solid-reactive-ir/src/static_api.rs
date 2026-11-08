@@ -14,13 +14,14 @@ use crate::execution_role::{RootBodyGuard, allowed_callback_spans, semantic_writ
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
 use crate::owners::{analysis_context, computation_is_async};
-use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
+use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::stored_throw::{ThrowEnd, Thrower, throw_end};
 use crate::{
     ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation, location,
 };
 
-pub(super) struct StaticDirectiveFileResult {
+#[derive(PartialEq)]
+pub(crate) struct StaticDirectiveFileResult {
     pub(super) defects: Vec<StaticDefect>,
     pub(super) violations: Vec<StaticViolation>,
     pub(super) writes: Vec<ReactiveWrite>,
@@ -31,19 +32,36 @@ pub(super) struct StaticDirectiveFileResult {
 }
 
 /// Runs the project-level static API stage and merges its independent file
-/// results into the program draft.
-pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+/// results into the program draft. Each file's result is a late chunk
+/// ([`crate::late_chunks`]): reused while the file and every read it recorded
+/// (the lookup's answers and hand-outs, the source tables' entries it asked,
+/// reachability's multiplicities, the client-build answer) answer as they did.
+pub(crate) fn check_project(
+    ctx: &AnalysisContext<'_>,
+    chunks: Option<&mut crate::late_chunks::FileChunks<StaticDirectiveFileResult>>,
+    draft: &mut ProgramDraft,
+) {
     let checker = context_of(ctx);
-    for result in parallel_file_results(crate::base::reads::file_slots(ctx.facts), |file| {
-        checker.check_file(file)
-    }) {
-        draft.static_defects.extend(result.defects);
-        draft.static_violations.extend(result.violations);
-        draft.writes.extend(result.writes);
+    let checker = StaticApiContext {
+        tables: checker.tables.with_client_build(checker.client_build),
+        ..checker
+    };
+    let mut inputs = crate::late_chunks::ChunkInputs::of(ctx);
+    inputs.discovery = checker.tables;
+    for result in
+        crate::late_chunks::FileChunks::run(chunks, &inputs, |file| checker.check_file(file))
+    {
+        draft.static_defects.extend(result.defects.iter().cloned());
+        draft
+            .static_violations
+            .extend(result.violations.iter().cloned());
+        draft.writes.extend(result.writes.iter().cloned());
         draft
             .write_action_obligations
-            .extend(result.write_action_obligations);
-        draft.jsx_phase_sites.extend(result.jsx_phase_sites);
+            .extend(result.write_action_obligations.iter().cloned());
+        draft
+            .jsx_phase_sites
+            .extend(result.jsx_phase_sites.iter().cloned());
     }
 }
 
@@ -52,11 +70,7 @@ pub(crate) fn context_of<'a>(ctx: &AnalysisContext<'a>) -> StaticApiContext<'a> 
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
         symbol_names: ctx.symbol_names,
-        source_kinds: ctx.source_kinds,
-        source_owned_write: ctx.source_owned_write,
-        value_form_stores: ctx.value_form_stores,
-        accessors: ctx.accessors,
-        reachable_calls: ctx.reachable_calls,
+        tables: crate::late_chunks::DiscoveryTables::of(ctx),
         client_build: !ctx.rule_options.runtime.selects_server_build()
             || crate::execution_paths::client_root_present(ctx.facts, ctx.dialect),
         package_instances: &ctx.rule_options.runtime.package_instances,
@@ -88,15 +102,23 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) lookup: &'a SemanticLookup<'a>,
     pub(super) entities: &'a EntitySymbols,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
-    pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(super) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
-    pub(super) value_form_stores: &'a HashSet<SymbolId>,
-    pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(super) reachable_calls: &'a HashMap<Location, u64>,
-    /// No server build of the Solid packages is selected.
-    pub(super) client_build: bool,
+    /// The source tables, reachability and the client-build answer, read
+    /// through the recorded accessors (a file's result is a late chunk).
+    pub(super) tables: crate::late_chunks::DiscoveryTables<'a>,
+    /// No server build of the Solid packages is selected, or a client root
+    /// is present: read through [`Self::client_build`], recorded.
+    client_build: bool,
     /// Which installed `solid-js` each file loads at runtime.
     pub(super) package_instances: &'a crate::PackageInstanceEvidence,
+}
+
+impl StaticApiContext<'_> {
+    /// No server build of the Solid packages is selected, or a client root
+    /// is present (a fact of every file): recorded as one read.
+    fn client_build(&self) -> bool {
+        self.tables.note_client_build(self.client_build);
+        self.client_build
+    }
 }
 
 /// ADR 0830: a function-literal argument of `call` returns a value that is
@@ -636,7 +658,7 @@ impl StaticApiContext<'_> {
             // that callback's stack, on the same package instance's queue, is
             // `effect_phase`'s. A server build selects neither.
             if let Some(kind) = kind
-                && self.client_build
+                && self.client_build()
                 && dialect.warns_inside_effect_phase(kind)
                 && let Some(root) = self.lookup.callee_package_root(file, call.callee)
                 && let Some(origin) = crate::effect_phase::effect_phase_origin(
@@ -692,7 +714,7 @@ impl StaticApiContext<'_> {
             };
             let mut unplaced = None;
             if let Some(kind) = kind
-                && self.client_build
+                && self.client_build()
                 && dialect.warns_inside_effect_phase(kind)
                 && (dispatched() || {
                     unplaced = self
@@ -811,7 +833,7 @@ impl StaticApiContext<'_> {
             // run lowers, so the throw is proven only where no call runs in the
             // apply before this one; otherwise the claim is uncertifiable.
             if let Some(created) = kind
-                && self.client_build
+                && self.client_build()
                 && dialect.throws_creating_in_effect_callback(
                     created,
                     call.arguments.first().is_some_and(|argument| {
@@ -891,7 +913,7 @@ impl StaticApiContext<'_> {
             // where nothing follows it) may run on an apply's stack with no
             // owner: an obligation, unless the walk above placed it.
             if let Some(created) = kind
-                && self.client_build
+                && self.client_build()
                 && dialect.throws_creating_in_effect_callback(
                     created,
                     call.arguments.first().is_some_and(|argument| {
@@ -987,7 +1009,7 @@ impl StaticApiContext<'_> {
                     .and_then(|root| self.entities.at(file.path.as_str(), root))
             };
             let Some((symbol, kind)) =
-                symbol.and_then(|symbol| Some((symbol, self.source_kinds.get(symbol).copied()?)))
+                symbol.and_then(|symbol| Some((symbol, self.tables.source_kind(symbol).copied()?)))
             else {
                 // The obligation this used to raise asked whether the target
                 // carries the source brand — and the brand is a type
@@ -1008,9 +1030,8 @@ impl StaticApiContext<'_> {
                             resolved.validity == typefacts::ResolvedCallValidity::Valid
                         })
                     && let Some(multiplicity) = self
-                        .reachable_calls
-                        .get(&location(file.path.shared(), call.callee))
-                        .copied()
+                        .tables
+                        .reachable_call(&location(file.path.shared(), call.callee))
                         // ADR 0721: no edge reaches the call, yet it may run.
                         .or_else(|| {
                             crate::local_access::unreached_write_may_run(
@@ -1094,7 +1115,7 @@ impl StaticApiContext<'_> {
             // the runtime rejects records no write.
             if is_refresh
                 && kind == ReactiveSourceKind::Store
-                && self.value_form_stores.contains(symbol)
+                && self.tables.value_form_store(symbol)
             {
                 continue;
             }
@@ -1113,7 +1134,7 @@ impl StaticApiContext<'_> {
                 ));
             }
             let callee = location(file.path.shared(), call.callee);
-            let reached = self.reachable_calls.get(&callee).copied();
+            let reached = self.tables.reachable_call(&callee);
             // ADR 0721: no edge reaches the call, yet it may run (a method, a
             // getter, a tag): one write whose place nothing proves.
             let unreached = reached.is_none()
@@ -1121,7 +1142,7 @@ impl StaticApiContext<'_> {
             let Some(multiplicity) = reached.or(unreached.then_some(1)) else {
                 continue;
             };
-            let Some((name, declaration)) = self.accessors.get(symbol) else {
+            let Some((name, declaration)) = self.tables.accessor(symbol) else {
                 continue;
             };
             if multiplicity == 0 {
@@ -1167,11 +1188,7 @@ impl StaticApiContext<'_> {
                         ),
                     )
                 },
-                owned_write: self
-                    .source_owned_write
-                    .get(symbol)
-                    .copied()
-                    .unwrap_or_default(),
+                owned_write: self.tables.source_owned_write(symbol).unwrap_or_default(),
                 context: analysis_context(
                     file,
                     call.span,
@@ -1215,7 +1232,7 @@ impl StaticApiContext<'_> {
             // No client root in sight: which build runs the apply is open.
             let uncertain = earlier_call
                 || origin.mixed
-                || !self.client_build
+                || !self.client_build()
                 || self.lookup.flush_drains_under_owner();
             // Written in the apply, a proved throw is every run of the site. In
             // a helper another entry may run it with no window (a timer), and

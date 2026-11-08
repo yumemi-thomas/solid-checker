@@ -1947,6 +1947,26 @@ impl<'a> SemanticLookup<'a> {
             Section::ListenerProjectReach => {
                 hasher.update([u8::from(self.listener_project_reach())]);
             }
+            Section::DispatchSites => {
+                let mut sites = self
+                    .event_dispatch_sites()
+                    .iter()
+                    .map(|site| {
+                        (
+                            site.path.as_str(),
+                            site.span,
+                            site.withholds_listener_proofs(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                sites.sort_unstable();
+                for (path, span, withholds) in sites {
+                    text(&mut hasher, path);
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                    hasher.update([u8::from(withholds)]);
+                }
+            }
             Section::Files => {
                 // The begin computes every file's fingerprints: run it first.
                 let _ = self.memo_world();

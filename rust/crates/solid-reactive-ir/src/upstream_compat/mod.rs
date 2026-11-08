@@ -31,13 +31,13 @@ mod syntax;
 use crate::{HashMap, HashSet};
 
 use crate::indexes::SemanticLookup;
-use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
+use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::{EntitySymbols, Fix, ReactiveSourceKind, StaticViolation, SymbolId, location};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{ArrayShape, Location, RuntimeValueDomain};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash)]
 struct IndexedReactiveRead {
     span: Span,
     proven: bool,
@@ -64,6 +64,8 @@ pub(super) enum ReadEvidence {
 #[derive(Default)]
 pub(super) struct ReactiveReadIndex {
     by_path: HashMap<String, Vec<IndexedReactiveRead>>,
+    /// Each path's rows as a recorded read answers them.
+    answers: HashMap<String, u64>,
 }
 
 impl ReactiveReadIndex {
@@ -101,7 +103,24 @@ impl ReactiveReadIndex {
         for reads in by_path.values_mut() {
             reads.sort_by_key(|read| (read.span.start, read.span.end, read.proven));
         }
-        Self { by_path }
+        let answers = by_path
+            .iter()
+            .map(|(path, reads)| (path.clone(), crate::late_chunks::answer_hash(reads)))
+            .collect();
+        Self { by_path, answers }
+    }
+
+    /// The rows of `path`, recorded ([`crate::late_chunks::ExtraRead`]).
+    fn rows_of(&self, path: &str) -> Option<&Vec<IndexedReactiveRead>> {
+        crate::late_chunks::note_extra(
+            crate::late_chunks::ExtraRead::ReactiveReadsOf(path.to_owned()),
+            self.rows_answer(path),
+        );
+        self.by_path.get(path)
+    }
+
+    fn rows_answer(&self, path: &str) -> u64 {
+        crate::late_chunks::answer_hash(&self.answers.get(path))
     }
 
     /// ADR 0671: [`Self::has_proven_read`], else whether anything evaluated
@@ -122,8 +141,7 @@ impl ReactiveReadIndex {
         }
         let expression = file.ast.peel_ts_sugar_span(expression);
         let row = self
-            .by_path
-            .get(file.path.as_str())
+            .rows_of(file.path.as_str())
             .is_some_and(|reads| reads.iter().any(|read| expression.contains(read.span)));
         let root_open = |root: Span| !settled_value(context, file, root, SETTLED_DEPTH);
         let open_call = file.ast.calls_within(expression).any(|call| {
@@ -173,7 +191,7 @@ impl ReactiveReadIndex {
                 .iter()
                 .any(|function| function.contains(span))
         };
-        let indexed_read = self.by_path.get(file.path.as_str()).is_some_and(|reads| {
+        let indexed_read = self.rows_of(file.path.as_str()).is_some_and(|reads| {
             let start = reads.partition_point(|read| read.span.start < expression.start);
             reads[start..]
                 .iter()
@@ -334,11 +352,34 @@ pub(super) fn source_symbol_at<'a>(
         return context.entities.at(file.path.as_str(), alias.source);
     }
     context.entities.at(file.path.as_str(), span).or_else(|| {
-        context
-            .source_reference_index
-            .get(file.path.as_str())
-            .and_then(|by_range| by_range.get(&(u64::from(span.start), u64::from(span.end))))
+        let found = source_reference_at(
+            context,
+            file.path.as_str(),
+            u64::from(span.start),
+            u64::from(span.end),
+        );
+        crate::late_chunks::note_extra(
+            crate::late_chunks::ExtraRead::SourceReference(
+                file.path.as_str().to_owned(),
+                u64::from(span.start),
+                u64::from(span.end),
+            ),
+            crate::late_chunks::answer_hash(&found),
+        );
+        found
     })
+}
+
+fn source_reference_at<'c>(
+    context: &'c UpstreamCompatContext<'_>,
+    path: &str,
+    start: u64,
+    end: u64,
+) -> Option<&'c crate::SymbolId> {
+    context
+        .source_reference_index
+        .get(path)
+        .and_then(|by_range| by_range.get(&(start, end)))
 }
 
 /// The object a member chain is rooted at: `store.a.b` -> `store`. A member
@@ -802,29 +843,29 @@ pub(super) struct UpstreamCompatContext<'a> {
     pub(super) lookup: &'a SemanticLookup<'a>,
     pub(super) entities: &'a EntitySymbols,
     /// Proven reactive accessors, by symbol: display name and declaration.
-    pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) accessors: crate::late_chunks::Noted<'a, (SymbolId, Location)>,
     /// Whether each proven source is an accessor or a store path.
-    pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(super) source_kinds: crate::late_chunks::Noted<'a, ReactiveSourceKind>,
     /// The exact dialect primitive that created a source, when it was created
     /// locally. This distinguishes source kinds with different write
     /// semantics, notably Solid 1.x's mutable proxy from readonly stores.
-    pub(super) source_primitives: &'a HashMap<SymbolId, SymbolId>,
+    pub(super) source_primitives: crate::late_chunks::Noted<'a, SymbolId>,
     /// Component props roots proven by component shape and propagated type
     /// facts. Member names may be unresolved (for example an inferred `any`),
     /// but the props object itself remains a reactive proxy.
-    pub(super) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(super) uncertain_prop_sources: &'a HashSet<SymbolId>,
+    pub(super) prop_sources: crate::late_chunks::Noted<'a, (SymbolId, Location)>,
+    pub(super) uncertain_prop_sources: crate::late_chunks::NotedSet<'a>,
     /// Values found as sources by their type alone (ADR 0294). A store among
     /// them is written through like a proven one, but which store it is, and
     /// so whether the write is dropped, is not known.
-    pub(super) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
+    pub(super) typed_sources: crate::late_chunks::Noted<'a, crate::source_discovery::TypedSource>,
     /// Caller-proven props reactivity per props declaration; answers
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
-    pub(super) props_reactivity: &'a crate::source_discovery::PropsReactivityIndex,
+    pub(super) props_reactivity: crate::late_chunks::NotedProps<'a>,
     /// What `handed_value` reads besides the above (ADR 0652).
-    pub(super) setters: &'a HashMap<
-        SymbolId,
+    pub(super) setters: crate::late_chunks::Noted<
+        'a,
         (
             SymbolId,
             Location,
@@ -832,7 +873,7 @@ pub(super) struct UpstreamCompatContext<'a> {
             ReactiveSourceKind,
         ),
     >,
-    pub(super) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) actions: crate::late_chunks::Noted<'a, (SymbolId, Location)>,
     /// Local, interprocedural, alias-propagated, and dependency-source-derived reads,
     /// indexed once for exact governing-expression queries.
     pub(super) reactive_reads: ReactiveReadIndex,
@@ -858,7 +899,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     pub(super) forwarded_uncaptured: shared_reactivity::ForwardedUncaptured,
     /// Whether the program applies `strictNullChecks`, from the Type Facts
     /// table (ADR 0465); `None` is no answer.
-    pub(super) strict_null_checks: Option<bool>,
+    strict_null_checks: Option<bool>,
 }
 
 /// Runs every upstream-compat rule the dialect's catalog declares over one
@@ -887,9 +928,40 @@ fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiag
     }
 }
 
-struct FileDiagnostics {
+#[derive(PartialEq)]
+pub(crate) struct FileDiagnostics {
     violations: Vec<StaticViolation>,
     defects: Vec<crate::StaticDefect>,
+}
+
+impl UpstreamCompatContext<'_> {
+    /// The program's `strictNullChecks`, recorded.
+    pub(super) fn strict_null_checks(&self) -> Option<bool> {
+        crate::late_chunks::note_extra(
+            crate::late_chunks::ExtraRead::StrictNullChecks,
+            crate::late_chunks::answer_hash(&self.strict_null_checks),
+        );
+        self.strict_null_checks
+    }
+}
+
+impl crate::late_chunks::ExtraAnswers for UpstreamCompatContext<'_> {
+    fn answer(&self, read: &crate::late_chunks::ExtraRead) -> u64 {
+        use crate::late_chunks::{ExtraRead, answer_hash};
+        match read {
+            ExtraRead::ReactiveReadsOf(path) => self.reactive_reads.rows_answer(path),
+            ExtraRead::ForwardedEmpty => u64::from(self.forwarded_uncaptured.is_empty_unrecorded()),
+            ExtraRead::ForwardedReached(path, function, position) => answer_hash(
+                &self
+                    .forwarded_uncaptured
+                    .reached_unrecorded(path, *function, *position),
+            ),
+            ExtraRead::SourceReference(path, start, end) => {
+                answer_hash(&source_reference_at(self, path, *start, *end))
+            }
+            ExtraRead::StrictNullChecks => answer_hash(&self.strict_null_checks),
+        }
+    }
 }
 
 /// The whole-project compat pass. Both dialects run it: the decomposed
@@ -897,7 +969,11 @@ struct FileDiagnostics {
 /// ESLint-era groups are gated inside [`check_file`], next to the catalogs'
 /// version table it mirrors.
 ///
-pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+pub(crate) fn check_project(
+    ctx: &AnalysisContext<'_>,
+    chunks: Option<&mut crate::late_chunks::FileChunks<FileDiagnostics>>,
+    draft: &mut ProgramDraft,
+) {
     let (prefer_for_name, prefer_show_name) = ("prefer-for", "prefer-show");
     let prefer_for_enabled = ctx
         .rule_options
@@ -915,11 +991,22 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         crate::base::reads::file_slots(ctx.facts),
         &context,
     );
-    for diagnostics in parallel_file_results(crate::base::reads::file_slots(ctx.facts), |file| {
-        check_file(file, &context)
-    }) {
-        draft.static_violations.extend(diagnostics.violations);
-        draft.static_defects.extend(diagnostics.defects);
+    // Each file's diagnostics are a late chunk: reused while the file and
+    // every read it recorded (the lookup's, the source tables' entries, and
+    // the questions it asked of this pass's whole-program structures: the
+    // file's read rows, forwarded parameters, reference ranges) answer as
+    // they did.
+    let mut inputs = crate::late_chunks::ChunkInputs::of(ctx);
+    inputs.discovery = inputs.discovery.with_extra(&context);
+    for diagnostics in
+        crate::late_chunks::FileChunks::run(chunks, &inputs, |file| check_file(file, &context))
+    {
+        draft
+            .static_violations
+            .extend(diagnostics.violations.iter().cloned());
+        draft
+            .static_defects
+            .extend(diagnostics.defects.iter().cloned());
     }
 }
 
@@ -948,6 +1035,8 @@ impl<'c, 'a> MemberWrites<'c, 'a> {
     }
 }
 
+use crate::late_chunks::{Noted, TableId};
+
 fn compat_context<'a>(
     ctx: &AnalysisContext<'a>,
     reactive_reads: ReactiveReadIndex,
@@ -958,15 +1047,18 @@ fn compat_context<'a>(
         dialect: ctx.dialect,
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
-        accessors: ctx.accessors,
-        source_kinds: ctx.source_kinds,
-        source_primitives: ctx.source_primitives,
-        prop_sources: ctx.prop_sources,
-        uncertain_prop_sources: ctx.uncertain_prop_sources,
-        typed_sources: ctx.typed_sources,
-        props_reactivity: ctx.props_reactivity,
-        setters: ctx.setters,
-        actions: ctx.actions,
+        accessors: Noted::new(TableId::Accessors, ctx.accessors),
+        source_kinds: Noted::new(TableId::SourceKinds, ctx.source_kinds),
+        source_primitives: Noted::new(TableId::SourcePrimitives, ctx.source_primitives),
+        prop_sources: Noted::new(TableId::PropSources, ctx.prop_sources),
+        uncertain_prop_sources: crate::late_chunks::NotedSet::new(
+            TableId::UncertainPropSources,
+            ctx.uncertain_prop_sources,
+        ),
+        typed_sources: Noted::new(TableId::TypedSources, ctx.typed_sources),
+        props_reactivity: crate::late_chunks::NotedProps::new(ctx.props_reactivity),
+        setters: Noted::new(TableId::Setters, ctx.setters),
+        actions: Noted::new(TableId::Actions, ctx.actions),
         reactive_reads,
         source_reference_index: std::sync::Arc::clone(ctx.source_reference_locations.get_or_init(
             || {

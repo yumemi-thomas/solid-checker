@@ -509,11 +509,37 @@ pub(crate) struct ForwardedUncaptured {
 type ParameterKey = (String, Span, usize);
 
 impl ForwardedUncaptured {
+    /// Whether no parameter reaches an undescribed callee, recorded.
     pub(super) fn is_empty(&self) -> bool {
+        let empty = self.is_empty_unrecorded();
+        crate::late_chunks::note_extra(
+            crate::late_chunks::ExtraRead::ForwardedEmpty,
+            u64::from(empty),
+        );
+        empty
+    }
+
+    pub(super) fn is_empty_unrecorded(&self) -> bool {
         self.reached.is_empty()
     }
 
+    /// The undescribed callee parameter `position` of `function` reaches,
+    /// recorded.
     fn reached(&self, path: &str, function: Span, position: usize) -> Option<&str> {
+        let reached = self.reached_unrecorded(path, function, position);
+        crate::late_chunks::note_extra(
+            crate::late_chunks::ExtraRead::ForwardedReached(path.to_owned(), function, position),
+            crate::late_chunks::answer_hash(&reached),
+        );
+        reached
+    }
+
+    pub(super) fn reached_unrecorded(
+        &self,
+        path: &str,
+        function: Span,
+        position: usize,
+    ) -> Option<&str> {
         let key_path = path.to_owned();
         if !self.functions.contains(&(key_path.clone(), function)) {
             return None;
@@ -1302,8 +1328,8 @@ fn handed_values_coerced(
             .entities
             .at(file.path.as_str(), binding)
             .filter(|symbol| {
-                context.accessors.contains_key(*symbol)
-                    && context.source_kinds.get(*symbol) != Some(&ReactiveSourceKind::Store)
+                context.accessors.contains_key(symbol)
+                    && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
             });
         let position = if standard_value_argument(file, context, property.value) {
             Some("a standard-library value parameter")
@@ -1462,8 +1488,8 @@ fn direct_mutations(
         // `source_reference_index`).
         let root = member_root(file, written).unwrap_or(written);
         let Some(symbol) = root_symbol(context, file, root).filter(|symbol| {
-            context.accessors.contains_key(*symbol)
-                || context.prop_sources.contains_key(*symbol)
+            context.accessors.contains_key(symbol)
+                || context.prop_sources.contains_key(symbol)
                 || typed_store_name(context, symbol).is_some()
         }) else {
             if root != written {
@@ -3479,8 +3505,7 @@ fn handed_container(
                     .any(|slot| slot.local.span == declaration)
                 && context
                     .props_reactivity
-                    .for_declaration(&location(file.path.shared(), parameter.pattern))
-                    .is_some()
+                    .declared(&location(file.path.shared(), parameter.pattern))
         })
     });
     if props_slot {
@@ -3572,13 +3597,11 @@ fn store_target(
         // A `merge`/`omit` view or an effect-apply parameter carries the
         // source's declaration, not its primitive.
         let (_, declaration) = context.accessors.get(symbol)?;
-        context
-            .source_primitives
-            .iter()
-            .find_map(|(source, primitive)| {
-                (context.accessors.get(source).map(|(_, found)| found) == Some(declaration))
-                    .then_some(primitive)
-            })
+        crate::late_chunks::primitive_declared_at(
+            context.accessors,
+            context.source_primitives,
+            declaration,
+        )
     });
     if primitive.is_some_and(|primitive| primitive.as_str() == "createProjection") {
         DirectMutationTarget::Projection
@@ -4356,7 +4379,7 @@ fn chain_links_verdict(
     if shallow_store_root(file, context, root) {
         return None;
     }
-    if context.strict_null_checks != Some(true) || !tsc_reports_in(file) {
+    if context.strict_null_checks() != Some(true) || !tsc_reports_in(file) {
         return Some(true);
     }
     let path = file.path.as_str();

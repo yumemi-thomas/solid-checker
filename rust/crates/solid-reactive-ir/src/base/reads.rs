@@ -98,10 +98,14 @@ pub(crate) enum Section {
     /// slots) and the paths in slot order, so it moves on any file's change,
     /// addition or removal.
     Files,
+    /// The classified dispatch sites as a file's listener obligations read
+    /// them: each site's path, span and whether it withholds listener proofs
+    /// (`listener_reach::check_file`).
+    DispatchSites,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 20] = [
+    pub(crate) const ALL: [Self; 21] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -122,6 +126,7 @@ impl Section {
         Self::FlushVeto,
         Self::ListenerProjectReach,
         Self::Files,
+        Self::DispatchSites,
     ];
 
     const fn bit(self) -> u32 {

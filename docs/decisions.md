@@ -2354,3 +2354,7 @@ Edit latency (owner, 2026-11-09: no slower than 207b13142). A value-census start
 <a id="adr-0910"></a>
 ## ADR 0910 — A scan of the file list is a recorded whole-program read
 Step A toward reusing ADR 0909's units across edits. `reads::all_files` and `SemanticLookup::files` note `Section::Files` for the computation recording: its fingerprint is the memo begin's per-file fingerprints and paths in slot order, so it moves on any file's change, addition or removal. Positions are `reads::file_slots` (unrecorded): a hand-out that notes its one file, a count, a stage driver assembling per-file chunks, or a lookup cache whose readers record what they read of it. ir-read-lint counts `file_slots` callers; `facts.files` is left only in the two accessors. Owner discovery's find-by-path is a hand-out of the one file (`first_file_by_path`). No edit-path recording scans the list (traced on app-game and solid-groove), so reuse is unchanged; findings and coverage moved nothing.
+
+<a id="adr-0911"></a>
+## ADR 0911 — Leaf operations, static API and compatibility files are late chunks
+They join ADR 0413's chunks. A chunk records each source-table entry it asks (`late_chunks::Noted`), reachability counts, transport targets, the client-build answer, and the compatibility pass's structures by key (a file's read rows, forwarded parameters, reference ranges). Dispatch sites are a section (`DispatchSites`). Shadow and verify-reused modes recompute every kept chunk and poison on a difference.

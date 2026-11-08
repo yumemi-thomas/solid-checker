@@ -984,12 +984,21 @@ fn handed_reads_after_await_through_calls<'a>(
     let tables = crate::local_access::HandedTables {
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
-        prop_sources: ctx.prop_sources,
-        source_kinds: ctx.source_kinds,
-        accessors: ctx.accessors,
-        setters: ctx.setters,
-        actions: ctx.actions,
-        props_reactivity: ctx.props_reactivity,
+        prop_sources: crate::late_chunks::Noted::new(
+            crate::late_chunks::TableId::PropSources,
+            ctx.prop_sources,
+        ),
+        source_kinds: crate::late_chunks::Noted::new(
+            crate::late_chunks::TableId::SourceKinds,
+            ctx.source_kinds,
+        ),
+        accessors: crate::late_chunks::Noted::new(
+            crate::late_chunks::TableId::Accessors,
+            ctx.accessors,
+        ),
+        setters: crate::late_chunks::Noted::new(crate::late_chunks::TableId::Setters, ctx.setters),
+        actions: crate::late_chunks::Noted::new(crate::late_chunks::TableId::Actions, ctx.actions),
+        props_reactivity: crate::late_chunks::NotedProps::new(ctx.props_reactivity),
         accessors_that_count: None,
     };
     for typescript_file in ctx.facts.typescript.files() {

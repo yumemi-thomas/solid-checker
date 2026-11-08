@@ -779,11 +779,25 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     build_timings.read_after_await_through_calls = substage_started.elapsed();
     let substage_started = Instant::now();
-    cleanup::collect_project(&analysis, &mut draft);
+    cleanup::collect_project(
+        &analysis,
+        late_stage_cache
+            .as_deref_mut()
+            .and_then(Option::as_mut)
+            .map(|cache| &mut cache.chunks.leaf_operations),
+        &mut draft,
+    );
     build_timings.leaf_operations = substage_started.elapsed();
     clock.finish(&mut build_timings, ReactiveIrStage::LeafAndCleanup);
     let substage_started = Instant::now();
-    static_api::check_project(&analysis, &mut draft);
+    static_api::check_project(
+        &analysis,
+        late_stage_cache
+            .as_deref_mut()
+            .and_then(Option::as_mut)
+            .map(|cache| &mut cache.chunks.static_api),
+        &mut draft,
+    );
     build_timings.static_api_files = substage_started.elapsed();
     let substage_started = Instant::now();
     server_rules::check_project(&analysis, &mut draft);
