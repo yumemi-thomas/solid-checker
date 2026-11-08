@@ -749,3 +749,28 @@ Stopped near the context limit at a green, pushed tip: claude/flip-census = clau
 **Machinery** (/Users/thomas/dev/sc-scratch.noindex/flip-reads): `m15/cycle.sh <tag> <prev sweep path>` with VD_BASE=<last green push> (the second argument is the sweep json path, not a tag); m16/ratchet2.mjs writes the whole ratchet from the rows; m16/offmoves.mjs <smoke> lists manifest moves off the ledger; m16/addman.mjs adds ids to a smoke manifest with their behaviour; m16/blk.mjs runs ro1 on grid cases and prints blockers; m16/rejudge.mjs re-reads a smoke against the current ledger. Ledger: `node scripts/fuzz/open-rows.mjs --update <smoke> --checker <bin> --typefacts <bin> --allow-new`; `--allow-gone` only for ids the coordinator names (run without it first).
 
 **Rules that bit me.** Launch long jobs with run_in_background, never `&` inside a foreground command (no completion notice). At a merge, regenerate snapshots on the merged build and compare row sets against both parents; take branch drops rows only after the per-fixture count names the falls (W's job 2 counts per fixture; old whole-ledger rows are declined). A smoke manifest's ids and expected must stay the same length (R5's was not). zsh: `git show "${r}:path"`. Keep 2-3 recent smoke dirs only: the disk filled once (4 GiB free).
+
+## R3e handoff (2026-11-08, stopping near the context limit)
+
+Branch claude/flip-r3c, worktree /Users/thomas/dev/sc-worktrees.noindex/r3c, scratch /Users/thomas/dev/sc-scratch.noindex/flip-r3c
+(helpers: bldb.sh <tag> (sc-build release -> r<tag>), cov.sh <tag> [update], vd.sh <tag> <base>, sw.sh <tag> <abs prev sweep>,
+wip.sh <msg> (snapshot to claude/flip-r3e-wip), run7.sh <tag> (all aw-* ids on origin's classify), fzmix.sh, fzlp.sh, fzpre.sh,
+tools/fxdiff.sh <old-bin-dir> <new-checker> <tsconfig...>, tools/runpe.mjs (run.mjs with pageerror), chk3.sh (matrix layout)).
+
+Commits since R3d (all verify-delta green, each reported to Part 16 and the coordinator):
+41d9d473c ADR 0888, 3d7e53b87 0893, b6b38884b, 5712a5014, d397e16fd, ca608d3f5, 449d7bcb6, 358983025 (0895),
+82f644958 (0896, merged by Part 16 as ed80bf72f), 17a632c8a (0897, Part 16 batch n1), ec444faa6 (0898, next batch).
+Corpus: 0896 +155 SC9012 listener-reach U (dispatch calls), 0897 and 0898 0 moved; no V moved in any of the three.
+
+Done from R3d's list: item 1a (0888: Chrome logs NoOwnerError via console.error; the FP was SC4002's owned-run claim on a
+may-resume owned bit, not an unobserved flight), 1b (0893), 3 (misplaced 32 -> 0 with 0897; the 50 unplaced are codes Chrome
+logs only by console.error: Part 16's codeOfLogged/consoleErrors judge work, patch flip-r3c/judge-codeOfLogged.patch), 4 R14
+(in origin's judge), 6 computed then (d397e16fd). Item 5 (B2 lib.dom exclusion): open-work says not built, coordinator's call.
+
+Open:
+- Stop-row audit for aw-then-* and lst-body-shared (handed over during the Codex stint): status not re-checked after the
+  weekly-limit gap; read scratch msg-forward.txt and Part 16's ledger before resuming.
+- Judge/oracle measurement artifacts with Part 16 (not mine to change): logged class-named errors (codeOfLogged + oracle
+  consoleErrors), StatusError cause placement in runtime-oracle.mjs, pageerror judging (flw-settled-report-error).
+- ADR 0852's generator rows may be the same console-log blind spot (NoOwnerError logged by a reading effect): re-check once
+  codeOfLogged lands.

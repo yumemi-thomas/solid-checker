@@ -8,3 +8,8 @@ uncertifiable (`Branch`). A compute passed by name is the same (`Named`): the na
 possible await. Controls stay violations: a `createRoot` body past the await runs under the root (rc.17 throws
 REACTIVE_WRITE_IN_OWNED_SCOPE), and an IIFE before the await runs in the compute (`Controls`). The stub is copied from
 `after-await-helper-callback` (rc.17).
+
+**ADR 0899 (`HandedOn`).** A helper that calls its callback in place and also hands it on (a recursive `again(g, n - 1)`):
+past the compute's await its in-place run is on the later task and its other runs are unfollowed, so the write is
+uncertifiable, never the compute's violation (census `aw-forward-fan-run`: Chrome quiet, the checker gave SC2001 V). Before
+the await the in-place run is in the compute: a violation, kept.
