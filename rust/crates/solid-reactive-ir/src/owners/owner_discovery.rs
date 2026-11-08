@@ -1048,11 +1048,13 @@ pub(crate) fn find_missing_owners_incremental(
         }
     }
     let mut recomputed = Vec::new();
+    // One check pass: each memo is asked once (`reads::PassAnswers`).
+    let answers = crate::base::reads::PassAnswers::new(lookup);
     for (file, pid) in files.iter().zip(&order) {
         if unchanged_paths.contains(file.path.as_str())
             && let Some(entry) = graph.file(*pid)
             && entry.fragment.source_hash == file.source_hash
-            && entry.fragment.proof.holds(lookup)
+            && entry.fragment.proof.holds(&answers)
             && (Arc::ptr_eq(&entry.fragment.compiler, &file.compiler)
                 || same_compiler_semantics(&entry.fragment.compiler, &file.compiler))
         {

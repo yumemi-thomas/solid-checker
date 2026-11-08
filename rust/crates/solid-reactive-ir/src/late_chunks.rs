@@ -104,23 +104,28 @@ impl<T: Send + Sync> FileChunks<T> {
             .retain(|path, _| slots.get(path.as_str()) == Some(&1));
         let chunks = &cache.chunks;
         let held_once = |file: &FileFacts| slots.get(file.path.as_str()) == Some(&1);
-        let outcomes = crate::pipeline::parallel_slice_results(inputs.files, |file| {
-            if inputs.unchanged_paths.contains(file.path.as_str())
-                && held_once(file)
-                && let Some(chunk) = chunks.get(file.path.as_str())
-                && chunk.source_hash == file.source_hash
-                && (Arc::ptr_eq(&chunk.compiler, &file.compiler)
-                    || crate::cache::same_compiler_semantics(&chunk.compiler, &file.compiler))
-                && inputs.discovery.answer_as_recorded(&chunk.discovery)
-                && chunk.proof.holds(inputs.lookup)
-            {
-                crate::base::reads::replay(&chunk.proof.reads);
-                return Outcome::Kept(Arc::clone(&chunk.value));
-            }
-            let ((value, discovery), reads) =
-                crate::base::reads::record(|| record_discovery(|| compute(file)));
-            Outcome::Computed(Arc::new(value), reads, discovery)
-        });
+        // Each worker asks a memo once for its slice (`reads::PassAnswers`).
+        let outcomes = crate::pipeline::parallel_slice_with_state(
+            inputs.files,
+            || crate::base::reads::PassAnswers::new(inputs.lookup),
+            |answers, file| {
+                if inputs.unchanged_paths.contains(file.path.as_str())
+                    && held_once(file)
+                    && let Some(chunk) = chunks.get(file.path.as_str())
+                    && chunk.source_hash == file.source_hash
+                    && (Arc::ptr_eq(&chunk.compiler, &file.compiler)
+                        || crate::cache::same_compiler_semantics(&chunk.compiler, &file.compiler))
+                    && inputs.discovery.answer_as_recorded(&chunk.discovery)
+                    && chunk.proof.holds(answers)
+                {
+                    crate::base::reads::replay(&chunk.proof.reads);
+                    return Outcome::Kept(Arc::clone(&chunk.value));
+                }
+                let ((value, discovery), reads) =
+                    crate::base::reads::record(|| record_discovery(|| compute(file)));
+                Outcome::Computed(Arc::new(value), reads, discovery)
+            },
+        );
         inputs
             .files
             .iter()

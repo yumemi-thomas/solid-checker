@@ -2123,25 +2123,28 @@ impl crate::base::reads::ReadAnswers for SemanticLookup<'_> {
         self.memos.store().id()
     }
 
-    fn memo_check(
+    fn memo_marks(&self) -> u64 {
+        self.memos.store().marks()
+    }
+
+    fn memo_answer(
         &self,
         store: u64,
         read: crate::base::reads::MemoRead,
-    ) -> crate::base::reads::MemoCheck {
-        use crate::base::reads::MemoCheck;
+    ) -> crate::base::reads::MemoAnswer {
+        use crate::base::reads::MemoAnswer;
         if store != self.memos.store().id() {
-            return MemoCheck::Moved;
+            return MemoAnswer::Decided(None);
         }
         if !crate::interproc::accessor_provenance::memo_read_decidable(
             self.memos.store(),
             read.table,
         ) {
-            return MemoCheck::Undecided;
+            return MemoAnswer::Undecided;
         }
         match self.memo_world().changed_at_checked(read.table, read.query) {
-            (_, true) => MemoCheck::Undecided,
-            (Some(changed_at), false) if changed_at == read.changed_at => MemoCheck::Same,
-            _ => MemoCheck::Moved,
+            (_, true) => MemoAnswer::Undecided,
+            (changed_at, false) => MemoAnswer::Decided(changed_at),
         }
     }
 

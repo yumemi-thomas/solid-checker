@@ -1119,13 +1119,15 @@ fn discover_summary_graph_nodes<'a, 'c>(
         .map(|file| file.path.as_str())
         .collect::<HashSet<_>>();
     cache.retain(|path, _| current_paths.contains(path.as_str()));
+    // One check pass: each memo is asked once (`reads::PassAnswers`).
+    let answers = crate::base::reads::PassAnswers::new(*lookup);
     let reusable_paths = facts
         .files
         .iter()
         .filter_map(|file| {
             (unchanged_paths.contains(file.path.as_str())
                 && cache.get(file.path.as_str()).is_some_and(|cached| {
-                    cached.proof.holds(*lookup)
+                    cached.proof.holds(&answers)
                         && super::transport_reads::hold_accessors(&cached.accessor_reads, accessors)
                         && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                             || same_compiler_semantics(&cached.compiler, &file.compiler))
@@ -2109,6 +2111,8 @@ fn collect_result_reads(
             // changes). The rest are recomputed together, on the workers the
             // first build uses: an edit that moves the stage's proof reruns
             // every file, and one at a time that was most of the edit.
+            // One check pass: each memo is asked once (`reads::PassAnswers`).
+            let answers = crate::base::reads::PassAnswers::new(*lookup);
             let reused = facts
                 .files
                 .iter()
@@ -2118,7 +2122,7 @@ fn collect_result_reads(
                             (Arc::ptr_eq(&cached.compiler, &file.compiler)
                                 || same_compiler_semantics(&cached.compiler, &file.compiler))
                                 && cached.dependencies.is_disjoint(&changed_dependencies)
-                                && cached.proof.holds(*lookup)
+                                && cached.proof.holds(&answers)
                                 && stage_proofs_hold
                                     .entry(Arc::as_ptr(&cached.stage_proof) as usize)
                                     .or_insert_with(|| {

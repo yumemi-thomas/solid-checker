@@ -140,8 +140,10 @@ impl<T: Eq + Send + Sync> ChunkSet<T> {
                     dirty.extend(readers.iter().copied());
                 }
             }
+            // One check pass: each memo is asked once (`reads::PassAnswers`).
+            let pass = crate::base::reads::PassAnswers::new(lookup);
             for (key, chunk) in &self.chunks {
-                if !dirty.contains(key) && !chunk.proof.holds(lookup) {
+                if !dirty.contains(key) && !chunk.proof.holds(&pass) {
                     dirty.insert(*key);
                 }
             }

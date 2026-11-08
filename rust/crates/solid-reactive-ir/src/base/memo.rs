@@ -937,6 +937,10 @@ pub(crate) struct Store<S: Schema> {
     /// Installs' reads not yet in the graph, split like the tables' shards.
     records: Box<[Mutex<Vec<Record>>; TABLE_SHARDS]>,
     revision: AtomicU32,
+    /// Bumped by every marking (a build's begin, a derived publish): a
+    /// reader that kept memo answers within a pass knows they may have
+    /// moved (`reads::PassAnswers`).
+    marks: std::sync::atomic::AtomicU64,
     /// A cycle or a verify-reused mismatch: the next [`Self::begin`] starts
     /// from an empty store.
     poisoned: AtomicBool,
@@ -951,6 +955,7 @@ impl<S: Schema> Store<S> {
         Self {
             tables: S::Tables::default(),
             graph: RwLock::default(),
+            marks: std::sync::atomic::AtomicU64::new(0),
             next: AtomicU32::new(0),
             inputs: Box::new(std::array::from_fn(|_| Mutex::default())),
             records: Box::new(std::array::from_fn(|_| Mutex::default())),
@@ -1007,7 +1012,13 @@ impl<S: Schema> Store<S> {
         self.mark(changed)
     }
 
+    /// How many markings this store has made ([`Self::mark`]).
+    pub(crate) fn marks(&self) -> u64 {
+        self.marks.load(Ordering::Acquire)
+    }
+
     fn mark(&self, changed: &[S::Input]) -> Invalidation {
+        self.marks.fetch_add(1, Ordering::AcqRel);
         // An input is interned when an install records it, so one no
         // reader records, in the graph or queued, marks nothing.
         let found = changed

@@ -998,6 +998,12 @@ impl MemoStore {
         self.id
     }
 
+    /// How many markings the store has made: a pass's kept memo answers
+    /// hold while this is unchanged (`reads::PassAnswers`).
+    pub(crate) fn marks(&self) -> u64 {
+        self.store.marks()
+    }
+
     /// A query of `table`, named for a diagnostic.
     pub(crate) fn describe(&self, table: TableId, query: super::QueryId) -> String {
         self.store.describe(table, query)

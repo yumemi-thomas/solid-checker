@@ -736,6 +736,8 @@ pub(super) fn reachable_call_multiplicity_incremental(
     let mut recomputed_paths = HashSet::<String>::default();
     let mut topology_unchanged = !multiplicity_by_path.is_empty() && removed_paths.is_empty();
     let mut recomputed = Vec::new();
+    // One check pass: each memo is asked once (`reads::PassAnswers`).
+    let answers = crate::base::reads::PassAnswers::new(lookup);
     for file in &facts.files {
         let reusable = (typescript_unchanged || typescript_delta.is_some())
             && cache.get(file.path.as_str()).is_some_and(|cached| {
@@ -746,7 +748,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
                     indexes.resolution_digest(file.path.as_str()),
                     typescript_unchanged,
                     typescript_delta,
-                ) && cached.proof.holds(lookup)
+                ) && cached.proof.holds(&answers)
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))
             });

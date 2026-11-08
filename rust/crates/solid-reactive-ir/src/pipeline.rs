@@ -1091,6 +1091,54 @@ where
     })
 }
 
+/// [`parallel_slice_results`] with a state each worker builds once (`init`)
+/// for its slice: what a worker learns while checking one item (a memo's
+/// answer in this build) serves its next ones. Results come back in input
+/// order and do not depend on the state.
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn parallel_slice_with_state<T, S, R, I, F>(items: &[T], init: I, analyze: F) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    I: Fn() -> S + Sync,
+    F: Fn(&S, &T) -> R + Sync,
+{
+    let workers = available_analysis_workers().min(items.len());
+    if workers <= 1 || items.len() < 256 {
+        let state = init();
+        return items.iter().map(|item| analyze(&state, item)).collect();
+    }
+    let chunk_size = items.len().div_ceil(workers);
+    let recording = WorkerContext::of_caller();
+    std::thread::scope(|scope| {
+        let handles = items
+            .chunks(chunk_size)
+            .map(|chunk| {
+                let (init, analyze) = (&init, &analyze);
+                scope.spawn(move || {
+                    on_worker(recording, || {
+                        let state = init();
+                        chunk
+                            .iter()
+                            .map(|item| analyze(&state, item))
+                            .collect::<Vec<_>>()
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .flat_map(|handle| {
+                joined(
+                    handle
+                        .join()
+                        .expect("parallel Reactive IR analysis worker panicked"),
+                )
+            })
+            .collect()
+    })
+}
+
 /// What a parallel helper's workers inherit from the spawning thread:
 /// whether it records its reads ([`crate::base::reads`]), and whether it is
 /// checking a proof ([`crate::base::memo::derived::deferring`]).

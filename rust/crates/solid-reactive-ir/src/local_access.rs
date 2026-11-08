@@ -1327,17 +1327,24 @@ impl LocalAccessContext<'_, '_> {
             // time it was most of the stage on a large project.
             let kept = &cache.files;
             let files = &self.facts.files;
-            let reusable = parallel_slice_results(files, |file| {
-                exact_typescript_delta
-                    && kept.get(file.path.as_str()).is_some_and(|cached| {
-                        self.cached_matches(
-                            file,
-                            cached,
-                            unchanged_paths.contains(file.path.as_str()),
-                            &changed_dependencies,
-                        )
-                    })
-            });
+            // Each worker asks a memo once for its whole slice
+            // (`reads::PassAnswers`): the chunks' proofs share most reads.
+            let reusable = crate::pipeline::parallel_slice_with_state(
+                files,
+                || crate::base::reads::PassAnswers::new(self.lookup),
+                |answers, file| {
+                    exact_typescript_delta
+                        && kept.get(file.path.as_str()).is_some_and(|cached| {
+                            self.cached_matches(
+                                file,
+                                cached,
+                                unchanged_paths.contains(file.path.as_str()),
+                                &changed_dependencies,
+                                answers,
+                            )
+                        })
+                },
+            );
             let mut recompute = Vec::new();
             for (file, reusable) in files.iter().zip(reusable) {
                 if reusable {
@@ -1559,10 +1566,11 @@ impl LocalAccessContext<'_, '_> {
         cached: &CachedLocalAccessFile,
         unchanged_path: bool,
         changed_dependencies: &HashSet<SymbolId>,
+        answers: &dyn crate::base::reads::ReadAnswers,
     ) -> bool {
         unchanged_path
             && cached.source_hash == file.source_hash
-            && cached.proof.holds(self.lookup)
+            && cached.proof.holds(answers)
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
             // A file's async reads depend on the whole program's async
