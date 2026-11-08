@@ -1,0 +1,11 @@
+{
+  "commit": "b571e6c5bcfba9739adf5c22157742869ab905ed",
+  "baseline": "c538da427c187b1b7195117c1b28fae481f3c1c4",
+  "judgeRev": "b571e6c5bcfba9739adf5c22157742869ab905ed",
+  "tool": "sweep",
+  "secondPath": false,
+  "args": ["--jobs", "8", "--manifest", "scripts/corpus/rc21-manifest.json"],
+  "ids": [],
+  "chrome": false,
+  "note": "ADR 0906 (C2): one corpus sweep of the frozen rc.21 apps, commit against baseline at the same root. It only adds patches (top/parent/frames and sloppy this as the global object; a classic script's enum and import-equals names), so expect U up or flat and V down or flat. List every moved row with code, blocker, path and line, and say whether any V went."
+}

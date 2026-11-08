@@ -7092,5 +7092,11 @@
   "found": "C2, the 0904 coverage in a second worktree (R3e's stale relabel)",
   "fixed": "ADR 0905",
   "outside": "the generator judges each program at one path, so no grid can see a row that moves with the path; process test path_independence_process copies the fixture to eight directories and fails on the build before (`cccccc` against `a`)"
+ },
+ {
+  "finding": "ADR 0906 (review R64): the patch census knew the global object only by name, so a classic script's `this.setTimeout = f`, a module's `top.setTimeout = f` (`parent`, `frames`), and a classic script's `enum Promise` or `import X = A.B` replaced a standard global with no patch",
+  "found": "review R64 and the review of ADR 0904 (565cb75a7)",
+  "fixed": "ADR 0906",
+  "outside": "the generator prints one ES module per program and judges in one frame: no classic script, no sloppy `this`, and `top` is the window it already names; fixtures classic-script-this-patch, top-window-patch and classic-script-enum-global (certified on c538da427, uncertifiable on b6) and their twin top-window-local pin it"
  }
 ]

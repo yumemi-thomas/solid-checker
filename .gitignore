@@ -1217,3 +1217,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/classic-script-global-let/node_modules/**
 !fixtures/reactive-ir/classic-script-global-module/node_modules/
 !fixtures/reactive-ir/classic-script-global-module/node_modules/**
+!fixtures/reactive-ir/classic-script-this-patch/node_modules/
+!fixtures/reactive-ir/classic-script-this-patch/node_modules/**
+!fixtures/reactive-ir/top-window-patch/node_modules/
+!fixtures/reactive-ir/top-window-patch/node_modules/**
+!fixtures/reactive-ir/classic-script-enum-global/node_modules/
+!fixtures/reactive-ir/classic-script-enum-global/node_modules/**
+!fixtures/reactive-ir/top-window-local/node_modules/
+!fixtures/reactive-ir/top-window-local/node_modules/**

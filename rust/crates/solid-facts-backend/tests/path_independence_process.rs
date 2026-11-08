@@ -51,14 +51,23 @@ fn a_fixture_has_the_same_findings_under_every_path() {
         .join("../../../fixtures/reactive-ir/loading-on-outside-hold");
     let parent = temporary_directory("path-independence");
     // Eight names: on the build before, about half the paths kept each label.
-    let reports = ["a", "bb", "cccccc", "loh-copy", "x1", "projects-y", "zz-app", "q"]
-        .iter()
-        .map(|name| {
-            let directory = parent.join(name);
-            copy_tree(&fixture, &directory);
-            (*name, findings_at(&typefacts, &directory))
-        })
-        .collect::<Vec<_>>();
+    let reports = [
+        "a",
+        "bb",
+        "cccccc",
+        "loh-copy",
+        "x1",
+        "projects-y",
+        "zz-app",
+        "q",
+    ]
+    .iter()
+    .map(|name| {
+        let directory = parent.join(name);
+        copy_tree(&fixture, &directory);
+        (*name, findings_at(&typefacts, &directory))
+    })
+    .collect::<Vec<_>>();
     for (name, report) in &reports[1..] {
         assert_eq!(
             report, &reports[0].1,
