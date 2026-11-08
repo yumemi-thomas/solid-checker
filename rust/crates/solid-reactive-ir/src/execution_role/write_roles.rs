@@ -2538,7 +2538,10 @@ pub(super) fn write_role_walk<'f>(
         );
     }
     // ADR 0782: a component a cleanup mounts writes inside that disposal.
-    if direct == ExecutionRole::UntrackedRendering {
+    // Only for a guard that stands down there: `action` and `onFlush` test
+    // the owner alone and never read the disposal depth (`Rejects`), so a
+    // component a cleanup mounts calls them in an owned scope (Chrome).
+    if direct == ExecutionRole::UntrackedRendering && root_body != RootBodyGuard::Rejects {
         use solid_dialect::WriteGuardInDisposal as Guard;
         let guard = lookup.dialect.write_guard_in_disposal();
         let reach = (guard != Guard::Rejects)

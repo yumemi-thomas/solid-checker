@@ -5989,5 +5989,27 @@
    "mx-strict-read-untracked-flw-flow-show-kid-calls-children-signal-direct-none"
   ],
   "rediscovered": "fixture show-named-child-length ComponentParent and HeldFragment: 8f07d4b92 no row at the read; r62 SC1001 U there; IntrinsicParent and ReturnedFragment stay tracked. The census twins (4, Chrome confirmed) are recall gaps on both builds: the kid twin's read already had a U, the held-fragment twin's U sits off the read's lines"
+ },
+ {
+  "finding": "ADR 0782's mount arm (a component only a cleanup mounts runs in that disposal, where the write guard stands down) also stood down for `action` and `onFlush`, whose guards ignore the disposal depth: `createRoot(() => <K1 />)` inside `onCleanup` with K1 calling either was certified, and Chrome raises the code",
+  "found": "Part 17's flip-final (s3 ledger), census cleanup-mount",
+  "fixed": "ADR 0782 amendment: the arm needs a guard that stands down in a disposal",
+  "grid": "mx-census",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-cleanup-mount-x-direct-none"
+  ],
+  "rediscovered": "census cleanup-mount, -mixed, handler-mount for the two codes (6, Chrome confirmed): 7bb11d203 2 certified false cleans (cleanup-mount), 4 agree; new build 6 agree. Legal REACTIVE_WRITE/STRICT_READ (3,702 programs): 0 false positives on both"
+ },
+ {
+  "finding": "The same ADR 0782 arm for `onFlush` (ON_FLUSH_IN_OWNED_SCOPE), whose guard tests the owner as `action`'s does",
+  "found": "Part 17's flip-final (s3 ledger), census cleanup-mount",
+  "fixed": "ADR 0782 amendment: the arm needs a guard that stands down in a disposal",
+  "grid": "mx-census",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-cleanup-mount-x-direct-none"
+  ],
+  "rediscovered": "see the ACTION_CALLED_IN_OWNED_SCOPE entry above: 7bb11d203 certified false clean; new build agree"
  }
 ]

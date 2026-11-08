@@ -24,6 +24,8 @@ declare module "solid-js" {
   export function latest<T>(fn: () => T): T;
   export function isPending(fn: () => unknown): boolean;
   export function onCleanup(fn: () => void): void;
+  export function onFlush(fn: () => void): void;
+  export function action<A extends unknown[], R>(fn: (...args: A) => Generator<unknown, R, unknown>): (...args: A) => Promise<R>;
   export function children(fn: () => unknown): Accessor<unknown> & { toArray: () => unknown[] };
   export function mapArray<T, U>(list: () => readonly T[], map: (value: T) => U): Accessor<U[]>;
   export function repeat<T>(count: () => number, map: (index: number) => T): Accessor<T[]>;
