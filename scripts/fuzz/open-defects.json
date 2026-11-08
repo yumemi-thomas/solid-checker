@@ -915,15 +915,6 @@
    "certified": false
   },
   {
-   "id": "flip/st-tracked-handled-flush",
-   "item": "R3f (R3e's successor; coordinator, Part 17): V in a helper a tracked effect runs under <Errored>: the boundary handles the throw and Chrome logs nothing. Kept here when b6b38884b took st-* out of the census",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "leaf-owner-forbidden-call"
-   ]
-  },
-  {
    "id": "flip/st-tracked-handled-sync-memo",
    "item": "R3e: a sync memo in a helper a tracked effect runs under <Errored>: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site, and the V beside it is the pair PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async. Scored stacked-claim by exact id, stacked-pairs.json patternClaims, while its twin holds. Kept here when b6b38884b took st-* out of the census",
    "outcome": "stacked-claim",
