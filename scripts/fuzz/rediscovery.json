@@ -7256,5 +7256,11 @@
   "found": "review D36",
   "fixed": "ADR 0901 (facts schema 92)",
   "outside": "the generator emits no eval or with; solid-facts unit test local_alias_members_need_no_direct_eval_and_a_module and fixture primitive-namespace-aliases/variants/eval-box hold it"
+ },
+ {
+  "finding": "ADR 0904 (review D37): a classic script's top-level declaration (`function setTimeout`, `var Math`, `let Promise`) replaces the standard global with no write, and the patch census raised no patch for it, so every patch_veto user trusted the replaced global",
+  "found": "review D37 of ADR 0903's trust design",
+  "fixed": "ADR 0904",
+  "outside": "the generator prints one ES module per program, so no classic script can declare a global beside it; fixtures classic-script-global-function and classic-script-global-let (certified on i7 = 608c38e38; violation and uncertifiable on b1) and their module twin classic-script-global-module pin it"
  }
 ]
