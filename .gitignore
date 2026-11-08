@@ -1239,13 +1239,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/classic-script-enum-global/node_modules/**
 !fixtures/reactive-ir/top-window-local/node_modules/
 !fixtures/reactive-ir/top-window-local/node_modules/**
-!fixtures/reactive-ir/impostor-census-key-proved/node_modules/
-!fixtures/reactive-ir/impostor-census-key-proved/node_modules/**
-!fixtures/reactive-ir/impostor-census-key-open/node_modules/
-!fixtures/reactive-ir/impostor-census-key-open/node_modules/**
-!fixtures/reactive-ir/impostor-census-trust-alias/node_modules/
-!fixtures/reactive-ir/impostor-census-trust-alias/node_modules/**
-!fixtures/reactive-ir/impostor-census-trust-member/node_modules/
-!fixtures/reactive-ir/impostor-census-trust-member/node_modules/**
 !fixtures/reactive-ir/primitive-indirect-call/node_modules/
 !fixtures/reactive-ir/primitive-indirect-call/node_modules/**

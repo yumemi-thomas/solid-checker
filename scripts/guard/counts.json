@@ -8,7 +8,7 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1129,
+  "SC1001 function-run-unplaced": 1127,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -33,7 +33,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 461,
+  "SC2001 function-run-unplaced": 460,
   "SC2001 function-unentered": 2,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 3,
@@ -163,7 +163,7 @@
   "SC9012 function-call-target-unresolved": 8,
   "SC9012 function-prototype-callee-unresolved": 1,
   "SC9012 handed-member-dispatch": 420,
-  "SC9012 handed-member-read": 64,
+  "SC9012 handed-member-read": 65,
   "SC9012 handed-read-after-await": 10,
   "SC9012 import-unresolved": 37,
   "SC9012 installed-member": 53,
@@ -186,7 +186,7 @@
   "SC9012 returned-callable-outside-source-universe": 47,
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
-  "SC9012 standard-member-impostor": 121,
+  "SC9012 standard-member-impostor": 124,
   "SC9012 store-key-undecided": 12,
   "SC9012 tuple-iteration-written": 1362,
   "SC9012 type-only-source": 85,
@@ -209,7 +209,7 @@
   "SC9012 value-through-new": 29,
   "SC9012 value-to-unresolved-callee": 255,
   "SC9012 value-use-unclassified": 70,
-  "SC9012 withheld-object-member": 53,
+  "SC9012 withheld-object-member": 51,
   "SC9014 dialect-detection": 149,
   "SC9014 router-release": 4,
   "SC9015 compiler-facts": 4,
@@ -1424,45 +1424,6 @@
    "kind": "relabel",
    "relabeledTo": "SC9012 value-forwarded",
    "note": "the merge of C2's ADR 0905 onto census 119e4b500 (Part 17, s5): beside C2's `setT(2)` at App.tsx 2472, the row at 2380 [2380,2383) also takes the span's least blocker, value-forwarded, now that a second walk reaches it on the merged tree (R1f/R1g's ADR 0901 names more aliases); uncertifiable before and after, same rule and span"
-  },
-  {
-   "fixture": "uncertifiable-repro/sc9012",
-   "adr": "ADR 0903",
-   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::proved_key",
-   "fixtures": {
-    "proved": "uncertifiable-repro/sc9012",
-    "open": "uncertifiable-repro/sc9012"
-   },
-   "key": "SC2001 function-run-unplaced",
-   "from": 9,
-   "to": 8,
-   "note": "leaf-project-function.tsx [499,519): fetchCurrentUser is async and its real Promise.then is standard once inert key/value sites lose their wildcard; the setter runs deferred, outside the caller computation."
-  },
-  {
-   "fixture": "uncertifiable-repro/sc9012",
-   "adr": "ADR 0903",
-   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::proved_key",
-   "fixtures": {
-    "proved": "uncertifiable-repro/sc9012",
-    "open": "uncertifiable-repro/sc9012"
-   },
-   "key": "SC9012 handed-member-read",
-   "from": 7,
-   "to": 6,
-   "note": "leaf-project-function.tsx [465,488): async fetchCurrentUser returns a real promise; standard then dispatch is restored, so its handed-member and impostor obligations close."
-  },
-  {
-   "fixture": "uncertifiable-repro/sc9012",
-   "adr": "ADR 0903",
-   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::proved_key",
-   "fixtures": {
-    "proved": "uncertifiable-repro/sc9012",
-    "open": "reactive-ir/impostor-census-key-open"
-   },
-   "key": "SC9012 standard-member-impostor",
-   "from": 7,
-   "to": 0,
-   "note": "Standard dispatch restored at exported-dispatch.ts [708,728), leaf-project-function.tsx [465,488), param-member-diverge-function.tsx [731,743), param-member-forwarded.tsx [454,478), param-member-path-dom.tsx [509,537), param-member-path.tsx [332,352), withheld-member.tsx [507,523). Existing exported-parameter/listener-reach rows remain where those obligations apply; literal-key/value/copy proof removes the unrelated wildcard, not a receiver or placement obligation."
   }
  ],
  "renames": []
