@@ -668,3 +668,27 @@ Open:
   consoleErrors), StatusError cause placement in runtime-oracle.mjs, pageerror judging (flw-settled-report-error).
 - ADR 0852's generator rows may be the same console-log blind spot (NoOwnerError logged by a reading effect): re-check once
   codeOfLogged lands.
+
+## R3f handoff (2026-11-08)
+
+Branches: claude/flip-r3c (worktree sc-worktrees.noindex/r3c), claude/flip-r3f-judge (worktree sc-worktrees.noindex/r3f-judge, from
+the census tip 47a475c7b; node_modules and the two pinned installs are symlinks to r3c's). Scratch: sc-scratch.noindex/flip-r3c/r3f
+(bld.sh <tag> release build -> flip-r3c/r<tag>; fwd.sh/fwdc.sh, unp.sh/unp2.sh, g852.sh, stfz.sh, audit.sh: the fuzz runs below;
+old-worktrees/: R3e's r3c-run and r3c-run2 changes, saved before their removal). Builds kept: rw1 (ec444faa6), rx1 (78b3be310),
+ry1 (7c4d54a78).
+
+Commits (none pushed; the integrator merges):
+- r3c 78b3be310 ADR 0899: a layer that also hands its callback on is still past the await (7 aw-forward-fan-run FP -> U).
+- r3c 7c4d54a78 ADR 0908: a component written inside an export is no export (pattern flip/st-tracked-handled-flush FP -> U). On
+  merge the integrator removes that pattern's open-defects entry (falsePositive ratchet -1): the entry is only on the census tip.
+- judge 2e2f7c9f0, 1f1486346 (renumber 0900 -> 0907), 8a4c5540e (cause frames only with no own frame or the same code),
+  7186a6128 (R66: any own frame of the program), 381ed7359 (R66 follow-up: any file of the case at any depth/extension, not its
+  node_modules; ADR 0852's 4 rows into open-work). ADR 0907: logged errors placed by their own frames. 80 aw-* census rows: 74
+  unplaced + 6 unjudged -> 33 agree, 37 recall-gap, 10 not-fired; 0 FP/FC; the follow-ups moved none.
+
+Findings: codeOfLogged, consoleErrors, cause frames and window-error-listener capture had already landed (da8695d5f, 565bffd79);
+what was left was positions. ADR 0852's 4 NO_OWNER_CONTEXT/DYNAMIC_STATIC_PROMISE gen-*-each rows rest on the old blind spot
+(Chrome logs the code at the site): a lost proof, recorded in open-work, narrowing after #173 (coordinator). Stop-row audit for
+aw-then-* and lst-body-shared: closed on 7c4d54a78, 0 FP/FC/misplaced. Not judged: the oracle-confirm path (Playwright console text
+has no stack), so a logged code there stays an open candidate. Possible gap, not probed: rc.21 `[FLUSH_IN_ACTION]` is also a plain
+throw with no diagnostic (dev-shared.js flush), outside ADR 0893's plain_throw list.
