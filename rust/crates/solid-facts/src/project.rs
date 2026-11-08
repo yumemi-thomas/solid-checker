@@ -855,7 +855,18 @@ impl FileFacts {
     /// calls read (ADR 0781), through assertions and bindings that hold it.
     #[must_use]
     pub fn standard_root(&self, span: Span) -> Option<StandardRoot> {
-        const GLOBAL_ROOTS: [&str; 4] = ["globalThis", "window", "self", "global"];
+        // ADR 0906 (review R64): `top`, `parent` and `frames` are the window
+        // of an unframed page (ADR 0803's window-valued names), and sloppy
+        // code's `this` is the global object.
+        const GLOBAL_ROOTS: [&str; 7] = [
+            "globalThis",
+            "window",
+            "self",
+            "global",
+            "top",
+            "parent",
+            "frames",
+        ];
         let ast = &self.ast;
         let mut value = ast.peel_ts_sugar_span(span);
         for _ in 0..16 {
@@ -875,11 +886,15 @@ impl FileFacts {
             return None;
         }
         let text = self.source_text(value)?.trim();
+        let sloppy_this =
+            self.source_text(root).map(str::trim) == Some("this") && self.sloppy_this(root);
+        let global = |name: &str| GLOBAL_ROOTS.contains(&name) || (sloppy_this && name == "this");
         let text = GLOBAL_ROOTS
             .iter()
+            .chain(sloppy_this.then_some(&"this"))
             .find_map(|name| text.strip_prefix(name)?.strip_prefix('.'))
             .unwrap_or(text);
-        if GLOBAL_ROOTS.contains(&text) {
+        if global(text) {
             return Some(StandardRoot::Global);
         }
         let plain = |name: &str| {
@@ -895,6 +910,31 @@ impl FileFacts {
             None if plain(text) => Some(StandardRoot::Constructor(text.to_owned())),
             _ => None,
         }
+    }
+
+    /// Review D4 and R64: whether `this` at `span` may be the global object:
+    /// sloppy code (a file that is no ECMAScript module, with no `"use
+    /// strict"` prologue), outside every class and every function whose
+    /// prologue says `"use strict"`. A plain call or the top level gives it the
+    /// global object; another receiver only makes this a patch more.
+    #[must_use]
+    pub fn sloppy_this(&self, span: Span) -> bool {
+        let ast = &self.ast;
+        let strict = |directive: &str| directive == "use strict";
+        ast.imports.is_empty()
+            && ast.module_level_exports().next().is_none()
+            && !ast
+                .module_directives
+                .iter()
+                .any(|directive| strict(&directive.value))
+            && !ast.classes.iter().any(|class| class.span.contains(span))
+            && !ast.functions.iter().any(|function| {
+                function.span.contains(span)
+                    && function
+                        .directives
+                        .iter()
+                        .any(|directive| strict(directive))
+            })
     }
 
     /// The spans of this file's calls whose callee, past transparent
