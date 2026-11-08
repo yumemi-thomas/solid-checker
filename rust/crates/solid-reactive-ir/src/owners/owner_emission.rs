@@ -1165,7 +1165,9 @@ mod arm_ratchet {
     fn every_emission_arm_names_its_ending() {
         let source = include_str!("owner_emission.rs");
         let mut arms = std::collections::BTreeSet::new();
-        let marker = "arm_id!(";
+        // Split so `scripts/fuzz/roles.mjs`, which scans for the macro, does not
+        // read this literal as an arm.
+        let marker = concat!("arm_", "id!(");
         let mut rest = source;
         while let Some(at) = rest.find(marker) {
             rest = &rest[at + marker.len()..];
