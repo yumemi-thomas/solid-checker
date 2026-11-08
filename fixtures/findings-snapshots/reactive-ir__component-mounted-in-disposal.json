@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/component-mounted-in-disposal/App.tsx",
-      "start": 184,
-      "end": 191,
+      "start": 201,
+      "end": 208,
       "fixes": 0
     },
     {
@@ -17,8 +17,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/component-mounted-in-disposal/App.tsx",
-      "start": 237,
-      "end": 244,
+      "start": 254,
+      "end": 261,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-mounted-in-disposal/App.tsx",
+      "start": 521,
+      "end": 526,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-mounted-in-disposal/App.tsx",
+      "start": 580,
+      "end": 587,
       "fixes": 0
     },
     {
@@ -28,8 +48,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/component-mounted-in-disposal/App.tsx",
-      "start": 296,
-      "end": 303,
+      "start": 649,
+      "end": 656,
       "fixes": 0
     }
   ]
