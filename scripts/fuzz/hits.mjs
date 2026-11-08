@@ -29,7 +29,7 @@ export const ORDER_LIMIT = 400;
 export const INSTRUMENT_PRELUDE = `${PRELUDE_MARK}function __h(id: number): void {
   const g = globalThis as unknown as { __scHits?: Record<number, number>; __scOrder?: number[] };
   const hits = (g.__scHits ??= {});
-  hits[id] = (hits[id] ?? 0) + 1;
+  hits[id >>> 0] = (hits[id >>> 0] ?? 0) + 1;
   const order = (g.__scOrder ??= []);
   if (order.length < ${ORDER_LIMIT}) order.push(id);
   const out = document.getElementById("sc-hits");

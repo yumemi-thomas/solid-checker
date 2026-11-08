@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-census-key-proved/App.tsx",
+      "start": 986,
+      "end": 993,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-census-key-proved/App.tsx",
+      "start": 1010,
+      "end": 1017,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-census-key-proved/App.tsx",
+      "start": 1025,
+      "end": 1034,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-census-key-proved/App.tsx",
+      "start": 1086,
+      "end": 1093,
+      "fixes": 0
+    }
+  ]
+}

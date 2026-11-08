@@ -90,6 +90,8 @@ const PATCHES = {
   // ADR 0877: a `const` holding a symbol, the global `Symbol` replaced first: the key may be a name.
   "patch-const-symbol": [`(globalThis as any).Symbol = { for: () => "then" }; const sk = (Symbol as any).for("k"); (Promise.prototype as any)[sk] = ${SYNC_PROTO};`, "Promise.resolve().then"],
   "patch-let-assigned-key": [`${PATCH_KEYS} let gp: any = {}; gp = Object.getPrototypeOf(Promise.resolve()); gp[pm] = ${SYNC_PROTO};`, "Promise.resolve().then"],
+  // ADR 0903 (review D35 A1): a template key may spell `prototype`: the program's own prototype is Promise's.
+  "proto-template-key": [`function PtF() {} const ptx: string = "type"; (PtF as any)[\`proto\${ptx}\`] = Promise.prototype; (PtF as any).prototype.then = ${SYNC_PROTO};`, "Promise.resolve().then"],
   "patch-key-ctor": [`${PATCH_KEYS} let gA = false; const gR = (globalThis as any)[pk]; (globalThis as any)[pk] = class extends gR { static resolve(v?: unknown) { return gA ? ((gA = false), { then(f: () => void) { f(); } }) : gR.resolve(v); } };`, "(gA = true, Promise.resolve()).then"],
 };
 // ADR 0840: the impostor away from the receiver (a parameter, a field, a return, a generic, a member), and with no assertion at all
@@ -124,6 +126,10 @@ const ADD_SYNC = 'function (this: any, t: string, cb: any, ...r: any[]) { if (t 
 const HOST_CALL = (target) => (h) => `${target}.addEventListener("x-sync", ${h})`;
 const HOST_HOLD = "const hO = EventTarget.prototype.addEventListener;";
 const IN_RUN = '/\\bC\\d+\\b/.test(new Error().stack ?? "")';
+// ADR 0903: a key built at run time, and the sync `then` a key or value lie installs.
+const KEY_THEN = '["th", "en"].join("")';
+const KEY_PROTO = '["__pro", "to__"].join("")';
+const SYNC_ARROW = "(f: () => void) => { f(); }";
 const RECEIVERS = {
   // R10c: a host global's own member, written under its lowercase spelling, through an alias, or handed to a helper.
   "recv-doc-patch": () => ({ hoisted: [expr(domExpr(`${HOST_HOLD} (document as any).addEventListener = ${ADD_SYNC};`))], held: [], call: HOST_CALL("document") }),
@@ -144,6 +150,31 @@ const RECEIVERS = {
   "recv-symbol-for-const": (t, q) => ({ hoisted: [expr(domExpr(`const ${t}k = Symbol.for("k"); const ${t}o: any = {}; ${t}o[${t}k] = () => 0;`))], held: [decl(q, domExpr("(x: number[]) => x"))], callee: `${q}([1]).forEach` }),
   // R10b: a promise's species, the prototype's constructor replaced by a class the standard's own then builds from.
   "recv-species-promise": (t) => ({ hoisted: [expr(domExpr(`class ${t} { static get [Symbol.species](): unknown { return ${IN_RUN} ? ${t} : Promise; } constructor(run: (a: unknown, b: unknown) => void) { run(() => {}, () => {}); } then(f: () => void) { f(); return this; } } (Promise.prototype as any).constructor = ${t};`))], held: [], callee: "Promise.resolve().then(() => 0).then" }),
+  // ADR 0903 (casts stage 3), each a lie a key or value proof must not take: the key or value reaches `then` on the program's own object,
+  // whose sync `then` the cast receiver runs on the caller's stack.
+  ...Object.fromEntries(Object.entries({
+    "key-any-param": (t) => `const ${t}p = (o: any, k: number, v: unknown) => { o[k] = v; }; ${t}p(${t}, "then" as any, ${SYNC_ARROW});`,
+    "key-cast": (t) => `const ${t}s = ${KEY_THEN}; ${t}[${t}s as unknown as number] = ${SYNC_ARROW};`,
+    "key-json": (t) => `const ${t}i: number = JSON.parse('"then"'); ${t}[${t}i] = ${SYNC_ARROW};`,
+    "key-tostring": (t) => `const ${t}i = { toString() { return "then"; } } as unknown as number; ${t}[${t}i] = ${SYNC_ARROW};`,
+    "key-let-written-string": (t) => `let ${t}i = 0; ${t}i++; const ${t}w = () => { (${t}i as any) = "then"; }; ${t}w(); ${t}[${t}i] = ${SYNC_ARROW};`,
+    "key-plus-string": (t) => `const ${t}a: any = "th"; ${t}[${t}a + "en"] = ${SYNC_ARROW};`,
+    "key-template-tail": (t) => `const ${t}a: any = "th"; ${t}[\`\${${t}a}en\`] = ${SYNC_ARROW};`,
+    "key-length-patched": (t) => `Object.defineProperty(Promise.prototype, "length", { get: () => "then", configurable: true }); ${t}[(Promise.resolve() as any).length] = ${SYNC_ARROW};`,
+    "value-cast": (t) => `const ${t}k = ${KEY_THEN}; ${t}[${t}k] = (${SYNC_ARROW}) as unknown as number;`,
+    "value-new-proxy": (t) => `const ${t}k = ${KEY_THEN}; ${t}[${t}k] = new Proxy(${SYNC_ARROW}, {});`,
+    "value-new-object": (t) => `const ${t}k = ${KEY_THEN}; ${t}[${t}k] = new Object(${SYNC_ARROW});`,
+    "copy-tostring-key": (t) => `const ${t}s = { x: ${SYNC_ARROW} }; const ${t}k: any = { n: 0, toString() { return this.n++ ? "then" : "x"; } }; ${t}[${t}k] = (${t}s as any)[${t}k];`,
+    // A proof that trusts a standard function the program patches: the key is "then", the value the sync function.
+    "key-math-patched": (t) => `const ${t}f = Math.floor; (Math as any).floor = () => "then"; ${t}[Math.floor(1)] = ${SYNC_ARROW}; Math.floor = ${t}f;`,
+    // R65: a named write through an unrooted Window alias invalidates a trusted function too.
+    "key-math-window-alias": (t) => `const ${t}w: any = document.defaultView; const ${t}M = Math; ${t}w.Math = { floor: () => "then" }; ${t}[Math.floor(1)] = ${SYNC_ARROW}; ${t}w.Math = ${t}M;`,
+    "key-floor-window-alias": (t) => `const ${t}w: any = document.defaultView; const ${t}f = Math.floor; ${t}w.Math.floor = () => "then"; ${t}[Math.floor(1)] = ${SYNC_ARROW}; ${t}w.Math.floor = ${t}f;`,
+    "key-math-affix-alias": (t) => `const ${t}w: any = document.defaultView; const ${t}M = Math; const ${t}tail: string = "th"; ${t}w[\`Ma\${${t}tail}\`] = { floor: () => "then" }; ${t}[Math.floor(1)] = ${SYNC_ARROW}; ${t}w.Math = ${t}M;`,
+    "key-counter-trust-reuse": (t) => `const ${t}w: any = document.defaultView; const ${t}f = Math.floor; ${t}w.Math.floor = () => "then"; const ${t}fill = (a: any) => { let i = Math.floor(1); ${t}[i + a] = 0; ${t}[i] = ${SYNC_ARROW}; }; ${t}fill(0); ${t}w.Math.floor = ${t}f;`,
+    "value-map-patched": (t) => `const ${t}M = Map; (globalThis as any).Map = function () { return ${SYNC_ARROW}; }; ${t}.then = new Map(); (globalThis as any).Map = ${t}M;`,
+    "proto-object-literal": (t) => `const ${t}k = ${KEY_PROTO}; const ${t}l = ${SYNC_ARROW}; ${t}[${t}k] = { then: ${t}l };`,
+  }).map(([name, write]) => [name, (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = {}; ${write(t)}`))], held: [], callee: `(${t} as Promise<void>).then` })])),
 };
 // The same, quiet in Chrome: the checker took the program's own late method for the standard's in-place one. Each hands the callback to a microtask.
 const LATE_EACH = "(cb: () => void) => { queueMicrotask(cb); }";
@@ -172,6 +203,29 @@ const LATE_RECEIVERS = {
   "recv-symbol-shadow-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = [1]; { const Symbol = (_: string) => "forEach"; const ${t}k = Symbol("k"); ${t}[${t}k] = ${LATE_EACH}; }`))], held: [], callee: `(${t} as number[]).forEach` }),
   // R10d: replace dispatches through the first argument's Symbol.replace.
   "recv-replace-late": (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = { [Symbol.replace]: (s: string, cb: () => void) => { queueMicrotask(cb); return s; } };`))], held: [], call: (h) => `"x".replace(${t}, ${h} as any)` }),
+};
+// ADR 0903 (review D35 A1, A2): quiet in Chrome. The key may be `__proto__`, or the copy reads an inherited member: the array's `forEach`
+// becomes `Map.prototype.forEach`, which throws on the array, and the callback never runs. A key or value proof must not take these.
+const THROW_RECEIVERS = Object.fromEntries(Object.entries({
+  "proto-new-map": (t) => `const ${t}k = ${KEY_PROTO}; ${t}[${t}k] = new Map();`,
+  "proto-object-literal-proto": (t) => `const ${t}k = ${KEY_PROTO}; ${t}[${t}k] = { __proto__: Map.prototype };`,
+  "copy-inherited": (t) => `const ${t}m = new Map(); const ${t}k = ["for", "Each"].join(""); ${t}[${t}k] = (${t}m as any)[${t}k];`,
+  "copy-different-source": (t) => `const ${t}s = { forEach: 1 }; const ${t}m = new Map(); for (const k of Object.keys(${t}s)) ${t}[k] = (${t}m as any)[k];`,
+}).map(([name, write]) => [name, (t) => ({ hoisted: [expr(domExpr(`const ${t}: any = []; ${write(t)}`))], held: [], callee: `(${t} as number[]).forEach` })]));
+// ADR 0903: a key or value the census proves names no member, so a real promise's `then` is the standard's again and the callback runs
+// later (Chrome quiet). The build before took each key for `*` and withheld `then` on a receiver no fact proves.
+const KEY_RUN = "const kq = (x: Promise<void>) => x;";
+const KEY_LEGAL = {
+  "key-num-mul": "const ks: any = \"then\"; kx[ks * 2] = () => {};",
+  "key-num-counter": "for (let ki = 0; ki < 2; ki++) kx[ki] = () => {};",
+  "key-num-const": "const kn = 4; kx[kn] = () => {}; kx[kn + 1] = () => {};",
+  "key-num-math": "const kr: any = 1.5; kx[Math.floor(kr)] = () => {};",
+  "key-num-length": 'const ka = [1, 2]; kx[ka.length] = () => {}; kx["ab".length] = () => {};',
+  "key-template": "const ks: any = 3; kx[`x-${ks}`] = () => {};",
+  "key-concat": 'const ks: any = 3; kx["x-" + ks] = () => {}; kx[ks + "-y"] = () => {};',
+  "copy-entries": "const ks = { a: 1, b: () => {} }; for (const [k, v] of Object.entries(ks)) kx[k] = v;",
+  "copy-keys": "const ks = { a: 1, b: () => {} }; for (const k of Object.keys(ks)) kx[k] = (ks as any)[k];",
+  "value-new-array": 'const kk = ["a", "b"].join(""); kx[kk] = new Array(3); kx[kk] = { a: 1, b: "x", c: [1] };',
 };
 // ADR 0803: the iterator written back unchanged. The tripwires fire and the write still runs (Chrome warns): never a silent clean.
 const ITER_SAME = { "iter-same": "Array.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator];" };
@@ -511,10 +565,10 @@ export const FLIP_READ_LEGAL = {
   DYNAMIC_STATIC_PROMISE: [FLUSH_READ_STORED],
   // Scout A.6: `Function.prototype.call` patched to defer, then `h.call(null)`: the read leaves the body (Chrome quiet). The proof read
   // `CallableFunction.call`, whose patch keys a `Function.prototype.call` write never raised.
-  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), "patch-call-late"],
+  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), ...Object.keys(THROW_RECEIVERS), ...Object.keys(KEY_LEGAL), "patch-call-late"],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), ...Object.keys(ITER_PATCHES)],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), ...Object.keys(THROW_RECEIVERS), ...Object.keys(KEY_LEGAL), ...Object.keys(ITER_PATCHES)],
   STORE_WRITE_OUTSIDE_SETTER: ["arm-helper"],
   RESOLVE_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late", FLUSH_READ_STORED],
   UNTIL_IN_REACTIVE_SCOPE: [...HANDED_FLUSH_LEGAL, "entry-chain-handler", "async-entry-late", FLUSH_READ_STORED],
@@ -1134,11 +1188,15 @@ export function flipReadContext(context, stmts, kit) {
       default: return { body: [held], view: [button(kit.name("b"), [expr(call(ref(h)))]), button(kit.name("b"), [expr(call(ref(h)))])] };
     }
   }
-  const cast = CASTS[context] ?? RECEIVERS[context] ?? LATE_RECEIVERS[context];
+  const cast = CASTS[context] ?? RECEIVERS[context] ?? LATE_RECEIVERS[context] ?? THROW_RECEIVERS[context];
   if (cast) {
     const { hoisted = [], held, callee, call: run, files, importLines } = cast(kit.name("t"), kit.name("q"));
     const h = kit.name("f");
     return { hoisted, body: [...held, decl(h, fn(stmts)), expr(domExpr(run ? run(h) : `${callee}(${h})`))], view: [], ...(files ? { files, importLines } : {}) };
+  }
+  if (KEY_LEGAL[context]) {
+    const h = kit.name("f");
+    return { hoisted: [expr(domExpr(`${KEY_RUN} const kx: any = {}; ${KEY_LEGAL[context]}`))], body: [decl(h, fn(stmts)), expr(domExpr(`kq(Promise.resolve()).then(${h})`))], view: [] };
   }
   if (PROTO_LEGAL[context]) {
     const h = kit.name("f");

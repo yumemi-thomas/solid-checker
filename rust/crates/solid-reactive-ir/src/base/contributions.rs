@@ -11,7 +11,10 @@ use solid_facts::core::Span;
 use solid_facts::{FileFacts, StandardRoot};
 
 use super::file_table::{FileView, ItemKind};
+
+mod census_proofs;
 use crate::{HashMap, HashSet};
+use census_proofs::{Proofs, TRUST_SITE, TRUSTED};
 
 /// The build-wide inputs a contribution may read besides its file. A change
 /// of any of them is a different cache domain, so a fresh build.
@@ -1530,6 +1533,10 @@ enum CensusKey {
     Symbol,
     /// A key no fact names: any member.
     Unknown,
+    /// ADR 0903: a key proved to name no census member, `prototype`,
+    /// `__proto__` or host key, while the standard functions its proof
+    /// trusts are unpatched.
+    NoMember(Vec<&'static str>),
 }
 
 /// The key a property key at `key` names: written, quoted, a literal under
@@ -1561,6 +1568,32 @@ fn census_key(file: &FileFacts, key: Span, computed: bool) -> CensusKey {
         return CensusKey::Symbol;
     }
     crate::indexes::constant_string_key(file, peeled).map_or(CensusKey::Unknown, CensusKey::Named)
+}
+
+/// [`census_key`], and for a key it leaves open ADR 0903's proof that it names
+/// no member.
+fn proved_key(proofs: &mut Proofs<'_>, file: &FileFacts, key: Span, computed: bool) -> CensusKey {
+    match census_key(file, key, computed) {
+        CensusKey::Unknown if computed => proofs
+            .key(key)
+            .map_or(CensusKey::Unknown, CensusKey::NoMember),
+        key => key,
+    }
+}
+
+/// A trust-writer key excludes the trusted names as well as census members.
+fn proved_trust_key(
+    proofs: &mut Proofs<'_>,
+    file: &FileFacts,
+    key: Span,
+    computed: bool,
+) -> CensusKey {
+    match census_key(file, key, computed) {
+        CensusKey::Unknown if computed => proofs
+            .trust_key(key)
+            .map_or(CensusKey::Unknown, CensusKey::NoMember),
+        key => key,
+    }
 }
 
 /// Whether the value at `span` is no function, by its syntax: a primitive,
@@ -1673,6 +1706,26 @@ pub(crate) fn impostor_detail(
                 .get(SYMBOL_SITE)
                 .map(|site| format!("a symbol's site or a definer may hold `{member}`: {site}"))
         })
+        .or_else(|| {
+            holders.get(TRUST_SITE).map(|site| {
+                format!("a proof here trusts a standard function the program patches: {site}")
+            })
+        })
+}
+
+/// The census keys of the file's sites, sorted, and the keys it writes.
+#[cfg(test)]
+pub(crate) fn census_keys(file: &FileFacts) -> (Vec<&'static str>, Vec<&'static str>) {
+    let (members, mut writers) = impostor_sites(file);
+    let mut members = members
+        .into_iter()
+        .map(|(member, _)| member)
+        .collect::<Vec<_>>();
+    members.sort_unstable();
+    members.dedup();
+    writers.sort_unstable();
+    writers.dedup();
+    (members, writers)
 }
 
 /// Each census site of the file, by key, and the keys it writes on an object it
@@ -1682,13 +1735,15 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
     let ast = &file.ast;
     let mut members: Vec<(&'static str, Span)> = Vec::new();
     let mut writers: Vec<&'static str> = Vec::new();
-    let census_member = |key: CensusKey| match key {
+    let mut proofs = Proofs::new(file);
+    let census_member = |key: &CensusKey| match key {
         CensusKey::Named(name) => IMPOSTOR_MEMBERS
             .iter()
             .find(|member| **member == name)
             .copied(),
         CensusKey::Unknown => Some(ANY_MEMBER),
         CensusKey::Symbol => Some(SYMBOL_SITE),
+        CensusKey::NoMember(_) => None,
     };
     // A `__proto__` write replaces every member at once; `self` and
     // `globalThis` are themselves keys a host receiver stands on.
@@ -1697,11 +1752,28 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
         CensusKey::Named(name) if HOST_KEYS.contains(&name.as_str()) => {
             HOST_KEYS.iter().find(|key| **key == name).copied()
         }
-        key => census_member(key),
+        key => census_member(&key),
+    };
+    // ADR 0903: a proof that trusts standard functions raises them, and the
+    // site reopens as `*` where the program patches one ([`impostor_veto`]).
+    let trusted = |trust: &[&'static str], at: Span, members: &mut Vec<(&'static str, Span)>| {
+        if !trust.is_empty() {
+            members.push((TRUST_SITE, at));
+            members.extend(trust.iter().filter_map(|name| {
+                TRUSTED
+                    .iter()
+                    .find(|(trusted, _)| trusted == name)
+                    .map(|(_, key)| (*key, at))
+            }));
+        }
     };
     let mut note = |key: CensusKey, at: Span| {
-        members.extend(census_member(key).map(|member| (member, at)));
+        if let CensusKey::NoMember(trust) = &key {
+            trusted(trust, at, &mut members);
+        }
+        members.extend(census_member(&key).map(|member| (member, at)));
     };
+    let mut lean = Vec::new();
     let mut noted = Vec::new();
     let mut write = |key: CensusKey, object: Span| {
         if !fresh_object(file, object) {
@@ -1713,7 +1785,7 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
             continue;
         }
         note(
-            census_key(file, property.key, property.computed),
+            proved_key(&mut proofs, file, property.key, property.computed),
             property.key,
         );
     }
@@ -1721,11 +1793,14 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
         match element.kind {
             ClassElementKind::Method | ClassElementKind::Getter | ClassElementKind::Setter => {}
             ClassElementKind::Field => {
-                if element
-                    .value
-                    .is_none_or(|value| noncallable_value(file, value))
-                {
-                    continue;
+                // A field is defined, never set: its key installs no prototype.
+                match element.value.map(|value| proofs.value(value, false)) {
+                    None => continue,
+                    Some(Some(trust)) => {
+                        trusted(&trust, element.span, &mut lean);
+                        continue;
+                    }
+                    Some(None) => {}
                 }
             }
             _ => continue,
@@ -1763,10 +1838,10 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
             }
             continue;
         };
-        if assigned.get(&target).is_some_and(|assignment| {
-            (assignment.reads_target && assignment.logical.is_none())
-                || (!assignment.reads_target && noncallable_value(file, assignment.value_span))
-        }) {
+        let assignment = assigned.get(&target);
+        if assignment
+            .is_some_and(|assignment| assignment.reads_target && assignment.logical.is_none())
+        {
             continue;
         }
         let key = if ast.computed_members.binary_search(&member.span).is_err() {
@@ -1778,8 +1853,32 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
         {
             CensusKey::Named(literal.key.to_string())
         } else {
-            census_key(file, member.property, true)
+            proved_key(&mut proofs, file, member.property, true)
         };
+        // ADR 0903 S3b: a value that is no function puts none there. Under a
+        // key no fact names, it may become a prototype.
+        if let Some(assignment) = assignment.filter(|assignment| !assignment.reads_target)
+            && let Some(mut trust) =
+                proofs.value(assignment.value_span, matches!(key, CensusKey::Unknown))
+        {
+            // The value's proof stands on the key's: no `__proto__` there.
+            if let CensusKey::NoMember(key_trust) = &key {
+                trust.extend(key_trust);
+            }
+            trusted(&trust, target, &mut lean);
+            continue;
+        }
+        // ADR 0903 S3c: a copy of a literal's own member under its own key.
+        // It still writes the object under a key no fact names.
+        if matches!(key, CensusKey::Unknown)
+            && let Some(assignment) = assignment
+                .filter(|assignment| !assignment.reads_target && assignment.logical.is_none())
+            && let Some(trust) = proofs.copy(member.property, assignment.value_span)
+        {
+            write(CensusKey::Unknown, member.object);
+            note(CensusKey::NoMember(trust), target);
+            continue;
+        }
         write(key.clone(), member.object);
         note(key, target);
     }
@@ -1795,12 +1894,12 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
                 .get(index)
                 .filter(|argument| !argument.spread)
         };
-        let argument_key = |index: usize| match argument(index) {
+        let argument_key = |proofs: &mut Proofs<'_>, index: usize| match argument(index) {
             Some(key) => match &key.literal_value {
                 ArgumentLiteralFact::String(name) => CensusKey::Named(name.to_string()),
                 // ADR 0877: a definer keeps `*`.
                 _ if const_symbol_key(file, key.span) => CensusKey::Unknown,
-                _ => census_key(file, key.span, true),
+                _ => proved_key(proofs, file, key.span, true),
             },
             None => CensusKey::Unknown,
         };
@@ -1811,15 +1910,26 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
             None => noted.push(key),
         };
         if spelled_callee(callee, "Reflect.set") {
-            if !argument(2).is_some_and(|value| noncallable_value(file, value.span)) {
-                write_target(argument_key(1));
-                note(argument_key(1), call.span);
+            let key = argument_key(&mut proofs, 1);
+            let value = argument(2)
+                .and_then(|value| proofs.value(value.span, matches!(key, CensusKey::Unknown)));
+            match value {
+                Some(mut trust) => {
+                    if let CensusKey::NoMember(key_trust) = &key {
+                        trust.extend(key_trust);
+                    }
+                    trusted(&trust, call.span, &mut lean);
+                }
+                None => {
+                    write_target(key.clone());
+                    note(key, call.span);
+                }
             }
         } else if spelled_callee(callee, "Object.defineProperty")
             || spelled_callee(callee, "Reflect.defineProperty")
         {
-            write_target(argument_key(1));
-            note(argument_key(1), call.span);
+            write_target(argument_key(&mut proofs, 1));
+            note(argument_key(&mut proofs, 1), call.span);
         } else if spelled_callee(callee, "Object.defineProperties")
             || spelled_callee(callee, "Object.create")
         {
@@ -1884,7 +1994,61 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
     }) {
         note(CensusKey::Unknown, reflect.span);
     }
+    members.extend(lean);
     writers.extend(noted.into_iter().filter_map(writer_member));
+    // R65: `w.Math = { floor: f }` and `w.Math.floor = f` need no rooted
+    // receiver, and a noncallable replacement invalidates a trust proof too.
+    for target in ast.write_targets.iter().chain(&ast.deleted_targets) {
+        let target = ast.peel_ts_sugar_span(*target);
+        let key = if let Some(member) = ast.member_at(target) {
+            if fresh_object(file, member.object) {
+                continue;
+            }
+            proved_trust_key(
+                &mut proofs,
+                file,
+                member.property,
+                ast.computed_members.binary_search(&target).is_ok(),
+            )
+        } else if ast.reference_declaration(target).is_none() {
+            census_key(file, target, false)
+        } else {
+            continue;
+        };
+        match key {
+            CensusKey::Named(name) => writers.extend(trusted_write_name(&name)),
+            CensusKey::Unknown => writers.push(TRUST_WRITE_ANY),
+            CensusKey::NoMember(trust) => trusted(&trust, target, &mut members),
+            CensusKey::Symbol => {}
+        }
+    }
+    // A reflective delete can expose an inherited replacement, just as delete.
+    for call in &ast.calls {
+        let callee = file
+            .source_text(ast.peel_ts_sugar_span(call.callee))
+            .unwrap_or("");
+        if !spelled_callee(callee, "Reflect.deleteProperty") {
+            continue;
+        }
+        let target = call.arguments.first().filter(|argument| !argument.spread);
+        if target.is_some_and(|target| fresh_object(file, target.span)) {
+            continue;
+        }
+        let key = call
+            .arguments
+            .get(1)
+            .filter(|argument| !argument.spread)
+            .map_or(CensusKey::Unknown, |argument| {
+                proved_trust_key(&mut proofs, file, argument.span, true)
+            });
+        match key {
+            CensusKey::Named(name) => writers.extend(trusted_write_name(&name)),
+            CensusKey::Unknown => writers.push(TRUST_WRITE_ANY),
+            CensusKey::NoMember(trust) => trusted(&trust, call.span, &mut members),
+            CensusKey::Symbol => {}
+        }
+    }
+
     // `Symbol.replace` read at all: it may become a key of any object.
     if let Some(read) = ast.members.iter().find(|member| {
         file.source_text(member.span).map(str::trim) == Some("Symbol.replace")
@@ -2556,6 +2720,36 @@ fn standard_receiver(
             })
 }
 
+/// R65: a trusted standard function may be replaced through an unrooted
+/// alias too. The write census is independent of whether the value is callable.
+pub(crate) fn trust_open(
+    hazard: &impl Fn(Hazard) -> bool,
+    defined_reflectively: &impl Fn(&str) -> bool,
+) -> bool {
+    hazard(standard_impostor(TRUST_SITE))
+        && TRUSTED.iter().any(|(name, key)| {
+            let (global, member) = name.split_once('.').unwrap_or((name, name));
+            hazard(standard_impostor(key))
+                && (patch_vetoed(name, hazard)
+                    || [global, member, ANY_MEMBER, TRUST_WRITE_ANY]
+                        .into_iter()
+                        .any(|key| hazard(standard_impostor_write(key)))
+                    || defined_reflectively(global)
+                    || defined_reflectively(member))
+        })
+}
+
+/// Open writes that may replace a trusted function with a noncallable value
+/// are separate from callable-member impostors (ADR 0903, R65).
+const TRUST_WRITE_ANY: &str = "@@trust-write:*";
+
+fn trusted_write_name(name: &str) -> Option<&'static str> {
+    TRUSTED
+        .iter()
+        .flat_map(|(name, _)| name.split('.'))
+        .find(|part| *part == name)
+}
+
 /// ADR 0840: whether the standard `qualified_name` at `callee` is withheld:
 /// it is a census member, the program may hold an impostor of it
 /// ([`Hazard::StandardImpostor`] for it or for any key, or a reflective
@@ -2586,7 +2780,11 @@ pub(crate) fn impostor_veto(
                 .into_iter()
                 .any(&hazard)));
     let patched = |name: &str| symbol_open || patch_vetoed(name, &hazard);
+    // ADR 0903: a site proved to put no function at a member, trusting a
+    // standard function the program patches, may be any key.
+    let trust_open = trust_open(&hazard, &defined_reflectively);
     (symbol_open
+        || trust_open
         || hazard(standard_impostor(member))
         || hazard(standard_impostor(ANY_MEMBER))
         || defined_reflectively(member)
@@ -2599,6 +2797,7 @@ pub(crate) fn impostor_veto(
             &patched,
             &|name| {
                 symbol_open
+                    || trust_open
                     || hazard(standard_impostor_write(name))
                     || hazard(standard_impostor_write(ANY_MEMBER))
                     || defined_reflectively(name)
