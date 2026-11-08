@@ -7262,5 +7262,11 @@
   "found": "review D37 of ADR 0903's trust design",
   "fixed": "ADR 0904",
   "outside": "the generator prints one ES module per program, so no classic script can declare a global beside it; fixtures classic-script-global-function and classic-script-global-let (certified on i7 = 608c38e38; violation and uncertifiable on b1) and their module twin classic-script-global-module pin it"
+ },
+ {
+  "finding": "ADR 0905: the value census kept the first walk's row at a use, and walks run in symbol-id order, which hashes the absolute path: loading-on-outside-hold's `setT(2)` was value-forwarded at some paths and value-to-unresolved-callee at others, one binary",
+  "found": "C2, the 0904 coverage in a second worktree (R3e's stale relabel)",
+  "fixed": "ADR 0905",
+  "outside": "the generator judges each program at one path, so no grid can see a row that moves with the path; process test path_independence_process copies the fixture to eight directories and fails on the build before (`cccccc` against `a`)"
  }
 ]

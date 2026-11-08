@@ -467,8 +467,7 @@ pub(crate) fn collect_project<'facts>(
         };
     // After every walk's own row: one SC9012 stands per start, and a
     // reference's row stays where it was.
-    let mut use_rows = Vec::new();
-    let mut used = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
+    let mut use_rows = CensusRows::default();
     // A walk the step budget cut: unknown past the cut, so a row at its root
     // that nothing deduplicates or covers. A root in a dependency file is not
     // reported: the project's references of the same symbol carry it too.
@@ -481,8 +480,10 @@ pub(crate) fn collect_project<'facts>(
         )
     };
     // ADR 0860: the rows past an escape, after every other.
-    let mut escaped_rows = Vec::new();
-    let mut escaped_seen = std::collections::BTreeSet::<(std::sync::Arc<str>, u64, u64)>::new();
+    let mut escaped_rows = CensusRows::default();
+    // The census's own rows at its references, in walk order: put in an
+    // order of their own before they are pushed.
+    let mut census_handed = Vec::new();
     for symbol in callables.iter().copied() {
         for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
             let root = ctx.prop_sources.contains_key(symbol)
@@ -521,22 +522,10 @@ pub(crate) fn collect_project<'facts>(
             }
             // The obligation sits at each use the walk ended at, too.
             for (location, blocker) in census.take_uses() {
-                if used.insert((
-                    location.path.clone(),
-                    location.start_byte,
-                    location.end_byte,
-                )) {
-                    use_rows.push(census_obligation(&callee, location, blocker));
-                }
+                use_rows.keep_least(census_obligation(&callee, location, blocker));
             }
             for (location, blocker) in census.take_escaped_uses() {
-                if escaped_seen.insert((
-                    location.path.clone(),
-                    location.start_byte,
-                    location.end_byte,
-                )) {
-                    escaped_rows.push(census_obligation(&callee, location, blocker));
-                }
+                escaped_rows.keep_least(census_obligation(&callee, location, blocker));
             }
             let Some(blocker) = open else {
                 continue;
@@ -545,7 +534,7 @@ pub(crate) fn collect_project<'facts>(
             if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
                 continue;
             }
-            handed.push(census_obligation(&callee, reference, blocker));
+            census_handed.push(census_obligation(&callee, reference, blocker));
         }
     }
     // P13: a source with no name has no reference to start from.
@@ -575,22 +564,10 @@ pub(crate) fn collect_project<'facts>(
                 }
             }
             for (location, blocker) in census.take_uses() {
-                if used.insert((
-                    location.path.clone(),
-                    location.start_byte,
-                    location.end_byte,
-                )) {
-                    use_rows.push(census_obligation("this value", location, blocker));
-                }
+                use_rows.keep_least(census_obligation("this value", location, blocker));
             }
             for (location, blocker) in census.take_escaped_uses() {
-                if escaped_seen.insert((
-                    location.path.clone(),
-                    location.start_byte,
-                    location.end_byte,
-                )) {
-                    escaped_rows.push(census_obligation("this value", location, blocker));
-                }
+                escaped_rows.keep_least(census_obligation("this value", location, blocker));
             }
             let Some(blocker) = open else {
                 continue;
@@ -598,7 +575,7 @@ pub(crate) fn collect_project<'facts>(
             if cut && blocker == crate::blockers::VALUE_USE_UNCLASSIFIED {
                 continue;
             }
-            handed.push(census_obligation(
+            census_handed.push(census_obligation(
                 "this value",
                 call.span.location(file.path.as_str()),
                 blocker,
@@ -636,7 +613,9 @@ pub(crate) fn collect_project<'facts>(
             }
         }
     }
-    handed.extend(use_rows);
+    census_handed.sort_by(|a, b| census_row_order(a).cmp(&census_row_order(b)));
+    handed.extend(census_handed);
+    handed.extend(use_rows.into_rows());
     // A row any other producer placed over the call (a read, a write, an
     // action) already speaks for it.
     let covered = |obligation: &crate::StaticDefect| {
@@ -678,7 +657,7 @@ pub(crate) fn collect_project<'facts>(
         })
         .collect::<std::collections::BTreeSet<_>>();
     let escaped_rows = escaped_rows
-        .into_iter()
+        .into_rows()
         .filter(|obligation| {
             let at = &obligation.location;
             !kept.contains(&(at.path.clone(), at.start_byte, at.end_byte))
@@ -1486,6 +1465,50 @@ fn project_imports_of(ctx: &AnalysisContext<'_>, package: &str) -> Vec<typefacts
         found.push(solid_facts::core::Span::new(0, 0).location(file.path.as_str()));
     }
     found
+}
+
+/// The census's rows, one per span. Walks run in the order of their sources'
+/// symbol ids, which hash the file's absolute path, so where several walks end
+/// at one span the row is the least by blocker and callee, never the first
+/// walk's: the same program gives the same rows wherever it lies.
+#[derive(Default)]
+struct CensusRows(std::collections::BTreeMap<(std::sync::Arc<str>, u64, u64), crate::StaticDefect>);
+
+impl CensusRows {
+    fn keep_least(&mut self, row: crate::StaticDefect) {
+        use std::collections::btree_map::Entry;
+        let at = &row.location;
+        match self.0.entry((at.path.clone(), at.start_byte, at.end_byte)) {
+            Entry::Vacant(slot) => {
+                slot.insert(row);
+            }
+            Entry::Occupied(mut slot) => {
+                if census_row_order(&row) < census_row_order(slot.get()) {
+                    slot.insert(row);
+                }
+            }
+        }
+    }
+
+    fn into_rows(self) -> impl Iterator<Item = crate::StaticDefect> {
+        self.0.into_values()
+    }
+}
+
+/// A census row's order among rows of one file: its span, then its blocker and
+/// callee. Never a symbol id or a walk's turn.
+fn census_row_order(row: &crate::StaticDefect) -> (&str, u64, u64, &str, &str) {
+    let callee = match &row.kind {
+        crate::StaticDefectKind::ReactiveDispatchUnresolved { callee, .. } => callee.as_str(),
+        _ => "",
+    };
+    (
+        row.location.path.as_ref(),
+        row.location.start_byte,
+        row.location.end_byte,
+        row.analysis_context.as_str(),
+        callee,
+    )
 }
 
 #[cfg(test)]
