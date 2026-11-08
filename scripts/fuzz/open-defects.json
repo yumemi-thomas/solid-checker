@@ -979,14 +979,13 @@
   "mx-census/mx-reactive-write-in-owned-scope-aw-forward-fan-run-signal-direct-none": "R3e",
   "mx-census/mx-reactive-write-in-owned-scope-aw-forward-fan-run-store-direct-none": "R3e",
   "mx-census/mx-resolve-in-reactive-scope-aw-forward-fan-run-x-direct-none": "R3e",
-  "mx-census/mx-until-in-reactive-scope-aw-forward-fan-run-x-direct-none": "R3e",
-  "mx-census/mx-settled-cleanup-unowned-flw-flow-for-async-x-direct-none": "R5"
+  "mx-census/mx-until-in-reactive-scope-aw-forward-fan-run-x-direct-none": "R3e"
  },
  "corpusBlockers": [],
  "ratchet": {
   "certified": 2,
   "certifiedF2": 0,
-  "falsePositive": 8,
+  "falsePositive": 7,
   "stackedClaim": 194,
   "stackedPairs": {
    "NO_OWNER_CONTEXT|missing-context-provider": 6,
@@ -1000,9 +999,10 @@
    "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 42
   },
   "unjudgedClaim": 6,
+  "haltedClaim": 2,
   "causes": {
    "R-not-legal": 2107,
-   "false-positive": 8,
+   "false-positive": 7,
    "createRoot inside onCleanup inside createRoot": 2,
    "R-unplaced": 173,
    "R-unjudged-unplaced": 6,
@@ -1013,9 +1013,10 @@
    "R-carrier": 139,
    "census": 93,
    "g2d named hand-off": 34,
-   "R-alias-call": 30,
+   "R-alias-call": 31,
    "R-stop-named-U": 320,
-   "R-placeless": 9,
+   "R-placeless": 10,
+   "R-halted": 2,
    "R-alias-owner": 22,
    "R-near": 9
   }
