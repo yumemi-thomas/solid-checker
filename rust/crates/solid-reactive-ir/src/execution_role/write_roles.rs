@@ -1717,7 +1717,7 @@ fn control_flow_nested_layers(
     lookup: &SemanticLookup<'_>,
 ) -> Option<ControlFlowLayers> {
     let deferred = |at: Span| {
-        control_flow_execution_role(file, at, entities, symbol_names, lookup.dialect)
+        control_flow_execution_role(file, at, entities, symbol_names, lookup)
             == Some(ExecutionRole::DeferredCallback)
     };
     if !deferred(span) {

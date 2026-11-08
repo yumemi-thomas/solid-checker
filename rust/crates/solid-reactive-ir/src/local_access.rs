@@ -2048,7 +2048,7 @@ impl LocalAccessContext<'_, '_> {
                 call.span,
                 self.entities,
                 self.symbol_names,
-                self.lookup.dialect,
+                self.lookup,
             );
             let component =
                 caller.is_some_and(|caller| self.lookup.function_is_component(file, caller));
@@ -3301,7 +3301,7 @@ impl LocalAccessContext<'_, '_> {
                             call.callee,
                             self.entities,
                             self.symbol_names,
-                            self.lookup.dialect,
+                            self.lookup,
                         )
                         .is_some()
                         || named_callback_execution_role(file, call.callee, self.lookup)
@@ -3578,7 +3578,7 @@ impl LocalAccessContext<'_, '_> {
                     call.callee,
                     self.entities,
                     self.symbol_names,
-                    self.lookup.dialect,
+                    self.lookup,
                 )
                 .is_some()
                 || named_callback_execution_role(file, call.callee, self.lookup).is_some()
@@ -7044,7 +7044,7 @@ impl LocalAccessContext<'_, '_> {
                     member.span,
                     self.entities,
                     self.symbol_names,
-                    self.lookup.dialect,
+                    self.lookup,
                 ).is_none()
                 && !matches!(
                     execution,

@@ -851,7 +851,7 @@ pub(super) fn semantic_role_before_awaits(
             ExecutionRole::Unknown
         );
     }
-    if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
+    if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, lookup) {
         // A read in a function nested in the flow callback that runs in
         // place there (a helper's callback, an IIFE, an inline library
         // callback; `climb_in_place_layers`) runs on the stack of the layer's

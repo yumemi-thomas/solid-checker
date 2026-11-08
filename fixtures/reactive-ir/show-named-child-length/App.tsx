@@ -71,3 +71,40 @@ export function InlineValueInBody(props: { name: number }) {
   shown()();
   return <span />;
 }
+
+// Reviewer R59: a plain function's return is no insert: `make`'s caller runs
+// the value in its body, a strict read (Chrome).
+function make(props: { name: number }) {
+  return (
+    <Show when={1}>
+      {
+        (() => {
+          props.name;
+        }) as any
+      }
+    </Show>
+  );
+}
+export function ReturnedByPlainFunction(props: { name: number }) {
+  (make(props) as any)()();
+  return <span />;
+}
+
+// Reviewer R59: part of a returned value, not the value itself.
+function makeHolder(props: { name: number }) {
+  return {
+    s: (
+      <Show when={1}>
+        {
+          (() => {
+            props.name;
+          }) as any
+        }
+      </Show>
+    ),
+  };
+}
+export function ReturnedInObject(props: { name: number }) {
+  (makeHolder(props).s as any)()();
+  return <span />;
+}

@@ -226,6 +226,16 @@ const ESCAPES = {
     const [C, g] = [kit.name("C"), kit.name("g")];
     return { before: [decl(C, domExpr(`createContext(${f})`, undefined, ["createContext"])), decl(g, domExpr(`useContext(${C})`, undefined, ["useContext"]))], fires: `${g}()` };
   }),
+  // Reviewer R60: a helper written outside the generator, called past its `yield`, runs on the timer's later step with no owner;
+  // `-body` also calls it in the body, an owned edge beside the unowned one.
+  "flw-gen-step-helper": (stmts, kit) => {
+    const [h, g, it] = [kit.name("h"), kit.name("g"), kit.name("it")];
+    return { hoisted: [decl(h, fn(stmts))], body: [decl(g, domExpr(`function* () { yield 1; ${h}(); }`)), decl(it, domExpr(`${g}()`)), expr(domExpr(`${it}.next()`)), expr(domExpr(`setTimeout(() => ${it}.next(), 0)`))], view: [] };
+  },
+  "flw-gen-step-helper-body": (stmts, kit) => {
+    const [h, g, it] = [kit.name("h"), kit.name("g"), kit.name("it")];
+    return { hoisted: [decl(h, fn(stmts))], body: [expr(domExpr(`${h}()`)), decl(g, domExpr(`function* () { yield 1; ${h}(); }`)), decl(it, domExpr(`${g}()`)), expr(domExpr(`${it}.next()`)), expr(domExpr(`setTimeout(() => ${it}.next(), 0)`))], view: [] };
+  },
   "flw-owned-returned": (stmts, kit) => {
     const [f, u, g] = [kit.name("f"), kit.name("u"), kit.name("g")];
     return { body: [decl(u, fn([decl(f, fn(stmts)), expr(call(ref(f))), ret(ref(f))])), decl(g, call(ref(u)))], view: [button(kit.name("b"), [expr(call(ref(g)))])] };
@@ -271,6 +281,11 @@ const FLOW_VALUES = {
     const [g, el] = [kit.name("g"), kit.name("el")];
     return { body: [decl(g, fn(stmts)), decl(el, domExpr(`(<Show when={1}>{(() => ${g}()) as any}</Show>) as any`, undefined, ["Show"])), expr(domExpr(`${el}()()`))], view: [] };
   },
+  // Reviewer R59: a plain function's return is no insert; its caller runs the value in its body.
+  "flw-flow-show-returned-plain": (stmts, kit) => {
+    const [g, mk] = [kit.name("g"), kit.name("mk")];
+    return { body: [decl(g, fn(stmts)), decl(mk, domExpr(`() => <Show when={1}>{(() => ${g}()) as any}</Show>`, undefined, ["Show"])), expr(domExpr(`(${mk}() as any)()()`))], view: [] };
+  },
   // Reviewer's R48: `Kid`'s function child is Kid's to run, here on a timer: the flow tag around it says nothing.
   "flw-flow-show-kid": (stmts, kit) => ({
     hoisted: [decl("Kid1", domExpr("(props: { children: (v: number) => unknown }) => { setTimeout(() => props.children(1), 0); return <i />; }"))],
@@ -303,8 +318,6 @@ export const FLIP_WRITE_CONTEXTS = {
 };
 
 for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONTEXTS[code] ?? []), ...Object.keys(GUARDED), ...Object.keys(ESCAPES), ...Object.keys(FLOW_VALUES), ...Object.keys(APPLY_AND_TIMER)];
-// The async child's Promise crashes `insert` and halts the reactive system, so `onSettled`'s callback never runs: this code cannot fire there.
-FLIP_WRITE_CONTEXTS.SETTLED_CLEANUP_UNOWNED = FLIP_WRITE_CONTEXTS.SETTLED_CLEANUP_UNOWNED.filter((context) => context !== "flw-flow-for-async");
 
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];

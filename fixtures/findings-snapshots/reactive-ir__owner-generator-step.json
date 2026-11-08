@@ -35,6 +35,50 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-generator-step/App.tsx",
+      "start": 918,
+      "end": 927,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-generator-step/App.tsx",
+      "start": 1043,
+      "end": 1050,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-generator-step/App.tsx",
+      "start": 1138,
+      "end": 1147,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-generator-step/App.tsx",
+      "start": 1296,
+      "end": 1303,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

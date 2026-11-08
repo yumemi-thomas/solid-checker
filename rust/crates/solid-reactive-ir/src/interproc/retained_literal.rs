@@ -132,8 +132,7 @@ pub(super) fn runs_in_unproven_stored_literal(
         if crate::execution_role::component_prop_literal(file, literal.span).is_some() {
             return false;
         }
-        return control_flow_execution_role(file, span, entities, symbol_names, lookup.dialect)
-            .is_none();
+        return control_flow_execution_role(file, span, entities, symbol_names, lookup).is_none();
     }
 }
 
