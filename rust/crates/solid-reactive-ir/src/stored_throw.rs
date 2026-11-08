@@ -791,8 +791,16 @@ fn handled_above(
         return false;
     };
     // A mount outside the analyzed code is open in an open program, for a
-    // component others can reach.
-    let exported = file.ast.exports_containing(component.span).next().is_some()
+    // component others can reach. ADR 0908: one the module exports itself,
+    // by its binding or as a top-level export's own function; a component
+    // written inside an exported declaration is not (its mounts are below,
+    // and a value of it that leaves is asked as a value).
+    let nested = file
+        .ast
+        .functions
+        .iter()
+        .any(|outer| outer.span != component.span && outer.span.contains(component.span));
+    let exported = (!nested && file.ast.exports_containing(component.span).next().is_some())
         || crate::owners::function_binding_name(file, component)
             .is_some_and(|name| crate::indexes::binding_exported(file, name.span));
     if !lookup.program_closed && exported {

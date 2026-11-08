@@ -66,6 +66,7 @@
   "SC2008 primitive-alias-call": 1,
   "SC2008 search-depth-limit": 2,
   "SC2009 optimistic-reach-unresolved": 9,
+  "SC3001 computation-error-unobserved": 1,
   "SC3001 leaf-operation-identity-unproven": 4,
   "SC3001 leaf-owner-unproven": 45,
   "SC3001 refused-creation-unrun": 1,

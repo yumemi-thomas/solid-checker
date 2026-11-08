@@ -7296,5 +7296,17 @@
   "found": "review R64 and the review of ADR 0904 (565cb75a7)",
   "fixed": "ADR 0906",
   "outside": "the generator prints one ES module per program and judges in one frame: no classic script, no sloppy `this`, and `top` is the window it already names; fixtures classic-script-this-patch, top-window-patch and classic-script-enum-global (certified on c538da427, uncertifiable on b6) and their twin top-window-local pin it"
+ },
+ {
+  "finding": "flush() in a helper a createTrackedEffect runs, in a component written inside an exported one and mounted only under <Errored fallback={(e) => …}>: rc.21's tracked-queue flush guard is a plain throw the boundary takes (Chrome logs nothing); SC3001 V, because handled_above read any function inside an exported declaration as exported and never asked its mount",
+  "found": "open-defects flip/st-tracked-handled-flush (R3e; flip-final's last pattern false positive)",
+  "fixed": "ADR 0908",
+  "grid": "patterns",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "flip/st-tracked-handled-flush"
+  ],
+  "rediscovered": "patterns.mjs --only st-tracked-handled on the census-tip judge (47a475c7b): 78b3be310 1 false positive (flip/st-tracked-handled-flush); ADR 0908 tree FIXED (uncertifiable, computation-error-unobserved). Fixture stored-throw-nested-component: NestedHandled V on 78b3be310, U here; NestedUnhandled and ExportedKid V on both",
+  "outside": "lg-recall FLUSH_IN_TRACKED_QUEUE_CALLBACK st-tracked-handled generates this very program, but the legal judge scores only the site line (the flush, line 5), and the V stands at the helper call (line 8): clean on both builds there. The pattern holds it"
  }
 ]
