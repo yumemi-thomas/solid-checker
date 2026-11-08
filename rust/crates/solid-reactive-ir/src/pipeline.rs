@@ -71,7 +71,8 @@ pub(crate) struct ProgramDraft {
     /// answer that decided whether a row was kept, with the answer.
     span_log: Option<Vec<(SpanKey, bool)>>,
     /// ADR 0874: where a call the impostor census withholds starts, by path.
-    pub(crate) withheld_starts: HashSet<(Arc<str>, u64)>,
+    /// Filled once, before any stage; shared with every speculative draft.
+    pub(crate) withheld_starts: Arc<HashSet<(Arc<str>, u64)>>,
     /// ADR 0874: each withheld call's callee span, by path. A row there is
     /// about the call's target, never a Get of the value on its chain.
     pub(crate) withheld_callees: HashSet<(Arc<str>, u64, u64)>,
@@ -97,7 +98,7 @@ impl ProgramDraft {
     /// spans this one has seen, whose answers it logs ([`Self::spans_agree`]).
     pub(crate) fn speculative(&self) -> Self {
         Self {
-            withheld_starts: self.withheld_starts.clone(),
+            withheld_starts: Arc::clone(&self.withheld_starts),
             span_log: Some(Vec::new()),
             ..Self::default()
         }
@@ -614,9 +615,11 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             Vec::new()
         },
         static_defects: boundary_defects,
-        withheld_starts: withheld()
-            .map(|(file, call)| (file.path.shared(), u64::from(call.span.start)))
-            .collect(),
+        withheld_starts: Arc::new(
+            withheld()
+                .map(|(file, call)| (file.path.shared(), u64::from(call.span.start)))
+                .collect(),
+        ),
         withheld_callees: withheld()
             .map(|(file, call)| {
                 let callee = file.ast.peel_ts_sugar_span(call.callee);
@@ -1294,9 +1297,28 @@ where
     I: Fn() -> S + Sync,
     F: Fn(&mut S, &T) -> R + Sync,
 {
+    parallel_balanced_with_state_from(64, items, init, analyze)
+}
+
+/// [`parallel_balanced_with_state`] for items each costly enough that
+/// `threshold` of them, fewer than the default 64, already pay for the
+/// threads.
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn parallel_balanced_with_state_from<T, S, R, I, F>(
+    threshold: usize,
+    items: &[T],
+    init: I,
+    analyze: F,
+) -> Vec<R>
+where
+    T: Sync,
+    R: Send,
+    I: Fn() -> S + Sync,
+    F: Fn(&mut S, &T) -> R + Sync,
+{
     let limit = available_analysis_workers();
     let workers = limit.min(items.len());
-    if workers <= 1 || items.len() < 64 {
+    if workers <= 1 || items.len() < threshold.max(2) {
         let mut state = init();
         return items.iter().map(|item| analyze(&mut state, item)).collect();
     }
