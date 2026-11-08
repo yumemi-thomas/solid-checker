@@ -129,17 +129,26 @@ async function stopHolderCheck(dir, rows, args) {
   if (!checker || !typefacts) throw new Error("--update needs --checker and --typefacts: the stop rows' holder-free check runs on the build the smoke judged");
   const variants = new Map();
   for (const grid of Object.keys(rows.grids)) for (const line of readFileSync(join(dir, grid, "programs.jsonl"), "utf8").split("\n").filter(Boolean)) { const row = JSON.parse(line); variants.set(`${grid}/${row.id}`, row.variant); }
-  const stop = Object.entries(rows.grids).flatMap(([grid, list]) => Object.entries(list).filter(([, row]) => row.cause === STOP_NAMED_U).map(([id]) => ({ id, grid, variant: variants.get(`${grid}/${id}`) })));
+  // The row's own site: its original U's file and line (namedKey `id/blocker@line:column`; the judge names only App.tsx's findings).
+  const siteOf = (row) => { const match = /@(\d+):\d+$/.exec(String(row.blocker ?? "")); return match ? { file: "App.tsx", line: Number(match[1]) } : null; };
+  const stop = Object.entries(rows.grids).flatMap(([grid, list]) => Object.entries(list).filter(([, row]) => row.cause === STOP_NAMED_U).map(([id, row]) => ({ id, grid, variant: variants.get(`${grid}/${id}`), site: siteOf(row) })));
+  const placeless = stop.filter((row) => row.site === null).map((row) => row.id);
+  if (placeless.length) throw new Error(`${placeless.length} stop rows name no blocker position (${placeless.slice(0, 3).join(", ")}): the check needs their site`);
   const plan = stopPlan(stop, ({ grid, id }) => {
     const folder = join(dir, grid, "cases", id);
     return readStopSource(folder);
   });
   const root = mkdtempSync(join(tmpdir(), "stop-holder-"));
-  const cases = plan.checked.map(({ id, text }) => { const folder = join(root, "src", id); mkdirSync(folder, { recursive: true }); writeFileSync(join(folder, "App.tsx"), text.replace("export function C1()", "export function App()")); return { id, dir: folder }; });
+  // Every source file of the program, the holder removed where it was and App.tsx's C1 mounting as App (stop-holder.mjs stopPlan).
+  const cases = plan.checked.map(({ id, files }) => {
+    const folder = join(root, "src", id); mkdirSync(folder, { recursive: true });
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(folder, name), text);
+    return { id, dir: folder };
+  });
   const { runChecker } = await import("./patterns.mjs");
   const findings = await runChecker(cases, join(root, "work"), { checker, typefacts });
   rmSync(root, { recursive: true, force: true });
-  return { checked: plan.checked.length, unchecked: plan.unchecked.length, uncheckedIds: plan.unchecked, noHolder: stop.length - plan.checked.length - plan.unchecked.length - plan.unmatched.length, problems: stopProblems(plan, findings) };
+  return { checked: plan.checked.length, multiFile: plan.checked.filter(({ files }) => Object.keys(files).length > 1).length, failed: plan.failed.length, unchecked: plan.unchecked.length, uncheckedIds: plan.unchecked, noHolder: stop.length - plan.checked.length - plan.unchecked.length - plan.unmatched.length - plan.failed.length, problems: stopProblems(plan, findings) };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -170,7 +179,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`stop rule blockers: ${JSON.stringify(blockers)}`);
   // The stop rows must keep a finding with the generator's holder removed (stop-holder.mjs). Needs the build the run judged.
   const stopRun = await stopHolderCheck(dir, out, args);
-  console.log(`stop holder check: ${stopRun.checked} checked, ${stopRun.unchecked} unchecked (a file beside App.tsx), ${stopRun.noHolder} with no holder`);
+  console.log(`stop holder check: ${stopRun.checked} checked (${stopRun.multiFile} of them multi-file), ${stopRun.failed} refused (no mount, a subdirectory or an unresolved import), ${stopRun.unchecked} unchecked (no App.tsx), ${stopRun.noHolder} with no holder`);
   for (const problem of stopRun.problems) console.log(`stop holder ${problem}`);
   if (stopRun.problems.length) throw new Error(`${stopRun.problems.length} stop rows fail the holder-free check: a U that was the holder's is a false clean, back to its owner`);
   if (added.length && !args.includes("--allow-new")) throw new Error(`${added.length} new rows: a new failing row is a defect to read, not to list. Pass --allow-new to list them`);
