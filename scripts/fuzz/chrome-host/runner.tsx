@@ -21,10 +21,11 @@ const describeError = (e: any) => ({
   cause: e?.cause ? { message: String(e.cause?.message ?? e.cause), stack: String(e.cause?.stack ?? '') } : null,
 });
 
-/** A logged value's stacks: an error's own, then its cause's (as `errors` records them); nothing for any other value. */
-const errorStacks = (value: any): string[] => (value instanceof Error || (value && typeof value === 'object' && typeof value.stack === 'string'))
-  ? [String(value.stack ?? ''), ...(value.cause && typeof value.cause.stack === 'string' ? [String(value.cause.stack)] : [])]
-  : [];
+/** A logged value's stack and its cause's message and stack, kept apart (the judge decides when the cause places it); none for a value that is no error. */
+const isError = (value: any) => value instanceof Error || (value && typeof value === 'object' && typeof value.stack === 'string');
+const loggedError = (value: any): { stack: string, cause: { message: string, stack: string } | null } | null => isError(value)
+  ? { stack: String(value.stack ?? ''), cause: isError(value.cause) ? { message: String(value.cause.message ?? value.cause), stack: String(value.cause.stack ?? '') } : null }
+  : null;
 
 /** The case's frames of a stack as served (transformed) positions, innermost first; chrome-host.mjs maps them. */
 function servedFrames(stack: string) {
@@ -71,8 +72,8 @@ async function runCase() {
   const diagnostics: any[] = [], errors: any[] = [], disposers: (() => void)[] = [];
   // Each logged line, with the stacks of the errors it logged (ADR 0907): a user effect logs the throw of its compute or of a computation
   // it read (`NoOwnerError: …`) and an `<Errored>` boundary logs what it caught; the error's own frames place it as a thrown one is placed.
-  const consoleErrors: { text: string, stacks: string[] }[] = [];
-  const logged = (text: string, stacks: string[] = []) => { consoleErrors.push({ text, stacks }); };
+  const consoleErrors: { text: string, error: ReturnType<typeof loggedError> }[] = [];
+  const logged = (text: string, error: ReturnType<typeof loggedError> = null) => { consoleErrors.push({ text, error }); };
   let witnesses: any[] = [], failure: any = null, phase = 'import', artifactCount: number | null = null;
   const halted: string[] = [];
   // The oracle's halt marker (runtime-oracle.mjs `haltMarker`): once REACTIVITY_HALTED or an error-severity diagnostic (thrown at its
@@ -123,7 +124,7 @@ async function runCase() {
   // A timer callback that throws reaches the window in a browser; on the virtual clock it is reported the same way.
   if (params.get('clock') === 'virtual') clock = installVirtualClock({ onError: (e: any) => errors.push({ phase, kind: 'window-error', ...describeError(e) }) });
   const oldError = console.error, oldWarn = console.warn;
-  console.error = (...args) => { logged(args.map(x => String(x)).join(' '), args.flatMap(errorStacks)); };
+  console.error = (...args) => { logged(args.map(x => String(x)).join(' '), args.map(loggedError).find(Boolean) ?? null); };
   console.warn = () => {};
   window.addEventListener('error', onError);
   window.addEventListener('unhandledrejection', onRejection);
@@ -214,7 +215,8 @@ async function runCase() {
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...servedFrames(e.stack), ...servedFrames(e.cause?.stack)] })),
       consoleErrors: consoleErrors.slice(0, 20).map(row => row.text),
-      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => row.stacks.flatMap(servedFrames)), artifactCount,
+      consoleErrorPositions: consoleErrors.slice(0, 20).map(row => servedFrames(row.error?.stack ?? '')),
+      consoleErrorCauses: consoleErrors.slice(0, 20).map(row => row.error?.cause ? { message: row.error.cause.message, positions: servedFrames(row.error.cause.stack) } : null), artifactCount,
     });
   }
 }

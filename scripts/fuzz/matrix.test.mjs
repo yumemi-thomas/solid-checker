@@ -22,6 +22,11 @@ describe("judge", () => {
     const claim = { ok: true, findings: [finding("missing-context-provider", "violation")] };
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: claim, runtime: at(10) }).outcome).toBe("agree");
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: ok, runtime: at(10) }).outcome).toBe("false-clean");
+    // A cause that is another code thrown at the site does not place it there (review of ADR 0907); the same code's cause does.
+    const caused = (cause) => run([], { consoleErrors: ["NoOwnerError: Context can only be accessed under a reactive root."], consoleErrorPositions: [[{ file: "App.tsx", line: 20, column: 1 }]], consoleErrorCauses: [{ message: cause, positions: [{ file: "App.tsx", line: 10, column: 1 }] }] });
+    const owner = { ok: true, findings: [finding("missing-owner", "violation")] };
+    expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: caused("Cannot call resolve inside a reactive scope") }).outcome).toBe("not-fired");
+    expect(judge({ code: "NO_OWNER_CONTEXT", site, typecheck: { ok: true }, checker: owner, runtime: caused("Context can only be accessed under a reactive root.") }).outcome).not.toBe("not-fired");
     // No frame: unplaced, as before.
     expect(judge({ code: "CONTEXT_NOT_FOUND", site, typecheck: { ok: true }, checker: claim, runtime: at(null) }).outcome).toBe("unplaced");
   });

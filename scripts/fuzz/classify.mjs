@@ -110,13 +110,20 @@ export function sourceExprAt(lines, line, column) {
 /** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
 /**
  * The coded errors the page logged (ADR 0907): an `<Errored>` boundary logs what it caught instead of rethrowing it, and a user effect
- * logs the throw of its compute or of a computation it read (`NoOwnerError: …`). Each is placed by the logged error's own frames and its
- * cause's (`consoleErrorPositions`, index-aligned with `consoleErrors`), as a thrown one is; a logged value that is no error has none.
+ * logs the throw of its compute or of a computation it read (`NoOwnerError: …`). Each is placed by the logged error's own frames
+ * (`consoleErrorPositions`, index-aligned with `consoleErrors`), as a thrown one is; a logged value that is no error has none. Its cause's
+ * frames (`consoleErrorCauses`) place it only where its own name no authored line, or where the cause carries the same code (review of
+ * ADR 0907: a cause that is another code thrown elsewhere would put the outer code at the cause's site).
  */
 export function loggedEvents(runtime) {
   return (runtime.consoleErrors ?? []).flatMap((text, index) => {
     const code = codeOfLogged(text);
-    return code ? [{ code, source: "thrown", positions: runtime.consoleErrorPositions?.[index] ?? [] }] : [];
+    if (!code) return [];
+    const own = runtime.consoleErrorPositions?.[index] ?? [];
+    const cause = runtime.consoleErrorCauses?.[index] ?? null;
+    const authored = own.some((position) => position.file === "App.tsx" || position.file === undefined);
+    const takesCause = cause && (!authored || codeOfLogged(cause.message) === code);
+    return [{ code, source: "thrown", positions: takesCause ? [...own, ...(cause.positions ?? [])] : own }];
   });
 }
 
