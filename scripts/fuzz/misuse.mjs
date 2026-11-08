@@ -274,7 +274,7 @@ export const PAIR_SETS = ["mount-source", "handoff-file", "callback-handoff"];
  * literal, a destructuring default, a nested pattern, an array slot. Callee forms of either: `.bind(null)`, `.call(null, ...)`, an
  * extracted method, an assignment or `||=` callee.
  */
-export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-let", "ns-exported", "ns-held", "ns-member", "reexport", "reexport-ns", "reexport-ns-as"];
+export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-let", "ns-exported", "ns-held", "ns-member", "alias-const", "reexport", "reexport-ns", "reexport-ns-as"];
 /**
  * A hook that returns a function with a body, not the source (`{ useIt: () => w1() }`), by slot form and by how the slot is read. `-written`
  * crosses them with an unrelated object's member of the same name written elsewhere in the program, which turns the resolver's name veto on:
@@ -1158,6 +1158,8 @@ export function describeUse(node, signals) {
       case "ns-exported": out.namespaces.push(module); out.moduleLines.push(`export const { ${name}: ${local} } = ${ns};`); out.text = wrap(local); break;
       case "ns-held": out.namespaces.push(module); out.moduleLines.push(`const ${ns}2 = ${ns};`, `const { ${name}: ${local} } = ${ns}2;`); out.text = wrap(local); break;
       case "ns-member": out.namespaces.push(module); out.moduleLines.push(`const ${local} = ${ns}.${name};`); out.text = wrap(local); break;
+      // Review D36: a `const` holding the named import itself (the `alias` binding is an import alias).
+      case "alias-const": importsOf(module).push(name); out.moduleLines.push(`const ${local} = ${name};`); out.text = wrap(local); break;
       case "reexport": out.importLines = [`import { ${name} as ${local} } from "./solid-api";`]; out.files = { "solid-api.ts": `export { ${name} } from "${module}";\n` }; out.text = wrap(local); break;
       // ADR 0780: the namespace is an export of a module, with no `import * as` of the primitive's module anywhere.
       case "reexport-ns-as": out.importLines = ['import { Api as R } from "./solid-api";']; out.files = { "solid-api.ts": `export * as Api from "${module}";\n` }; out.text = wrap(`R.${name}`); break;

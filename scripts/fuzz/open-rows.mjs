@@ -15,7 +15,7 @@ import { ALIAS_OWNER, CASTS_STAGE2, F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, S
 const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "stacked-claim", "unjudged-claim", "secondary-false-clean", "not-legal"];
 /** Rows the ledger may not hold: certified CONTEXT_NOT_FOUND, a real hole R5 is closing. They fail the smoke until that lands. */
 export const NOT_LISTED = (row) => /^flw-guard-(?:early|probe-loop)$/.test(String(row.context ?? ""));
-const ALIAS_BINDINGS = ["ns-default", "ns-member", "extracted"];
+const ALIAS_BINDINGS = ["ns-default", "ns-member", "extracted", "alias-const"];
 /** The callee never resolves as a primitive in these bindings: a `flw-owned-*` row has no owner site (R5). */
 const ALIAS_OWNER_BINDINGS = [...ALIAS_BINDINGS, "bind", "call", "or-assign", "ns-nested", "ns-held"];
 /** The contexts casts stage 2 closes. */
