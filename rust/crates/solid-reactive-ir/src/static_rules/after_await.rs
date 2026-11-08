@@ -230,72 +230,40 @@ pub(super) fn run<'a>(
     let mut reach = Reach::new(ctx);
     // The members each function starts with, in order. Building one reads
     // the build alone, never the walks' state.
-    let mut starts = Vec::new();
-    for typescript_file in ctx.facts.typescript.files() {
-        for function in typescript_file.async_functions.iter() {
-            let member_site = ctx
-                .dialect
-                .reports_member_reads_after_await()
-                .then(|| member_read_site(&reach.files, function))
-                .flatten();
-            if function.calls_after_await.is_empty()
-                && member_site.is_none()
-                && !reach.has_promise_seed(function)
-                && !reach.has_implicit_suspension(function)
-                && !reach.has_own_await(function)
-                && !reach.has_try_handler(function)
-                && !reach.steps_generator(function)
-            {
-                continue;
-            }
-            // Built on first use, once per build: only a function with
-            // something to report needs it.
-            // ADR 0873: a compute a project wrapper's parameter hands on.
-            let (context, handed) =
-                match tracked_async_computation_context(ctx, function, computations.get(ctx)) {
-                    Some(context) => (context, None),
-                    None => {
-                        match ast_function(&reach.files, function).and_then(|(file, function)| {
-                            super::handed_compute::handed_compute(ctx, file, function)
-                        }) {
-                            Some(super::handed_compute::HandedCompute::Tracked(context)) => {
-                                (context, None)
-                            }
-                            Some(super::handed_compute::HandedCompute::Unplaced { via }) => (
-                                "handed async function".to_owned(),
-                                Some(AfterAwaitObligation::HandOffNotFollowed { via }),
-                            ),
-                            None => continue,
-                        }
-                    }
-                };
-            let blocker = handed
-                .is_some()
-                .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
-            let function = Arc::new(function.clone());
-            // An owner a `dispose` function can reach may be gone when the
-            // continuation resumes: the runtime then reads in a disposed
-            // computation and stays silent, so every read is an obligation.
-            let conditional = owner_may_be_disposed(ctx, &reach.files, &function)
-                .then_some(AfterAwaitObligation::OwnerMayBeDisposed)
-                .or(handed);
-            // ADR 0820: past a generator's leading `yield` nothing is tracked.
-            let windows = if ast_function(&reach.files, &function)
-                .is_some_and(|(file, function)| leading_yield(file, function))
-            {
-                Vec::new()
-            } else {
-                vec![Arc::clone(&function)]
-            };
-            starts.push(Member {
-                function,
-                context,
-                windows,
-                conditional,
-                blocker,
-            });
-        }
-    }
+    // The members each function starts with, in order. Deciding and
+    // building one reads the build alone, never the walks' state, so both run
+    // on the workers (ADR 0909).
+    let functions = ctx
+        .facts
+        .typescript
+        .files()
+        .flat_map(|file| file.async_functions.iter())
+        .collect::<Vec<_>>();
+    let candidates = crate::pipeline::parallel_balanced_with_state(
+        &functions,
+        || Reach::new(ctx),
+        |reach, function| reach.may_report(function),
+    );
+    let candidates = functions
+        .into_iter()
+        .zip(candidates)
+        .filter_map(|(function, candidate)| candidate.then_some(function))
+        .collect::<Vec<_>>();
+    // Built on first use, once per build: only a function with something to
+    // report needs it.
+    let starts = if candidates.is_empty() {
+        Vec::new()
+    } else {
+        let index = computations.get(ctx);
+        crate::pipeline::parallel_balanced_with_state(
+            &candidates,
+            || Reach::new(ctx),
+            |reach, function| reach.start_member(index, function),
+        )
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+    };
     // ADR 0909: a member's walk is a function of the member and the build;
     // only the rows' span dedup reads the draft (`ProgramDraft::spans_agree`)
     // and only the queue's bound reads the walks so far
@@ -1035,6 +1003,71 @@ impl<'f, 'a> Reach<'f, 'a> {
         // The bound reads the walks so far, which the walk itself never
         // changes: applied here, it sees what it saw inside the walk.
         queue.extend(next.into_iter().map(|member| self.bounded(member)));
+    }
+
+    /// Whether `function` has anything after an await to walk.
+    fn may_report(&self, function: &'f AsyncFunctionFact) -> bool {
+        let member_site = self
+            .ctx
+            .dialect
+            .reports_member_reads_after_await()
+            .then(|| member_read_site(&self.files, function))
+            .flatten();
+        !(function.calls_after_await.is_empty()
+            && member_site.is_none()
+            && !self.has_promise_seed(function)
+            && !self.has_implicit_suspension(function)
+            && !self.has_own_await(function)
+            && !self.has_try_handler(function)
+            && !self.steps_generator(function))
+    }
+
+    /// The member a function the walks report on starts with, or `None`
+    /// for one no computation runs.
+    fn start_member(
+        &self,
+        index: &super::AsyncComputations,
+        function: &'f AsyncFunctionFact,
+    ) -> Option<Member> {
+        let ctx = self.ctx;
+        // ADR 0873: a compute a project wrapper's parameter hands on.
+        let (context, handed) = match tracked_async_computation_context(ctx, function, index) {
+            Some(context) => (context, None),
+            None => match ast_function(&self.files, function).and_then(|(file, function)| {
+                super::handed_compute::handed_compute(ctx, file, function)
+            })? {
+                super::handed_compute::HandedCompute::Tracked(context) => (context, None),
+                super::handed_compute::HandedCompute::Unplaced { via } => (
+                    "handed async function".to_owned(),
+                    Some(AfterAwaitObligation::HandOffNotFollowed { via }),
+                ),
+            },
+        };
+        let blocker = handed
+            .is_some()
+            .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
+        let function = Arc::new(function.clone());
+        // An owner a `dispose` function can reach may be gone when the
+        // continuation resumes: the runtime then reads in a disposed
+        // computation and stays silent, so every read is an obligation.
+        let conditional = owner_may_be_disposed(ctx, &self.files, &function)
+            .then_some(AfterAwaitObligation::OwnerMayBeDisposed)
+            .or(handed);
+        // ADR 0820: past a generator's leading `yield` nothing is tracked.
+        let windows = if ast_function(&self.files, &function)
+            .is_some_and(|(file, function)| leading_yield(file, function))
+        {
+            Vec::new()
+        } else {
+            vec![Arc::clone(&function)]
+        };
+        Some(Member {
+            function,
+            context,
+            windows,
+            conditional,
+            blocker,
+        })
     }
 
     /// ADR 0909: `member`'s walk on a draft of its own
