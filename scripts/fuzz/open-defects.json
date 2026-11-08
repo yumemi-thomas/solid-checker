@@ -993,14 +993,13 @@
    "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async": 50,
    "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 42
   },
-  "unjudgedClaim": 6,
+  "unjudgedClaim": 0,
   "haltedClaim": 2,
   "causes": {
-   "R-not-legal": 2178,
+   "R-not-legal": 2179,
    "createRoot inside onCleanup inside createRoot": 2,
-   "R-unplaced": 173,
-   "R-unjudged-unplaced": 6,
    "R-stacked": 194,
+   "R-unplaced": 8,
    "R-other": 32,
    "R-neighbour-U": 79,
    "R-misplaced": 33,
