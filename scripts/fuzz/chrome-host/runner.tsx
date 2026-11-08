@@ -123,9 +123,12 @@ async function runCase() {
     Error.stackTraceLimit = 41;
     try { return new Error(`diagnostic ${code}`).stack; } finally { Error.stackTraceLimit = limit; }
   };
+  // Where the hit order log stood when Solid reported the diagnostic (hits.mjs `__h`): a halt's place among the counters that ran, the
+  // ordering evidence a halted claim needs (classify.mjs `haltPlace`; a log already full, hits.mjs ORDER_LIMIT, places nothing).
+  const orderAt = () => ((globalThis as any).__scOrder ?? []).length;
   const stop = OBSERVE!.diagnostics.subscribe((event: any) => {
     diagnostics.push({ code: event.code, message: event.message ?? null, loc: event.loc ?? null, siteKind: event.siteKind ?? null,
-      severity: event.severity ?? null, phase, stack: diagnosticStack(event.code) });
+      severity: event.severity ?? null, phase, stack: diagnosticStack(event.code), orderAt: orderAt() });
   });
   try {
     const plan = await (await fetch(`/cases/${id}/sites.json`)).json();
@@ -198,7 +201,7 @@ async function runCase() {
     console.error = oldError; console.warn = oldWarn;
     (window as any).__scResolve({
       id, wallMs: Math.round(performance.now() - started), failure, witnesses, hits, order, hitsDom, quiescent,
-      diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, positions: servedFrames(d.stack) })),
+      diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, orderAt: d.orderAt, positions: servedFrames(d.stack) })),
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...servedFrames(e.stack), ...servedFrames(e.cause?.stack)] })),
       consoleErrors: consoleErrors.slice(0, 20), artifactCount,

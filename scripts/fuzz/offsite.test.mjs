@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { offSiteVerdicts, runtimeEvents } from "./classify.mjs";
+import { haltPlace, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { rowProblem } from "./codes.mjs";
 import { readGrid } from "./focus.mjs";
 import { judgeLegalProgram, legalCells } from "./legal.mjs";
@@ -73,6 +73,47 @@ describe("offSiteVerdicts", () => {
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")], undefined, threw(null)))).toEqual(["unjudged(disturbed-unplaced)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], { h1: 1, h2: 0, h3: 1 }, threw(null)))).toEqual(["unexecuted"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([], null, threw(null)))).toEqual(["unjudged(disturbed-no-hit-ledger)"]);
+  });
+});
+
+describe("halted claims (coordinator's ruling, Part 17; ADR 0900)", () => {
+  // Solid halted (REACTIVITY_HALTED at hit-order place `at`) after a DOM error of the program's own; the decoy's counter h2 at line 20.
+  const halt = (at, extra = {}) => ({ code: "REACTIVITY_HALTED", message: "m", positions: [], ...(at === undefined ? {} : { orderAt: at }), ...extra });
+  const dom = { errors: [{ kind: "window-error", message: "Failed to execute 'insertBefore' on 'Node'", positions: [] }] };
+  const halted = (diagnostics, order, hits = { h1: 1, h2: 1, h3: 1 }) => run(diagnostics, hits, { ...dom, order });
+  it("haltPlace: before, after, unordered, or no halt", () => {
+    expect(haltPlace(halted([halt(2)], ["h1", "h3", "h2"]), ["h2"])).toBe("before");
+    expect(haltPlace(halted([halt(2)], ["h1", "h2", "h3"]), ["h2"])).toBe("after");
+    // The first halt counts (the earliest place), whatever order the records came in.
+    expect(haltPlace(halted([halt(3), halt(1)], ["h1", "h2", "h3"]), ["h2"])).toBe("before");
+    expect(haltPlace(halted([halt(3)], ["h1", "h2", "h3"]), ["h2"])).toBe("after");
+    // A halt with no place (an older runner, the oracle), a log that misses a hit, a halt past the log's limit, no order at all: no evidence.
+    expect(haltPlace(halted([halt()], ["h1", "h3", "h2"]), ["h2"])).toBe("unordered");
+    expect(haltPlace(halted([halt(2), halt()], ["h1", "h3", "h2"]), ["h2"])).toBe("unordered");
+    expect(haltPlace(halted([halt(2)], ["h1", "h3"]), ["h2"])).toBe("unordered");
+    expect(haltPlace(halted([halt(400)], ["h1", "h3", "h2"]), ["h2"])).toBe("unordered");
+    expect(haltPlace(run([halt(2)], { h1: 1, h2: 1, h3: 1 }, dom), ["h2"])).toBe("unordered");
+    expect(haltPlace(halted([halt(2)], ["h1", "h3", "h2"]), [])).toBe("unordered");
+    // Every counter on the lines must run after the halt; a twice-run counter with one run before it is "after".
+    expect(haltPlace(halted([halt(2)], ["h2", "h1", "h2"], { h1: 1, h2: 2, h3: 0 }), ["h2"])).toBe("after");
+    expect(haltPlace(halted([], ["h1", "h2"]), ["h2"])).toBe(null);
+  });
+  it("a V whose lines ran only after the halt is a halted claim; with no place it is unjudged; a V that ran before it stays a false positive", () => {
+    expect(verdictsOf([finding("missing-owner", 20)], halted([halt(2)], ["h1", "h3", "h2"]))).toEqual(["halted(halt-before-site)"]);
+    expect(verdictsOf([finding("missing-owner", 20)], halted([halt()], ["h1", "h3", "h2"]))).toEqual(["unjudged(halt-unordered)"]);
+    expect(verdictsOf([finding("missing-owner", 20)], halted([halt(2)], ["h1", "h2", "h3"]))).toEqual(["false-positive(disturbed)"]);
+    // Thrown on the V's lines first: a stacked claim as before (ADR 0887), the halt does not change it.
+    expect(offSiteVerdicts({ findings: [finding("missing-owner", 20)], built, runtime: halted([event("PRIMITIVE_IN_EFFECT_CALLBACK", 20), halt(2)], ["h1", "h3", "h2"]), plan: built.plan })[0].verdict).toBe("stacked");
+    // An undisturbed run is never a halted claim: no halt, no change (and a REACTIVITY_HALTED alone disturbs the run).
+    expect(verdictsOf([finding("missing-owner", 20)], run([], { h1: 1, h2: 1, h3: 1 }, { order: ["h1", "h2"] }))).toEqual(["false-positive"]);
+  });
+  it("the misuse and legal grids score them halted-claim and unplaced, counted problems", () => {
+    const fp = { ok: true, findings: [finding("missing-owner", 20)] };
+    const at = (runtime) => judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: fp, runtime, built }).outcome;
+    expect(at(halted([halt(2)], ["h1", "h3", "h2"]))).toBe("halted-claim");
+    expect(at(halted([halt()], ["h1", "h3", "h2"]))).toBe("unplaced");
+    expect(at(halted([halt(2)], ["h1", "h2", "h3"]))).toBe("false-positive");
+    expect(rowProblem({ outcome: "halted-claim" })).toBe("halted-claim");
   });
 });
 

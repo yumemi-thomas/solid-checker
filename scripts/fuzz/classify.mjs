@@ -33,7 +33,7 @@
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
 import { withholdingRules, codeOfLogged, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, withheldAtStack, withStarts } from "./codes.mjs";
-import { hitCount } from "./hits.mjs";
+import { ORDER_LIMIT, hitCount } from "./hits.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
 import { registrationLines } from "./registration.mjs";
 import { STATUS as UNEXECUTED_STATUS, unexecutedCandidate } from "./unexecuted.mjs";
@@ -154,6 +154,32 @@ export function disturbances(runtime, plan) {
 }
 
 /**
+ * Halted claim (coordinator's ruling, Part 17): where Solid's coded REACTIVITY_HALTED stands against the hits on a finding's counters, from the
+ * hit-order log (hits.mjs `__h`) and the place the runner recorded each diagnostic at (chrome-host/runner.tsx `orderAt`). Whatever threw first
+ * (a DOM error from the program is the program's own failure), a halt placed before every hit of the finding's counters stopped the engine
+ * before the claimed effect could fire there:
+ *   "before"     the first halt's place precedes every hit of every counter, each hit in the log;
+ *   "after"      a counter ran before the halt: the claim could fire with reactivity live, and the silence there counts;
+ *   "unordered"  a halt with no place: a record without `orderAt` (the oracle's, an older runner's), a halt past ORDER_LIMIT, or a counter
+ *                whose hits the full log does not hold. Never a halted claim (no ordering evidence): the row is `unplaced`;
+ *   null         no REACTIVITY_HALTED recorded.
+ */
+export function haltPlace(runtime, hitIds) {
+  const halts = (runtime.diagnostics ?? []).filter((diagnostic) => diagnostic.code === "REACTIVITY_HALTED");
+  if (!halts.length) return null;
+  if (halts.some((halt) => !Number.isInteger(halt.orderAt))) return "unordered";
+  const at = Math.min(...halts.map((halt) => halt.orderAt));
+  const order = runtime.order;
+  if (!Array.isArray(order) || !runtime.hits || at >= ORDER_LIMIT || !hitIds.length) return "unordered";
+  for (const id of hitIds) {
+    const places = order.flatMap((logged, index) => (String(logged) === String(id) ? [index] : []));
+    if (places.length !== hitCount(runtime.hits, id)) return "unordered";
+    if (places.some((index) => index < at)) return "after";
+  }
+  return "before";
+}
+
+/**
  * The grids' violations away from the site they judge (a decoy's line, a parent's, a helper call's, another use of a combination
  * program): each against the runtime, so a false positive there is not hidden behind the site's own verdict.
  *   substantiated   a code of the rule is reported on the finding's lines (a frame, or the line that registered the callback a frame
@@ -219,11 +245,16 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     };
     const elsewhere = reported.find((event) => appLines(event).length && sameSource(event))?.code ?? null;
     const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });
-    const halted = (verdict) => {
+    const halted = (verdict, hitIds = []) => {
       if (!disturbed.length) return verdict;
       // A repeat stays one in a halted run (its pair needs the same twin); a stacked claim needs nothing of the rule reported anywhere.
       if (verdict.verdict === "stacked" || verdict.why === "repeat-other-source") return { ...verdict, why: `disturbed-${verdict.why}` };
-      if (verdict.verdict === "false-positive") return first ? { finding: label, verdict: "stacked", first, why: "disturbed" } : { ...verdict, why: "disturbed" };
+      if (verdict.verdict === "false-positive" && first) return { finding: label, verdict: "stacked", first, why: "disturbed" };
+      // Halted claim (`haltPlace`): the engine stopped before the claimed effect could fire on these lines; with no ordering evidence, unjudged.
+      const place = verdict.verdict === "false-positive" ? haltPlace(runtime, hitIds) : null;
+      if (place === "before") return { finding: label, verdict: "halted", why: "halt-before-site" };
+      if (place === "unordered") return { finding: label, verdict: "unjudged", why: "halt-unordered" };
+      if (verdict.verdict === "false-positive") return { ...verdict, why: "disturbed" };
       if (verdict.verdict === "unjudged") return { finding: label, verdict: "unjudged", why: `disturbed-${verdict.why}` };
       return verdict;
     };
@@ -236,14 +267,14 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
       const entered = hitCount(hits, host.hit);
       if (entered === null) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
       if (entered === 0) return halted({ finding: label, verdict: "unexecuted", why: "host" });
-      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected());
-      return halted({ finding: label, verdict: "false-positive", why: "host-ran" });
+      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected(), [host.hit]);
+      return halted({ finding: label, verdict: "false-positive", why: "host-ran" }, [host.hit]);
     }
     const counts = covered.map((site) => hitCount(hits, site.hit));
     if (counts.some((count) => count === null)) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
     if (counts.every((count) => count === 0)) return halted({ finding: label, verdict: "unexecuted" });
-    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected());
-    return halted({ finding: label, verdict: "false-positive" });
+    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected(), covered.map((site) => site.hit));
+    return halted({ finding: label, verdict: "false-positive" }, covered.map((site) => site.hit));
   });
 }
 

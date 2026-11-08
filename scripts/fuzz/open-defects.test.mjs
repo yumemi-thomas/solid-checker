@@ -184,6 +184,12 @@ describe("the row ledger (ADR 0815, R23)", () => {
     expect(ratchetDifferences({ rows, ratchet: { ...base, stackedClaim: 2, stackedPairs: { "A|r": 2 } } })).toEqual([{ key: "stacked B|s", rows: 1, ratchet: null }]);
     expect(ratchetDifferences({ rows, ratchet: base }).map((row) => row.key)).toEqual(["stackedClaim", "stacked A|r", "stacked B|s"]);
     expect(finalBlockers({ rows })).toEqual([]);
+    // Halted claims (Part 17, ADR 0900): exact both ways, their own key.
+    const haltedRows = { grids: { g: { h: { outcome: "halted-claim", cause: "R-halted", rules: ["missing-owner"] } } } };
+    expect(ledgerCounts(haltedRows)).toMatchObject({ haltedClaim: 1, falsePositive: 0 });
+    expect(ratchetDifferences({ rows: haltedRows, ratchet: { certified: 0, certifiedF2: 0, falsePositive: 0, haltedClaim: 1, causes: { "R-halted": 1 } } })).toEqual([]);
+    expect(ratchetDifferences({ rows: haltedRows, ratchet: { certified: 0, certifiedF2: 0, falsePositive: 0, causes: { "R-halted": 1 } } }).map((row) => row.key)).toEqual(["haltedClaim"]);
+    expect(ratchetDifferences({ rows: { grids: {} }, ratchet: { certified: 0, certifiedF2: 0, falsePositive: 0, haltedClaim: 1, causes: {} } }).map((row) => row.key)).toEqual(["haltedClaim"]);
     const unjudged = { grids: { g: { c: { outcome: "unjudged-claim", cause: "R-unjudged-unplaced", rules: ["r"] } } } };
     expect(ledgerCounts(unjudged)).toMatchObject({ unjudgedClaim: 1 });
     expect(ratchetDifferences({ rows: unjudged, ratchet: { certified: 0, certifiedF2: 0, falsePositive: 0, causes: { "R-unjudged-unplaced": 1 } } }).map((row) => row.key)).toEqual(["unjudgedClaim"]);

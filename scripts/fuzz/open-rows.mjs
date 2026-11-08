@@ -9,10 +9,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem, withholdingRules } from "./codes.mjs";
 import { STOP_VARIANTS, readStopSource, stopPlan, stopProblems } from "./stop-holder.mjs";
-import { ALIAS_OWNER, CASTS_STAGE2, F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, STACKED, STOP_NAMED_U, UNJUDGED, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
+import { ALIAS_OWNER, CASTS_STAGE2, F1_OPEN, F2_OPEN, OPEN_DEFECTS, OPEN_ROWS, HALTED, STACKED, STOP_NAMED_U, UNJUDGED, finalBlockers, heldGridEntry, ledgerCounts, namedKey, readOpenDefects } from "./open-defects.mjs";
 
 /** What the list may hold. Any other problem (wrong-rule, harness, tsc-overlap) stays a failure. */
-const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "stacked-claim", "unjudged-claim", "secondary-false-clean", "not-legal"];
+const LEDGERED = ["false-clean", "misplaced", "unplaced", "false-positive", "stacked-claim", "unjudged-claim", "halted-claim", "secondary-false-clean", "not-legal"];
 /** Rows the ledger may not hold: certified CONTEXT_NOT_FOUND, a real hole R5 is closing. They fail the smoke until that lands. */
 export const NOT_LISTED = (row) => /^flw-guard-(?:early|probe-loop)$/.test(String(row.context ?? ""));
 const ALIAS_BINDINGS = ["ns-default", "ns-member", "extracted"];
@@ -33,6 +33,7 @@ export function causeOf(row, problem, entry) {
   if (problem === "not-legal") return "R-not-legal";
   if (problem === "stacked-claim") return STACKED;
   if (problem === "unjudged-claim") return UNJUDGED;
+  if (problem === "halted-claim") return HALTED;
   if (problem !== "false-clean") return problem;
   const variant = String(row.variant ?? "");
   if (/^(?:store-)?proto-|^installed-|^use-|^net-|^cast-|^store-dstr-/.test(variant)) return "R-carrier";
@@ -83,7 +84,7 @@ export function ledger(dir, seed, list) {
       if (inStopGroup(row)) { (entry && !entry.item.startsWith("R-") ? stopCheck.family : named ? stopCheck.listed : stopCheck.rejected).push(row.id); }
       const stops = named && !(entry && !entry.item.startsWith("R-")) && !CASTS_STAGE2_CONTEXTS.includes(row.context);
       const owner = list.owners?.[`${grid}/${row.id}`];
-      rows[row.id] = { outcome: problem, ...(row.detail?.certified === true ? { certified: true } : {}), cause: stops ? STOP_NAMED_U : causeOf(row, problem, entry), ...(stops ? { blocker: namedKey(named), ...(named.atRead ? { atRead: true } : {}) } : {}), ...(problem === "stacked-claim" ? { pairs: row.detail?.pairs ?? [] } : {}), ...(problem === "unjudged-claim" ? { rules: row.detail?.rules ?? [] } : {}), ...(owner ? { owner } : {}) };
+      rows[row.id] = { outcome: problem, ...(row.detail?.certified === true ? { certified: true } : {}), cause: stops ? STOP_NAMED_U : causeOf(row, problem, entry), ...(stops ? { blocker: namedKey(named), ...(named.atRead ? { atRead: true } : {}) } : {}), ...(problem === "stacked-claim" ? { pairs: row.detail?.pairs ?? [] } : {}), ...(problem === "unjudged-claim" || problem === "halted-claim" ? { rules: row.detail?.rules ?? [] } : {}), ...(owner ? { owner } : {}) };
     }
     if (Object.keys(rows).length) grids[grid] = Object.fromEntries(Object.entries(rows).sort(([a], [b]) => (a < b ? -1 : 1)));
   }
@@ -118,6 +119,9 @@ export function ledgerChange(before, after) {
   return { added: [...now].filter((id) => !was.has(id)), removed: [...was].filter((id) => !now.has(id)), moved };
 }
 
+/** Every halted-claim row by id (`grid/id rules`): each report lists them (coordinator's ruling, Part 17). */
+export const haltedIds = (rows) => Object.entries(rows?.grids ?? {}).flatMap(([grid, list]) => Object.entries(list).filter(([, row]) => row.outcome === "halted-claim").map(([id, row]) => `${grid}/${id} ${(row.rules ?? []).join(",")}`));
+
 /** The holder-free check of `rows`' stop rows, on the smoke at `dir`'s programs. `--checker` and `--typefacts` name the build; a run with neither stops. */
 async function stopHolderCheck(dir, rows, args) {
   const value = (name) => { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; };
@@ -144,6 +148,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const blockers = finalBlockers(readOpenDefects());
     console.log(`final gate: ${blockers.length} rows under ${F1_OPEN}, ${F2_OPEN}, ${ALIAS_OWNER} or ${CASTS_STAGE2}, certified, false positive or unchecked stop row`);
     for (const id of readOpenDefects().rows?.stopUnchecked ?? []) console.log(`unchecked stop row ${id}`);
+    for (const id of haltedIds(readOpenDefects().rows)) console.log(`halted claim ${id}`);
     process.exit(blockers.length ? 1 : 0);
   }
   const at = args.indexOf("--update");
@@ -171,5 +176,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (added.length && !args.includes("--allow-new")) throw new Error(`${added.length} new rows: a new failing row is a defect to read, not to list. Pass --allow-new to list them`);
   out.stopUnchecked = stopRun.uncheckedIds;
   writeFileSync(OPEN_ROWS, printLedger(out));
+  for (const id of haltedIds(out)) console.log(`halted claim ${id}`);
   console.log(JSON.stringify(ledgerCounts(out), null, 1));
 }
