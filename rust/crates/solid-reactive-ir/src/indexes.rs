@@ -2734,6 +2734,14 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// Whether exactly one slot holds `path`: what a per-file or per-function
+    /// cache keyed by path may keep (a path held twice is kept for neither).
+    pub(crate) fn path_held_once(&self, path: &str) -> bool {
+        self.file_table
+            .id_of(path)
+            .is_some_and(|id| self.file_table.slots_of(id).len() == 1)
+    }
+
     pub(crate) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
         let facts: &'a ProjectFacts = self.facts;
         // A hand-out (`hand_outs`): the slot a path names, and its file.

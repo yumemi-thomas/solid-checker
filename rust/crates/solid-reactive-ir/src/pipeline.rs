@@ -811,7 +811,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &analysis,
         &project_indexes,
         &source_discovery.unchanged_paths,
-        late_stage_cache.and_then(Option::as_mut),
+        late_stage_cache.as_deref_mut().and_then(Option::as_mut),
         &mut draft,
         &mut build_timings,
     );
@@ -876,8 +876,14 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     program.static_violations.extend(holds);
     // ADR 0458: after every producer and gate, over the rows that may be
     // reported, while the lookup's memos are still open.
-    program.unreached_sites =
-        crate::execution_role::unreached_report_sites(&program, semantic_lookup);
+    program.unreached_sites = crate::execution_role::unreached_report_sites(
+        &program,
+        semantic_lookup,
+        late_stage_cache
+            .and_then(Option::as_mut)
+            .map(|cache| &mut cache.unreached),
+        &source_discovery.unchanged_paths,
+    );
     program.early_mention_sites =
         crate::indexes::early_mention_report_sites(&program, semantic_lookup);
     if defer_memo_end {

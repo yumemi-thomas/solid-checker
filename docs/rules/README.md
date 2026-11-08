@@ -133,7 +133,9 @@ A violation at a site no execution reaches is uncertifiable, whatever the rule
 `if (false)` arm, code after a `return` or `throw` in the same block, or a
 function nothing that runs calls, renders or names (also one an IIFE returns
 into a discarded result, and a method of a class nothing names). A function at
-module scope, and any value handed on, may run. Style rules (SC80xx) and
+module scope, and any value handed on, may run. Whether a site's function
+runs is decided within a depth and work bound of the site's own (ADRs 0560,
+0912); past it the violation is uncertifiable too. Style rules (SC80xx) and
 `flush-in-effect-callback` (SC2008) are unaffected.
 
 ## A binding named before its declarator
