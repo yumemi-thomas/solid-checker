@@ -179,6 +179,30 @@ impl<T> Required<T> for Option<T> {
     }
 }
 
+/// Whether something is at `path`, as a lookup step: `Ok(false)` only when
+/// nothing is there (ADR 0915); an input that exists and cannot be followed
+/// or read is an unobservable refusal, never an absence. One `stat` on the
+/// present path, the cost `Path::exists` had; a miss adds the `lstat` walk.
+fn present(path: &Path, what: &str) -> Result<bool, DiscoveryRefusal> {
+    present_in(path, what, &mut crate::observed::Ancestors::default())
+}
+
+/// [`present`] sharing one walk's ancestor classifications (a loop over many
+/// candidates in the same directories).
+fn present_in(
+    path: &Path,
+    what: &str,
+    ancestors: &mut crate::observed::Ancestors,
+) -> Result<bool, DiscoveryRefusal> {
+    if fs::metadata(path).is_ok() {
+        return Ok(true);
+    }
+    match crate::observed::unobservable_in(path, ancestors) {
+        Some(_) => Err(DiscoveryRefusal::unobservable(path, what)),
+        None => Ok(false),
+    }
+}
+
 /// An input discovery read and could not observe (ADR 0915). Inference is
 /// refused, as for any refusal, and the ordinary analysis that follows does
 /// not certify: it names this blocker instead.
@@ -264,7 +288,9 @@ pub fn inferred_project_host_with_note(
         Err(reason) => return Ok(InferredHost::refused(&reason)),
     };
     // An empty graph is a refusal decided over its manifest's inputs; one
-    // that could not be read makes it that input's (ADR 0915).
+    // that could not be read makes it that input's (ADR 0915). Phase-1 inputs
+    // were checked where they were read; only the graph's own failed
+    // observations are asked again.
     let empty = |index: &ProjectHostIndex| {
         let observed = index
             .manifest
@@ -272,7 +298,6 @@ pub fn inferred_project_host_with_note(
             .iter()
             .filter(|(_, identity)| identity.as_str() == "unreadable")
             .map(|(path, _)| PathBuf::from(path))
-            .chain(inputs.config_inputs.iter().cloned())
             .collect::<Vec<_>>();
         let refusal = DiscoveryRefusal::new(directory, index.manifest.reason.clone())
             .or_unobservable(&observed);

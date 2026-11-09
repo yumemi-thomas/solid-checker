@@ -381,16 +381,15 @@ pub(super) fn discovery_inputs(
         ));
     }
     let mut paths_observed = Vec::new();
-    // ADR 0915: a refusal decided after reading an input that could not be
-    // observed is that input's, whatever reason the walk gave.
-    application_inputs(&directory, &project, &mut paths_observed)
-        .map_err(|refusal| refusal.or_unobservable(&paths_observed))?;
+    // ADR 0915: every lookup below reports an input that exists and cannot be
+    // read where it meets it (`present`, `read_from`, the plugin audit), so a
+    // refusal needs no second pass over its witness (12,397 paths for one
+    // plugin closure, re-read on every daemon edit).
+    application_inputs(&directory, &project, &mut paths_observed)?;
     // Refusal consumes only its witness. No app inventory, request parsing,
     // or manifest hashing is needed before the configuration can be admitted.
-    let config = configuration(&directory, &mut paths_observed)
-        .map_err(|refusal| refusal.or_unobservable(&paths_observed))?;
-    let paths = paths_targets(&directory, &project)
-        .map_err(|refusal| refusal.or_unobservable(&paths_observed))?;
+    let config = configuration(&directory, &mut paths_observed)?;
+    let paths = paths_targets(&directory, &project)?;
     Ok(DiscoveryInputs {
         directory,
         config,

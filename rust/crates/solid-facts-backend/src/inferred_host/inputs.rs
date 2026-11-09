@@ -230,12 +230,15 @@ pub(super) fn static_fact_requests(ast: &solid_facts::ast::AstFacts) -> Vec<Stri
 /// error, a package manifest that does not parse. Only a path with nothing
 /// there is `absent`.
 pub(super) fn identity(path: &Path) -> Option<String> {
+    identity_in(path, &mut crate::observed::Ancestors::default())
+}
+
+/// [`identity`] sharing one pass's ancestor classifications.
+fn identity_in(path: &Path, ancestors: &mut crate::observed::Ancestors) -> Option<String> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => Some(metadata),
         Err(error) if crate::observed::absent_kind(error.kind()) => {
-            return crate::observed::broken_ancestor(path)
-                .is_none()
-                .then(|| "absent".into());
+            return ancestors.broken(path).is_none().then(|| "absent".into());
         }
         Err(_) => None,
     };
@@ -310,7 +313,11 @@ pub(crate) fn identities(paths: &[&Path]) -> Vec<Option<String>> {
         .map_or(1, usize::from)
         .min(6);
     if paths.len() < 128 || workers == 1 {
-        return paths.iter().map(|path| identity(path)).collect();
+        let mut ancestors = crate::observed::Ancestors::default();
+        return paths
+            .iter()
+            .map(|path| identity_in(path, &mut ancestors))
+            .collect();
     }
     std::thread::scope(|scope| {
         // Interleave paths so a large package's adjacent files cannot all land
@@ -318,9 +325,11 @@ pub(crate) fn identities(paths: &[&Path]) -> Vec<Option<String>> {
         let jobs = (0..workers)
             .map(|worker| {
                 scope.spawn(move || {
+                    // One worker's ancestor classifications, for this pass only.
+                    let mut ancestors = crate::observed::Ancestors::default();
                     (worker..paths.len())
                         .step_by(workers)
-                        .map(|index| (index, identity(paths[index])))
+                        .map(|index| (index, identity_in(paths[index], &mut ancestors)))
                         .collect::<Vec<_>>()
                 })
             })

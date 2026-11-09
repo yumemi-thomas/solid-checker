@@ -46,7 +46,7 @@ pub(super) fn application_inputs(
     for ancestor in directory.ancestors().skip(1) {
         let path = ancestor.join("package.json");
         inputs.push(path.clone());
-        if path.exists() {
+        if present(&path, "cannot read enclosing manifest")? {
             if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
                 return Err(DiscoveryRefusal::new(
                     &path,
@@ -159,10 +159,15 @@ pub(super) fn side_inputs(
 ) -> Result<(), DiscoveryRefusal> {
     // Vite's default PostCSS discovery loads JavaScript and named plugins in
     // Node. Include absence above the leaf too; JSON is not an inert exemption.
+    let mut ancestors = crate::observed::Ancestors::default();
     for ancestor in directory.ancestors() {
         let package = ancestor.join("package.json");
         inputs.push(package.clone());
-        if package.exists() {
+        if present_in(
+            &package,
+            "cannot read PostCSS discovery manifest",
+            &mut ancestors,
+        )? {
             let package: serde_json::Value = serde_json::from_slice(
                 &fs::read(&package)
                     .ok()
@@ -183,7 +188,7 @@ pub(super) fn side_inputs(
             ] {
                 let path = ancestor.join(format!("{stem}{suffix}"));
                 inputs.push(path.clone());
-                if path.exists() {
+                if present_in(&path, "cannot observe PostCSS side input", &mut ancestors)? {
                     return Err(DiscoveryRefusal::new(
                         &path,
                         "executable PostCSS side input",
@@ -238,12 +243,13 @@ pub(super) fn configuration_in_generation(
             "non-conventional or mode-specific Vite config",
         ));
     }
-    let configs = CONFIGS
-        .iter()
-        .map(|name| directory.join(name))
-        .filter(|path| path.exists())
-        .collect::<Vec<_>>();
     inputs.extend(CONFIGS.iter().map(|name| directory.join(name)));
+    let mut configs = Vec::new();
+    for path in CONFIGS.iter().map(|name| directory.join(name)) {
+        if present(&path, "cannot observe Vite config candidate")? {
+            configs.push(path);
+        }
+    }
     let [path] = configs.as_slice() else {
         return Err(DiscoveryRefusal::new(
             directory,
@@ -264,14 +270,17 @@ pub(super) fn configuration_in_generation(
     let mut audited_packages = crate::host_plugins::PackageAudits::new();
     for name in &config.plugins {
         crate::host_plugins::audit(directory, name, inputs, &mut audited_packages, generation)
-            .map_err(|reason| DiscoveryRefusal::new(path, reason))?;
+            .map_err(|refusal| match refusal.unobservable {
+                Some(at) => DiscoveryRefusal::unobservable(&at, &refusal.reason),
+                None => DiscoveryRefusal::new(path, refusal.reason),
+            })?;
     }
     if config.plugins.contains("@tanstack/router-plugin/vite") {
         // JSON can point at executable virtual-route modules. Options alone
         // do not disable generator discovery of this file.
         let path = directory.join("tsr.config.json");
         inputs.push(path.clone());
-        if path.exists() {
+        if present(&path, "cannot observe virtual-route configuration")? {
             return Err(DiscoveryRefusal::new(
                 &path,
                 "executable virtual-route configuration",
@@ -280,7 +289,7 @@ pub(super) fn configuration_in_generation(
         let mut routes = Vec::new();
         let root = directory.join("src/routes");
         inputs.push(root.clone());
-        if root.exists() {
+        if present(&root, "cannot observe routes directory")? {
             inventory_paths(&root, &mut routes)
                 .map_err(|at| DiscoveryRefusal::unobservable(&at, "cannot inventory routes"))?;
             if routes.iter().any(|path| {
@@ -313,11 +322,30 @@ pub(super) fn configuration_in_generation(
         // discharge CSS compilation only; executable plugin/config side inputs
         // still cannot enter the reviewed configuration through a stylesheet.
         inputs.extend(inventory.iter().cloned());
+        let before = inputs.len();
         if !crate::host_loadable::stylesheet_closure(&inventory, &config, inputs) {
+            // ADR 0915: a stylesheet or side input it could not read is
+            // unobservable; check only what the closure read.
+            let read = inputs[before..]
+                .iter()
+                .chain(inventory.iter().filter(|path| {
+                    path.extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| {
+                            [
+                                "css", "pcss", "postcss", "less", "sass", "scss", "styl", "stylus",
+                                "sss",
+                            ]
+                            .contains(&extension)
+                        })
+                }))
+                .cloned()
+                .collect::<Vec<_>>();
             return Err(DiscoveryRefusal::new(
                 directory,
                 "executable stylesheet plugin/config side-input closure is unproved",
-            ));
+            )
+            .or_unobservable(&read));
         }
     }
     Ok(config)

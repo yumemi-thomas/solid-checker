@@ -11,6 +11,7 @@
 //! that the checker could not read, which is a missing fact and never
 //! evidence of absence.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -20,28 +21,76 @@ pub(crate) fn absent_kind(kind: ErrorKind) -> bool {
     matches!(kind, ErrorKind::NotFound | ErrorKind::NotADirectory)
 }
 
-/// The nearest existing ancestor of `path` that makes it unobservable: a
-/// symlink that does not resolve, or a directory `lstat` cannot see past.
-/// `None` when the nearest existing ancestor is an ordinary file or
-/// directory, so an `ENOENT` at `path` is a real absence.
-pub(crate) fn broken_ancestor(path: &Path) -> Option<(PathBuf, String)> {
-    for ancestor in path.ancestors().skip(1) {
-        if ancestor.as_os_str().is_empty() {
-            return None;
-        }
-        match fs::symlink_metadata(ancestor) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return match fs::metadata(ancestor) {
-                    Ok(_) => None,
-                    Err(error) => Some((ancestor.to_owned(), link_failure(ancestor, &error))),
-                };
+/// One ancestor directory as a lookup step sees it.
+#[derive(Clone)]
+enum Step {
+    /// Nothing there: the walk goes on up.
+    Missing,
+    /// An ordinary directory or file, or a link that resolves: the walk stops.
+    Ordinary,
+    /// A link that does not resolve, or an `lstat` error that is no absence.
+    Broken(String),
+}
+
+/// The ancestor walk of many paths of one check: each ancestor directory is
+/// classified once. Absent inputs share their parents (one fingerprint pass
+/// holds thousands), so the walk costs one `lstat` per directory, not per
+/// path. Made per check and dropped with it: never reused across requests.
+#[derive(Default)]
+pub(crate) struct Ancestors(HashMap<PathBuf, Step>);
+
+impl Ancestors {
+    /// The nearest existing ancestor of `path` that makes it unobservable: a
+    /// symlink that does not resolve, or a directory `lstat` cannot see past.
+    /// `None` when the nearest existing ancestor is an ordinary file or
+    /// directory, so an `ENOENT` at `path` is a real absence.
+    pub(crate) fn broken(&mut self, path: &Path) -> Option<(PathBuf, String)> {
+        for ancestor in path.ancestors().skip(1) {
+            if ancestor.as_os_str().is_empty() {
+                return None;
             }
-            Ok(_) => return None,
-            Err(error) if absent_kind(error.kind()) => {}
-            Err(error) => return Some((ancestor.to_owned(), error.to_string())),
+            let step = match self.0.get(ancestor) {
+                Some(step) => step.clone(),
+                None => {
+                    // Nothing exists under a directory with nothing there: no
+                    // `lstat` for it (a package's absent `node_modules/<dep>`).
+                    let step = if self.missing_parent(ancestor) {
+                        Step::Missing
+                    } else {
+                        classify(ancestor)
+                    };
+                    self.0.insert(ancestor.to_owned(), step.clone());
+                    step
+                }
+            };
+            match step {
+                Step::Missing => {}
+                Step::Ordinary => return None,
+                Step::Broken(why) => return Some((ancestor.to_owned(), why)),
+            }
         }
+        None
     }
-    None
+
+    /// Whether `path`'s parent is already known to hold nothing, so nothing
+    /// is at `path` either.
+    pub(crate) fn missing_parent(&self, path: &Path) -> bool {
+        path.parent()
+            .and_then(|parent| self.0.get(parent))
+            .is_some_and(|step| matches!(step, Step::Missing))
+    }
+}
+
+fn classify(ancestor: &Path) -> Step {
+    match fs::symlink_metadata(ancestor) {
+        Ok(metadata) if metadata.file_type().is_symlink() => match fs::metadata(ancestor) {
+            Ok(_) => Step::Ordinary,
+            Err(error) => Step::Broken(link_failure(ancestor, &error)),
+        },
+        Ok(_) => Step::Ordinary,
+        Err(error) if absent_kind(error.kind()) => Step::Missing,
+        Err(error) => Step::Broken(error.to_string()),
+    }
 }
 
 fn link_failure(path: &Path, error: &std::io::Error) -> String {
@@ -61,8 +110,16 @@ fn link_failure(path: &Path, error: &std::io::Error) -> String {
 /// Diagnosis only: callers decide unobservability from their own read and
 /// ask this for the words.
 pub(crate) fn unobservable(path: &Path) -> Option<(PathBuf, String)> {
+    unobservable_in(path, &mut Ancestors::default())
+}
+
+/// [`unobservable`] sharing one check's [`Ancestors`].
+pub(crate) fn unobservable_in(path: &Path, ancestors: &mut Ancestors) -> Option<(PathBuf, String)> {
+    if ancestors.missing_parent(path) {
+        return ancestors.broken(path);
+    }
     match fs::symlink_metadata(path) {
-        Err(error) if absent_kind(error.kind()) => broken_ancestor(path),
+        Err(error) if absent_kind(error.kind()) => ancestors.broken(path),
         Err(error) => Some((path.to_owned(), error.to_string())),
         Ok(metadata) => {
             if metadata.file_type().is_symlink()
