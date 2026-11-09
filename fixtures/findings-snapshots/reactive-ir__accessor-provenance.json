@@ -233,17 +233,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 2580,
-      "end": 2590,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -507,17 +496,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 5439,
-      "end": 5449,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -583,17 +561,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 6312,
-      "end": 6322,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -613,17 +580,6 @@
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 6356,
       "end": 6366,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
-      "start": 6477,
-      "end": 6488,
       "fixes": 0
     },
     {
@@ -1170,17 +1126,6 @@
       "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
       "start": 472,
       "end": 491,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
-      "start": 556,
-      "end": 570,
       "fixes": 0
     },
     {

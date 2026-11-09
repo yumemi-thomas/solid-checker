@@ -42,6 +42,9 @@ use super::{
     static_string_expression, text,
 };
 use crate::pipeline::parallel_file_results;
+
+#[path = "container_root.rs"]
+mod container_root;
 use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
 use crate::{
     DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
@@ -1799,6 +1802,10 @@ fn push_unproven_container_write(
         push_parameter_store_flow(file, context, site, root, sink, defects);
         return;
     }
+    // ADR 0919: the container's value on every route a caller hands it in.
+    if handed_container_write(file, context, site, root, sink, defects) {
+        return;
+    }
     // Every enumerated caller passes the prop a static value (a plain
     // binding, never a store, which pass 10 classifies reactive): the write
     // lands on a plain object, and stays this rule's silence.
@@ -1822,6 +1829,83 @@ fn push_unproven_container_write(
         fixes: vec![],
         uncertain: true,
     });
+}
+
+/// ADR 0919: a write at `site` through a container a caller handed in, whose
+/// value [`container_root::handed_root`] joins over every route. A plain value
+/// on every route: silent. One `createStore` store on every route: a store
+/// write, judged at the write ([`container_root::handed_store_standing`]),
+/// its links past the store as a local store's (ADR 0465). `false`: some
+/// route is open, and ADR 0509's obligation stands.
+fn handed_container_write(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    site: Span,
+    root: Span,
+    sink: SinkWrite,
+    defects: &mut Vec<StaticDefect>,
+) -> bool {
+    let member = file.ast.peel_ts_sugar_span(sink.member);
+    // The object written into: the target itself where the operation writes
+    // a whole link (`Object.assign(props.s, …)`), else the member's object.
+    let container = if sink.linked || member == root {
+        member
+    } else {
+        match file.ast.member_at(member) {
+            Some(written) => written.object,
+            None => return false,
+        }
+    };
+    match container_root::handed_root(file, context, container) {
+        container_root::HandedRoot::Open => false,
+        container_root::HandedRoot::Plain => true,
+        container_root::HandedRoot::Store {
+            symbol,
+            root: store_root,
+        } => {
+            let mut sink_open = sink.may_not_write;
+            if sink.delete {
+                match context.lookup.entity_at(file.path.as_str(), sink.member) {
+                    None => sink_open = true,
+                    Some(entity) if !entity.writable_optional_property => return true,
+                    Some(_) => {}
+                }
+            }
+            // TypeScript's: a nullish link past the store.
+            let Some(past_root) = chain_links_verdict(file, context, sink.member, store_root)
+            else {
+                return true;
+            };
+            let past_root = past_root || (sink.linked && member != store_root);
+            let standing = container_root::handed_store_standing(file, context, site);
+            let proven = !sink_open
+                && !past_root
+                && standing == WriteStanding::Dropped
+                && !context.dialect.store_root_properties_are_readonly()
+                && reached(file, site, context.lookup);
+            let name = context.accessors.get(&symbol).map_or_else(
+                || text(file, root).to_owned(),
+                |(name, _)| name.as_str().to_owned(),
+            );
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::DirectMutation {
+                    name,
+                    target: DirectMutationTarget::Store,
+                },
+                location: location(file.path.shared(), site),
+                analysis_context: if proven {
+                    String::new()
+                } else if sink_open {
+                    crate::blockers::STORE_OPERATION_MAY_NOT_WRITE.to_owned()
+                } else {
+                    standing.blocker().unwrap_or_default().to_owned()
+                },
+                fixes: vec![],
+                uncertain: !proven,
+            });
+            true
+        }
+    }
 }
 
 /// ADR 0790: the source a write's chain root names, only when the root,
@@ -2187,6 +2271,20 @@ impl<'c> ParameterFlow<'_, 'c> {
         let Some((callee_file, callee, exact)) =
             crate::execution_role::project_callee_at_parameter(file, call, position, lookup)
         else {
+            // ADR 0919: the first parameter of a store setter's callback is
+            // its draft, the setter a value a caller handed in.
+            if position == 0
+                && index == 0
+                && !rest
+                && !call.arguments.iter().any(|argument| argument.spread)
+                && container_root::handed_store_setter(
+                    file,
+                    self.context,
+                    file.ast.peel_ts_sugar_span(call.callee),
+                )
+            {
+                return;
+            }
             if lookup
                 .resolved_callee_call(file, call.callee)
                 .is_none_or(|resolved| resolved.declaration.is_none())
@@ -4373,6 +4471,9 @@ fn chain_links_verdict(
     {
         links.retain(|&link| !root.contains(ast.peel_ts_sugar_span(link)));
     }
+    // ADR 0919: a root that is itself a member (`props.s`): only the links
+    // past it.
+    links.retain(|&link| !root.contains(ast.peel_ts_sugar_span(link)));
     if links.is_empty() {
         return Some(false);
     }

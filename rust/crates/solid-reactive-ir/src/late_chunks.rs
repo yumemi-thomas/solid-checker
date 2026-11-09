@@ -223,6 +223,8 @@ pub(crate) enum DiscoveryRead {
     PropsDeclared(Location),
     /// [`NotedProps::accessor_value_use`] of one named slot.
     AccessorValueUse(Location, String),
+    /// [`NotedProps::passed_on_every_site`] of one named slot (ADR 0919).
+    PassedOnEverySite(Location, String),
     /// The primitive of a source whose accessor is declared at a location
     /// ([`primitive_declared_at`]).
     PrimitiveDeclaredAt(Location),
@@ -330,6 +332,22 @@ impl<'a> NotedProps<'a> {
             note(
                 DiscoveryRead::PropsDeclared(declaration.clone()),
                 u64::from(answer),
+            );
+        }
+        answer
+    }
+
+    /// [`crate::source_discovery::PropsReactivityIndex::passed_on_every_site`].
+    pub(crate) fn passed_on_every_site(
+        &self,
+        declaration: &Location,
+        name: &str,
+    ) -> Option<(Vec<SymbolId>, bool, Vec<Location>)> {
+        let answer = self.index.passed_on_every_site(declaration, name);
+        if recording_tables() {
+            note(
+                DiscoveryRead::PassedOnEverySite(declaration.clone(), name.to_owned()),
+                answer_of(&answer),
             );
         }
         answer
@@ -779,6 +797,11 @@ impl<'a> DiscoveryTables<'a> {
                 DiscoveryRead::AccessorValueUse(declaration, name) => {
                     use_answer(self.props_reactivity.accessor_value_use(declaration, name))
                 }
+                DiscoveryRead::PassedOnEverySite(declaration, name) => answer_of(
+                    &self
+                        .props_reactivity
+                        .passed_on_every_site(declaration, name),
+                ),
                 DiscoveryRead::PrimitiveDeclaredAt(declaration) => answer_of(
                     &primitive_declared_at_in(self.accessors, self.source_primitives, declaration),
                 ),

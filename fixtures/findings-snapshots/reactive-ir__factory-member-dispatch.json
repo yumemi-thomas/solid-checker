@@ -110,17 +110,6 @@
       "start": 1851,
       "end": 1921,
       "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/factory-member-dispatch/source.ts",
-      "start": 2010,
-      "end": 2024,
-      "fixes": 0
     }
   ]
 }

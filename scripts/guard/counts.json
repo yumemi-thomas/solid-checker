@@ -4,16 +4,16 @@
   "SC1001 binding-before-initialization": 7,
   "SC1001 build-constant-arm": 3,
   "SC1001 callback-invocation-unproven": 3,
-  "SC1001 callee-callback-timing": 399,
+  "SC1001 callee-callback-timing": 400,
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1127,
+  "SC1001 function-run-unplaced": 1128,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
-  "SC1001 read-backing-unproven": 357,
+  "SC1001 read-backing-unproven": 370,
   "SC1001 summary-read-unplaced": 91,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
@@ -22,7 +22,7 @@
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 82,
   "SC1003 destructure-root-unproven": 29,
-  "SC1003 props-callers-unenumerated": 14,
+  "SC1003 props-callers-unenumerated": 15,
   "SC1004 component-identity-unproven": 1,
   "SC1004 conditional-return-unproven": 8,
   "SC1005 accessor-value-coerced": 13,
@@ -49,8 +49,8 @@
   "SC2003 no-hydration-subtree": 1,
   "SC2003 search-depth-limit": 1,
   "SC2003 store-operation-may-not-write": 20,
-  "SC2003 store-write-unproven": 91,
-  "SC2003 unproven-container-root": 122,
+  "SC2003 store-write-unproven": 96,
+  "SC2003 unproven-container-root": 92,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 15,
   "SC2004 function-run-unplaced": 11,
@@ -164,7 +164,7 @@
   "SC9012 forwarded-to-undescribed-callee": 28,
   "SC9012 function-call-target-unresolved": 8,
   "SC9012 function-prototype-callee-unresolved": 1,
-  "SC9012 handed-member-dispatch": 424,
+  "SC9012 handed-member-dispatch": 425,
   "SC9012 handed-member-read": 65,
   "SC9012 handed-read-after-await": 10,
   "SC9012 import-unresolved": 37,
@@ -196,9 +196,9 @@
   "SC9012 value-bound-held": 5,
   "SC9012 value-escaped-from-untrack": 3,
   "SC9012 value-exported-unnamed": 5,
-  "SC9012 value-forwarded": 240,
+  "SC9012 value-forwarded": 250,
   "SC9012 value-from-primitive-callback": 23,
-  "SC9012 value-held-in-binding": 109,
+  "SC9012 value-held-in-binding": 111,
   "SC9012 value-held-in-member": 24,
   "SC9012 value-in-carrier": 339,
   "SC9012 value-in-class-field": 12,
@@ -1439,6 +1439,120 @@
     "open": "reactive-ir/leaf-scope-by-value-callback"
    },
    "note": "`createTrackedEffect(copy)` in LeafByCopy and LeafCopyAlsoClicked: the `const` copy resolves to `track` (ADR 0516 alias fact), whose body holds no leaf-forbidden operation; the slot written or the object escaped (BundleWritten, BundleEscaped) keeps its row"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC2003 unproven-container-root",
+   "from": 8,
+   "to": 3,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/accessor-provenance",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "the writes into `collection(1)`, `memo()`, `modifiable(1)` and `useMutated()` results and the `for` heads over them: each a project function whose one straight-line return is a fresh closed literal, so the container is plain on every route"
+  },
+  {
+   "fixture": "reactive-ir/factory-member-dispatch",
+   "key": "SC2003 unproven-container-root",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/factory-member-dispatch",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "`patched.rename = …`: `createRenamable()` returns one fresh closed literal"
+  },
+  {
+   "fixture": "reactive-ir/leaf-source-call-targets-negative",
+   "key": "SC2003 unproven-container-root",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/leaf-source-call-targets-negative",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "`service.mutableLeaf = …`: the factory returns one fresh closed literal"
+  },
+  {
+   "fixture": "reactive-ir/provider-array-provenance",
+   "key": "SC2003 unproven-container-root",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/provider-array-provenance",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "`providers[0] = …`: `makeProviders()` returns a fresh array literal"
+  },
+  {
+   "fixture": "reactive-ir/provider-array-vetoes",
+   "key": "SC2003 unproven-container-root",
+   "from": 19,
+   "to": 0,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/provider-array-vetoes",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "every write, mutator, reflective and `for`-head write into `makeProviders()`'s result, a fresh array literal on every route"
+  },
+  {
+   "fixture": "reactive-ir/store-mutators",
+   "key": "SC2003 unproven-container-root",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/store-mutators",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "`copy.push(9)` with `const copy = [...store.items]`: a fresh array literal"
+  },
+  {
+   "fixture": "reactive-ir/store-write-literal-links",
+   "key": "SC2003 unproven-container-root",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/store-write-literal-links",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "`thing.n = 1`: the hook returns a fresh closed literal"
+  },
+  {
+   "fixture": "reactive-ir/transported-member-stability",
+   "key": "SC2003 unproven-container-root",
+   "from": 4,
+   "to": 1,
+   "adr": "ADR 0919",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs::handed_root",
+   "fixtures": {
+    "proved": "reactive-ir/transported-member-stability",
+    "open": "reactive-ir/store-handed-root"
+   },
+   "note": "the writes into `read()`, `useAccount()`, `nested().inner` and `dynamic()` results, fresh closed literals on every route"
+  },
+  {
+   "fixture": "reactive-ir/local-alias-member-reads",
+   "key": "SC2003 unproven-container-root",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0919",
+   "kind": "relabel",
+   "relabeledTo": "SC2003 store-write-unproven",
+   "note": "`holder.state.v = 4`: the hook holder's slot is the store on every route; the write stays uncertifiable as a store write past its window proof"
   }
  ],
  "renames": []
