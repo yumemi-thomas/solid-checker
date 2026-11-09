@@ -1040,64 +1040,336 @@ pub(super) fn function_declaration_span(
 /// The location of every row `program` may report whose site no execution
 /// reaches, with why, sorted. The backend makes a violation there
 /// uncertifiable (ADR 0458).
+///
+/// ADR 0912: each site is asked with queries of its own, so its depth limit
+/// and work bound ([`super::walk_bound`]) are its own and its answer is a
+/// function of the build and the site alone. A site's query derives one
+/// answer, whether the function written around it runs ([`SiteReach::site`]:
+/// the syntax decides the rest), so that answer, by a query of its own, is
+/// one per function ([`Entered::of`]), shared by its sites and computed on
+/// the workers.
 pub(crate) fn unreached_report_sites(
     program: &crate::Program,
     lookup: &SemanticLookup<'_>,
+    cache: Option<&mut ReachChunks>,
+    unchanged_paths: &HashSet<String>,
 ) -> Vec<crate::UnreachedSite> {
-    let query = SiteReach::new(lookup);
-    let plain = SiteReach::without_refusals(lookup);
-    let lazy = SiteReach::proving_lazy_reads(lookup);
-    let mut sites = crate::projection::reported_locations(program)
-        .into_iter()
-        .filter_map(|location| {
-            let file = lookup.file_by_path(location.path.as_ref())?;
-            let (Ok(start), Ok(end)) = (
-                u32::try_from(location.start_byte),
-                u32::try_from(location.end_byte),
-            ) else {
-                return None;
-            };
-            let site = Span::new(start, end);
-            let undecided = crate::UnreachedSite {
-                location: location.clone(),
-                dead_code: false,
-                absent_prop: false,
-                refused_creation: false,
-                lazy_unread: false,
-                undecided: true,
-            };
-            match query.site(file, site) {
-                Reach::Unreached(reason) => match plain.site(file, site) {
-                    // ADR 0560: an undecided query proves nothing; the
-                    // violation is not proven either.
-                    Reach::Undecided => Some(undecided),
-                    plain => Some(crate::UnreachedSite {
-                        location: location.clone(),
-                        dead_code: reason == UnreachedReason::DeadCode,
-                        absent_prop: reason == UnreachedReason::AbsentProp,
-                        refused_creation: plain == Reach::MayRun,
-                        lazy_unread: false,
-                        undecided: false,
-                    }),
-                },
-                Reach::Undecided => Some(undecided),
-                // ADR 0576: a site only an unread lazy computation runs.
-                Reach::MayRun => match lazy.site(file, site) {
-                    Reach::Unreached(_) => Some(crate::UnreachedSite {
-                        location: location.clone(),
-                        dead_code: false,
-                        absent_prop: false,
-                        refused_creation: false,
-                        lazy_unread: true,
-                        undecided: false,
-                    }),
-                    Reach::Undecided => Some(undecided),
-                    Reach::MayRun => None,
-                },
-            }
+    let mut locations = crate::projection::reported_locations(program);
+    locations.sort_by(|left, right| crate::location_order(left, right));
+    locations.dedup();
+    let sites = crate::pipeline::parallel_balanced_results(&locations, |location| {
+        let file = lookup.file_by_path(location.path.as_ref())?;
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(location.start_byte),
+            u32::try_from(location.end_byte),
+        ) else {
+            return None;
+        };
+        Some(SyntaxReach::of(file, Span::new(start, end), lookup))
+    });
+    let mut owners = sites
+        .iter()
+        .flatten()
+        .filter_map(|site| match site {
+            SyntaxReach::Owned(file, function) => Some((*file, *function)),
+            _ => None,
         })
         .collect::<Vec<_>>();
-    sites.sort_by(|left, right| crate::location_order(&left.location, &right.location));
-    sites.dedup();
-    sites
+    owners.sort_by(|left, right| {
+        (left.0.path.as_str(), left.1.span.start, left.1.span.end).cmp(&(
+            right.0.path.as_str(),
+            right.1.span.start,
+            right.1.span.end,
+        ))
+    });
+    owners.dedup_by(|left, right| std::ptr::eq(left.0, right.0) && left.1.span == right.1.span);
+    let answers = owners
+        .iter()
+        .map(|(file, function)| function_key(file, function))
+        .zip(ReachChunks::run(cache, &owners, lookup, unchanged_paths))
+        .collect::<HashMap<_, _>>();
+    locations
+        .iter()
+        .zip(sites)
+        .filter_map(|(location, site)| {
+            let answer = |dead_code, absent_prop, refused_creation, lazy_unread, undecided| {
+                Some(crate::UnreachedSite {
+                    location: (*location).clone(),
+                    dead_code,
+                    absent_prop,
+                    refused_creation,
+                    lazy_unread,
+                    undecided,
+                })
+            };
+            match site? {
+                SyntaxReach::DeadCode => answer(true, false, false, false, false),
+                SyntaxReach::AbsentProp => answer(false, true, false, false, false),
+                SyntaxReach::Unowned => None,
+                SyntaxReach::Owned(file, function) => {
+                    match answers.get(&function_key(file, function))?.site() {
+                        SiteAnswer::MayRun => None,
+                        SiteAnswer::NeverEntered { refused_creation } => {
+                            answer(false, false, refused_creation, false, false)
+                        }
+                        SiteAnswer::LazyUnread => answer(false, false, false, true, false),
+                        // ADR 0560: an undecided query proves nothing; the
+                        // violation is not proven either.
+                        SiteAnswer::Undecided => answer(false, false, false, false, true),
+                    }
+                }
+            }
+        })
+        .collect()
+}
+
+fn function_key(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> FunctionKey {
+    (file.path.shared(), function.span)
+}
+
+/// ADR 0912: each function's [`OwnerAnswers`], kept across builds while its
+/// file is one of the build's `unchanged_paths` held by one slot, with the
+/// same source and compiler semantics, the queries would choose the same
+/// method and bound ([`Method`]), and every read they recorded answers as it
+/// did ([`crate::base::reads`]: memo answers, sections, other files handed
+/// out). Shadow and verify-reused modes compute every kept answer again and
+/// poison the store on a difference.
+#[derive(Default)]
+pub(crate) struct ReachChunks {
+    kept: HashMap<FunctionKey, KeptAnswers>,
+}
+
+struct KeptAnswers {
+    source_hash: solid_facts::core::SourceHash,
+    compiler: std::sync::Arc<solid_facts::compiler::ExecutionMap>,
+    method: Method,
+    proof: crate::base::reads::ReadProof,
+    answers: OwnerAnswers,
+}
+
+/// What a query chooses its method and bound by, outside the reads it
+/// records: [`SiteReach::new`]'s whole-program function count, the
+/// process's test switches, and whether the program is closed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Method {
+    iterates: bool,
+    fixes: bool,
+    bound: u64,
+    closed: bool,
+}
+
+impl Method {
+    fn of(lookup: &SemanticLookup<'_>) -> Self {
+        let query = SiteReach::new(lookup);
+        Self {
+            iterates: query.iterates,
+            fixes: query.fixes,
+            bound: super::walk_bound(),
+            closed: lookup.program_closed,
+        }
+    }
+}
+
+enum ReachOutcome {
+    Kept(OwnerAnswers),
+    Computed(OwnerAnswers, crate::base::reads::Reads),
+}
+
+impl ReachChunks {
+    /// Each owner's answers, in order: kept where they hold, computed
+    /// (recording what they read) elsewhere. The cache then holds exactly
+    /// this build's owners.
+    fn run(
+        cache: Option<&mut Self>,
+        owners: &[(&solid_facts::FileFacts, &solid_facts::ast::FunctionFact)],
+        lookup: &SemanticLookup<'_>,
+        unchanged_paths: &HashSet<String>,
+    ) -> Vec<OwnerAnswers> {
+        let Some(cache) = cache else {
+            return crate::pipeline::parallel_balanced_results(owners, |(file, function)| {
+                OwnerAnswers::of(file, function, lookup)
+            });
+        };
+        let method = Method::of(lookup);
+        let store = lookup.memo_store();
+        let check = store.check_solvers();
+        let kept = &cache.kept;
+        let outcomes = crate::pipeline::parallel_balanced_with_state(
+            owners,
+            || crate::base::reads::PassAnswers::new(lookup),
+            |answers, (file, function)| {
+                let path = file.path.as_str();
+                if unchanged_paths.contains(path)
+                    && lookup.path_held_once(path)
+                    && let Some(chunk) = kept.get(&function_key(file, function))
+                    && chunk.method == method
+                    && chunk.source_hash == file.source_hash
+                    && (std::sync::Arc::ptr_eq(&chunk.compiler, &file.compiler)
+                        || crate::cache::same_compiler_semantics(&chunk.compiler, &file.compiler))
+                    && chunk.proof.holds(answers)
+                {
+                    if check
+                        && crate::base::reads::suppress(|| OwnerAnswers::of(file, function, lookup))
+                            != chunk.answers
+                    {
+                        store.poison(&format!(
+                            "IR site-reach verify mismatch: the kept answer of the function at {}:{}..{} differs from a fresh one",
+                            path, function.span.start, function.span.end
+                        ));
+                    } else {
+                        crate::base::reads::replay(&chunk.proof.reads);
+                        return ReachOutcome::Kept(chunk.answers);
+                    }
+                }
+                let (value, reads) =
+                    crate::base::reads::record(|| OwnerAnswers::of(file, function, lookup));
+                ReachOutcome::Computed(value, reads)
+            },
+        );
+        let mut next = HashMap::default();
+        let answers = owners
+            .iter()
+            .zip(outcomes)
+            .map(|((file, function), outcome)| {
+                let key = function_key(file, function);
+                match outcome {
+                    ReachOutcome::Kept(answers) => {
+                        if let Some(chunk) = cache.kept.remove(&key) {
+                            next.insert(key, chunk);
+                        }
+                        answers
+                    }
+                    ReachOutcome::Computed(answers, reads) => {
+                        if lookup.path_held_once(file.path.as_str()) {
+                            next.insert(
+                                key,
+                                KeptAnswers {
+                                    source_hash: file.source_hash.clone(),
+                                    compiler: std::sync::Arc::clone(&file.compiler),
+                                    method,
+                                    proof: crate::base::reads::ReadProof::new(reads, lookup),
+                                    answers,
+                                },
+                            );
+                        }
+                        answers
+                    }
+                }
+            })
+            .collect();
+        cache.kept = next;
+        answers
+    }
+}
+
+/// What a report site's syntax decides before any query runs: the arms of
+/// [`SiteReach::site_within`] that read no function's answer.
+enum SyntaxReach<'a> {
+    DeadCode,
+    AbsentProp,
+    /// Written in no function: it may run.
+    Unowned,
+    /// It runs when the function written around it runs.
+    Owned(
+        &'a solid_facts::FileFacts,
+        &'a solid_facts::ast::FunctionFact,
+    ),
+}
+
+impl<'a> SyntaxReach<'a> {
+    fn of(file: &'a solid_facts::FileFacts, site: Span, lookup: &SemanticLookup<'_>) -> Self {
+        if file.ast.unreachable_contains(site) {
+            return Self::DeadCode;
+        }
+        let owner = crate::owners::owning_function(&file.ast, site);
+        if behind_absent_prop(file, site, lookup)
+            || owner
+                .is_some_and(|function| prop_runs_only_behind_absent_prop(file, function, lookup))
+        {
+            return Self::AbsentProp;
+        }
+        owner.map_or(Self::Unowned, |function| Self::Owned(file, function))
+    }
+}
+
+/// Whether a function runs, by a query of its own (ADR 0912).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Entered {
+    Runs,
+    Never,
+    /// ADR 0560: the query stopped at its depth limit or work bound.
+    Undecided,
+}
+
+impl Entered {
+    fn of<'l, 'a>(
+        query: &SiteReach<'l, 'a>,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> Self {
+        let runs = query.runs(file, function);
+        if query.limited.get() {
+            Self::Undecided
+        } else if runs {
+            Self::Runs
+        } else {
+            Self::Never
+        }
+    }
+}
+
+/// The answers the report sites of one function read: the query's, then the
+/// one without refusals where it never runs, or the lazy-read one where it
+/// runs. Each by a fresh query.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct OwnerAnswers {
+    entered: Entered,
+    /// [`SiteReach::without_refusals`]' answer, where `entered` is `Never`.
+    plain: Option<Entered>,
+    /// [`SiteReach::proving_lazy_reads`]' answer, where `entered` is `Runs`.
+    lazy: Option<Entered>,
+}
+
+/// What a report site written in a function proves.
+enum SiteAnswer {
+    MayRun,
+    NeverEntered { refused_creation: bool },
+    LazyUnread,
+    Undecided,
+}
+
+impl OwnerAnswers {
+    fn of(
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        lookup: &SemanticLookup<'_>,
+    ) -> Self {
+        let entered = Entered::of(&SiteReach::new(lookup), file, function);
+        let plain = (entered == Entered::Never)
+            .then(|| Entered::of(&SiteReach::without_refusals(lookup), file, function));
+        let lazy = (entered == Entered::Runs)
+            .then(|| Entered::of(&SiteReach::proving_lazy_reads(lookup), file, function));
+        Self {
+            entered,
+            plain,
+            lazy,
+        }
+    }
+
+    fn site(self) -> SiteAnswer {
+        match (self.entered, self.plain, self.lazy) {
+            (Entered::Never, Some(Entered::Undecided), _)
+            | (Entered::Undecided, _, _)
+            | (Entered::Runs, _, Some(Entered::Undecided)) => SiteAnswer::Undecided,
+            (Entered::Never, plain, _) => SiteAnswer::NeverEntered {
+                refused_creation: plain == Some(Entered::Runs),
+            },
+            // ADR 0576: a site only an unread lazy computation runs.
+            (Entered::Runs, _, Some(Entered::Never)) => SiteAnswer::LazyUnread,
+            (Entered::Runs, _, _) => SiteAnswer::MayRun,
+        }
+    }
 }

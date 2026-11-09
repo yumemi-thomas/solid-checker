@@ -24,6 +24,11 @@
 //       in other files: what a chunk reads of another file through a lookup
 //       hand-out (ADR 0408) must move it. The fixture budget above did not
 //       catch hand-outs left unrecorded; this family does (ADR 0910).
+//   bun scripts/ir-edit-fuzz.mjs --fixtures --family reach [--steps 6]
+//       A direct `eval` added and removed in a file beside another file's
+//       sites no execution reaches: each function's kept site-reach
+//       answer (ADR 0912) must move with what it read of the rest of the
+//       program. No other budget moved one (a plant recording no read passed).
 //   bun scripts/ir-edit-fuzz.mjs --fixtures --family census [--steps 4]
 //       Edits that add a definer or a classic-script declaration of a window
 //       member the census read as absent: the retained build must answer as a
@@ -99,6 +104,9 @@ export const MOUNT_FIXTURE_PROJECTS = ["reactive-ir/stored-throw-value-mount"];
 
 /** The `hand-out` family (`--fixtures --family hand-out`): line deletions across files that hand each other facts. */
 export const HAND_OUT_FIXTURE_PROJECTS = ["reactive-ir/helper-prop-read"];
+
+/** The `reach` family (`--fixtures --family reach`): unreached sites in one file, edits in another. */
+export const REACH_FIXTURE_PROJECTS = ["reactive-ir/dead-code-sites"];
 
 /** Mulberry32: a seeded generator, so a failing run replays from its seed. */
 export function seededRandom(seed) {
@@ -218,6 +226,16 @@ export const EDIT_KINDS = {
   "add-classic-declaration": ({ text, path, serial }) =>
     /\bwire\.ts$/.test(path) && /\bexport \{\};/.test(text) ? `${text.replace(/\bexport \{\};/, "")}\nfunction __log() {} // ${serial}\n` : null,
   "add-eval": ({ text, serial }) => `${text}\nexport const __fzEval${serial} = (code: string) => eval(code);\n`,
+  // The `reach` family's: removes the eval this kind added, else adds one, in a file beside the unreached sites (one
+  // that does not say "no execution reaches"), so each edit moves whether the program calls a direct `eval` and the
+  // sites' file stays unchanged: its kept site-reach answers (ADR 0912) must move with it.
+  "toggle-eval": ({ text, serial }) => {
+    if (text.includes("no execution reaches")) return null;
+    const added = /\nexport const __fzEval\d+ = \(code: string\) => eval\(code\);\n/g;
+    return added.test(text) ? text.replace(added, "\n") : `${text}\nexport const __fzEval${serial} = (code: string) => eval(code);\n`;
+  },
+
+
   "add-prototype-write": ({ text, path, serial }) =>
     `${text}\n${/\.tsx?$/.test(path) ? "(Object.prototype as any)" : "Object.prototype"}.__fz${serial} = 1;\n`
 };
@@ -404,7 +422,8 @@ function run(command, args, options) {
 }
 
 function parseArguments(argv) {
-  const options = { steps: 6, seed: 1, kinds: Object.keys(EDIT_KINDS), shadow: true };
+  // `toggle-eval` is the `reach` family's alone: the other budgets keep their seeded sequences.
+  const options = { steps: 6, seed: 1, kinds: Object.keys(EDIT_KINDS).filter((kind) => kind !== "toggle-eval"), shadow: true };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = () => {
@@ -427,12 +446,13 @@ function parseArguments(argv) {
     else throw new Error(`unknown argument ${flag}`);
   }
   if (options.family !== undefined) {
-    if (!["retype", "mount", "census", "hand-out"].includes(options.family)) throw new Error(`unknown family ${options.family}`);
+    if (!["retype", "mount", "census", "hand-out", "reach"].includes(options.family)) throw new Error(`unknown family ${options.family}`);
     options.kinds = {
       retype: ["retype-return"],
       mount: ["value-mount"],
       census: ["add-dunder-definer", "add-classic-declaration"],
-      "hand-out": ["delete-line"]
+      "hand-out": ["delete-line"],
+      reach: ["toggle-eval"]
     }[options.family];
   }
   for (const kind of options.kinds) {
@@ -710,7 +730,8 @@ async function main() {
         retype: RETYPE_FIXTURE_PROJECTS,
         mount: MOUNT_FIXTURE_PROJECTS,
         census: CENSUS_FIXTURE_PROJECTS,
-        "hand-out": HAND_OUT_FIXTURE_PROJECTS
+        "hand-out": HAND_OUT_FIXTURE_PROJECTS,
+        reach: REACH_FIXTURE_PROJECTS
       }[options.family] ?? FIXTURE_PROJECTS;
     const results = await mapPool(projects, async (id, index) => {
       // A copy: the fixture tree is never edited in place.

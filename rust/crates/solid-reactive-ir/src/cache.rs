@@ -777,6 +777,9 @@ pub(crate) struct CachedLateStages {
     /// The chunked passes' per-file outputs, each with its own proof
     /// ([`crate::late_chunks`]).
     pub(crate) chunks: crate::late_chunks::LateChunks,
+    /// Each function's site-reach answers for the report sites
+    /// (`execution_role::unreached_report_sites`, ADR 0912).
+    pub(crate) unreached: crate::execution_role::ReachChunks,
 }
 
 /// Whether two analyses of one path's source hold the same AST facts, every

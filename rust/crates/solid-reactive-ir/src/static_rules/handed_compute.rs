@@ -24,20 +24,22 @@ pub(super) enum HandedCompute {
 /// none does, or each runs it as a primitive's untracked callback.
 pub(super) fn handed_compute(
     ctx: &AnalysisContext<'_>,
+    exact_arguments: &super::ExactArguments<'_>,
     file: &FileFacts,
     function: &FunctionFact,
 ) -> Option<HandedCompute> {
     let mut answer = None;
-    for call in &file.ast.calls {
+    for (call_index, call) in file.ast.calls.iter().enumerate() {
         for (index, argument) in call.arguments.iter().enumerate() {
             if argument.spread
                 || (file.ast.peel_ts_sugar_span(argument.span) != function.span
-                    && crate::owners::exact_function_argument(
+                    && !exact_arguments.names(
                         file,
-                        argument.span,
+                        call_index,
+                        index,
                         ctx.semantic_lookup,
-                    )
-                    .is_none_or(|(path, span)| path != file.path.as_str() || span != function.span))
+                        |path, span| path == file.path.as_str() && span == function.span,
+                    ))
             {
                 continue;
             }
