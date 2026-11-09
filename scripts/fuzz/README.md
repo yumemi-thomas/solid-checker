@@ -574,7 +574,7 @@ What the 2026-11-03 reports proposed and these slices leave out, with the reason
 | `unexecuted.mjs`, `deadsite.mjs` | the unexecuted candidate (the ledger's proof), Chrome's judgement of it, and the confirmation conditions as code |
 | `typecheck.mjs` | `tsrs -p ... --noEmit` against the published typings; a program that does not type-check is dropped |
 | `checker.mjs` | materializes a case as the oracle does and runs the native checker; per-site verdicts |
-| `chrome-host.mjs`, `chrome-host/` | the default fast path: the runner in Chrome, its Vite server (cases served from memory) and source-map placement |
+| `chrome-host.mjs`, `chrome-host/` | the default fast path: the runner in Chrome, its Vite server (cases served from memory) and source-map placement; the program's window `error` listeners see at most 100 error events (`error-listeners.mjs`: one that raises the next never returned a record, in Chrome or the oracle) |
 | `exec.mjs`, `exec/` | the Rust executor: projects, type checks, checker runs and the Chrome pages off the orchestrator's thread; `exec/vite-host.mjs` its Vite helper |
 | `runtime-diff.mjs` | the runtime differential: the fast path's records against the oracle's, behaviour apart from attribution |
 | `focus.mjs`, `smoke.mjs`, `smoke/` | `make fuzz-focus` (the grids for some codes) and `make fuzz-smoke` (the smoke manifests, their selection and validation) |
