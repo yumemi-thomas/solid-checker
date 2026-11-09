@@ -27,7 +27,7 @@ has three outcomes, and only this one is a refusal:
   `workspace:*`) — the default dialect applies, and the analysis carries the
   [unaudited-solid-release](unaudited-solid-release.md) notice with the
   blocker `solid-version-unclassified` (ADR 0700): which release it runs is
-  unknown, so it cannot certify.
+  unknown, so it cannot certify. So is an unreadable manifest (ADR 0915).
 
 The finding names the exact `package.json` that decided it and the version it
 read. It is the only identity in the catalog the rules engine never produces:

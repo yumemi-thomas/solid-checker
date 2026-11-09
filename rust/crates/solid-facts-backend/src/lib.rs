@@ -52,6 +52,7 @@ mod host_loadable;
 mod host_plugins;
 mod inferred_host;
 pub mod installed_bytes;
+mod observed;
 mod package_requirements;
 mod program_boundary;
 mod release_scope;
@@ -70,9 +71,10 @@ pub use diagnostics::{
 };
 pub use host_config::{tsconfig_extends_chain, tsconfig_extends_witness};
 pub use inferred_host::{
-    InferredHost, inferred_host_directory_digest, inferred_host_input_digest,
-    inferred_host_input_digests, inferred_host_input_paths, inferred_host_input_paths_for_project,
-    inferred_host_input_paths_for_sources, inferred_project_host_with_note,
+    HostInputUnobservable, InferredHost, inferred_host_directory_digest,
+    inferred_host_input_digest, inferred_host_input_digests, inferred_host_input_paths,
+    inferred_host_input_paths_for_project, inferred_host_input_paths_for_sources,
+    inferred_project_host_with_note,
 };
 pub use package_requirements::{external_package_boundary, unsupplied_package_boundary};
 pub use program_boundary::{BoundaryCache, BoundaryDecision, program_boundary_digest};

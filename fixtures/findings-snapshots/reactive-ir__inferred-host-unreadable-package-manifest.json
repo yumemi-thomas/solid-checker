@@ -1,0 +1,27 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "blocker": "package-source-unavailable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/inferred-host-unreadable-package-manifest/src/helper.ts",
+      "start": 0,
+      "end": 47,
+      "fixes": 0
+    },
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "blocker": "host-input-unreadable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/inferred-host-unreadable-package-manifest/tsconfig.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}
