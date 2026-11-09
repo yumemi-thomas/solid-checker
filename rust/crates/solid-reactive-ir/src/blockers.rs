@@ -131,6 +131,9 @@ pub(crate) const VALUE_PENDING_IN_JSX: &str = "value-pending-in-jsx";
 /// `export default` of a literal or a call: no binding names it, so no importer
 /// is walked (W's census review H1).
 pub(crate) const VALUE_EXPORTED_UNNAMED: &str = "value-exported-unnamed";
+/// ADR 0923: a thrown value, where the `catch` that binds it is not the
+/// throwing function's own (its callers' are not walked), or binds a pattern.
+pub(crate) const VALUE_THROWN: &str = "value-thrown";
 pub(crate) const RUNTIME_CONFIGURATION_PREMISE: &str = "runtime-configuration-premise";
 /// ADR 0694: a store Get that only leads to a write, in a window no read in
 /// that body is proven in. `via` carries it: the row reads as through this.

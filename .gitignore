@@ -733,6 +733,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-setter-extent/node_modules/**
 !fixtures/reactive-ir/store-delete/node_modules/
 !fixtures/reactive-ir/store-delete/node_modules/**
+!fixtures/reactive-ir/store-delete-anchor/node_modules/
+!fixtures/reactive-ir/store-delete-anchor/node_modules/**
 !fixtures/reactive-ir/tsc-suppressed-rejections/node_modules/
 !fixtures/reactive-ir/tsc-suppressed-rejections/node_modules/**
 !fixtures/reactive-ir/projection-writes/node_modules/
@@ -1153,6 +1155,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
 !fixtures/reactive-ir/value-use-census/node_modules/
 !fixtures/reactive-ir/value-use-census/node_modules/**
+!fixtures/reactive-ir/thrown-value-catch/node_modules/
+!fixtures/reactive-ir/thrown-value-catch/node_modules/**
 !fixtures/reactive-ir/value-use-escaped/node_modules/
 !fixtures/reactive-ir/value-use-escaped/node_modules/**
 !fixtures/reactive-ir/generator-stepped/node_modules/

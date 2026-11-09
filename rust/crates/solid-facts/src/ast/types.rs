@@ -355,6 +355,10 @@ pub struct AstFacts {
     /// where a function body or a module scope may end by throwing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub throw_statements: Vec<Span>,
+    /// Every `throw` statement with its operand, sorted by span (facts schema
+    /// 93, ADR 0923): where a thrown value goes is the census's question.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub throws: Vec<ThrowFact>,
     /// The left side of every `for (target in …)` / `for (target of …)` whose
     /// target is an *assignment* to an existing binding rather than a
     /// declaration, by span, sorted. Each iteration writes the target, so it
@@ -1403,6 +1407,22 @@ pub struct YieldFact {
 pub struct TryCatchFact {
     pub block: Span,
     pub handler: Span,
+    /// The clause's parameter when it is one identifier (`catch (e)`), at
+    /// its binding (facts schema 93, ADR 0923): the name the thrown value is
+    /// bound to. `None` for `catch {}` and for a pattern.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<Span>,
+    /// Whether the clause binds the thrown value at all (`catch {}` does not).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub binds: bool,
+}
+
+/// A `throw` statement and its operand (facts schema 93, ADR 0923).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThrowFact {
+    pub span: Span,
+    pub argument: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -2388,6 +2408,7 @@ impl AstFacts {
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
             throw_statements: Vec::new(),
+            throws: Vec::new(),
             iteration_targets: Vec::new(),
             loop_statements: Vec::new(),
             loop_repeats: Vec::new(),

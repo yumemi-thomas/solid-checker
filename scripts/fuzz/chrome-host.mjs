@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_FAST_INSTALL, ENTRY_SOURCE, installedVersions, pinnedProblems, stageCases } from "./fast.mjs";
 import { EXECUTOR_SOURCES } from "./exec.mjs";
 import { cleanPositions } from "./hits.mjs";
+import { compiledHanded, isProgramModule } from "./served.mjs";
 import { pinnedBrowser } from "../playwright-browser.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -166,7 +167,7 @@ export function chromeHostKey({ clock = "virtual-time", pages = "fresh-context",
   const tools = ["vite", "@solidjs/vite-plugin", "@jridgewell/trace-mapping"].map((name) => fileHash(join(resolve(oracleInstall), "node_modules", name, "package.json")));
   return JSON.stringify({
     kind: "chrome", clock, pages, tools, ...(executor ? { executor } : {}),
-    sources: ["chrome-host.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "chrome-host/index.html", "fast/virtual-clock.mjs", ...(executor === "rust" ? EXECUTOR_SOURCES : [])].map((name) => fileHash(join(here, name))),
+    sources: ["chrome-host.mjs", "served.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "chrome-host/index.html", "fast/virtual-clock.mjs", ...(executor === "rust" ? EXECUTOR_SOURCES : [])].map((name) => fileHash(join(here, name))),
     browser: { path: executable, build: treeStat(dirname(executable)) },
   });
 }
@@ -199,7 +200,7 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
   const solid = [plugin.default, plugin.default?.default, plugin.solid].find((value) => typeof value === "function");
   if (!solid) throw new Error("@solidjs/vite-plugin exports no plugin function");
   const mapping = await load("@jridgewell/trace-mapping");
-  const lookup = { TraceMap: mapping.TraceMap ?? mapping.default?.TraceMap, originalPositionFor: mapping.originalPositionFor ?? mapping.default?.originalPositionFor };
+  const lookup = { TraceMap: mapping.TraceMap ?? mapping.default?.TraceMap, originalPositionFor: mapping.originalPositionFor ?? mapping.default?.originalPositionFor, traceSegment: mapping.traceSegment ?? mapping.default?.traceSegment };
   dbg("loaded tools");
   // The page, the runner and its clock, served from memory with long-lived caching once transformed (`freeze`): a program's
   // navigation then fetches only its own modules, and the browser reuses the compiled scripts.
@@ -325,7 +326,14 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
       if (module) server.moduleGraph.invalidateModule(module);
     }
   };
-  return { work, server, base, freeze, stage, done, map: (id, record) => mapPositions(server, lookup, id, record, staged.get(id)?.get("App.tsx") ?? readStaged(id), twins.get(id) ?? undefined) };
+  /** A program module's text as staged (`helpers.ts`, `el.ts`): never App.tsx (`source`) or the host's own entry. */
+  const moduleSource = (id, file) => {
+    if (!isProgramModule(file)) return undefined;
+    const text = staged.get(id)?.get(file);
+    if (text !== undefined) return text;
+    try { return readFileSync(join(casesRoot, id, file), "utf8"); } catch { return undefined; }
+  };
+  return { work, server, base, freeze, stage, done, map: (id, record) => mapPositions(server, lookup, id, record, staged.get(id)?.get("App.tsx") ?? readStaged(id), twins.get(id) ?? undefined, (file) => moduleSource(id, file)) };
 }
 
 /**
@@ -334,21 +342,56 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
  * line); a frame with no original position, or one past the end of its line in `source` (the oracle's `position-out-of-range`), is
  * dropped, never passed through as an App.tsx line. `clean` (hits.mjs `cleanPositions`) then takes a position on the instrumented twin
  * to the clean text the checker's findings are on; a position with none there (the counter's prelude) is dropped too.
+ * A frame in another module of the program (`moduleSource(file)` gives its text: `el.ts`, `helpers.ts`; never instrumented) is mapped
+ * through that module's own transform the same way, as the oracle records it (`{ file, line, column }`); one the host cannot map (no
+ * text, no map, no original position, past its line) keeps its file and no position, so it still counts for depth (R20) and places nothing.
+ * An App.tsx frame at a compiled `insert`, `effect` or `memo` call (call-starts.mjs `compiledHanded`) carries `compiled`: the source start
+ * of the expression that call was handed, read from the served code and mapped the same way (codes.mjs `withStarts` reads it, top frame only).
  */
-export async function mapPositions(server, { TraceMap, originalPositionFor }, id, record, source, clean = (position) => position) {
-  const url = `/cases/${id}/App.tsx`;
-  const module = await server.moduleGraph.getModuleByUrl(url);
-  const raw = module?.transformResult?.map ?? (await server.transformRequest(url))?.map;
-  if (!raw?.mappings) return record;
-  const map = new TraceMap(raw);
+export async function mapPositions(server, { TraceMap, originalPositionFor, traceSegment }, id, record, source, clean = (position) => position, moduleSource = () => undefined) {
+  const servedOf = async (file) => {
+    const url = `/cases/${id}/${file}`;
+    const module = await server.moduleGraph.getModuleByUrl(url);
+    return module?.transformResult ?? (await server.transformRequest(url));
+  };
+  const mapOf = async (file) => { const raw = (await servedOf(file))?.map; return raw?.mappings ? new TraceMap(raw) : null; };
+  const served = await servedOf("App.tsx");
+  if (!served?.map?.mappings) return record;
+  const map = new TraceMap(served.map);
+  // ADR 0921: a frame at a compiled `insert`/`effect`/`memo` call also records where the expression it was handed starts in the source.
+  const handedAt = typeof served.code === "string" ? compiledHanded(served.code) : () => [];
   const lines = source === undefined ? null : source.split("\n");
+  const all = [...(record.diagnostics ?? []), ...(record.errors ?? []), ...(record.consoleErrorCauses ?? []).filter(Boolean)].flatMap((row) => row.positions ?? [])
+    .concat((record.consoleErrorPositions ?? []).flat());
+  const modules = new Map();
+  for (const file of new Set(all.filter((p) => p.file !== undefined && p.file !== "App.tsx" && Number.isInteger(p.line) && Number.isInteger(p.column)).map((p) => p.file))) {
+    const text = moduleSource(file);
+    const moduleMap = text === undefined ? null : await mapOf(file).catch(() => null);
+    if (moduleMap) modules.set(file, { map: moduleMap, lines: text.split("\n") });
+  }
+  const inModule = (p) => {
+    const known = modules.get(p.file);
+    if (!known || !Number.isInteger(p.line) || !Number.isInteger(p.column)) return { file: p.file };
+    const at = originalPositionFor(known.map, { line: p.line, column: Math.max(0, p.column - 1) });
+    if (!at.line || at.line > known.lines.length || at.column >= known.lines[at.line - 1].length) return { file: p.file };
+    return { file: p.file, line: at.line, column: at.column + 1 };
+  };
   const original = (positions) => (positions ?? []).flatMap((p) => {
-    if (p.file !== undefined && p.file !== "App.tsx") return [{ file: p.file }];
+    if (p.file !== undefined && p.file !== "App.tsx") return [inModule(p)];
     const at = originalPositionFor(map, { line: p.line, column: Math.max(0, p.column - 1) });
     if (!at.line) return [];
     if (lines && (at.line > lines.length || at.column >= lines[at.line - 1].length)) return [];
     const position = clean({ line: at.line, column: at.column + 1 });
-    return position ? [{ file: "App.tsx", ...position }] : [];
+    if (!position) return [];
+    // Only a value the compiler mapped where it starts: the mapping at or before it would be the call's own (its element's), not the value's.
+    const compiled = (traceSegment ? handedAt(p.line, p.column) : []).flatMap((value) => {
+      if (traceSegment(map, value.line - 1, value.column - 1)?.[0] !== value.column - 1) return [];
+      const from = originalPositionFor(map, { line: value.line, column: value.column - 1 });
+      if (!from.line || (lines && (from.line > lines.length || from.column >= lines[from.line - 1].length))) return [];
+      const start = clean({ line: from.line, column: from.column + 1 });
+      return start ? [start] : [];
+    });
+    return [{ file: "App.tsx", ...position, ...(compiled.length ? { compiled } : {}) }];
   });
   return {
     ...record,

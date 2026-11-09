@@ -197,7 +197,7 @@ export const ORACLE_SOURCES = () => sha256(JSON.stringify([
  * (`executionFiles`), so a generator that grows keeps the records of the programs it still writes.
  */
 export const RECORD_SOURCES = () => sha256(JSON.stringify([
-  ...["fast.mjs", "fast-daemon.mjs", "typecheck.mjs", "checker.mjs", "chrome.mjs", "chrome-host.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "hits.mjs", "pipeline.mjs", "cache.mjs"].map((name) => fileHash(join(here, name))),
+  ...["fast.mjs", "fast-daemon.mjs", "typecheck.mjs", "checker.mjs", "chrome.mjs", "chrome-host.mjs", "served.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "hits.mjs", "pipeline.mjs", "cache.mjs"].map((name) => fileHash(join(here, name))),
   treeHash(join(here, "fast"), (name) => /\.(mjs|tsx?|json)$/.test(name) && !/\.test\./.test(name)),
 ]));
 
