@@ -55,7 +55,7 @@ import { linkScratch } from "./scratch.mjs";
 import { idFilter, keepIds } from "./smoke.mjs";
 import { gridSampleOptions, sampleEntries, sampleLine } from "./sample.mjs";
 import { gridShardOptions, shardEntries, shardKey, shardLine, shardOf } from "./shard.mjs";
-import { assertFindingsMapped, materializeForChecker } from "./checker.mjs";
+import { assertFindingsMapped, materializeForChecker, projectModules } from "./checker.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
@@ -219,7 +219,20 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   // claiming or declining row only: a withholding there would cover every code raised in that callback at any depth (R5, R25).
   const registeredAt = built?.program && built.lineTable ? registrationPositions(built.program, built.lineTable, text) : () => [];
   const registered = events.flatMap((event) => (attributed(event)[0] ? registeredAt(attributed(event)[0].line) : []));
-  const recordedAt = (finding) => stacks.some((stack) => withheldAtStack(finding, stack, mount, code)) || (!withholdingRules.includes(finding.rule) && registered.some((position) => finding.line === position.line && finding.column === position.column));
+  // ADR 0921: a finding in another module of the program (`el.ts`, `helpers.ts`; checker.mjs `moduleFindings`) is judged at the frames
+  // Chrome recorded in that module, by the same rule as App.tsx's at App.tsx's: its exact positions and starts, a deeper frame only where
+  // it mounts nothing. Every other file's frames are blank for it, as App.tsx's are blank for none of these. No registering line counts.
+  const moduleTexts = Object.fromEntries(projectModules(built?.files).map((file) => [file, String(built.files[file])]));
+  const moduleStacks = new Map();
+  const stacksIn = (file) => {
+    if (!moduleStacks.has(file)) moduleStacks.set(file, events.map((event) => withStarts(appStack(event.positions, file), frameStarts(moduleTexts[file], file))));
+    return moduleStacks.get(file);
+  };
+  const recordedInModule = (finding) => moduleTexts[finding.file] !== undefined
+    && stacksIn(finding.file).some((stack) => withheldAtStack(finding, stack, (frame) => callStarts(moduleTexts[finding.file], finding.file).mount(frame.line, frame.column), code));
+  const moduleFindings = (checker.moduleFindings ?? []).filter((finding) => moduleTexts[finding.file] !== undefined && !ignoredRules.includes(finding.rule));
+  const recordedAt = (finding) => ((finding.file ?? "App.tsx") !== "App.tsx" ? recordedInModule(finding)
+    : stacks.some((stack) => withheldAtStack(finding, stack, mount, code)) || (!withholdingRules.includes(finding.rule) && registered.some((position) => finding.line === position.line && finding.column === position.column)));
   const claims = (finding) => coversCodeAt(code, finding, recordedAt(finding));
   // Measured, not counted: a withholding whose start line is a frame's line but no recorded position (a column, a mount line).
   const nearOnly = (finding) => !claims(finding) && withholdingRules.includes(finding.rule) && stacks.some((stack) => stack.some((frame) => frame.line === finding.line));
@@ -231,14 +244,18 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const placedCode = !SPEC[code].placeless && !isPlacelessCode(code);
   // Chrome gave this code with a place no position with a column (an unplaced diagnostic, the oracle path's records): the judge cannot
   // place it. Unjudged, counted and listed (`unplaced`), never a pass or a false clean.
-  if (placedCode && !stacks.some((stack) => stack.some((frame) => Number.isInteger(frame.column)))) return { outcome: "unplaced", detail: { placed, findings: relevant.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } };
+  // A frame in another module of the program places the code too (ADR 0921), at that module's own positions only.
+  const placedIn = (stack) => stack.some((frame) => Number.isInteger(frame.column));
+  if (placedCode && !stacks.some(placedIn) && !Object.keys(moduleTexts).some((file) => stacksIn(file).some(placedIn))) return { outcome: "unplaced", detail: { placed, findings: relevant.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } };
   const claimingViolation = relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && (placedCode ? recordedAt(finding) : inLines(finding, region)))
-    ?? (placedCode ? undefined : relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule)));
-  const remote = Boolean(claimingViolation) && !inLines(claimingViolation, region);
+    ?? (placedCode ? moduleFindings.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && recordedAt(finding)) : relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule)));
+  const inModule = (finding) => (finding.file ?? "App.tsx") !== "App.tsx";
+  const where = (finding) => `${inModule(finding) ? `${finding.file}:` : ""}${finding.line}`;
+  const remote = Boolean(claimingViolation) && (inModule(claimingViolation) || !inLines(claimingViolation, region));
   const violations = covering.filter((finding) => finding.kind === "violation");
   const stray = relevant.filter((finding) => finding.kind === "violation" && !rules.includes(finding.rule) && !inLines(finding, region));
   const atOthers = checker.findings.filter((finding) => finding.kind === "violation" && elsewhere(finding)).map((finding) => `${finding.rule}@${finding.line}`);
-  const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${claimingViolation.line}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
+  const detail = { ...(atOthers.length ? { atOthers } : {}), placed, findings: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(remote ? { remote: `${claimingViolation.rule}@${where(claimingViolation)}` } : {}), ...(stray.length ? { stray: stray.map((finding) => `${finding.rule}@${finding.line}`) } : {}), ...(Object.keys(secondary).length ? { secondary } : {}) };
   // A violation of another rule that the runtime substantiates on these lines (one of that rule's codes reported here: a store read
   // in a body is a strict read too) is a second defect at the site, not a wrong rule; the code is judged as if it were absent.
   const holes = holeLines(built, site, others);
@@ -269,8 +286,8 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const mechanism = (finding) => ((codeRules[code] ?? []).includes(finding.rule) ? "claiming" : withholdingRules.includes(finding.rule) ? "withholding" : "declining");
   if (covering.some(claims)) return { outcome: "recall-gap", detail: { ...detail, declinedBy: mechanism(covering.find(claims)) } };
   const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};
-  const claimingElsewhere = relevant.find((finding) => claims(finding));
-  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, declinedBy: mechanism(claimingElsewhere), remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${claimingElsewhere.line}` } };
+  const claimingElsewhere = relevant.find((finding) => claims(finding)) ?? (placedCode ? moduleFindings.find((finding) => claims(finding)) : undefined);
+  if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, declinedBy: mechanism(claimingElsewhere), remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${where(claimingElsewhere)}` } };
   // Certified: the file has no uncertifiable finding at all, so the checker claims it proved the whole file. A false clean there is a
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
   const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");

@@ -3712,3 +3712,36 @@ fn identifier_binding_answers_what_the_scan_answered() {
         assert_eq!(indexed, scanned, "{name:?}");
     }
 }
+
+/// Facts schema 93 (ADR 0923): each `throw` with its operand, and a `catch`
+/// clause's parameter when it is one identifier.
+#[test]
+fn throws_and_catch_parameters_are_recorded() {
+    let source = concat!(
+        "declare const c: () => number;\n",
+        "try { throw (c as unknown); } catch (e) { void e; }\n",
+        "try { throw c; } catch ({ x }) { void x; }\n",
+        "try { throw c; } catch { void 0; }\n",
+    );
+    let facts = super::extract("throws.ts", source).unwrap();
+    let text = |span: crate::core::Span| &source[span.start as usize..span.end as usize];
+    let thrown = facts
+        .throws
+        .iter()
+        .map(|thrown| (text(thrown.span), text(thrown.argument)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        thrown,
+        [
+            ("throw (c as unknown);", "c as unknown"),
+            ("throw c;", "c"),
+            ("throw c;", "c"),
+        ]
+    );
+    let caught = facts
+        .try_catches
+        .iter()
+        .map(|caught| (caught.parameter.map(text), caught.binds))
+        .collect::<Vec<_>>();
+    assert_eq!(caught, [(Some("e"), true), (None, true), (None, false)]);
+}

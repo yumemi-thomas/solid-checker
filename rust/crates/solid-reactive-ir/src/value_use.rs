@@ -140,6 +140,8 @@ enum Holder {
     Awaited,
     Yielded,
     Iterated,
+    /// ADR 0923: the operand of the `throw` statement at this span.
+    Thrown(Span),
 }
 
 /// Ordered maps: a walk visits holders and references in source order, so two
@@ -283,6 +285,9 @@ impl FileIndex {
         }
         for operand in &ast.await_operands {
             add(*operand, Holder::Awaited);
+        }
+        for thrown in &ast.throws {
+            add(thrown.argument, Holder::Thrown(thrown.span));
         }
         for yielded in &ast.yields {
             if let Some(operand) = yielded.operand {
@@ -837,7 +842,7 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     /// A position no table holds: an export or a name.
-    fn unheld(&self, file: &FileFacts, at: Span, mode: Mode) -> Position {
+    fn unheld(&mut self, file: &'a FileFacts, at: Span, mode: Mode) -> Position {
         let ast = &file.ast;
         if jsx_name(file, at) {
             // `<H />` calls what `H` holds, and no row reads it. A root's tag
@@ -852,9 +857,8 @@ impl<'l, 'a> Census<'l, 'a> {
             return Position::Followed;
         }
         // An export of a name: its importers' references are the name's own,
-        // walked with it. `export default` of a literal or a call has no name,
-        // and its importers are walked by nothing; a holder's default export
-        // is no name the walk follows into them either.
+        // walked with it. `export default` of a literal or a call has no name:
+        // its row stays, and ADR 0923 walks its importers' references too.
         if exported_directly(file, at) {
             let specifier = ast
                 .exports
@@ -863,13 +867,118 @@ impl<'l, 'a> Census<'l, 'a> {
                 .any(|specifier| specifier.local.span == at);
             let named = is_value_reference(file, at)
                 && (specifier || matches!(mode, Mode::Value | Mode::Root));
-            return if named {
-                Position::Followed
-            } else {
-                Position::Open(blockers::VALUE_EXPORTED_UNNAMED)
-            };
+            if named {
+                return Position::Followed;
+            }
+            self.default_export_uses(file, at, mode);
+            return Position::Open(blockers::VALUE_EXPORTED_UNNAMED);
         }
         Position::Open(blockers::VALUE_USE_UNCLASSIFIED)
+    }
+
+    /// ADR 0923: the references of the `export default` around `at`, in the
+    /// files that import it, walked as the exported value's uses. The export
+    /// is the compiler's symbol whose declaration is exactly that statement,
+    /// reached from an import binding's alias target; its references are the
+    /// compiler's. A reference this cannot read is a use of its own.
+    fn default_export_uses(&mut self, file: &'a FileFacts, at: Span, mode: Mode) {
+        let Some(export) = file.ast.exports.iter().find(|export| {
+            export.kind == solid_facts::ast::ExportKind::Default && export.span.contains(at)
+        }) else {
+            return;
+        };
+        let declared = export.span.location(file.path.as_str());
+        let mut targets = Vec::new();
+        for importer in self.lookup.files() {
+            for binding in importer
+                .ast
+                .imports
+                .iter()
+                .flat_map(|import| &import.bindings)
+            {
+                let Some(symbol) = self
+                    .lookup
+                    .symbol_at(importer.path.as_str(), binding.local.span)
+                else {
+                    continue;
+                };
+                let target = symbol.alias_target();
+                self.lookup.note_symbol_declarations(target);
+                let exact = self
+                    .lookup
+                    .symbol_declarations(target)
+                    .is_some_and(|declarations| {
+                        declarations
+                            .iter()
+                            .any(|declaration| declaration.location == declared)
+                    });
+                if exact && !targets.contains(&target) {
+                    targets.push(target);
+                }
+            }
+        }
+        for target in targets {
+            for reference in self.lookup.symbol_references(target) {
+                let Some((holder, span)) = self.place(&reference) else {
+                    self.uses
+                        .push((reference, blockers::VALUE_USE_UNCLASSIFIED));
+                    continue;
+                };
+                if is_value_reference(holder, span) {
+                    self.position(holder, span, mode);
+                } else if let Some(blocker) = self.unnamed_reference(holder, span, mode) {
+                    self.uses
+                        .push((span.location(holder.path.as_str()), blocker));
+                }
+            }
+        }
+    }
+
+    /// ADR 0923: where a thrown value goes. The innermost `try` whose block
+    /// holds the `throw` in the same function binds it in its `catch`. Out
+    /// of an anonymous synchronous function called on the spot (an IIFE) it
+    /// goes on from that call; past any other function's end no caller's
+    /// `catch` is walked, so it stays open.
+    fn caught(&mut self, file: &'a FileFacts, statement: Span, mode: Mode) -> Position {
+        let ast = &file.ast;
+        let mut from = statement;
+        for _ in 0..MAX_HOPS {
+            let thrower = crate::owners::containing_ast_function(ast, from);
+            let caught = ast
+                .try_catches
+                .iter()
+                .filter(|caught| {
+                    caught.block.contains(from)
+                        && crate::owners::containing_ast_function(ast, caught.block)
+                            .map(|function| function.span)
+                            == thrower.map(|function| function.span)
+                })
+                .min_by_key(|caught| caught.block.end - caught.block.start);
+            if let Some(caught) = caught {
+                if !caught.binds {
+                    return Position::Followed;
+                }
+                let Some(parameter) = caught.parameter else {
+                    return Position::Open(blockers::VALUE_THROWN);
+                };
+                return self.name_uses(file, parameter, mode);
+            }
+            let Some(function) = thrower.filter(|function| {
+                function.kind != solid_facts::ast::FunctionKind::Declaration
+                    && function.name.is_none()
+                    && function.method_name.is_none()
+                    && !function.r#async
+                    && !function.generator
+            }) else {
+                return Position::Open(blockers::VALUE_THROWN);
+            };
+            let mut calls = ast.calls_with_peeled_callee(function.span);
+            match (calls.next(), calls.next()) {
+                (Some(call), None) if !call.construct => from = call.span,
+                _ => return Position::Open(blockers::VALUE_THROWN),
+            }
+        }
+        Position::Open(blockers::VALUE_THROWN)
     }
 
     #[deny(clippy::wildcard_enum_match_arm)]
@@ -1052,6 +1161,12 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::Awaited => Position::Open(blockers::VALUE_THROUGH_AWAIT),
             Holder::Yielded => Position::Open(blockers::VALUE_THROUGH_GENERATOR),
             Holder::Iterated => Position::Open(blockers::VALUE_IN_CARRIER),
+            // ADR 0923: the `catch` that binds it holds it where no row reads
+            // it; its uses are walked as past an escape, each with a row.
+            Holder::Thrown(_) => {
+                self.escape(file, at, row, mode, blockers::VALUE_THROWN);
+                Position::Open(blockers::VALUE_THROWN)
+            }
         }
     }
 
@@ -1232,6 +1347,7 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::Awaited => Position::Open(blockers::VALUE_THROUGH_AWAIT),
             Holder::Yielded => Position::Open(blockers::VALUE_THROUGH_GENERATOR),
             Holder::Iterated => Position::Open(blockers::VALUE_IN_CARRIER),
+            Holder::Thrown(statement) => self.caught(file, statement, mode),
         }
     }
 
@@ -1246,7 +1362,12 @@ impl<'l, 'a> Census<'l, 'a> {
             self.site(file, at, site, blocker);
             return Position::Followed;
         }
-        if file.ast.deleted_targets.contains(&at) || exported_directly(file, at) {
+        if file.ast.deleted_targets.contains(&at) {
+            return Position::Followed;
+        }
+        if exported_directly(file, at) {
+            // ADR 0923: a default export's importers use it as well.
+            self.default_export_uses(file, at, mode);
             return Position::Followed;
         }
         Position::Open(blockers::VALUE_USE_UNCLASSIFIED)
@@ -2919,7 +3040,6 @@ mod tests {
     #[test]
     fn a_form_no_table_holds_reaches_the_default_at_every_placement() {
         for form in [
-            "throw HELD;",
             "void { [HELD]: 1 };",
             "void o[HELD];",
             "class A extends HELD {}",
@@ -2933,6 +3053,23 @@ mod tests {
                 assert!(!exported_directly(&file, at), "{source}");
                 assert!(!jsx_name(&file, at), "{source}");
             }
+        }
+    }
+
+    /// ADR 0923: a `throw` operand is held by its statement at every
+    /// placement (it once fell to the default).
+    #[test]
+    fn a_thrown_operand_is_held_by_its_statement() {
+        for placement in PLACEMENTS {
+            let source = placement.replace('$', "throw HELD;");
+            let file = facts(&source);
+            let at = span_of(&source, "HELD");
+            let statement = span_of(&source, "throw HELD;");
+            let index = FileIndex::of(&file);
+            assert!(
+                matches!(index.holders.get(&at).map(Vec::as_slice), Some([Holder::Thrown(held)]) if *held == statement),
+                "{source}"
+            );
         }
     }
 

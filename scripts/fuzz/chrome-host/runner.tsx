@@ -33,7 +33,7 @@ function servedFrames(stack: string) {
   const rows: { file: string, line: number, column: number }[] = [];
   for (const text of String(stack ?? '').split('\n')) {
     const match = new RegExp(`/cases/${id}/([^/:?\\s)]+\\.tsx?)(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)`).exec(text);
-    // Another of the case's modules: no position (only App.tsx is mapped), but the frame counts for depth (R20).
+    // Another of the case's modules: chrome-host.mjs maps it through that module's transform, or keeps its file alone (depth, R20).
     if (match) rows.push({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
   }
   return rows;
@@ -41,7 +41,8 @@ function servedFrames(stack: string) {
 
 /**
  * Review R66 follow-up (ADR 0907): a logged error's frames of the program under test: any file under the case's own `/cases/<id>/` but
- * its `node_modules`, at any depth and extension (App.tsx with its served position, which chrome-host.mjs maps; any other by path only).
+ * its `node_modules`, at any depth and extension, each with its served position: chrome-host.mjs maps App.tsx and the program's other
+ * modules, and keeps any other file by path only.
  * Only the logged errors read this; diagnostics and thrown errors keep `servedFrames` (their stack depths, R20).
  */
 function caseFrames(stack: string) {
@@ -52,7 +53,7 @@ function caseFrames(stack: string) {
     if (at < 0) continue;
     const match = /^([^:?\s)]+?)(?:\?[^:\s)]*)?:(\d+):(\d+)/.exec(text.slice(at + prefix.length));
     if (!match || match[1].startsWith('node_modules/')) continue;
-    rows.push(match[1] === 'App.tsx' ? { file: 'App.tsx', line: Number(match[2]), column: Number(match[3]) } : { file: match[1] });
+    rows.push({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
   }
   return rows;
 }
