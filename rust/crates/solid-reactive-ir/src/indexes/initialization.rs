@@ -568,6 +568,23 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| MemberStability::index(self.facts, self))
     }
 
+    /// ADR 0919: whether member stability assumes member `name` of an object
+    /// created in the file at `owner` (no visible write can replace it),
+    /// recorded as the probe [`crate::base::memo::probes::Probe::Stable`]
+    /// asks it. A path this build does not analyze answers no.
+    pub(crate) fn member_stable_in(&self, owner: &str, name: &str) -> bool {
+        let Some(id) = self.file_table.interner().get(owner) else {
+            return false;
+        };
+        self.note_probe_read(crate::base::memo::probes::Probe::Stable, || {
+            crate::base::memo::probes::PolledKey::FileText(id, std::sync::Arc::from(name))
+        });
+        matches!(
+            self.member_stability().state_of(self.facts, owner, name),
+            crate::interproc::accessor_provenance::Stability::Assumed
+        )
+    }
+
     /// Whether code at `span` in file `caller` runs after the declarator of
     /// binding `binding` of file `declaring`. `visiting` holds the arrows
     /// whose own mentions are being proved, so a cycle of them ends.

@@ -62,6 +62,13 @@ values and a setter's draft are silent. A setter reached through more aliases
 than are followed opens a window not proven either way: uncertifiable,
 `search-depth-limit` (ADR 0751).
 
+**Through a handed container (ADR 0919).** A write through a props member, a
+`merge`/`omit` view, a context value or a hook's result follows the container
+over every route a caller hands it in. One `createStore` store on every route,
+written outside every call that may open a setter's window, on a stack no such
+call starts: a violation (`props.s.v = 1` where every site passes `s={store}`).
+Plain on every route, or a handed setter's draft: silent. Else uncertifiable.
+
 **Through a call or a loop (ADR 0720).** An identity function (`id(store).n =
 1`) or a `createMemo(() => store)` accessor returns the store: a violation. An
 element (`find`, `at`, `for…of`, a `For` row, a `filter`, `slice` or

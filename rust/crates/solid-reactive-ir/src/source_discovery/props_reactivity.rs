@@ -77,7 +77,20 @@ pub(crate) enum PropsReactivity {
         reactive: BTreeSet<String>,
         accessor_values: BTreeSet<String>,
         passed: PassedSources,
+        /// ADR 0919: when the only escapes are elements whose one spread is
+        /// an enclosing component's own current props, those elements.
+        spread_forwards: Option<SpreadForwards>,
     },
+}
+
+/// ADR 0919: the elements of a component that hand it an enclosing
+/// component's own props whole (`<Inner {...props} />`), each the parent's
+/// props declaration and every name the element sets itself, and whether
+/// some element passes attributes alone.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct SpreadForwards {
+    pub(crate) direct: bool,
+    pub(crate) forwards: Vec<(Location, BTreeSet<String>)>,
 }
 
 /// ADR 0509: per prop name, the exact sources (a primitive's accessor, setter
@@ -121,6 +134,10 @@ pub(crate) struct PassedSource {
     /// Some visible site passes a getter that calls an async source
     /// (`a={data()}`): reading the prop reads it, pending or not.
     pub(crate) async_getter: bool,
+    /// ADR 0919: some visible site passes a function literal written there.
+    pub(crate) function: bool,
+    /// ADR 0919: some visible site does not pass the prop at all.
+    pub(crate) missing: bool,
 }
 
 /// The per-declaration classification map, keyed by the props parameter's
@@ -246,6 +263,56 @@ impl PropsReactivityIndex {
                 .is_none_or(|passed| passed.sources.is_empty() && !passed.may_hold_proxy),
             _ => false,
         }
+    }
+
+    /// ADR 0919: what every call site passes `name`, when every caller is
+    /// enumerated and each site passes it an exact source, a closed literal
+    /// of functions and primitives or a function literal, or hands the
+    /// component an enclosing component's own props whole without setting
+    /// `name` itself: the sources, whether some site passes such a plain
+    /// value, and the props declarations whose `name` the forwarding sites
+    /// pass on. `None` when a caller is not enumerated, a site does not pass
+    /// `name`, or a site passes anything else.
+    pub(crate) fn passed_on_every_site(
+        &self,
+        declaration: &Location,
+        name: &str,
+    ) -> Option<(Vec<SymbolId>, bool, Vec<Location>)> {
+        if !self.caller_proof {
+            return None;
+        }
+        let (passed, forwards) = match self.by_declaration.get(declaration)? {
+            PropsReactivity::Enumerated { passed, .. } => (passed.get(name)?, Vec::new()),
+            PropsReactivity::Escaping {
+                passed,
+                spread_forwards: Some(spread),
+                ..
+            } => {
+                if spread.forwards.iter().any(|(_, set)| set.contains(name)) {
+                    return None;
+                }
+                let forwards = spread
+                    .forwards
+                    .iter()
+                    .map(|(parent, _)| parent.clone())
+                    .collect();
+                match passed.get(name) {
+                    Some(passed) => (passed, forwards),
+                    None if !spread.direct => {
+                        return Some((Vec::new(), false, forwards));
+                    }
+                    None => return None,
+                }
+            }
+            PropsReactivity::Escaping { .. } => return None,
+        };
+        (!passed.missing && !(passed.other && passed.may_hold_proxy)).then(|| {
+            (
+                passed.sources.iter().cloned().collect(),
+                passed.other || passed.function,
+                forwards,
+            )
+        })
     }
 
     /// ADR 0823: every caller is enumerated, and none passes `name` a value
@@ -753,6 +820,7 @@ pub(super) fn classify_one_component(
                 reactive: BTreeSet::new(),
                 accessor_values: BTreeSet::new(),
                 passed: PassedSources::new(),
+                spread_forwards: None,
             },
             forwarded,
             Vec::new(),
@@ -762,6 +830,9 @@ pub(super) fn classify_one_component(
     // one sets this flag and keeps scanning, because the JSX call sites that
     // are visible still witness what they pass.
     let mut escapes = false;
+    // ADR 0919: an escape other than an own-props spread element.
+    let mut other_escape = false;
+    let mut own_spreads = Vec::new();
     // Exported: callers outside the project can pass anything as well --
     // unless the user has asserted that there is no outside. That assertion
     // removes only the assumption of an *unseen* caller; every reference below
@@ -769,6 +840,7 @@ pub(super) fn classify_one_component(
     let closed = runtime.program_is_closed();
     if !closed && inputs.exported(symbol) {
         escapes = true;
+        other_escape = true;
     }
     let component_uses = inputs.uses_of(file, function.span);
     // Every reference must be the declaration itself or one of the resolved
@@ -778,6 +850,7 @@ pub(super) fn classify_one_component(
     let references = super::trace::references(lookup, symbol.as_str());
     if references.is_empty() {
         escapes = true;
+        other_escape = true;
     }
     for reference in &references {
         let (Ok(start), Ok(end)) = (
@@ -785,6 +858,7 @@ pub(super) fn classify_one_component(
             u32::try_from(reference.end_byte),
         ) else {
             escapes = true;
+            other_escape = true;
             continue;
         };
         let span = Span::new(start, end);
@@ -834,6 +908,7 @@ pub(super) fn classify_one_component(
                 reference_is_export_specifier(facts, span, reference.path.as_ref())
             }) {
                 escapes = true;
+                other_escape = true;
             }
         }
     }
@@ -843,6 +918,12 @@ pub(super) fn classify_one_component(
     let mut accessor_unresolved = BTreeSet::new();
     let mut passed = PassedSources::new();
     let mut spreads = Vec::new();
+    // ADR 0919: per prop name, the elements that pass it.
+    let mut passing = BTreeMap::<String, usize>::new();
+    let elements = component_uses
+        .iter()
+        .filter(|(_, element)| element.spreads.is_empty())
+        .count();
     for (use_file, element) in component_uses {
         // A spread hands over an object whose properties this cannot
         // enumerate — and, because a later spread wins over an earlier
@@ -860,13 +941,44 @@ pub(super) fn classify_one_component(
             {
                 spreads.push(forward);
             }
+            // ADR 0919: one spread of an enclosing component's own props
+            // parameter hands its slots on, but for the names the element
+            // sets itself, before or after.
+            match (
+                element.spreads.as_slice(),
+                element.spreads.first().and_then(|spread| {
+                    own_props_parameter(lookup, entities, inputs, use_file, spread.argument)
+                }),
+            ) {
+                ([_], Some(parent)) => {
+                    let mut set = BTreeSet::new();
+                    for attribute in &element.attributes {
+                        match use_file.source_text(attribute.local_name) {
+                            Some(name) => {
+                                set.insert(name.to_owned());
+                            }
+                            None => other_escape = true,
+                        }
+                    }
+                    if !element.children.is_empty() {
+                        set.insert("children".to_owned());
+                    }
+                    own_spreads.push((parent, set));
+                }
+                _ => other_escape = true,
+            }
             continue;
         }
+        let mut named = BTreeSet::new();
         for attribute in &element.attributes {
             let Some(attribute_name) = use_file.source_text(attribute.local_name) else {
                 escapes = true;
+                other_escape = true;
                 continue;
             };
+            if named.insert(attribute_name) {
+                *passing.entry(attribute_name.to_owned()).or_default() += 1;
+            }
             let value_use = if attribute.namespace.is_some() {
                 PropUse::Unknown
             } else {
@@ -927,7 +1039,10 @@ pub(super) fn classify_one_component(
                         .ast
                         .function_at(use_file.ast.peel_ts_sugar_span(expression))
                         .is_some()
-                }) => {}
+                }) =>
+                {
+                    entry.function = true;
+                }
                 None => {
                     entry.other = true;
                     entry.may_hold_proxy |= !attribute
@@ -997,6 +1112,9 @@ pub(super) fn classify_one_component(
             }
         }
     }
+    for (name, entry) in &mut passed {
+        entry.missing = passing.get(name).copied().unwrap_or_default() < elements;
+    }
     if escapes {
         // `unresolved` is dropped on purpose: without a complete caller set
         // every prop that is not a proven reactive witness is unresolved
@@ -1007,6 +1125,10 @@ pub(super) fn classify_one_component(
                 reactive,
                 accessor_values,
                 passed,
+                spread_forwards: (!other_escape).then_some(SpreadForwards {
+                    direct: elements > 0,
+                    forwards: own_spreads,
+                }),
             },
             forwarded,
             spreads,
@@ -1093,6 +1215,53 @@ fn spread_of_own_props(
         overridden.insert("children".to_owned());
     }
     Some((declaration.clone(), overridden))
+}
+
+/// ADR 0919: the props declaration of the component parameter `argument`
+/// names exactly: the parameter itself (no alias, no view), never written.
+/// Which value its slots hold is the join's question, slot by slot; that the
+/// object is still the one the callers built is this one.
+fn own_props_parameter(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    inputs: &ComponentInputs<'_>,
+    file: &FileFacts,
+    argument: solid_facts::core::Span,
+) -> Option<Location> {
+    let argument = file.ast.peel_ts_sugar_span(argument);
+    if !file.ast.identifiers.iter().any(|identifier| {
+        identifier.span == argument
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) {
+        return None;
+    }
+    let symbol = entities
+        .get(&location(file.path.shared(), argument))
+        .cloned()
+        .or_else(|| super::trace::binding_symbol(lookup, file.path.as_str(), argument))?;
+    let (_, declaration) = inputs.prop_source(&symbol)?;
+    read_declaration_file(lookup, file, declaration);
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return None;
+    };
+    let span = solid_facts::core::Span::new(start, end);
+    let parameter = *declaration.path == *file.path.as_str()
+        && file.ast.functions.iter().any(|function| {
+            function.parameters.first().is_some_and(|parameter| {
+                parameter.shape == solid_facts::ast::BindingShape::Identifier
+                    && parameter
+                        .names
+                        .first()
+                        .is_some_and(|name| name.span == span)
+            })
+        });
+    (entities.get(declaration) == Some(&symbol)
+        && parameter
+        && !crate::indexes::binding_written(file, span))
+    .then(|| declaration.clone())
 }
 
 /// How many lone-spread receivers deep the inertness proof follows before it

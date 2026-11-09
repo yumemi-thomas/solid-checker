@@ -100,7 +100,7 @@
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
-      "blocker": "unproven-container-root",
+      "blocker": "store-write-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/local-alias-member-reads/App.tsx",
       "start": 2885,
