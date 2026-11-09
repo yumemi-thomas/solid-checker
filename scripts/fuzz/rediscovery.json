@@ -7341,5 +7341,59 @@
    "lg-dynamic-static-promise-flush-read-stored-x-wrapper-handoff-assign-this"
   ],
   "rediscovered": "focus.mjs --codes DYNAMIC_STATIC_PROMISE over the six default grids plus mx-recall and lg-recall: a62c14ae1's release 1 false positive (this id, static-dynamic-async-source/violation@4); the ADR 0914 tree 0 (uncertifiable, computation-error-unobserved), nothing needs a look, mx-recall unchanged (4606 agree, 1777 recall-gap). Fixture stored-throw-class-member-wrapper: FuzzShape and MethodInMemo V on a62c14ae1, U here; ReadMemo and InBody V on both"
+ },
+ {
+  "finding": "ADR 0918: PRIMITIVE_IN_FORBIDDEN_SCOPE in a leaf callback (settled, tracked) named by value (cb-alias, cb-bundle, cb-shared) and reached through a hand-off: SC9012 or the violation at the leaf call argument, a position no Solid stack holds (cb-alias, cb-bundle: every hand-off; cb-shared: assign, assign-param, member, wrapper), and the cb-shared wrapper binding misplaced there",
+  "found": "full mx-pairs run on 6c2e63ecf (coordinator, coord-land/grids-6c2e63ecf), Chrome host records",
+  "fixed": "ADR 0918",
+  "grid": "mx-pairs",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-settled-memo-direct-handoff-foreach-cb-bundle",
+   "mx-primitive-in-forbidden-scope-settled-memo-direct-handoff-foreach-cb-alias",
+   "mx-primitive-in-forbidden-scope-settled-memo-direct-handoff-assign-cb-shared",
+   "mx-primitive-in-forbidden-scope-settled-memo-wrapper-handoff-foreach-cb-shared",
+   "mx-primitive-in-forbidden-scope-tracked-memo-direct-handoff-foreach-cb-bundle",
+   "mx-primitive-in-forbidden-scope-tracked-memo-direct-handoff-foreach-cb-alias",
+   "mx-primitive-in-forbidden-scope-tracked-memo-direct-handoff-assign-cb-shared",
+   "mx-primitive-in-forbidden-scope-tracked-memo-wrapper-handoff-foreach-cb-shared"
+  ],
+  "rediscovered": "focus.mjs --codes PRIMITIVE_IN_FORBIDDEN_SCOPE,CLEANUP_IN_FORBIDDEN_SCOPE,FLUSH_IN_TRACKED_QUEUE_CALLBACK --grids mx-pairs,lg-pairs: 6c2e63ecf release 900 false cleans and 54 misplaced for this code, exit 1; the ADR 0918 tree none, nothing needs a look (all moved to agree or an in-body recall gap), lg-pairs unchanged"
+ },
+ {
+  "finding": "ADR 0918: CLEANUP_IN_FORBIDDEN_SCOPE in a leaf callback (settled, tracked) named by value (cb-alias, cb-bundle, cb-shared) and reached through a hand-off: SC9012 or the violation at the leaf call argument, a position no Solid stack holds (cb-alias, cb-bundle: every hand-off; cb-shared: assign, assign-param, member, wrapper), and the cb-shared wrapper binding misplaced there",
+  "found": "full mx-pairs run on 6c2e63ecf (coordinator, coord-land/grids-6c2e63ecf), Chrome host records",
+  "fixed": "ADR 0918",
+  "grid": "mx-pairs",
+  "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-cleanup-in-forbidden-scope-settled-x-direct-handoff-foreach-cb-bundle",
+   "mx-cleanup-in-forbidden-scope-settled-x-direct-handoff-foreach-cb-alias",
+   "mx-cleanup-in-forbidden-scope-settled-x-direct-handoff-assign-cb-shared",
+   "mx-cleanup-in-forbidden-scope-settled-x-wrapper-handoff-foreach-cb-shared",
+   "mx-cleanup-in-forbidden-scope-tracked-x-direct-handoff-foreach-cb-bundle",
+   "mx-cleanup-in-forbidden-scope-tracked-x-direct-handoff-foreach-cb-alias",
+   "mx-cleanup-in-forbidden-scope-tracked-x-direct-handoff-assign-cb-shared",
+   "mx-cleanup-in-forbidden-scope-tracked-x-wrapper-handoff-foreach-cb-shared"
+  ],
+  "rediscovered": "focus.mjs --codes PRIMITIVE_IN_FORBIDDEN_SCOPE,CLEANUP_IN_FORBIDDEN_SCOPE,FLUSH_IN_TRACKED_QUEUE_CALLBACK --grids mx-pairs,lg-pairs: 6c2e63ecf release 300 false cleans and 18 misplaced for this code, exit 1; the ADR 0918 tree none, nothing needs a look (all moved to agree or an in-body recall gap), lg-pairs unchanged"
+ },
+ {
+  "finding": "ADR 0918: FLUSH_IN_TRACKED_QUEUE_CALLBACK in a leaf callback (settled, tracked) named by value (cb-alias, cb-bundle, cb-shared) and reached through a hand-off: SC9012 or the violation at the leaf call argument, a position no Solid stack holds (cb-alias, cb-bundle: every hand-off; cb-shared: assign, assign-param, member, wrapper), and the cb-shared wrapper binding misplaced there",
+  "found": "full mx-pairs run on 6c2e63ecf (coordinator, coord-land/grids-6c2e63ecf), Chrome host records",
+  "fixed": "ADR 0918",
+  "grid": "mx-pairs",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-settled-x-direct-handoff-foreach-cb-bundle",
+   "mx-flush-in-tracked-queue-callback-settled-x-direct-handoff-foreach-cb-alias",
+   "mx-flush-in-tracked-queue-callback-settled-x-direct-handoff-assign-cb-shared",
+   "mx-flush-in-tracked-queue-callback-settled-x-wrapper-handoff-foreach-cb-shared",
+   "mx-flush-in-tracked-queue-callback-tracked-x-direct-handoff-foreach-cb-bundle",
+   "mx-flush-in-tracked-queue-callback-tracked-x-direct-handoff-foreach-cb-alias",
+   "mx-flush-in-tracked-queue-callback-tracked-x-direct-handoff-assign-cb-shared",
+   "mx-flush-in-tracked-queue-callback-tracked-x-wrapper-handoff-foreach-cb-shared"
+  ],
+  "rediscovered": "focus.mjs --codes PRIMITIVE_IN_FORBIDDEN_SCOPE,CLEANUP_IN_FORBIDDEN_SCOPE,FLUSH_IN_TRACKED_QUEUE_CALLBACK --grids mx-pairs,lg-pairs: 6c2e63ecf release 300 false cleans and 18 misplaced for this code, exit 1; the ADR 0918 tree none, nothing needs a look (all moved to agree or an in-body recall gap), lg-pairs unchanged"
  }
 ]

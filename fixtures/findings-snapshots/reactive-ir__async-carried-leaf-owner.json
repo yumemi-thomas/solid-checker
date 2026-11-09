@@ -289,8 +289,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-carried-leaf-owner/App.tsx",
-      "start": 3091,
-      "end": 3093,
+      "start": 3057,
+      "end": 3068,
       "fixes": 0
     },
     {

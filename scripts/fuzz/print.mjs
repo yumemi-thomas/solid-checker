@@ -780,7 +780,9 @@ export function moduleFiles(program) {
     const created = component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => signalText(sig, signals, used));
     const keys = sourceKeys(component, signals).map(([key]) => key);
     const hook = (head) => [`${head} {`, ...created.map((line) => `${INDENT}${line}`), `${INDENT}return { ${keys.join(", ")} };`, "}"].join("\n");
-    if (component.source === "module" || component.source === "module-barrel") sourced.push(created.map((line) => `export ${line}`).join("\n"));
+    // ADR 0917: a context's `moduleTop` (misuse.mjs `buildOne`) above the values it must precede.
+    for (const name of component.moduleTop?.solid ?? []) used.add(name);
+    if (component.source === "module" || component.source === "module-barrel") sourced.push([...(component.moduleTop ? [component.moduleTop.text] : []), ...created.map((line) => `export ${line}`)].join("\n"));
     else if (component.source === "module-default-hook") sourced.push(hook("export default function useVals()"));
     else if (component.source === "module-hook-direct") sourced.push(["export function useVals() {", `${INDENT}return ${created[0].replace(/^const \w+ = /, "")}`, "}"].join("\n"));
     else sourced.push(hook("export function useVals()"));

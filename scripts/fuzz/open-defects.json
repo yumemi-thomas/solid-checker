@@ -684,35 +684,6 @@
    "outcome": "misplaced",
    "item": "R-misplaced",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-forbidden-scope-settled-root-wrapper-iife-cb-shared. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "lg-reactive-write-in-owned-scope-",
-   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-   "contexts": [
-    "iter-alias",
-    "iter-alias-key",
-    "iter-alias-reflect",
-    "iter-assign-src",
-    "iter-ctor-key",
-    "iter-define-key",
-    "iter-fn-escaped",
-    "iter-fn-new",
-    "iter-global-alias",
-    "iter-gpo-destructure",
-    "iter-gpo-key",
-    "iter-handed-proto",
-    "iter-key",
-    "iter-next",
-    "iter-next-assign",
-    "iter-next-define",
-    "iter-next-key",
-    "iter-next-src",
-    "iter-proto-key",
-    "iter-reflect-set"
-   ],
-   "outcome": "not-legal",
-   "item": "R-not-legal",
-   "note": "Legal-grid iter-* programs: a hidden iteration patch runs the write inside the compute, so Solid reports the code the generator labels legal. Held open by id; not classified as fine."
   }
  ],
  "patterns": [
@@ -984,12 +955,11 @@
   "unjudgedClaim": 0,
   "haltedClaim": 2,
   "causes": {
-   "R-not-legal": 2179,
    "R-stacked": 194,
    "R-unplaced": 8,
-   "R-other": 32,
-   "R-neighbour-U": 79,
-   "R-misplaced": 33,
+   "R-other": 7,
+   "R-neighbour-U": 48,
+   "R-misplaced": 29,
    "R-carrier": 139,
    "census": 93,
    "g2d named hand-off": 34,
