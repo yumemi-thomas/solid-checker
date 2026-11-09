@@ -6786,7 +6786,7 @@
   "finding": "ADR 0868's caller walk did not ask whether a caller in another file holds an owner edge: in a closed program `wrapUse(); hold(() => wrapUse());` left the helper file's site certified (reviewer's R38)",
   "found": "the rolling review of 08805ab01",
   "fixed": "ADR 0868, callers amendment",
-  "outside": "the grids run open-world programs, where an export's seed already leaves this U, and parseFindings keeps App.tsx rows only, so a site in a second file reads as a false clean on every build. Pinned by fixture closed-two-file-caller: build r13 no SC4001 row, r15 U at the helper's site"
+  "outside": "the grids run open-world programs, where an export's seed already leaves this U on every build. Pinned by fixture closed-two-file-caller: build r13 no SC4001 row, r15 U at the helper's site"
  },
  {"finding":"CONTEXT_NOT_FOUND claimed (SC4002 V) on a context read in an async helper the memo calls past its own await: the call edge kept the memo's owned bit as a possible run (MayResumeUnowned), and ADR 0577's owned-run throw read it as a proven one; rc.21 throws NoOwnerError there, which the reading effect logs (console.error), and the judge dropped the class-named log","found":"Part 16 ledger dry run (pinned smoke seed 21400934, rp7), R3d handoff item 1; R3e probes cases/{aw,cc,mo}","fixed":"ADR 0888","grid":"mx-census","code":"CONTEXT_NOT_FOUND","ids":["mx-context-not-found-aw-helper-late-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, with the judge reading class-named console errors (codeOfLogged + consoleErrors, Part 16's judge commit): 8f0005a43 (rg7) false-positive (missing-context-provider@7, Chrome same); ADR 0888 tree not-fired (missing-owner@7 unconnected: Chrome's NO_OWNER_CONTEXT is logged with no position). On the old judge the new tree stays false-positive (missing-owner@7): the log is unread"},
  {"finding":"A plain throw (resolve, until, a static dynamic source, useContext) claimed as a violation in a compute that stores its error, where nothing reports it: unread, in a try here or in a caller, under isPending, an effect's error arm, Errored with a parameter fallback (here or above a mount), a getter that never runs; and a helper whose only tracked entry is unread","found":"Part 16 ledger dry run (mx-census flush-read-stored, 3 ids); D18 and R3e probes cases/mu, cases/mv","fixed":"ADR 0893","grid":"lg-recall","code":"RESOLVE_IN_REACTIVE_SCOPE","ids":["lg-resolve-in-reactive-scope-st-unread-x-direct-none","lg-resolve-in-reactive-scope-st-read-ispending-x-direct-none","lg-resolve-in-reactive-scope-st-read-errored-handled-x-direct-none","lg-resolve-in-reactive-scope-st-read-show-false-x-direct-none","lg-resolve-in-reactive-scope-st-c-deferred-unread-x-direct-none","lg-resolve-in-reactive-scope-st-helper-body-x-direct-none"],"rediscovered":"release, --confirm-with-chrome, by id, with Part 16's codeOfLogged applied for the run: the h2 build (8f0005a43 with ADR 0888) 289 of 380 st-* legal ids false-positive (Chrome same), rc 3; the ADR 0893 build 0 false-positive, 375 uncertifiable, 4 clean, 1 unexecuted"},
@@ -7683,5 +7683,111 @@
    "mx-strict-read-untracked-ref-row-signal-wrapper-forward-2"
   ],
   "rediscovered": "focus.mjs --smoke --grids mx-recall --sample 0 --sample-seed 21400934 (the ledger seed, strict; 5,140 programs): a0cbb930e release (#186) 273 problems, these 272 false cleans and one other, exit 1; the ADR 0920 tree only that other (mx-flush-in-tracked-queue-callback-tracked-rerun-x-wrapper-generator, false clean on both), these 272 recall gaps, no other row moved. Over every forward-N id of the 13 codes in flow-*, ref-* and effect-cleanup-rerun-named (mx-recall 2,016, lg-recall 682): only these 272 moved"
+ },
+ {
+  "finding": "ADR 0921 cause 7: a strict read in another module of the program (use-export-let: el.ts; use-hook-store-module: hse.ts) read as a false clean though SC9012 stood at Chrome's frame there: the Chrome host recorded that module's frames by file only and the judge read App.tsx's findings only (a measurement artifact, not a checker miss)",
+  "found": "W's mx-recall false-clean research on 6c2e63ecf (causes 7 and 8), and PR #187's Fuzz smoke (run 42621899472, open-defect-fixed)",
+  "fixed": "ADR 0921 (Chrome host mapPositions, checker.mjs moduleFindings, matrix judge)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-use-export-let-direct-none",
+   "mx-strict-read-untracked-body-use-hook-store-module-alias-module-helper",
+   "mx-strict-read-untracked-body-use-hook-store-module-direct-none",
+   "mx-strict-read-untracked-body-use-hook-store-module-wrapper-helper",
+   "mx-strict-read-untracked-effect-apply-use-export-let-alias-helper",
+   "mx-strict-read-untracked-effect-apply-use-export-let-direct-none",
+   "mx-strict-read-untracked-effect-apply-use-export-let-wrapper-closure",
+   "mx-strict-read-untracked-effect-apply-use-export-let-wrapper-closure-helper",
+   "mx-strict-read-untracked-effect-apply-use-hook-store-module-direct-none",
+   "mx-strict-read-untracked-root-use-export-let-alias-iife",
+   "mx-strict-read-untracked-root-use-export-let-direct-module-helper",
+   "mx-strict-read-untracked-root-use-export-let-direct-none",
+   "mx-strict-read-untracked-root-use-hook-store-module-alias-helper",
+   "mx-strict-read-untracked-root-use-hook-store-module-alias-iife",
+   "mx-strict-read-untracked-root-use-hook-store-module-direct-module-helper",
+   "mx-strict-read-untracked-root-use-hook-store-module-direct-none",
+   "mx-strict-read-untracked-root-use-hook-store-module-wrapper-closure",
+   "mx-strict-read-untracked-root-use-hook-store-module-wrapper-closure-helper",
+   "mx-strict-read-untracked-root-use-hook-store-module-wrapper-iife"
+  ],
+  "rediscovered": "focus.mjs --smoke --cover all --cover-seed 1 (CI Fuzz smoke): 6e33e0b08 (run 42619710954) green with every id held by the ledger as failing (mx-recall R-carrier 139, R-neighbour-U 48, R-misplaced 29); the ADR 0921 tree 974bb8852 (run 42621899472): every id open-defect-fixed, now 19 recall-gap"
+ },
+ {
+  "finding": "ADR 0921 cause 8: JSX in a handler, timer, promise, microtask, async continuation or runWithOwner(null) (jsx-and, -array, -attr, -insert; flw-apply-and-timer): the claiming row on the expression a compiled insert/effect/memo is handed read as a false clean or misplaced, because the dev compiler maps that call to its element, attribute or fragment, where Chrome's frame lands (a measurement artifact, not a checker miss)",
+  "found": "W's mx-recall false-clean research on 6c2e63ecf (causes 7 and 8), and PR #187's Fuzz smoke (run 42621899472, open-defect-fixed)",
+  "fixed": "ADR 0921 (served.mjs compiledHanded, Chrome host record, codes.mjs withStarts)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-async-finally-jsx-and-direct-closure",
+   "mx-no-owner-effect-async-finally-jsx-and-direct-none",
+   "mx-no-owner-effect-async-finally-jsx-array-direct-closure",
+   "mx-no-owner-effect-async-finally-jsx-attr-direct-helper",
+   "mx-no-owner-effect-async-finally-jsx-insert-direct-module-helper",
+   "mx-no-owner-effect-async-for-await-jsx-and-direct-closure-helper",
+   "mx-no-owner-effect-async-for-await-jsx-array-direct-closure",
+   "mx-no-owner-effect-async-for-await-jsx-attr-direct-closure",
+   "mx-no-owner-effect-async-for-await-jsx-insert-direct-iife",
+   "mx-no-owner-effect-async-for-await-jsx-insert-direct-none",
+   "mx-no-owner-effect-async-jsx-and-direct-helper",
+   "mx-no-owner-effect-async-jsx-array-direct-closure-helper",
+   "mx-no-owner-effect-async-jsx-attr-direct-closure-helper",
+   "mx-no-owner-effect-async-jsx-insert-direct-module-helper",
+   "mx-no-owner-effect-async-loop-jsx-and-direct-iife",
+   "mx-no-owner-effect-async-loop-jsx-array-direct-none",
+   "mx-no-owner-effect-async-loop-jsx-attr-direct-module-helper",
+   "mx-no-owner-effect-async-loop-jsx-insert-direct-closure-helper",
+   "mx-no-owner-effect-flw-apply-and-timer-jsx-insert-direct-none",
+   "mx-no-owner-effect-flw-named-apply-and-timer-jsx-insert-direct-none",
+   "mx-no-owner-effect-handler-jsx-and-direct-iife",
+   "mx-no-owner-effect-handler-jsx-array-direct-iife",
+   "mx-no-owner-effect-handler-jsx-attr-direct-helper",
+   "mx-no-owner-effect-handler-jsx-insert-direct-iife",
+   "mx-no-owner-effect-micro-jsx-and-direct-closure-helper",
+   "mx-no-owner-effect-micro-jsx-array-direct-module-helper",
+   "mx-no-owner-effect-micro-jsx-attr-direct-closure",
+   "mx-no-owner-effect-micro-jsx-insert-direct-none",
+   "mx-no-owner-effect-owner-null-jsx-and-direct-module-helper",
+   "mx-no-owner-effect-owner-null-jsx-array-direct-helper",
+   "mx-no-owner-effect-owner-null-jsx-attr-direct-none",
+   "mx-no-owner-effect-owner-null-jsx-insert-direct-helper",
+   "mx-no-owner-effect-then-jsx-and-direct-closure",
+   "mx-no-owner-effect-then-jsx-array-direct-none",
+   "mx-no-owner-effect-then-jsx-attr-direct-closure",
+   "mx-no-owner-effect-then-jsx-insert-direct-helper",
+   "mx-no-owner-effect-timer-jsx-and-direct-helper",
+   "mx-no-owner-effect-timer-jsx-array-direct-iife",
+   "mx-no-owner-effect-timer-jsx-attr-direct-iife",
+   "mx-no-owner-effect-timer-jsx-insert-direct-none"
+  ],
+  "rediscovered": "focus.mjs --smoke --cover all --cover-seed 1 (CI Fuzz smoke): 6e33e0b08 (run 42619710954) green with every id held by the ledger as failing (mx-recall R-carrier 139, R-neighbour-U 48, R-misplaced 29); the ADR 0921 tree 974bb8852 (run 42621899472): every id open-defect-fixed, now 12 agree, 28 recall-gap"
+ },
+ {
+  "finding": "ADR 0921 cause 8: JSX in an effect apply (jsx-insert, -attr, -fragment): the claiming row on the expression a compiled insert/effect/memo is handed read as a false clean or misplaced, because the dev compiler maps that call to its element, attribute or fragment, where Chrome's frame lands (a measurement artifact, not a checker miss)",
+  "found": "W's mx-recall false-clean research on 6c2e63ecf (causes 7 and 8), and PR #187's Fuzz smoke (run 42621899472, open-defect-fixed)",
+  "fixed": "ADR 0921 (served.mjs compiledHanded, Chrome host record, codes.mjs withStarts)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-effect-apply-jsx-attr-direct-closure",
+   "mx-primitive-in-effect-callback-effect-apply-jsx-attr-direct-helper",
+   "mx-primitive-in-effect-callback-effect-apply-jsx-fragment-direct-closure-helper",
+   "mx-primitive-in-effect-callback-effect-apply-jsx-insert-direct-iife"
+  ],
+  "rediscovered": "focus.mjs --smoke --cover all --cover-seed 1 (CI Fuzz smoke): 6e33e0b08 (run 42619710954) green with every id held by the ledger as failing (mx-recall R-carrier 139, R-neighbour-U 48, R-misplaced 29); the ADR 0921 tree 974bb8852 (run 42621899472): every id open-defect-fixed, now 4 recall-gap"
+ },
+ {
+  "finding": "ADR 0921 cause 8: JSX in onSettled or createTrackedEffect (jsx-insert, -attr, -fragment): the claiming row on the expression a compiled insert/effect/memo is handed read as a false clean or misplaced, because the dev compiler maps that call to its element, attribute or fragment, where Chrome's frame lands (a measurement artifact, not a checker miss)",
+  "found": "W's mx-recall false-clean research on 6c2e63ecf (causes 7 and 8), and PR #187's Fuzz smoke (run 42621899472, open-defect-fixed)",
+  "fixed": "ADR 0921 (served.mjs compiledHanded, Chrome host record, codes.mjs withStarts)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-settled-jsx-fragment-direct-none",
+   "mx-primitive-in-forbidden-scope-tracked-jsx-attr-direct-iife",
+   "mx-primitive-in-forbidden-scope-tracked-jsx-insert-direct-none"
+  ],
+  "rediscovered": "focus.mjs --smoke --cover all --cover-seed 1 (CI Fuzz smoke): 6e33e0b08 (run 42619710954) green with every id held by the ledger as failing (mx-recall R-carrier 139, R-neighbour-U 48, R-misplaced 29); the ADR 0921 tree 974bb8852 (run 42621899472): every id open-defect-fixed, now 3 agree"
  }
 ]
