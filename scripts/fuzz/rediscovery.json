@@ -7330,5 +7330,16 @@
    "mx-settled-cleanup-unowned-flw-owned-action-gen-x-call-none"
   ],
   "rediscovered": "the 12 ids, origin's judge, Chrome confirmed: o1 ad8cc68bd and rn4 (f2e74e79a's code) 12 false cleans; rn6 0, 12 uncertifiable (SC4001 at the call). The 529 alias ids: rn2 12 false cleans, rn6 0, the 268 agree unchanged id for id, 0 false positives"
+ },
+ {
+  "finding": "A static dynamic promise source called from wrapUse(), which the arrow a class constructor stores on this calls, the class written in a memo nothing reads (in flush and a helper's callback): ADR 0893's walk found no entry of the constructor (new is no plain call) and ended Open, and the lexical fallback asked only whether the site, at module level, is inside the memo, so SC2007 stood as a violation; Chrome runs it legally (the memo keeps the error)",
+  "found": "W's full recall grids at a62c14ae1 (scripts/flip/notes/research-w-grids-rolling.md on claude/flip-research-w, 9df0fadf5), the one new false positive, uncached Chrome confirmed",
+  "fixed": "ADR 0914",
+  "grid": "lg-recall",
+  "code": "DYNAMIC_STATIC_PROMISE",
+  "ids": [
+   "lg-dynamic-static-promise-flush-read-stored-x-wrapper-handoff-assign-this"
+  ],
+  "rediscovered": "focus.mjs --codes DYNAMIC_STATIC_PROMISE over the six default grids plus mx-recall and lg-recall: a62c14ae1's release 1 false positive (this id, static-dynamic-async-source/violation@4); the ADR 0914 tree 0 (uncertifiable, computation-error-unobserved), nothing needs a look, mx-recall unchanged (4606 agree, 1777 recall-gap). Fixture stored-throw-class-member-wrapper: FuzzShape and MethodInMemo V on a62c14ae1, U here; ReadMemo and InBody V on both"
  }
 ]

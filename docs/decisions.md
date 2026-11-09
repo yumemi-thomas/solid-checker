@@ -2358,3 +2358,7 @@ Step A toward reusing ADR 0909's units across edits. `reads::all_files` and `Sem
 <a id="adr-0911"></a>
 ## ADR 0911 — Leaf operations, static API and compatibility files are late chunks
 They join ADR 0413's chunks. A chunk records each source-table entry it asks (`late_chunks::Noted`), reachability counts, transport targets, the client-build answer, and the compatibility pass's structures by key (a file's read rows, forwarded parameters, reference ranges). Dispatch sites are a section (`DispatchSites`). Shadow and verify-reused modes recompute every kept chunk and poison on a difference.
+
+<a id="adr-0914"></a>
+## ADR 0914 — A throw walk's stop in an unread compute is unobserved
+The walk found no entry of a class constructor or method and ended `Open`; a wrapper's site outside the memo kept a V (W's FP). Such stops, all in this file inside an unread compute: U. `stored_throw.rs`.
