@@ -13,7 +13,7 @@
 //! not expressible as a type. The ledger entry and the `tsc` evidence are in
 //! `fixtures/tsc-oracle/README.md`.
 
-use crate::{HashMap, HashSet};
+use crate::HashMap;
 use std::cell::RefCell;
 
 use solid_dialect::{CleanupRule, Primitive};
@@ -24,48 +24,42 @@ use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 use super::{Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location};
 use crate::execution_role::direct_callback_runs;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
-use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
+use crate::pipeline::{AnalysisContext, ProgramDraft};
 
-/// Runs the project-level leaf-owner stage.
-pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let safe_call_symbols = ctx
-        .accessors
-        .keys()
-        .chain(ctx.setters.keys())
-        .chain(ctx.actions.keys())
-        .cloned()
-        .collect::<HashSet<_>>();
-    let setter_symbols = ctx.setters.keys().cloned().collect::<HashSet<_>>();
-    let action_symbols = ctx.actions.keys().cloned().collect::<HashSet<_>>();
-    let source_call_targets = &draft.source_call_targets;
-    draft.leaf_operations.extend(
-        parallel_file_results(&ctx.facts.files, |file| {
-            leaf_owner_operations_for_file(
-                file,
-                ctx.symbol_names,
-                &safe_call_symbols,
-                &setter_symbols,
-                &action_symbols,
-                ctx.semantic_lookup,
-                source_call_targets,
-            )
-        })
-        .into_iter()
-        .flatten(),
-    );
+/// Runs the project-level leaf-owner stage: each file's operations are a
+/// late chunk ([`crate::late_chunks`]), reused while the file and every read
+/// it recorded (the lookup's answers and hand-outs, and which symbols name an
+/// accessor, a setter or an action, and the transport targets it asked)
+/// answer as they did.
+pub(crate) fn collect_project(
+    ctx: &AnalysisContext<'_>,
+    chunks: Option<&mut crate::late_chunks::FileChunks<Vec<LeafOwnerOperation>>>,
+    draft: &mut ProgramDraft,
+) {
+    let mut inputs = crate::late_chunks::ChunkInputs::of(ctx);
+    inputs.discovery = inputs
+        .discovery
+        .with_source_call_targets(&draft.source_call_targets);
+    let per_file = crate::late_chunks::FileChunks::run(chunks, &inputs, |file| {
+        leaf_owner_operations_for_file(
+            file,
+            ctx.symbol_names,
+            inputs.discovery,
+            ctx.semantic_lookup,
+        )
+    });
+    let operations = per_file
+        .iter()
+        .flat_map(|operations| operations.iter().cloned())
+        .collect::<Vec<_>>();
+    draft.leaf_operations.extend(operations);
 }
 
 pub(super) fn leaf_owner_operations_for_file(
     file: &FileFacts,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    safe_call_symbols: &HashSet<SymbolId>,
-    setter_symbols: &HashSet<SymbolId>,
-    action_symbols: &HashSet<SymbolId>,
+    tables: crate::late_chunks::DiscoveryTables<'_>,
     lookup: &SemanticLookup<'_>,
-    source_call_targets: &HashMap<
-        typefacts::Location,
-        crate::interproc::accessor_provenance::Callable,
-    >,
 ) -> Vec<LeafOwnerOperation> {
     let Some(file) = lookup.file_by_path(file.path.as_str()) else {
         return Vec::new();
@@ -76,11 +70,8 @@ pub(super) fn leaf_owner_operations_for_file(
     let resolution = LeafScopeResolution {
         lookup,
         symbol_names,
-        safe_call_symbols,
-        setter_symbols,
-        action_symbols,
+        tables,
         completions: &completions,
-        source_call_targets,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -863,17 +854,13 @@ pub(crate) fn creates_forbidden_primitive(
 /// The project-wide lookups both leaf-scope walkers thread through every hop.
 #[derive(Clone, Copy)]
 struct LeafScopeResolution<'a, 'lookup> {
-    source_call_targets:
-        &'a HashMap<typefacts::Location, crate::interproc::accessor_provenance::Callable>,
     lookup: &'a SemanticLookup<'lookup>,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
-    /// Calls that cannot open a leaf scope of their own: accessors, setters,
-    /// and actions.
-    safe_call_symbols: &'a HashSet<SymbolId>,
-    /// The setters among them, whose function argument runs (ADR 0210).
-    setter_symbols: &'a HashSet<SymbolId>,
-    /// ADR 0550: the actions among them, whose first step runs in the scope.
-    action_symbols: &'a HashSet<SymbolId>,
+    /// Asked, recorded: which calls cannot open a leaf scope of their own
+    /// (accessors, setters, and actions); the setters among them, whose
+    /// function argument runs (ADR 0210); ADR 0550: the actions, whose first
+    /// step runs in the scope; and the transport targets.
+    tables: crate::late_chunks::DiscoveryTables<'a>,
     /// ADR 0275: per function, the calls it runs on every normal completion.
     completions: &'a RefCell<HashMap<(String, Span), Vec<Span>>>,
 }
@@ -1093,11 +1080,7 @@ fn helper_forbidden_operations(
     exact_this: ExactThis,
     guaranteed: bool,
 ) -> bool {
-    let LeafScopeResolution {
-        lookup,
-        safe_call_symbols,
-        ..
-    } = resolution;
+    let LeafScopeResolution { lookup, .. } = resolution;
     if depth == 0 {
         return false;
     }
@@ -1164,8 +1147,8 @@ fn helper_forbidden_operations(
     // result, including the shared literal-receiver escape census. Reuse
     // identity, never a signature's possible target or a read-only summary.
     match resolution
-        .source_call_targets
-        .get(&location(call_file.path.shared(), call.callee))
+        .tables
+        .source_call_target(&location(call_file.path.shared(), call.callee))
     {
         Some(target @ crate::interproc::accessor_provenance::Callable::Function { path, span }) => {
             let Some((helper_file, helper)) = lookup
@@ -1198,11 +1181,11 @@ fn helper_forbidden_operations(
             );
         }
         Some(crate::interproc::accessor_provenance::Callable::Accessor(symbol))
-            if safe_call_symbols.contains(symbol) =>
+            if resolution.tables.safe_call(symbol) =>
         {
             // ADR 0550: an action whose generator no `const` names runs a
             // step nothing here walks.
-            return !resolution.action_symbols.contains(symbol);
+            return !resolution.tables.action(symbol);
         }
         _ => {}
     }
@@ -1253,16 +1236,16 @@ fn helper_forbidden_operations(
     else {
         return false;
     };
-    if resolution.setter_symbols.contains(symbol) {
+    if resolution.tables.setter(symbol) {
         // A setter runs a function argument -- the updater -- before it
         // returns (ADR 0210).
         return setter_updater_operations(
             resolution, call_file, call, kinds, visited, depth, guaranteed,
         );
     }
-    if safe_call_symbols.contains(symbol) {
+    if resolution.tables.safe_call(symbol) {
         // ADR 0550: as above, an unwalked action step is open.
-        return !resolution.action_symbols.contains(symbol);
+        return !resolution.tables.action(symbol);
     }
     let Some((helper_file, helper)) = lookup
         .function_for_symbol(symbol)
@@ -2045,7 +2028,7 @@ fn tag_forbidden_operations(
                         .binding_at_reference(file.path.as_str(), tag)
                         .map(|(_, _, symbol)| symbol)
                 })?;
-            if resolution.safe_call_symbols.contains(&symbol) {
+            if resolution.tables.safe_call(&symbol) {
                 return None;
             }
             lookup

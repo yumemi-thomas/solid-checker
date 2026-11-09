@@ -141,7 +141,7 @@ pub(crate) fn client_root_present(
     dialect: &dyn solid_dialect::Dialect,
 ) -> bool {
     const ROOTS: [&str; 2] = ["render", "hydrate"];
-    facts.files.iter().any(|file| {
+    crate::base::reads::all_files(facts).iter().any(|file| {
         file.ast.imports.iter().any(|import| {
             !import.type_only
                 && import.bindings.iter().any(|binding| {
@@ -172,16 +172,22 @@ pub(crate) fn execution_paths(
     lookup: &crate::indexes::SemanticLookup<'_>,
 ) -> ExecutionPaths {
     let client = client_path(facts, runtime, dialect);
-    let files = &facts.files;
+    let files = crate::base::reads::all_files(facts);
     let hydrates = hydrating_pass_present(files, runtime, dialect);
-    let mut arms = Vec::new();
-    for file in files {
+    // Each file's arms read that file and the build: found on the workers,
+    // in file order.
+    let mut arms = crate::pipeline::parallel_file_results(files, |file| {
+        let mut arms = Vec::new();
         file_arms(file, dialect, &mut arms);
         deferred_mount_arms(facts, file, runtime, dialect, &mut arms);
         if hydrates {
             no_hydration_arms(file, lookup, &mut arms);
         }
-    }
+        arms
+    })
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
     arm_only_functions(files, runtime, lookup, &mut arms);
     ExecutionPaths { client, arms }
 }
@@ -460,12 +466,13 @@ fn deferred_mount_arms(
         let Some(path) = solid_facts::resolve_relative_module_path(
             file.path.as_str(),
             specifier,
-            facts.files.iter().map(|target| target.path.as_str()),
+            crate::base::reads::all_files(facts)
+                .iter()
+                .map(|target| target.path.as_str()),
         ) else {
             continue;
         };
-        let Some(target) = facts
-            .files
+        let Some(target) = crate::base::reads::all_files(facts)
             .iter()
             .find(|target| target.path.as_str() == path)
         else {

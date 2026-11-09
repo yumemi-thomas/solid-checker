@@ -2288,7 +2288,7 @@ pub(super) fn dependency_getter_obligations(
 ) -> (Vec<ReactiveRead>, Vec<StaticDefect>) {
     let mut reads = Vec::new();
     let mut obligations = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::all_files(facts) {
         if facts.dependency_source_root(file.path.as_str()).is_some() {
             continue;
         }

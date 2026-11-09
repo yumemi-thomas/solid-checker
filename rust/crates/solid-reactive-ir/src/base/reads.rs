@@ -92,10 +92,20 @@ pub(crate) enum Section {
     FlushVeto,
     /// Project-wide registration/read reachability, fingerprinted as a boolean.
     ListenerProjectReach,
+    /// Every analyzed file: a scan of the file list ([`all_files`],
+    /// `SemanticLookup::files`). Fingerprinted from the memo begin's per-file
+    /// fingerprints (source, compiler map, entity rows, call signatures,
+    /// slots) and the paths in slot order, so it moves on any file's change,
+    /// addition or removal.
+    Files,
+    /// The classified dispatch sites as a file's listener obligations read
+    /// them: each site's path, span and whether it withholds listener proofs
+    /// (`listener_reach::check_file`).
+    DispatchSites,
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 19] = [
+    pub(crate) const ALL: [Self; 21] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -115,6 +125,8 @@ impl Section {
         Self::ProjectPrimitives,
         Self::FlushVeto,
         Self::ListenerProjectReach,
+        Self::Files,
+        Self::DispatchSites,
     ];
 
     const fn bit(self) -> u32 {
@@ -493,6 +505,25 @@ pub(crate) fn note_once(section: Section) {
     if NOTED_IN.with(|noted| noted[section as usize].replace(current)) != current {
         note(section);
     }
+}
+
+/// Every analyzed file of `facts`, for a scan: a whole-program read
+/// ([`Section::Files`]) for the computation recording. Outside every
+/// recording (a stage's driver) the note goes nowhere.
+pub(crate) fn all_files(facts: &solid_facts::ProjectFacts) -> &[solid_facts::FileFacts] {
+    note_once(Section::Files);
+    &facts.files
+}
+
+/// The analyzed files as positions, read by no note: for a reader that notes
+/// the one file it reads by slot (a hand-out, `indexes::hand_outs`), reads no
+/// file's facts (a count, a slot's path under a memo whose key names it), is
+/// a stage's driver assembling per-file chunks (each chunk records its own
+/// reads), or fills a lookup cache whose readers record what they read of it
+/// (hand-outs, sections, probes) or which a memo reads as the whole program.
+/// `scripts/ir-read-lint.mjs` counts every caller.
+pub(crate) fn file_slots(facts: &solid_facts::ProjectFacts) -> &[solid_facts::FileFacts] {
+    &facts.files
 }
 
 /// Records that the current computation read a memo answer.

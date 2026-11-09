@@ -75,7 +75,7 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| {
                 let facts: &'a ProjectFacts = self.facts;
                 let mut testing = HashSet::default();
-                for file in &facts.files {
+                for file in crate::base::reads::file_slots(facts) {
                     let ast = &file.ast;
                     let mut owners = HashMap::<Span, Span>::default();
                     for function in &ast.functions {
@@ -133,7 +133,7 @@ impl<'a> SemanticLookup<'a> {
         {
             let world = self.memo_world();
             let mut calls = HashMap::<&'a str, Vec<Span>>::default();
-            for file in self.files() {
+            for file in self.file_slots() {
                 let path = file.path.as_str();
                 if calls.contains_key(path) {
                     continue;
@@ -169,9 +169,7 @@ impl<'a> SemanticLookup<'a> {
     /// the forwards' fixed point ([`parameter_completion_fixpoint`]), as
     /// the memos compute them.
     pub(super) fn compute_parameter_completion_calls(&self) -> Vec<(String, Span, usize)> {
-        let slots = self
-            .facts
-            .files
+        let slots = crate::base::reads::file_slots(self.facts)
             .iter()
             .map(|file| (file.path.as_str(), self.parameter_completion_slot(file)))
             .collect::<Vec<_>>();
@@ -305,7 +303,7 @@ impl<'a> SemanticLookup<'a> {
     ) -> &HashMap<&'a str, Vec<ResultAccessForwarded>> {
         self.result_access_forwarded.get_or_init(|| {
             let table = self.memos.table();
-            let files = self.files();
+            let files = self.file_slots();
             self.memo_world()
                 .answer::<super::ResultAccessForwardedAll>(&())
                 .iter()

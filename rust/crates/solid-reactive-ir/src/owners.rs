@@ -99,7 +99,8 @@ pub(crate) fn collect_project(
         apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.absorb_owner(&owner_timings);
-        timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
+        timings.owner_recomputed_files =
+            u64::try_from(crate::base::reads::file_slots(ctx.facts).len()).unwrap_or(u64::MAX);
     }
 }
 

@@ -18,7 +18,7 @@ pub(super) fn dependency_value_obligations(
     let mut obligations = Vec::new();
     // Every file, the packages' and the project's: computed fresh on each
     // analysis, never retained per file (ADR 0289's rule for this phase).
-    let files = &facts.files;
+    let files = crate::base::reads::all_files(facts);
     let (packages, project): (Vec<_>, Vec<_>) = files
         .iter()
         .partition(|file| facts.dependency_source_root(file.path.as_str()).is_some());

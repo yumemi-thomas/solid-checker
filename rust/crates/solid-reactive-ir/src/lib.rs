@@ -631,7 +631,7 @@ fn is_one_path(multiplicity: &u64) -> bool {
 /// the node option that exempts the source's setter from the owned-scope
 /// write guard. Only an exact object literal proves the key present or
 /// absent; an options value the syntax does not show may carry it.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum OwnedWriteOption {
     /// The key is absent or `false`, or the primitive's node does not read
@@ -2194,7 +2194,7 @@ pub struct ObligationCounts {
     pub factory_instances: usize,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReactiveSourceKind {
     Accessor,

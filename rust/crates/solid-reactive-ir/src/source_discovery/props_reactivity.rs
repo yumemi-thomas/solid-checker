@@ -1285,8 +1285,7 @@ pub(super) fn reference_is_export_specifier(
 /// The analyzed files at `path`; a caller records the read
 /// ([`super::trace::read_path`]).
 fn files_at<'f>(facts: &'f ProjectFacts, path: &str) -> impl Iterator<Item = &'f FileFacts> {
-    facts
-        .files
+    crate::base::reads::file_slots(facts)
         .iter()
         .filter(move |file| file.path.as_str() == path)
 }

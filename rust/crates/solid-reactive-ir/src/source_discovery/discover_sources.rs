@@ -271,7 +271,7 @@ fn merge_file_source_contributions(
         ..
     } = *ctx;
     let mut aggregate = SourceDiscoveryAggregate::default();
-    for contribution in &parallel_file_results(&facts.files, |file| {
+    for contribution in &parallel_file_results(crate::base::reads::file_slots(facts), |file| {
         discover_file_sources(
             semantic_lookup,
             file,
@@ -288,14 +288,13 @@ fn merge_file_source_contributions(
     aggregate.append_to(tables.merge_target());
     let mut unchanged_paths = HashSet::<String>::default();
     if let Some(identities) = identities {
-        let current_paths = facts
-            .files
+        let current_paths = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| file.path.as_str())
             .collect::<HashSet<_>>();
         identities.retain(|path, _| current_paths.contains(path.as_str()));
         let mut identity_misses = 0;
-        for file in &facts.files {
+        for file in crate::base::reads::file_slots(facts) {
             let Some(cached) = identities.get(file.path.as_str()) else {
                 continue;
             };
@@ -314,7 +313,7 @@ fn merge_file_source_contributions(
         }
         build_timings.source_discovery_identity_misses = identity_misses;
         // An unchanged file keeps the identity it was matched by.
-        for file in &facts.files {
+        for file in crate::base::reads::file_slots(facts) {
             if !unchanged_paths.contains(file.path.as_str()) {
                 identities.insert(
                     file.path.clone(),

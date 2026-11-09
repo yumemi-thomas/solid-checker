@@ -98,8 +98,9 @@ pub(crate) fn dispatch_in_test_only_function<'a>(
     // The literal at this span in any slot of the path: the answer for a path
     // is the union over its slots, as the whole-program census was.
     dispatch_in_census_function(file, call, |function| {
+        // The slots of the file's own path: one id, the file itself.
         lookup
-            .files()
+            .file_slots()
             .iter()
             .filter(|slot| slot.path == file.path)
             .filter_map(|slot| {

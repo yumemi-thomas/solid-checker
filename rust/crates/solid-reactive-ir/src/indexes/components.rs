@@ -224,7 +224,7 @@ impl<'a> SemanticLookup<'a> {
         {
             let world = self.memo_world();
             let table = self.memos.table();
-            let files = self.files();
+            let files = self.file_slots();
             let slots = (0..files.len()).collect::<Vec<_>>();
             let answers = crate::pipeline::parallel_slice_results(&slots, |slot| {
                 let id = table.slot_id(*slot);
@@ -522,7 +522,7 @@ impl<'a> SemanticLookup<'a> {
             return Vec::new();
         };
         let table = self.memos.table();
-        let files = self.files();
+        let files = self.file_slots();
         self.memo_world()
             .answer::<super::CallSitesOf>(&target)
             .iter()
@@ -699,7 +699,10 @@ impl<'a> SemanticLookup<'a> {
         self.functions_by_symbol.get_or_init(|| {
             // Each file's named functions, then its function-valued bindings,
             // read on several workers; the first in file order names a symbol.
-            let slots = self.facts.files.iter().enumerate().collect::<Vec<_>>();
+            let slots = crate::base::reads::file_slots(self.facts)
+                .iter()
+                .enumerate()
+                .collect::<Vec<_>>();
             let named = crate::pipeline::parallel_slice_results(&slots, |&(file_index, file)| {
                 self.file_symbol_functions(file_index, file)
             });
@@ -813,7 +816,7 @@ impl<'a> SemanticLookup<'a> {
         table: &crate::base::FileTable,
     ) -> std::collections::BTreeSet<(crate::base::FileId, Span)> {
         let mut rendered = std::collections::BTreeSet::new();
-        for file in &self.facts.files {
+        for file in crate::base::reads::file_slots(self.facts) {
             for element in &file.ast.jsx_elements {
                 if self
                     .function_called_at(file.path.as_str(), element.name.span)

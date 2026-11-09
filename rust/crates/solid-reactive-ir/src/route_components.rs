@@ -182,7 +182,7 @@ fn audited_directories(
         return None;
     }
     let mut directories = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         for import in &file.ast.imports {
             if import.module.as_str() != ROUTE_PACKAGE
                 || import.type_only
@@ -257,11 +257,13 @@ fn unaudited_files<'a>(
     facts: &'a ProjectFacts,
     audited: &'a [String],
 ) -> impl Iterator<Item = &'a FileFacts> {
-    facts.files.iter().filter(move |file| {
-        !audited
-            .iter()
-            .any(|directory| file.path.as_str().starts_with(directory.as_str()))
-    })
+    crate::base::reads::file_slots(facts)
+        .iter()
+        .filter(move |file| {
+            !audited
+                .iter()
+                .any(|directory| file.path.as_str().starts_with(directory.as_str()))
+        })
 }
 
 /// Whether `file` reads one of the component keys off some object: a member
@@ -424,8 +426,7 @@ fn router_config_values(
             };
             let held_only_by_routers = uses.iter().all(|(path, span)| {
                 named_routes.contains(&(path.clone(), *span))
-                    || facts
-                        .files
+                    || crate::base::reads::file_slots(facts)
                         .iter()
                         .find(|candidate| candidate.path.as_str() == path)
                         .is_some_and(|candidate| {
@@ -676,7 +677,7 @@ fn router_directories(
     }
     let imports = facts.resolved_imports.as_ref()?;
     let mut directories = Vec::new();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         for import in &file.ast.imports {
             if import.module.as_str() != ROUTER_PACKAGE
                 || import.type_only
@@ -854,8 +855,7 @@ fn definitions_exposed(
                     return true;
                 };
                 if !uses.iter().all(|(path, span)| {
-                    facts
-                        .files
+                    crate::base::reads::file_slots(facts)
                         .iter()
                         .find(|candidate| candidate.path.as_str() == path)
                         .is_some_and(|candidate| rendered_or_surface(candidate, *span))

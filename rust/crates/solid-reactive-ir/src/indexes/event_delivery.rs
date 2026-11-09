@@ -219,7 +219,7 @@ impl SemanticLookup<'_> {
     pub(crate) fn raw_store_values_present(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::RawStoreValues);
         *self.raw_store_values.get_or_init(|| {
-            self.files().iter().any(|file| {
+            self.file_slots().iter().any(|file| {
                 file.ast
                     .identifiers
                     .iter()
@@ -652,7 +652,7 @@ impl SemanticLookup<'_> {
     /// a bare `addEventListener`, a literal key, a read of the method (`.call`,
     /// an alias), a computed key on a DOM global.
     fn program_listens_for_click(&self) -> bool {
-        self.files().iter().any(|file| {
+        self.file_slots().iter().any(|file| {
             let ast = &file.ast;
             let quiet = |callee: Span| {
                 ast.calls_with_peeled_callee(callee)

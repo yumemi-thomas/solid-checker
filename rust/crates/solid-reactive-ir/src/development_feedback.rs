@@ -123,8 +123,7 @@ pub(crate) fn models(
     lookup: &SemanticLookup<'_>,
     dialect: &dyn Dialect,
 ) -> Vec<DevelopmentFile> {
-    facts
-        .files
+    crate::base::reads::file_slots(facts)
         .iter()
         .map(|file| {
             let origins = file

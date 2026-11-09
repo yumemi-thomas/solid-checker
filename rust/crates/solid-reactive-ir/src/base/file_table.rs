@@ -276,7 +276,7 @@ pub(crate) fn resolution_digests(facts: &solid_facts::ProjectFacts) -> Resolutio
     }
     let mut attested = HashMap::<&str, Vec<&solid_facts::AttestedImport>>::default();
     if let Some(imports) = &facts.resolved_imports {
-        for file in &facts.files {
+        for file in crate::base::reads::file_slots(facts) {
             if imports.covers(file.path.as_str()) {
                 attested.entry(file.path.as_str()).or_default();
             }
@@ -295,7 +295,7 @@ pub(crate) fn resolution_digests(facts: &solid_facts::ProjectFacts) -> Resolutio
         }
     }
     let mut digests = ResolutionDigests::default();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         let path = file.path.as_str();
         let (rows, outcomes) = (attested.get(path), runtime.get_mut(path));
         if rows.is_none() && outcomes.is_none() {

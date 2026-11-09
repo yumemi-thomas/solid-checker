@@ -63,7 +63,7 @@ const HINT_PLACEMENT: &str = "Put the directive first in the function body (or f
 pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let custom = NameMatcher::new(ctx.rule_options.client_wrappers());
     let has_custom = !ctx.rule_options.client_wrappers().is_empty();
-    for file in &ctx.facts.files {
+    for file in crate::base::reads::file_slots(ctx.facts) {
         let module_level = file
             .ast
             .module_directives

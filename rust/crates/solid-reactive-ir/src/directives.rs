@@ -438,7 +438,7 @@ fn nested_owner(
 /// positions, from direct calls and from functions returned into them.
 pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let mut seen_directive_creations = HashSet::default();
-    for file in &ctx.facts.files {
+    for file in crate::base::reads::file_slots(ctx.facts) {
         for call in &file.ast.calls {
             let phase = ref_phase(file, call.callee);
             let owner = nested_owner(ctx, file, call.callee);

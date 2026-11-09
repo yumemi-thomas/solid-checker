@@ -170,7 +170,7 @@ impl SemanticLookup<'_> {
             (Probe::CreateSignalCall, PolledKey::Site(id, rank, ordinal)) => {
                 ProbeAnswer::Flag(self.memo_slot(*id, *rank).is_some_and(|slot| {
                     matches!(
-                        self.primitives(&self.facts.files[slot])
+                        self.primitives(&crate::base::reads::file_slots(self.facts)[slot])
                             .calls
                             .get(*ordinal as usize),
                         Some(Some(crate::PrimitiveName::Known(
@@ -182,7 +182,7 @@ impl SemanticLookup<'_> {
             }
             (Probe::StandardCall, PolledKey::Site(id, rank, ordinal)) => {
                 ProbeAnswer::Call(self.memo_slot(*id, *rank).and_then(|slot| {
-                    let file = &self.facts.files[slot];
+                    let file = &crate::base::reads::file_slots(self.facts)[slot];
                     let call = file.ast.calls.get(*ordinal as usize)?;
                     let declaration =
                         self.standard_library_declaration(file, call, typefacts::CallKind::Call)?;

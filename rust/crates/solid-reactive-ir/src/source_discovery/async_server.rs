@@ -242,7 +242,7 @@ pub(crate) fn project_server_rendering(
     if let Some(rendering) = environment.rendering {
         return ServerRenderingPremise::select(Some(rendering), false);
     }
-    let imports_server_entry = facts.files.iter().any(|file| {
+    let imports_server_entry = crate::base::reads::all_files(facts).iter().any(|file| {
         file.ast.imports.iter().any(|import| {
             // `@solidjs/web` and its subpaths, spelled by the dialect rather
             // than by this module. `modules()` already enumerates them, so a

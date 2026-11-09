@@ -60,7 +60,7 @@ pub(crate) fn memo_read_decidable(
     !reads_derived || resolver_memos::served_this_build(store)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum Callable {
     Accessor(SymbolId),
     Function {

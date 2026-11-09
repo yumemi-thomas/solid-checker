@@ -58,6 +58,37 @@ impl OpenWalk<'_> {
 }
 
 impl LocalAccessContext<'_, '_> {
+    /// Answers [`Self::source_compute_open`] for each of `symbols` not yet
+    /// answered, on the workers. Each answer is its own walk with its own
+    /// budget ([`OpenComputes`]), so it is the one the first asker would get.
+    pub(crate) fn prefill_source_compute_open(&self, symbols: &[&SymbolId], open: &OpenComputes<'_>)
+    where
+        Self: Sync,
+    {
+        let asked = {
+            let answers = open.answers.borrow();
+            symbols
+                .iter()
+                .copied()
+                .filter(|symbol| !answers.contains_key(symbol.as_str()))
+                .collect::<Vec<_>>()
+        };
+        let targets = open.targets;
+        let answers = crate::pipeline::parallel_balanced_results(&asked, |symbol| {
+            let walk = OpenWalk {
+                targets,
+                sources: RefCell::new(HashSet::default()),
+                functions: RefCell::new(HashSet::default()),
+                left: Cell::new(OPEN_WALK_BUDGET),
+            };
+            self.source_open(symbol, &walk)
+        });
+        let mut held = open.answers.borrow_mut();
+        for (symbol, answer) in asked.into_iter().zip(answers) {
+            held.insert((*symbol).clone(), answer);
+        }
+    }
+
     /// Whether the source `symbol` may be pending by what its compute reads,
     /// though no fact says its computation is async.
     pub(crate) fn source_compute_open(&self, symbol: &str, open: &OpenComputes<'_>) -> bool {

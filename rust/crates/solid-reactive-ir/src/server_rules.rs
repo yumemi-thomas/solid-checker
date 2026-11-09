@@ -52,7 +52,7 @@ fn http_response_after_flush<'a>(ctx: &AnalysisContext<'a>, draft: &mut ProgramD
     let loading_hosts: OnceLock<HashSet<(&'a str, Span)>> = OnceLock::new();
     // Each file's findings depend on the file and those premises only, so the
     // files run on the analysis workers and their findings join in file order.
-    for violations in parallel_balanced_results(&ctx.facts.files, |file| {
+    for violations in parallel_balanced_results(crate::base::reads::file_slots(ctx.facts), |file| {
         http_response_in_file(ctx, file, &server_rendering, &loading_hosts)
     }) {
         draft.static_violations.extend(violations);
@@ -228,7 +228,7 @@ fn call_under_loading_children(ctx: &AnalysisContext<'_>, file: &FileFacts, span
 fn loading_wrapped_components<'a>(ctx: &AnalysisContext<'a>) -> HashSet<(&'a str, Span)> {
     let mut hosts = HashSet::default();
     let mut pending = Vec::new();
-    for caller in &ctx.facts.files {
+    for caller in crate::base::reads::all_files(ctx.facts) {
         for element in &caller.ast.jsx_elements {
             let Some((target_file, target)) = ctx
                 .semantic_lookup
@@ -299,9 +299,11 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
     // file that asks for it: that file keeps what it found before asking, and
     // the files after it (which a walk in file order never reaches) add
     // nothing.
-    for (defects, ends_rule) in parallel_balanced_results(&ctx.facts.files, |file| {
-        rich_arguments_in_file(ctx, file, &serializer_proof)
-    }) {
+    for (defects, ends_rule) in
+        parallel_balanced_results(crate::base::reads::file_slots(ctx.facts), |file| {
+            rich_arguments_in_file(ctx, file, &serializer_proof)
+        })
+    {
         for defect in defects {
             draft.push_defect(defect);
         }
@@ -1133,7 +1135,7 @@ fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMe
 /// ambiguous configuration is kept separate from both enabled and disabled.
 fn project_rich_argument_serializer(ctx: &AnalysisContext<'_>) -> SerializerProof {
     let mut unresolved = false;
-    for file in &ctx.facts.files {
+    for file in crate::base::reads::all_files(ctx.facts) {
         // ADR 0707 (SSR audit D10): the opt-in is the call, not the import:
         // rc.21's rich-args installs the codec inside
         // `enableRichArguments()`. Proven only for an unconditional

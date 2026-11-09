@@ -1102,27 +1102,24 @@ fn discover_summary_graph_nodes<'a, 'c>(
     } = context;
     let mut graph_node_reused_paths = HashSet::default();
     let Some(cache) = interprocedural_graph_cache else {
-        let discovered = parallel_file_results(&facts.files, |file| {
+        let discovered = parallel_file_results(crate::base::reads::file_slots(facts), |file| {
             discover_summary_nodes(file, project_indexes, entities, lookup)
         });
-        let nodes = facts
-            .files
+        let nodes = crate::base::reads::file_slots(facts)
             .iter()
             .zip(discovered)
             .map(|(file, nodes)| (file.path.as_str(), FileNodes::Computed(nodes)))
             .collect();
         return (nodes, graph_node_reused_paths);
     };
-    let current_paths = facts
-        .files
+    let current_paths = crate::base::reads::file_slots(facts)
         .iter()
         .map(|file| file.path.as_str())
         .collect::<HashSet<_>>();
     cache.retain(|path, _| current_paths.contains(path.as_str()));
     // One check pass: each memo is asked once (`reads::PassAnswers`).
     let answers = crate::base::reads::PassAnswers::new(*lookup);
-    let reusable_paths = facts
-        .files
+    let reusable_paths = crate::base::reads::file_slots(facts)
         .iter()
         .filter_map(|file| {
             (unchanged_paths.contains(file.path.as_str())
@@ -1135,7 +1132,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
             .then_some(file.path.as_str())
         })
         .collect::<HashSet<_>>();
-    let discovered = parallel_file_results(&facts.files, |file| {
+    let discovered = parallel_file_results(crate::base::reads::file_slots(facts), |file| {
         (!reusable_paths.contains(file.path.as_str())).then(|| {
             crate::base::reads::record_detached(|| {
                 discover_summary_nodes(file, project_indexes, entities, lookup)
@@ -1143,7 +1140,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
         })
     });
     let mut computed = Vec::with_capacity(discovered.len());
-    for (file, discovered) in facts.files.iter().zip(discovered) {
+    for (file, discovered) in crate::base::reads::file_slots(facts).iter().zip(discovered) {
         if let Some((file_nodes, reads)) = discovered {
             chunk_reads.push(reads.clone());
             // The nodes' reads, until the merge adds the contribution's.
@@ -1168,8 +1165,7 @@ fn discover_summary_graph_nodes<'a, 'c>(
         }
     }
     let cache = &*cache;
-    let nodes = facts
-        .files
+    let nodes = crate::base::reads::file_slots(facts)
         .iter()
         .zip(computed)
         .map(|(file, computed)| {
@@ -1246,45 +1242,53 @@ fn merge_graph_contributions(
     let mut graph_recomputed_files = 0;
     match interprocedural_graph_cache {
         None => {
-            let contributions = parallel_file_results(&facts.files, |file| {
-                discover_interprocedural_graph(
-                    file,
-                    nodes,
-                    nodes_by_path,
-                    InterproceduralGraphSymbols {
-                        entities,
-                        names: symbol_names,
-                    },
-                    lookup,
-                    accessors,
-                )
-            });
-            for (file, contribution) in facts.files.iter().zip(contributions) {
+            let contributions =
+                parallel_file_results(crate::base::reads::file_slots(facts), |file| {
+                    discover_interprocedural_graph(
+                        file,
+                        nodes,
+                        nodes_by_path,
+                        InterproceduralGraphSymbols {
+                            entities,
+                            names: symbol_names,
+                        },
+                        lookup,
+                        accessors,
+                    )
+                });
+            for (file, contribution) in crate::base::reads::file_slots(facts)
+                .iter()
+                .zip(contributions)
+            {
                 graph_recomputed_files += 1;
                 graph.merge(file.path.as_str(), &contribution);
             }
         }
         Some(cache) => {
-            let contributions = parallel_file_results(&facts.files, |file| {
-                (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
-                    crate::base::reads::record_detached(|| {
-                        super::transport_reads::record(|| {
-                            discover_interprocedural_graph(
-                                file,
-                                nodes,
-                                nodes_by_path,
-                                InterproceduralGraphSymbols {
-                                    entities,
-                                    names: symbol_names,
-                                },
-                                lookup,
-                                accessors,
-                            )
+            let contributions =
+                parallel_file_results(crate::base::reads::file_slots(facts), |file| {
+                    (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
+                        crate::base::reads::record_detached(|| {
+                            super::transport_reads::record(|| {
+                                discover_interprocedural_graph(
+                                    file,
+                                    nodes,
+                                    nodes_by_path,
+                                    InterproceduralGraphSymbols {
+                                        entities,
+                                        names: symbol_names,
+                                    },
+                                    lookup,
+                                    accessors,
+                                )
+                            })
                         })
                     })
-                })
-            });
-            for (file, contribution) in facts.files.iter().zip(contributions) {
+                });
+            for (file, contribution) in crate::base::reads::file_slots(facts)
+                .iter()
+                .zip(contributions)
+            {
                 if graph_node_reused_paths.contains(file.path.as_str())
                     && let Some(cached) = cache.get(file.path.as_str())
                 {
@@ -1356,7 +1360,7 @@ fn add_transported_call_summaries(
         ..
     } = context;
     let mut transported_edges = HashSet::default();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         for call in &file.ast.calls {
             let Some(owner) = containing_summary_function_indexed(
                 nodes,
@@ -1629,7 +1633,7 @@ fn add_direct_reference_summaries(
         .values()
         .any(|typed| typed.held_body_unfollowed)
     {
-        for file in &facts.files {
+        for file in crate::base::reads::file_slots(facts) {
             for contribution in typed_candidate_contributions(file, context, nodes, nodes_by_path) {
                 summaries[contribution.owner].push(contribution.read);
             }
@@ -1668,16 +1672,18 @@ fn collect_returned_summaries<'a>(
     let returns_by_owner = items_by_containing_function(
         nodes,
         nodes_by_path,
-        facts.files.iter().flat_map(|file| {
-            file.ast
-                .returns
-                .iter()
-                .map(move |returned| (file.path.as_str(), returned))
-        }),
+        crate::base::reads::file_slots(facts)
+            .iter()
+            .flat_map(|file| {
+                file.ast
+                    .returns
+                    .iter()
+                    .map(move |returned| (file.path.as_str(), returned))
+            }),
         |returned| returned.span,
     );
     let mut returns_by_ast_owner = HashMap::default();
-    for file in &facts.files {
+    for file in crate::base::reads::file_slots(facts) {
         for returned in &file.ast.returns {
             if let Some(function) = containing_ast_function(&file.ast, returned.span) {
                 returns_by_ast_owner
@@ -2050,9 +2056,9 @@ fn collect_result_reads(
             && cache.dependency_states.is_empty()
             && cache.dependency_users.is_empty()
         {
-            let per_file = parallel_file_results(&facts.files, read_file);
+            let per_file = parallel_file_results(crate::base::reads::file_slots(facts), read_file);
             for (file, ((reads, obligations, dependencies), (recorded, transport))) in
-                facts.files.iter().zip(per_file)
+                crate::base::reads::file_slots(facts).iter().zip(per_file)
             {
                 result_recomputed_files += 1;
                 result.extend(reads.iter().cloned());
@@ -2074,8 +2080,7 @@ fn collect_result_reads(
                 );
             }
         } else {
-            let current_paths = facts
-                .files
+            let current_paths = crate::base::reads::file_slots(facts)
                 .iter()
                 .map(|file| file.path.as_str())
                 .collect::<HashSet<_>>();
@@ -2113,8 +2118,7 @@ fn collect_result_reads(
             // every file, and one at a time that was most of the edit.
             // One check pass: each memo is asked once (`reads::PassAnswers`).
             let answers = crate::base::reads::PassAnswers::new(*lookup);
-            let reused = facts
-                .files
+            let reused = crate::base::reads::file_slots(facts)
                 .iter()
                 .map(|file| {
                     unchanged_paths.contains(file.path.as_str())
@@ -2139,8 +2143,7 @@ fn collect_result_reads(
                         })
                 })
                 .collect::<Vec<_>>();
-            let stale = facts
-                .files
+            let stale = crate::base::reads::file_slots(facts)
                 .iter()
                 .zip(&reused)
                 .filter(|(_, reused)| !**reused)
@@ -2149,7 +2152,7 @@ fn collect_result_reads(
             let mut recomputed =
                 crate::pipeline::parallel_balanced_results_from(2, &stale, |file| read_file(file))
                     .into_iter();
-            for (file, reused) in facts.files.iter().zip(reused) {
+            for (file, reused) in crate::base::reads::file_slots(facts).iter().zip(reused) {
                 if reused && let Some(cached) = cache.files.get(file.path.as_str()) {
                     result_reused_files += 1;
                     result.extend(cached.reads.iter().cloned());
@@ -2215,7 +2218,7 @@ fn collect_result_reads(
             }
         }
     } else {
-        for file in &facts.files {
+        for file in crate::base::reads::file_slots(facts) {
             result_recomputed_files += 1;
             let (reads, obligations, _) =
                 interprocedural_result_reads_for_file(file, result_read_context);

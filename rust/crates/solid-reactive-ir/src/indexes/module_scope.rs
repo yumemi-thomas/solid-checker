@@ -38,7 +38,7 @@ pub(super) fn census(lookup: &SemanticLookup<'_>) -> ModuleScopeCensus {
     let mut creating = Vec::new();
     let mut edges = Vec::new();
     let mut unseen = false;
-    for file in lookup.files() {
+    for file in lookup.file_slots() {
         let path = file.path.as_str();
         if path.contains("/node_modules/") || is_declaration_file(path) {
             continue;

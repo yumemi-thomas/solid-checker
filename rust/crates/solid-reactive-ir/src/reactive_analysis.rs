@@ -100,8 +100,8 @@ pub(crate) fn collect_project<'facts>(
     // where the host has a second worker: a wasm32-wasip1 reactor build has no
     // thread support and `Scope::spawn` panics there instead of degrading to
     // an inline call.
-    let overlap =
-        ctx.facts.files.len() >= PARALLEL_INDEX_FILE_THRESHOLD && available_analysis_workers() > 1;
+    let overlap = crate::base::reads::file_slots(ctx.facts).len() >= PARALLEL_INDEX_FILE_THRESHOLD
+        && available_analysis_workers() > 1;
     let interprocedural_context = InterproceduralContext {
         facts: ctx.facts,
         project_indexes,
@@ -448,7 +448,7 @@ pub(crate) fn collect_project<'facts>(
             starts.push(CensusStart::Reference(symbol, reference));
         }
     }
-    for file in ctx.semantic_lookup.files() {
+    for file in ctx.semantic_lookup.file_slots() {
         for call in &file.ast.calls {
             let Some(primitive) = ctx.semantic_lookup.primitive_at_call(file, call.span) else {
                 continue;
@@ -630,7 +630,7 @@ pub(crate) fn collect_project<'facts>(
     // well as a method: the call is the use, and its row names the census.
     // ADR 0875: the row names the site that holds it.
     let mut holders = None;
-    let files = ctx.semantic_lookup.files();
+    let files = ctx.semantic_lookup.file_slots();
     // The draft's withheld calls (asked once per call); a draft built without
     // them asks here.
     let mut withheld_calls = std::mem::take(&mut draft.withheld_calls);
@@ -655,7 +655,7 @@ pub(crate) fn collect_project<'facts>(
             .filter(|call| !call.construct)
         {
             let holders = holders.get_or_insert_with(|| {
-                crate::base::contributions::impostor_holders(ctx.semantic_lookup.files())
+                crate::base::contributions::impostor_holders(ctx.semantic_lookup.file_slots())
             });
             let mut row = census_obligation(
                 file.source_text(call.callee).unwrap_or("this call"),
@@ -793,14 +793,13 @@ pub(crate) fn collect_project<'facts>(
                 ) != crate::owners::LoadingCover::Covered
             })
     };
-    let synthesized = draft
-        .reads
-        .iter()
-        .filter(|read| {
-            // Every condition is a question about the build; the loading-cover
-            // walk (`attributed_at_tracked`) is asked last, of the reads the
-            // others keep.
-            !async_rows.contains(&read.location)
+    // Each read's conditions ask only the build: they are asked on the
+    // workers, and the rows kept in the reads' order.
+    let synthesize = |read: &crate::ReactiveRead| -> bool {
+        // Every condition is a question about the build; the loading-cover
+        // walk (`attributed_at_tracked`) is asked last, of the reads the
+        // others keep.
+        !async_rows.contains(&read.location)
                 // Local access decided the rows of a component's own source;
                 // these are the sources it could not see: transported, in
                 // another file, or at module scope, and a read a local
@@ -861,7 +860,13 @@ pub(crate) fn collect_project<'facts>(
                 && (read.execution.reports_untracked_read()
                     || read.execution.reports_unplaced()
                     || attributed_at_tracked(read))
-        })
+    };
+    let synthesized_rows = crate::pipeline::parallel_balanced_results(&draft.reads, synthesize);
+    let synthesized = draft
+        .reads
+        .iter()
+        .zip(synthesized_rows)
+        .filter_map(|(read, synthesized)| synthesized.then_some(read))
         .map(|read| crate::AsyncRead {
             accessor: read.accessor.clone(),
             location: read.location.clone(),
@@ -903,7 +908,11 @@ pub(crate) fn collect_project<'facts>(
         .iter()
         .map(|read| read.location.clone())
         .collect::<HashSet<_>>();
-    let opened = draft
+    // Each read's questions ask only the build: the probe and suspension
+    // checks and the loading-cover climb run on the workers, the sources'
+    // pending walks are answered on the workers first (each its own walk,
+    // `OpenComputes`), and the rows are kept in the reads' order.
+    let candidates = draft
         .reads
         .iter()
         .filter(|read| {
@@ -916,37 +925,56 @@ pub(crate) fn collect_project<'facts>(
                         || read.execution.reports_unplaced())
                         && read.is_uncertifiable()))
         })
-        .filter_map(|read| {
-            let file = analyzed_file(ctx, read.location.path.as_ref())?;
-            let span = solid_facts::core::Span::new(
-                u32::try_from(read.location.start_byte).ok()?,
-                u32::try_from(read.location.end_byte).ok()?,
-            );
-            let symbol = ctx.entities.get(&read.declaration)?;
-            // A probe meets the source pending by design, and a computation's
-            // own read suspends it: the question moves to whoever reads that.
-            if file.ast.call_at(span).is_some_and(|call| {
-                crate::execution_role::pending_accessor_probe(
-                    file,
-                    call.callee,
-                    ctx.semantic_lookup,
-                ) || crate::execution_role::computation_read_suspends(
+        .collect::<Vec<_>>();
+    let placed = crate::pipeline::parallel_balanced_results(&candidates, |read| {
+        let file = analyzed_file(ctx, read.location.path.as_ref())?;
+        let span = solid_facts::core::Span::new(
+            u32::try_from(read.location.start_byte).ok()?,
+            u32::try_from(read.location.end_byte).ok()?,
+        );
+        let symbol = ctx.entities.get(&read.declaration)?;
+        // A probe meets the source pending by design, and a computation's
+        // own read suspends it: the question moves to whoever reads that.
+        (!file.ast.call_at(span).is_some_and(|call| {
+            crate::execution_role::pending_accessor_probe(file, call.callee, ctx.semantic_lookup)
+                || crate::execution_role::computation_read_suspends(
                     file,
                     call.callee,
                     ctx.entities,
                     ctx.symbol_names,
                     ctx.semantic_lookup,
                 )
-            }) || !local_access_context.source_compute_open(symbol, &open_computes)
-            {
-                return None;
-            }
-            let cover = crate::owners::read_loading_cover(
-                ctx.semantic_lookup,
-                file,
-                span,
-                ctx.symbol_names,
-            );
+        }))
+        .then_some((file, span, symbol))
+    });
+    {
+        let mut symbols = placed
+            .iter()
+            .flatten()
+            .map(|(_, _, symbol)| *symbol)
+            .collect::<Vec<_>>();
+        symbols.sort_unstable();
+        symbols.dedup();
+        local_access_context.prefill_source_compute_open(&symbols, &open_computes);
+    }
+    let open = placed
+        .into_iter()
+        .map(|placed| {
+            placed.filter(|(_, _, symbol)| {
+                local_access_context.source_compute_open(symbol, &open_computes)
+            })
+        })
+        .collect::<Vec<_>>();
+    let covers = crate::pipeline::parallel_balanced_results(&open, |open| {
+        open.map(|(file, span, _)| {
+            crate::owners::read_loading_cover(ctx.semantic_lookup, file, span, ctx.symbol_names)
+        })
+    });
+    let opened = candidates
+        .into_iter()
+        .zip(covers)
+        .filter_map(|(read, cover)| {
+            let cover = cover?;
             Some(crate::AsyncRead {
                 accessor: read.accessor.clone(),
                 location: read.location.clone(),
@@ -1031,21 +1059,24 @@ pub(crate) fn collect_project<'facts>(
     }
     // ADR 0570: a read not proven to run in the pass that created its source
     // (a later mount of a handed or module-scope memo) may meet it settled.
-    for read in &mut draft.async_reads {
+    // Each read's climbs ask only the build: the reads are settled on the
+    // workers and kept in their order.
+    let settle = |read: &crate::AsyncRead| -> crate::AsyncRead {
+        let mut read = read.clone();
         if read.apply_first_run_pending {
-            continue;
+            return read;
         }
         let Some(file) = analyzed_file(ctx, read.location.path.as_ref()) else {
             read.creation_pass_unproven = true;
             read.root_pass_unproven = true;
-            continue;
+            return read;
         };
         let (Ok(start), Ok(end)) = (
             u32::try_from(read.location.start_byte),
             u32::try_from(read.location.end_byte),
         ) else {
             read.creation_pass_unproven = true;
-            continue;
+            return read;
         };
         // ADR 0682: a read attributed at a call in a body `<Dynamic>` mounts has
         // that body's window, as a direct read there has (ADR 0662).
@@ -1088,7 +1119,9 @@ pub(crate) fn collect_project<'facts>(
             file,
             solid_facts::core::Span::new(start, end),
         );
-    }
+        read
+    };
+    draft.async_reads = crate::pipeline::parallel_balanced_results(&draft.async_reads, settle);
     // ADR 0774: an async read no fact places may run at a tracked position with
     // no boundary. SC5001's row alone leaves SC5003 nothing to say at the site,
     // so such a read gets the pair `push_unplaced_async_reads` writes.
@@ -1141,7 +1174,14 @@ pub(crate) fn collect_project<'facts>(
     // negative proof is that none of them lies inside the predicate.
     static_rules::result_access_callbacks(ctx, draft);
     let compat_started = Instant::now();
-    upstream_compat::check_project(ctx, draft);
+    upstream_compat::check_project(
+        ctx,
+        caches
+            .late_stages
+            .as_deref_mut()
+            .map(|cache| &mut cache.chunks.upstream),
+        draft,
+    );
     timings.upstream_compat = compat_started.elapsed();
     // ADR 0692: upstream's `package-callee` row, pushed last, holds the same
     // reference open as the census row before it (`observe(count)`): one
@@ -1169,6 +1209,17 @@ pub(crate) fn collect_project<'facts>(
     }
     hold_withdrawn_static_rows(draft);
     // ADR 0838: after every producer, every pending read is accounted for.
+    // It asks every accessor whether it may be pending: those answers are
+    // walked on the workers first.
+    {
+        let mut accessors = ctx
+            .accessors
+            .keys()
+            .filter(|symbol| !source.async_sources.contains(symbol.as_str()))
+            .collect::<Vec<_>>();
+        accessors.sort_unstable();
+        local_access_context.prefill_source_compute_open(&accessors, &open_computes);
+    }
     crate::pending_accounting::account_pending_reads(
         ctx,
         &|symbol| {

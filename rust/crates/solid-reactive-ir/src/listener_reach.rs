@@ -180,6 +180,7 @@ pub(crate) fn check_file(
     // The dispatch's own position needs an obligation even when its listener
     // was registered in another analyzed file. The existential proves no
     // target/event relationship; it can only add U, never V or a clean.
+    crate::base::reads::note(crate::base::reads::Section::DispatchSites);
     for site in lookup.event_dispatch_sites() {
         if site.withholds_listener_proofs()
             && site.path == file.path.as_str()

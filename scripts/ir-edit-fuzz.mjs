@@ -19,6 +19,11 @@
 //       Facts delta (`SOLID_CHECKER_IR_DELTA_LOG`) and answer as a fresh run.
 //   bun scripts/ir-edit-fuzz.mjs --fixtures --family mount [--steps 8]
 //       A value mount or its boundary edited in another file (`value-mount`).
+//   bun scripts/ir-edit-fuzz.mjs --fixtures --family hand-out [--steps 6]
+//       Lines deleted where a helper's prop reads are decided by call sites
+//       in other files: what a chunk reads of another file through a lookup
+//       hand-out (ADR 0408) must move it. The fixture budget above did not
+//       catch hand-outs left unrecorded; this family does (ADR 0910).
 //   bun scripts/ir-edit-fuzz.mjs --fixtures --family census [--steps 4]
 //       Edits that add a definer or a classic-script declaration of a window
 //       member the census read as absent: the retained build must answer as a
@@ -91,6 +96,9 @@ export const RETYPE_FIXTURE_PROJECTS = [
  * `handled_above` (ADR 0893) answers from that file: the edit adds or removes the value mount or the boundary over it.
  */
 export const MOUNT_FIXTURE_PROJECTS = ["reactive-ir/stored-throw-value-mount"];
+
+/** The `hand-out` family (`--fixtures --family hand-out`): line deletions across files that hand each other facts. */
+export const HAND_OUT_FIXTURE_PROJECTS = ["reactive-ir/helper-prop-read"];
 
 /** Mulberry32: a seeded generator, so a failing run replays from its seed. */
 export function seededRandom(seed) {
@@ -419,8 +427,13 @@ function parseArguments(argv) {
     else throw new Error(`unknown argument ${flag}`);
   }
   if (options.family !== undefined) {
-    if (!["retype", "mount", "census"].includes(options.family)) throw new Error(`unknown family ${options.family}`);
-    options.kinds = { retype: ["retype-return"], mount: ["value-mount"], census: ["add-dunder-definer", "add-classic-declaration"] }[options.family];
+    if (!["retype", "mount", "census", "hand-out"].includes(options.family)) throw new Error(`unknown family ${options.family}`);
+    options.kinds = {
+      retype: ["retype-return"],
+      mount: ["value-mount"],
+      census: ["add-dunder-definer", "add-classic-declaration"],
+      "hand-out": ["delete-line"]
+    }[options.family];
   }
   for (const kind of options.kinds) {
     if (!(kind in EDIT_KINDS)) throw new Error(`unknown edit kind ${kind}`);
@@ -692,7 +705,13 @@ async function main() {
   let total = 0;
   let mismatches = 0;
   if (options.fixtures) {
-    const projects = { retype: RETYPE_FIXTURE_PROJECTS, mount: MOUNT_FIXTURE_PROJECTS, census: CENSUS_FIXTURE_PROJECTS }[options.family] ?? FIXTURE_PROJECTS;
+    const projects =
+      {
+        retype: RETYPE_FIXTURE_PROJECTS,
+        mount: MOUNT_FIXTURE_PROJECTS,
+        census: CENSUS_FIXTURE_PROJECTS,
+        "hand-out": HAND_OUT_FIXTURE_PROJECTS
+      }[options.family] ?? FIXTURE_PROJECTS;
     const results = await mapPool(projects, async (id, index) => {
       // A copy: the fixture tree is never edited in place.
       const copy = mkdtempSync(join(tmpdir(), "ir-edit-fuzz-fixture-"));

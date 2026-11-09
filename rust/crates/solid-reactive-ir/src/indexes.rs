@@ -282,7 +282,7 @@ pub(super) struct AssignedMembers {
 /// (`HTMLCanvasElement = …`): an identifier target no local declaration
 /// binds.
 fn global_identifier_written(facts: &ProjectFacts, name: &str) -> bool {
-    facts.files.iter().any(|file| {
+    crate::base::reads::file_slots(facts).iter().any(|file| {
         crate::base::contributions::written_global_identifiers(file).any(|written| written == name)
     })
 }
@@ -606,13 +606,11 @@ impl<'a> ProjectIndexes<'a> {
         facts: &'a ProjectFacts,
         ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     ) -> Self {
-        let files_by_path = facts
-            .files
+        let files_by_path = crate::base::reads::file_slots(facts)
             .iter()
             .map(|file| (file.path.as_str(), file))
             .collect();
-        let ast_files_by_path = facts
-            .files
+        let ast_files_by_path = crate::base::reads::file_slots(facts)
             .iter()
             .filter_map(|file| {
                 ast_indexes
@@ -1244,7 +1242,7 @@ impl<'a> SemanticLookup<'a> {
                 .is_sorted(),
             "entity table must be sorted by path for per-path containment slices"
         );
-        let file_table = crate::base::FileTable::new(&facts.files);
+        let file_table = crate::base::FileTable::new(crate::base::reads::file_slots(facts));
         Self {
             object_members: OnceLock::new(),
             spread_handlers: OnceLock::new(),
@@ -1383,7 +1381,7 @@ impl<'a> SemanticLookup<'a> {
     /// of that path): a position in [`Self::files`], read by address. It
     /// reads no other file.
     pub(crate) fn own_file(&self, file: &FileFacts) -> Option<&'a FileFacts> {
-        let files = self.files();
+        let files = self.file_slots();
         let at = std::ptr::from_ref(file) as usize;
         let start = files.as_ptr() as usize;
         let index = at.checked_sub(start)? / std::mem::size_of::<FileFacts>().max(1);
@@ -1396,7 +1394,7 @@ impl<'a> SemanticLookup<'a> {
     /// way (`SiteReach::least_fixed_point`), so it is no read of the answers.
     pub(crate) fn function_count(&self) -> usize {
         *self.function_count.get_or_init(|| {
-            self.files()
+            self.file_slots()
                 .iter()
                 .map(|file| file.ast.functions.len())
                 .sum()
@@ -1468,7 +1466,7 @@ impl<'a> SemanticLookup<'a> {
             ]
             .iter()
             .any(|primitive| primitives.contains(primitive))
-                && self.files().iter().any(|file| {
+                && self.file_slots().iter().any(|file| {
                     file.ast.calls.iter().any(|call| {
                         match self.primitive_at_call(file, call.span) {
                             Some(Primitive::Render | Primitive::Hydrate | Primitive::OnCleanup) => {
@@ -1574,7 +1572,7 @@ impl<'a> SemanticLookup<'a> {
 
     /// The analyzed files, one per path (its first slot), sorted by path.
     fn files_by_path(&self) -> Vec<&'a FileFacts> {
-        let all_slots = self.files();
+        let all_slots = self.file_slots();
         let mut ordered = self
             .file_table
             .ids()
@@ -1949,6 +1947,31 @@ impl<'a> SemanticLookup<'a> {
             Section::ListenerProjectReach => {
                 hasher.update([u8::from(self.listener_project_reach())]);
             }
+            Section::DispatchSites => {
+                let mut sites = self
+                    .event_dispatch_sites()
+                    .iter()
+                    .map(|site| {
+                        (
+                            site.path.as_str(),
+                            site.span,
+                            site.withholds_listener_proofs(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                sites.sort_unstable();
+                for (path, span, withholds) in sites {
+                    text(&mut hasher, path);
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                    hasher.update([u8::from(withholds)]);
+                }
+            }
+            Section::Files => {
+                // The begin computes every file's fingerprints: run it first.
+                let _ = self.memo_world();
+                hasher.update(self.memos.store().files_digest(self.memos.table()));
+            }
             Section::RawStoreValues => {
                 hasher.update([u8::from(self.raw_store_values_present())]);
             }
@@ -2089,7 +2112,7 @@ impl<'a> SemanticLookup<'a> {
             if crate::pipeline::available_analysis_workers() <= 1 {
                 return;
             }
-            let tuple_results = self.files().iter().any(|file| {
+            let tuple_results = self.file_slots().iter().any(|file| {
                 file.ast.returns.iter().any(|returned| {
                     returned.argument.is_some_and(|argument| {
                         file.ast
@@ -2254,7 +2277,7 @@ impl<'a> SemanticLookup<'a> {
     fn file_index(&self, file: &FileFacts) -> usize {
         // A file of this build's facts names its slot by its address: the
         // last slot of its id, found without hashing its path.
-        let files = &self.facts.files;
+        let files = crate::base::reads::file_slots(self.facts);
         let size = std::mem::size_of::<FileFacts>();
         let offset = (std::ptr::from_ref(file) as usize).wrapping_sub(files.as_ptr() as usize);
         if size != 0
@@ -2280,15 +2303,14 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn named_callback_roles(&self, file: &FileFacts) -> &super::NamedCallbackRoles {
         let index = self.file_index(file);
         let slots = self.file_named_callback_roles.get_or_init(|| {
-            self.facts
-                .files
+            crate::base::reads::file_slots(self.facts)
                 .iter()
                 .map(|_| crate::base::reads::Recorded::new())
                 .collect()
         });
         slots[index].get_or_init(|| {
             super::named_callback_roles(
-                &self.facts.files[index],
+                &crate::base::reads::file_slots(self.facts)[index],
                 self.entities,
                 self.symbol_names,
                 self,
@@ -2300,14 +2322,13 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn primitives(&self, file: &FileFacts) -> &FilePrimitives {
         let index = self.file_index(file);
         let slots = self.file_primitives.get_or_init(|| {
-            self.facts
-                .files
+            crate::base::reads::file_slots(self.facts)
                 .iter()
                 .map(|_| crate::base::reads::Recorded::new())
                 .collect()
         });
         slots[index].get_or_init(|| {
-            let file = &self.facts.files[index];
+            let file = &crate::base::reads::file_slots(self.facts)[index];
             FilePrimitives {
                 calls: file
                     .ast
@@ -2443,8 +2464,17 @@ impl<'a> SemanticLookup<'a> {
         self.symbols_by_id().get(entity.symbol.as_ref()).copied()
     }
 
-    pub(super) fn files(&self) -> &'a [FileFacts] {
-        &self.facts.files
+    /// Every analyzed file, for a scan: a whole-program read
+    /// ([`crate::base::reads::Section::Files`]) for the computation recording.
+    pub(crate) fn files(&self) -> &'a [FileFacts] {
+        crate::base::reads::all_files(self.facts)
+    }
+
+    /// The analyzed files as positions, read by no note
+    /// ([`crate::base::reads::file_slots`]): for a reader that notes each file
+    /// it reads by slot, or reads no file's facts.
+    pub(crate) fn file_slots(&self) -> &'a [FileFacts] {
+        crate::base::reads::file_slots(self.facts)
     }
 
     /// ADR 0319: the invocation-flow answer of every literal, computed once.
@@ -2537,7 +2567,12 @@ impl<'a> SemanticLookup<'a> {
         let facts: &'a ProjectFacts = self.facts;
         solid_facts::resolve_relative_module_path_indexed(from, module, |probe| {
             let slots = self.file_table.slots_of(self.file_table.id_of(probe)?);
-            Some((facts.files[*slots.first()?].path.as_str(), slots.len()))
+            Some((
+                crate::base::reads::file_slots(facts)[*slots.first()?]
+                    .path
+                    .as_str(),
+                slots.len(),
+            ))
         })
     }
 
@@ -2546,6 +2581,20 @@ impl<'a> SemanticLookup<'a> {
     /// built once.
     pub(super) fn first_file_index(&self, path: &str) -> Option<usize> {
         self.file_table.first_slot(path)
+    }
+
+    /// The first analyzed file at `path` (what a scan of [`Self::files`] for
+    /// the path finds first), handed out: the computation recording notes
+    /// that file, or the path's absence, instead of the whole file list.
+    pub(crate) fn first_file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
+        let slot = self.file_table.first_slot(path);
+        match slot {
+            Some(slot) => self.note_slot_read(slot),
+            None => self.note_probe_read(crate::base::memo::probes::Probe::PathFile, || {
+                Self::symbol_key(path)
+            }),
+        }
+        slot.map(|slot| &crate::base::reads::file_slots(self.facts)[slot])
     }
 
     /// L0: this build's analyzed files by interned id.
@@ -2561,7 +2610,7 @@ impl<'a> SemanticLookup<'a> {
     ) -> crate::base::Views<'s> {
         crate::base::Views {
             table,
-            files: self.files(),
+            files: self.file_slots(),
             sources: crate::base::ViewSources {
                 ast_indexes: self.ast_indexes,
                 symbols: self.entities,
@@ -2673,7 +2722,7 @@ impl<'a> SemanticLookup<'a> {
         C: PartialEq,
         'a: 's,
     {
-        let files: &'a [FileFacts] = self.files();
+        let files: &'a [FileFacts] = self.file_slots();
         files.iter().enumerate().map(move |(slot, file)| {
             (
                 file,
@@ -2695,7 +2744,7 @@ impl<'a> SemanticLookup<'a> {
                 Self::symbol_key(path)
             }),
         }
-        slot.map(|slot| &facts.files[slot])
+        slot.map(|slot| &crate::base::reads::file_slots(facts)[slot])
     }
 
     /// A missing symbol is missing reference evidence, not an empty census.
@@ -2936,7 +2985,7 @@ impl<'a> SemanticLookup<'a> {
         }
         let slot = self.first_file_index(&declaration.location.path)?;
         self.note_slot_read(slot);
-        let file = &self.facts.files[slot];
+        let file = &crate::base::reads::file_slots(self.facts)[slot];
         let (Ok(start), Ok(end)) = (
             u32::try_from(declaration.location.start_byte),
             u32::try_from(declaration.location.end_byte),
