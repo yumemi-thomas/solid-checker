@@ -11,7 +11,7 @@ import { randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ignoredRules } from "./codes.mjs";
+import { ignoredRules, isProgramModule } from "./codes.mjs";
 import { tsconfigFor } from "./typecheck.mjs";
 
 /**
@@ -110,7 +110,7 @@ export function materializeFromDirectory(caseDir, install, id) {
 }
 
 /** A project module besides App.tsx and the entry: a top-level `.ts`/`.tsx` source (not a declaration file). */
-const isProjectModule = (name) => /^[^/]+\.tsx?$/.test(name) && !name.endsWith(".d.ts") && name !== "App.tsx" && name !== "main.tsx";
+const isProjectModule = isProgramModule;
 /** The case's project modules (`helpers.ts`), sorted. */
 export const projectModules = (files = {}) => Object.keys(files).filter(isProjectModule).sort();
 
@@ -174,7 +174,8 @@ export function checkerResult({ status, stdout, stderr = "", wallMs = 0, spawnEr
   try {
     const analysis = JSON.parse(stdout);
     const veto = entryVeto(analysis, dir);
-    return { ok: true, findings: parseFindings(analysis, dir), wallMs, exitStatus: status, ...(veto ? { entryVeto: veto } : {}) };
+    const moduleFindings = parseModuleFindings(analysis, dir);
+    return { ok: true, findings: parseFindings(analysis, dir), ...(moduleFindings.length ? { moduleFindings } : {}), wallMs, exitStatus: status, ...(veto ? { entryVeto: veto } : {}) };
   } catch (error) {
     if (error instanceof UnmappedFindingsError) unmapped.push(error.message);
     return { ok: false, findings: [], wallMs, exitStatus: status, error: error instanceof UnmappedFindingsError ? error.message : `malformed checker output: ${error.message}` };
@@ -228,12 +229,28 @@ export function parseFindings(analysis, dir) {
   }
   return located
     .filter(({ path }) => path?.startsWith(prefix) && relative(root, path) === "App.tsx")
-    .map(({ finding }) => finding)
-    .map((finding) => ({
-      file: "App.tsx", rule: finding.rule, id: finding.id, kind: finding.kind, ...(finding.analysisContext ? { blocker: String(finding.analysisContext).split(":")[0] } : {}),
-      line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
-      ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { claimsSilent: true } : {}),
-    }));
+    .map(({ finding }) => findingRow(finding, "App.tsx"));
+}
+
+const findingRow = (finding, file) => ({
+  file, rule: finding.rule, id: finding.id, kind: finding.kind, ...(finding.analysisContext ? { blocker: String(finding.analysisContext).split(":")[0] } : {}),
+  line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
+  ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { claimsSilent: true } : {}),
+});
+
+/**
+ * The findings in the program's other modules (`helpers.ts`, `el.ts`: `projectModules`), each with its `file`. Kept apart from `findings`,
+ * which every judge reads as App.tsx's by line: only the matrix judge reads these, and only at a frame Chrome recorded in the same module
+ * (matrix.mjs `recordedAt`, ADR 0921). The entry (main.tsx) and the packages are not the program's modules.
+ */
+export function parseModuleFindings(analysis, dir) {
+  const root = canonical(dir);
+  const prefix = `${root}/`;
+  return (analysis?.findings ?? []).flatMap((finding) => {
+    const path = finding.primaryLocation?.path ? canonical(finding.primaryLocation.path) : null;
+    const file = path?.startsWith(prefix) ? relative(root, path) : null;
+    return file && isProjectModule(file) ? [findingRow(finding, file)] : [];
+  });
 }
 
 /**
