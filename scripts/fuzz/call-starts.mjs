@@ -11,7 +11,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const ts = createRequire(join(resolve(here, "../../packages/cli"), "package.json"))("typescript");
+// Loaded on first use, never on import: audit.mjs reaches this module through focus.mjs, and its `pick` and `report` jobs run with no
+// install, parse no program, and failed on the import alone (run 42517832347).
+let loaded = null;
+const typescript = () => (loaded ??= createRequire(join(resolve(here, "../../packages/cli"), "package.json"))("typescript"));
 const cache = new Map();
 /** Solid's own functions that read the value they are handed: unlike a primitive that raises its own codes, their arguments stay handed (R23). */
 const VALUE_READERS = new Set(["deep", "snapshot", "merge", "omit"]);
@@ -29,6 +32,7 @@ const VALUE_READERS = new Set(["deep", "snapshot", "merge", "omit"]);
  * something else.
  */
 export function statementAt(source, line, column, fileName = "App.tsx") {
+  const ts = typescript();
   const text = String(source ?? "");
   const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const offsetOf = (l, c) => (file.getLineStarts()[l - 1] ?? Infinity) + c - 1;
@@ -48,6 +52,7 @@ export function statementAt(source, line, column, fileName = "App.tsx") {
  * The lines that say whether the function holding `line` runs: its own, and every reference to its name (`const hf = ...; [].forEach(hf)`).
  */
 export function carrierLines(source, line, fileName = "App.tsx") {
+  const ts = typescript();
   const text = String(source ?? "");
   const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const lineOf = (offset) => file.getLineAndCharacterOfPosition(offset).line + 1;
@@ -73,6 +78,7 @@ export function frameStarts(source, fileName = "App.tsx") {
 
 /** `(line, column) => [{ line, column }]` (1-based): the starts a frame at that position stands for, its own position first. */
 export function callStarts(source, fileName = "App.tsx") {
+  const ts = typescript();
   const text = String(source ?? "");
   const key = `${fileName}\u0000${text}`;
   if (cache.has(key)) return cache.get(key);
