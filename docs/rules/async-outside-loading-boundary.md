@@ -24,11 +24,9 @@ the analysis cannot see. A read written in what a component tag receives is unce
 a prop is a getter, so the child decides whether a render ever reads it (ADR 0641). A control-flow
 tag runs it in a render, and stays proven.
 
-A read written directly in a named local function (`const wrapUse = () =>
-{ user(); }`) is rendered where a call of that function sits in rendered JSX,
-through up to four such functions. The finding sits at that call and is
-uncertifiable, never proven: nothing shows the read runs pending while the
-call renders (ADR 0462). A call in a named function no named-callback role
+A read in a named local function (`const wrapUse = () => { user(); }`) is
+rendered where a call of it sits in rendered JSX, through up to four such
+functions; the finding sits at that call, uncertifiable (ADR 0462). A call in a named function no named-callback role
 places (a closure in a `<For>` child handed to a timer, or never called) is not
 rendered by the JSX around it (ADR 0564). A function run in place in a tracked JSX expression of a flow row (`<For>{() => <p>{(() => use())()}</p>}</For>`) is rendered there, as outside a flow row (ADR 0834). A closure handed on from a child callback (`<Show when={1}>{(_u) => { h(() => use()); … }}</Show>`) is not rendered by the element around it: uncertifiable, never this rule's violation (ADR 0836). A read in a callback a
 standard-library carrier may run zero times (`{[].map(() => user())}`, an
@@ -39,29 +37,22 @@ A parent's or module-scope memo read by a component not proven to mount in
 the pass that created it (a later `<Show>`, `<Switch>` or non-literal `<For>`)
 may be settled at the read: uncertifiable (ADR 0570).
 
-Where a project module awaits at its top level (or a load the analysis cannot
-see may), the finding is **uncertifiable**: the await's checkpoint may settle
-the source (a module-scope memo, a hook's instance created at module scope)
-before the read first runs, and a settled read needs no boundary (ADR 0518).
-Premise: no installed dependency awaits at its top level.
+Where a project module awaits at its top level (or an unseen load may), the
+finding is **uncertifiable**: the checkpoint may settle a module-scope source
+before the read first runs (ADR 0518). Premise: no installed dependency awaits at its top level.
 
-This is the static counterpart of Solid's dev-mode `ASYNC_OUTSIDE_LOADING_BOUNDARY`
-warning — and like the runtime warning, it is informational rather than halting.
+It is the static counterpart of Solid's dev-mode `ASYNC_OUTSIDE_LOADING_BOUNDARY`
+warning, informational like it.
 
 **Declared first paint exception.** A source that provably declares
-`loadingValue` (or `seedLoadingValue: true` on store-family sources) is never
-flagged: the node is born committed, so its first flight never suspends
-readers and never trips a `Loading` boundary — rendering it bare is the
-pattern's entire point, and the runtime warning does not fire for it
-(verified against `solid-js@2.0.0-rc.0`). Once the first real answer lands,
-re-asks use the normal pending machinery, but by then the reader holds a
-committed value and the boundary question is moot for this warning. If the
-options argument cannot be read statically (a spread, a variable), the source
-may declare either key, so the bare render is **uncertifiable**, never a
-violation (ADR 0430; the same holds for the SSR variant below, and for
-SC5001). Pass the options as an object literal so the checker can read them.
+`loadingValue` (or `seedLoadingValue: true` on a store-family source) is never
+flagged: it is born committed, its first flight suspends no reader, and the
+runtime warning does not fire (`solid-js@2.0.0-rc.0`, verified). If the options
+argument cannot be read statically (a spread, a variable), the bare render is
+**uncertifiable**, never a violation (ADR 0430; the same for the SSR variant
+below and SC5001). Pass the options as an object literal.
 
-A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889). Where the source starts from an import nothing resolves (`createSignal(fromAbsentModule())`), the same row has blocker `source-module-unresolved` (ADR 0891).
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; one an SC9012 row holds (a value no row follows to the read) has this rule's own row, blocker `pending-read-unresolved` (ADR 0926); a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889). Where the source starts from an import nothing resolves (`createSignal(fromAbsentModule())`), the same row has blocker `source-module-unresolved` (ADR 0891).
 
 ## Why is this bad?
 
@@ -116,11 +107,10 @@ hands the position to the client. Outside a boundary, Solid throws
 `ssrSource: "client" read during SSR outside a <Loading> boundary` rather than
 letting the stream hang.
 
-This proof is based on the option itself, not async provenance, so it also
-catches a synchronous client-only compute. A named server-rendering or hydrate
-entry proves the error. When the entry may live outside the analyzed project,
-the finding is uncertifiable. A spread or variable options argument gives no SSR error, because a
-first-paint declaration cannot be ruled out.
+The proof reads the option, not async provenance, so a synchronous client-only
+compute is caught too. A named server-rendering or hydrate entry proves the
+error; an entry that may sit outside the project leaves it uncertifiable. A
+spread or variable options argument gives none: a first paint may be declared.
 
 ```tsx
 const widget = createMemo(() => measureBrowserThing(), {

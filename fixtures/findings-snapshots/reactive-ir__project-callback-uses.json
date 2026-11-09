@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
+      "start": 1454,
+      "end": 1461,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -691,6 +702,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 185,
+      "end": 201,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -699,6 +721,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 185,
       "end": 201,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 350,
+      "end": 365,
       "fixes": 0
     },
     {
@@ -713,6 +746,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 351,
+      "end": 356,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -721,6 +765,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 351,
       "end": 356,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 358,
+      "end": 364,
       "fixes": 0
     },
     {
@@ -746,10 +801,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "value-forwarded",
+      "blocker": "pending-read-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 544,
@@ -763,8 +818,41 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 544,
+      "end": 562,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 720,
       "end": 736,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 720,
+      "end": 736,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 974,
+      "end": 980,
       "fixes": 0
     },
     {
@@ -809,6 +897,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 1507,
       "end": 1548,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 1956,
+      "end": 1972,
       "fixes": 0
     },
     {
@@ -911,6 +1010,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2910,
+      "end": 2916,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -933,10 +1043,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "value-forwarded",
+      "blocker": "pending-read-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 3139,
@@ -950,8 +1060,41 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 3139,
+      "end": 3145,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 3309,
       "end": 3315,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 3309,
+      "end": 3315,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 3483,
+      "end": 3489,
       "fixes": 0
     },
     {
@@ -1043,6 +1186,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4552,
+      "end": 4558,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1073,6 +1227,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 4732,
       "end": 4743,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4823,
+      "end": 4829,
       "fixes": 0
     },
     {
@@ -1164,6 +1329,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 5428,
+      "end": 5466,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1172,6 +1348,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 5428,
       "end": 5466,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 5823,
+      "end": 5829,
       "fixes": 0
     },
     {

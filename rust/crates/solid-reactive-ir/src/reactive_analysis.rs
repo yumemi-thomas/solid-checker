@@ -542,15 +542,47 @@ pub(crate) fn collect_project<'facts>(
     // The census's own rows at its references, in walk order: put in an
     // order of their own before they are pushed.
     let mut census_handed = Vec::new();
+    // ADR 0926: where each start's walks met the value at a row or left it
+    // open, for the pending accounting (a source that may be pending is read
+    // there).
+    let mut census_reach = Vec::new();
     for (start, answer) in starts.iter().zip(answers) {
         let crate::value_use::StartAnswer {
             open,
             cut,
             uses,
             escaped_uses,
+            reached,
+            async_walk,
         } = answer;
+        let mut reach = reached;
+        reach.extend(
+            uses.iter()
+                .chain(&escaped_uses)
+                .map(|(location, _)| location.clone()),
+        );
         match start {
             CensusStart::Reference(symbol, reference) => {
+                if open.is_some() {
+                    reach.push(reference.clone());
+                }
+                if !reach.is_empty() {
+                    let (accessor, declaration) = ctx
+                        .accessors
+                        .get(*symbol)
+                        .or_else(|| ctx.prop_sources.get(*symbol))
+                        .map_or_else(
+                            || ("this value".into(), reference.clone()),
+                            |(name, declaration)| (format!("{name}()").into(), declaration.clone()),
+                        );
+                    census_reach.push(crate::pending_accounting::PendingReach {
+                        symbol: Some((*symbol).clone()),
+                        async_walk,
+                        accessor,
+                        declaration,
+                        at: reach,
+                    });
+                }
                 let callee = ctx
                     .symbol_names
                     .get(*symbol)
@@ -595,6 +627,18 @@ pub(crate) fn collect_project<'facts>(
             }
             // P13: a source with no name has no reference to start from.
             CensusStart::Created { file, call, .. } => {
+                if open.is_some() {
+                    reach.push(call.location(file.path.as_str()));
+                }
+                if !reach.is_empty() {
+                    census_reach.push(crate::pending_accounting::PendingReach {
+                        symbol: None,
+                        async_walk,
+                        accessor: "this value".into(),
+                        declaration: call.location(file.path.as_str()),
+                        at: reach,
+                    });
+                }
                 if cut {
                     budget_rows.push(budget("this value", call.location(file.path.as_str())));
                     if let Some(package) = ctx.facts.dependency_source_root(file.path.as_str()) {
@@ -897,6 +941,7 @@ pub(crate) fn collect_project<'facts>(
             pending_apply: None,
             origin: None,
             unaccounted: false,
+            read_unresolved: false,
             source_module_unresolved: false,
             walk_cut: false,
         })
@@ -1005,6 +1050,7 @@ pub(crate) fn collect_project<'facts>(
                 pending_apply: None,
                 origin: None,
                 unaccounted: false,
+                read_unresolved: false,
                 source_module_unresolved: false,
                 walk_cut: false,
             })
@@ -1220,6 +1266,25 @@ pub(crate) fn collect_project<'facts>(
         accessors.sort_unstable();
         local_access_context.prefill_source_compute_open(&accessors, &open_computes);
     }
+    // ADR 0926: a creating call no binding holds is pending where its compute
+    // may read a pending source (ADR 0802's walk, as for a named source).
+    for reach in census_reach
+        .iter_mut()
+        .filter(|reach| reach.symbol.is_none() && !reach.async_walk)
+    {
+        let created = analyzed_file(ctx, reach.declaration.path.as_ref()).zip(
+            u32::try_from(reach.declaration.start_byte)
+                .ok()
+                .zip(u32::try_from(reach.declaration.end_byte).ok()),
+        );
+        reach.async_walk = created.is_some_and(|(file, (start, end))| {
+            local_access_context.created_compute_open(
+                file,
+                solid_facts::core::Span::new(start, end),
+                &open_computes,
+            )
+        });
+    }
     crate::pending_accounting::account_pending_reads(
         ctx,
         &|symbol| {
@@ -1233,6 +1298,7 @@ pub(crate) fn collect_project<'facts>(
                 .is_some_and(|options| options.declared_loading)
         },
         &walk_decided_reads.into_iter().collect(),
+        &census_reach,
         draft,
     );
     interprocedural.factory_instances
