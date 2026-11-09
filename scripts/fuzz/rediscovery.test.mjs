@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { requiredIds } from "./cover.mjs";
-import { GRIDS, whole } from "./focus.mjs";
+import { requiredIds, wholeGrid } from "./cover.mjs";
+import { GRIDS } from "./focus.mjs";
 import { legalCells, legalId, legalShapes, pairLegalCells, recallLegalShapes } from "./legal.mjs";
 import { cellList, censusCells, censusShapes, combined, gridShapes, mountsOption, pairShapes, recallShapes, shapeId } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
@@ -68,8 +68,8 @@ describe("rediscovery.json", () => {
         const held = new Set(JSON.parse(readFileSync(manifest, "utf8")).ids);
         expect(entry.ids.filter((id) => !held.has(id))).toEqual([]);
       }
-      // ADR 0615: a grid with no manifest had these skipped (60 of 64 rows); every sample now holds them, or the census does.
-      if (!whole(entry.grid)) expect(entry.ids.filter((id) => !required.has(id))).toEqual([]);
+      // ADR 0615: a grid with no manifest had these skipped (60 of 64 rows); every sample now holds them, the pull request's census sample too (ADR 0916).
+      if (!wholeGrid(entry.grid, "all")) expect(entry.ids.filter((id) => !required.has(id))).toEqual([]);
     }
     // Generating the programs for their ids took 200 s on CI and timed out at 300 s (PR #162); the ids alone take seconds.
   }, 60000);

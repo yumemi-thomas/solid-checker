@@ -1,11 +1,12 @@
 // The pairwise samples (ADR 0615): a covering sample of every grid's programs, computed from the grids' shapes, so it is a function of the code
 // alone: no run to read, no manifest to refresh, and a value a table adds is in the next sample. `--cover all`: every pair of axis values, across
-// codes, the pull-request tier. `--cover per-code`: every pair of axis values within each code, the tier before a merge. A row is one program; a
+// codes, the pull-request tier, which takes the census into the cover and asks a recall grid's program only for its pairs with `code` (ADR 0916).
+// `--cover per-code`: every pair of axis values within each code, the tier before a merge, beside the whole census. A row is one program; a
 // feature is a pair of its axis values; the sample is a greedy cover of the features, ties broken by a hash of the id under `seed`, so one seed gives one
 // sample and only the nightly lane rotates it.
 //
 // The misuse and the legal grids are one population: `side` is an axis, so a value's pairs are covered on each side it has. A `required` program (the
-// census's are their own grid; the ledger's, and the behaviour manifests') comes first and its features are not covered twice.
+// ledger's and rediscovery.json's) comes first and its features are not covered twice.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GRIDS } from "./focus-grids.mjs";
@@ -13,14 +14,21 @@ import { GENERATOR_VERSION } from "./generate.mjs";
 import { legalCells, legalId, legalShapes, pairLegalCells, recallLegalShapes } from "./legal.mjs";
 import { cellList, censusCells, censusShapes, combined, gridShapes, mountsOption, pairShapes, recallShapes, shapeId } from "./matrix.mjs";
 import { sourcesOption } from "./misuse.mjs";
-import { OPEN_ROWS } from "./open-defects.mjs";
+import { OPEN_ROWS, answers, readOpenDefects } from "./open-defects.mjs";
 import { fnv } from "./rng.mjs";
 import { readRediscovery } from "./smoke.mjs";
 
 /** The axes a pair is made of. */
 export const AXES = ["side", "code", "context", "variant", "binding", "layer", "mount", "source", "callback", "combo"];
-/** The grids a sample draws from. The census runs whole beside it. */
-export const SAMPLED_GRIDS = Object.keys(GRIDS).filter((grid) => grid !== "mx-census");
+/** The grids a sample draws from. The census joins the pull request's sample and runs whole beside the per-code one (`wholeGrid`). */
+export const SAMPLED_GRIDS = Object.keys(GRIDS);
+/**
+ * Whether a grid runs whole beside a sample of tier `cover` (all, per-code, or none): the census, except in the pull request's tier (ADR 0916), whose
+ * cover holds every (code, context) pair of it, as every pair of axis values, in a third of its programs.
+ */
+export const wholeGrid = (grid, cover) => grid === "mx-census" && cover !== "all";
+/** The recall grids: the pull request's tier asks their programs only for their pairs with `code` (ADR 0916); per code, they take every pair. */
+const RECALL_GRIDS = new Set(Object.keys(GRIDS).filter((grid) => GRIDS[grid].includes("--recall")));
 /** The pull request's seed. It changes with the code or never: a failure belongs to the pull request that shows it. */
 export const FIXED_SEED = 1;
 const LEAN = { lean: true };
@@ -34,6 +42,10 @@ export function gridRows(grid, { codes } = {}) {
   const pairs = args.includes("--pairs"), recall = args.includes("--recall");
   const rows = [];
   const push = (cell, shape) => rows.push({ grid, id: legal ? legalId(cell, { shape }) : shapeId(cell, shape), side: legal ? "legal" : "misuse", code: cell.code, context: cell.context, ...shape });
+  if (args.includes("--census")) {
+    for (const cell of censusCells({ codes })) for (const shape of censusShapes(cell.code)) push(cell, shape);
+    return rows;
+  }
   const cells = legal ? (pairs ? pairLegalCells({ codes }) : legalCells({ codes, recall })) : cellList({ codes, recall });
   for (const cell of cells) {
     const shapes = pairs ? pairShapes(cell.code, cell.context, { legal }) : recall ? (legal ? recallLegalShapes : recallShapes)(cell.code, cell.context, LEAN)
@@ -43,16 +55,22 @@ export function gridRows(grid, { codes } = {}) {
   return rows;
 }
 
-/** A census grid's ids, for what asks of them: it runs whole. */
+/** A census grid's ids, for what asks of them. */
 export const censusIds = ({ codes } = {}) => censusCells({ codes }).flatMap((cell) => censusShapes(cell.code).map((shape) => shapeId(cell, shape)));
 
 const valueOf = (row, axis) => String(row[axis] ?? "-");
-/** A row's features: every pair of its axis values; within its code with `perCode`, whose pairs leave `code` out and carry it. */
+const CODE = AXES.indexOf("code");
+/**
+ * A row's features: every pair of its axis values; within its code with `perCode`, whose pairs leave `code` out and carry it. Across codes, a recall
+ * grid's row has only its pairs with `code` (every value of each axis for its code, the same features a base row's pairs hold): its every pair is 47,000
+ * programs, 45,000 of them recall, about an hour on a runner (ADR 0916).
+ */
 function eachFeature(row, perCode, emit) {
   const axes = perCode ? AXES.filter((axis) => axis !== "code") : AXES;
   const prefix = perCode ? `${row.code}\0` : "";
   const values = axes.map((axis) => valueOf(row, axis));
-  for (let i = 0; i < axes.length; i += 1) for (let j = i + 1; j < axes.length; j += 1) emit(`${prefix}${i}.${values[i]}\0${j}.${values[j]}`);
+  const withCode = !perCode && RECALL_GRIDS.has(row.grid);
+  for (let i = 0; i < axes.length; i += 1) for (let j = i + 1; j < axes.length; j += 1) if (!withCode || i === CODE || j === CODE) emit(`${prefix}${i}.${values[i]}\0${j}.${values[j]}`);
 }
 
 /**
@@ -118,10 +136,30 @@ export const requiredIds = ({ rows = ledgerIds() } = {}) => [...new Set([...read
 /** The ledger's ids, every grid's. */
 export const ledgerIds = (path = OPEN_ROWS) => (existsSync(path) ? Object.values(JSON.parse(readFileSync(path, "utf8")).grids ?? {}).flatMap((rows) => Object.keys(rows)) : []);
 
-/** One sample: the ids of each grid. `required`: the ids that come first, the others are chosen around them. */
-export function sample({ perCode = false, seed = FIXED_SEED, required = [], grids = SAMPLED_GRIDS, codes } = {}) {
+/**
+ * One program of each family of open-defects.json (`grids`) that no required program answers, the one with the least hash under `seed`: a
+ * family is exercised at every seed, not only while a cover happens on it (ADR 0916: the pull request's sample had held "ref in a
+ * control-flow callback" by chance, 4 of 75,091 programs, and its smaller cover held none).
+ */
+export function familyIds(rows, required = [], { families = readOpenDefects().grids ?? [], seed = FIXED_SEED } = {}) {
+  const held = new Set(required);
+  const byCode = new Map();
+  for (const row of rows) (byCode.get(row.code) ?? byCode.set(row.code, []).get(row.code)).push(row);
+  const picks = [];
+  for (const entry of families) {
+    const family = (byCode.get(entry.code) ?? []).filter((row) => answers(entry, row));
+    if (!family.length || family.some((row) => held.has(row.id))) continue;
+    const pick = family.reduce((best, row) => (fnv(`${seed}:${row.id}`) < fnv(`${seed}:${best.id}`) ? row : best));
+    picks.push(pick.id);
+    held.add(pick.id);
+  }
+  return picks;
+}
+
+/** One sample: the ids of each grid. `required`: the ids that come first, the others are chosen around them, with one of each open family. */
+export function sample({ perCode = false, seed = FIXED_SEED, required = [], grids = SAMPLED_GRIDS, codes, families } = {}) {
   const rows = grids.flatMap((grid) => gridRows(grid, { codes }));
-  const { ids, features } = cover(rows, { perCode, seed, required });
+  const { ids, features } = cover(rows, { perCode, seed, required: [...required, ...familyIds(rows, required, { seed, ...(families ? { families } : {}) })] });
   const of = new Map(rows.map((row) => [row.id, row.grid]));
   const byGrid = Object.fromEntries(grids.map((grid) => [grid, []]));
   for (const id of ids) byGrid[of.get(id)].push(id);

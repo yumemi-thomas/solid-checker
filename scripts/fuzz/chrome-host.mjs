@@ -166,7 +166,7 @@ export function chromeHostKey({ clock = "virtual-time", pages = "fresh-context",
   const tools = ["vite", "@solidjs/vite-plugin", "@jridgewell/trace-mapping"].map((name) => fileHash(join(resolve(oracleInstall), "node_modules", name, "package.json")));
   return JSON.stringify({
     kind: "chrome", clock, pages, tools, ...(executor ? { executor } : {}),
-    sources: ["chrome-host.mjs", "chrome-host/runner.tsx", "chrome-host/index.html", "fast/virtual-clock.mjs", ...(executor === "rust" ? EXECUTOR_SOURCES : [])].map((name) => fileHash(join(here, name))),
+    sources: ["chrome-host.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "chrome-host/index.html", "fast/virtual-clock.mjs", ...(executor === "rust" ? EXECUTOR_SOURCES : [])].map((name) => fileHash(join(here, name))),
     browser: { path: executable, build: treeStat(dirname(executable)) },
   });
 }
@@ -187,6 +187,7 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
   cpSync(join(here, "chrome-host/runner.tsx"), join(work, "runner.tsx"));
   cpSync(join(here, "chrome-host/index.html"), join(work, "index.html"));
   cpSync(join(here, "fast/virtual-clock.mjs"), join(work, "virtual-clock.mjs"));
+  cpSync(join(here, "chrome-host/error-listeners.mjs"), join(work, "error-listeners.mjs"));
   // The oracle's own tools (`feedback run`, packages/cli/scripts/feedback-browser.mjs): its Vite, its Solid plugin with its options,
   // and its source-map lookup, so a page compiles and an event maps to a line exactly as the oracle's do. The served packages are the
   // fast install's (the same pinned Solid release).
@@ -272,10 +273,13 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
   const freeze = async () => {
     const runner = await server.transformRequest("/runner.tsx");
     const virtualClock = await server.transformRequest("/virtual-clock.mjs");
-    if (!runner?.code || !virtualClock?.code) throw new Error("the runner did not transform");
+    const listeners = await server.transformRequest("/error-listeners.mjs");
+    if (!runner?.code || !virtualClock?.code || !listeners?.code) throw new Error("the runner did not transform");
     if (!runner.code.includes('from "/virtual-clock.mjs"')) throw new Error("the transformed runner imports its clock from an unexpected URL");
+    if (!runner.code.includes('from "/error-listeners.mjs"')) throw new Error("the transformed runner imports its error listeners from an unexpected URL");
     cached.set("/sc-runner.js", { type: "text/javascript", text: runner.code });
     cached.set("/virtual-clock.mjs", { type: "text/javascript", text: virtualClock.code });
+    cached.set("/error-listeners.mjs", { type: "text/javascript", text: listeners.code });
     cached.set("/sc.html", { type: "text/html", text: readFileSync(join(work, "index.html"), "utf8").replace('src="/runner.tsx"', 'src="/sc-runner.js"') });
     // Vite's client (`/@vite/client`), which the @solidjs/web dependency bundle imports for `injectQuery` (Vite rewrites a dynamic
     // import with a computed path through it), is served as that function alone, Vite's own source: the page then opens no HMR

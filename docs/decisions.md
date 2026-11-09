@@ -1159,11 +1159,11 @@ Shapes ADR 0510 left uncertifiable SC5001 although rc.17 throws `PENDING_ASYNC_U
 
 <a id="adr-0512"></a>
 ## ADR 0512 — The fuzzer's fast path is Chrome, driven by a Rust executor
-The differential fuzzer's fast path runs in headless Chromium, not Happy DOM: one Vite server with the Solid plugin serving cases from memory, one reused page per worker, a fresh document per program, on Chrome's virtual time. Projects, `tsrs -b` batches, checker runs and pages (over CDP, with Playwright's switches) run in a Rust executor (`scripts/fuzz/exec`, its own workspace); verdicts stay in JS. Trust is measured: a stratified runtime differential against `feedback run` gives records identical to the host's (both keep 41 frames; the oracle runs `--source-instrumentation off`, whose `withOperation` wrapper frames moved 8 of 4,340 sampled records), and hosts are compared record for record after each host change. Loops: `make fuzz-focus CODES=…`; `make fuzz-smoke` (4% of programs, every behaviour five times and every core-axis pair per code, validated against an earlier checker); full grids before a PR. `--fast-host happy-dom` remains. Owners: `scripts/fuzz/chrome-host.mjs`, `exec/`, `focus.mjs`, `smoke.mjs`.
+The differential fuzzer's fast path runs in headless Chromium, not Happy DOM: one Vite server with the Solid plugin serving cases from memory, one reused page per worker, a fresh document per program, on Chrome's virtual time. Projects, `tsrs -b` batches, checker runs and pages (over CDP, with Playwright's switches) run in a Rust executor (`scripts/fuzz/exec`, its own workspace); verdicts stay in JS. Trust is measured: a stratified runtime differential against `feedback run` gives records identical to the host's (both keep 41 frames; the oracle runs `--source-instrumentation off`, whose `withOperation` wrapper frames moved 8 of 4,340 sampled records), and hosts are compared record for record after each host change. Loops: `make fuzz-focus CODES=…`; `make fuzz-smoke` (ADR 0916); full grids before a PR. `--fast-host happy-dom` remains. Owners: `scripts/fuzz/chrome-host.mjs`, `exec/`, `focus.mjs`, `smoke.mjs`.
 
 <a id="adr-0513"></a>
 ## ADR 0513 — The fuzzer measures recall on axes the base grids do not draw
-`--recall` grids (`mx-recall`, `lg-recall`) cross each new binding, callee form, layer, callback form, mount and file source with every cell's base grid, adding recall-only contexts and a `LOADING_ON_OUTSIDE_HOLD` template; mutation mode pairs each misuse shape with its legal twin, checker only. They are opt-in, so base grids, seeds and baselines stay byte-identical, and out of `fuzz-focus` and `fuzz-smoke` by default, since their false cleans are the open-work misses they measure. Owners: `scripts/fuzz/misuse.mjs`, `mounts.mjs`, `matrix.mjs` (`recallAxes`), `mutation.mjs`.
+`--recall` grids (`mx-recall`, `lg-recall`) cross each new binding, callee form, layer, callback form, mount and file source with every cell's base grid, adding recall-only contexts and a `LOADING_ON_OUTSIDE_HOLD` template; mutation mode pairs each misuse shape with its legal twin, checker only. They are opt-in, so base grids, seeds and baselines stay byte-identical, and out of `fuzz-focus` by default. Owners: `scripts/fuzz/misuse.mjs`, `mounts.mjs`, `matrix.mjs` (`recallAxes`), `mutation.mjs`.
 
 <a id="adr-0514"></a>
 ## ADR 0514 — The fuzzer's browser is the pinned Playwright's; a Linux VM where process starts are gated
@@ -2366,3 +2366,7 @@ Owner (2026-11-09): each report site has its own ADR 0560 site-reach bound (exha
 <a id="adr-0914"></a>
 ## ADR 0914 — A throw walk's stop in an unread compute is unobserved
 The walk found no entry of a class constructor or method and ended `Open`; a wrapper's site outside the memo kept a V (W's FP). Such stops, all in this file inside an unread compute: U. `stored_throw.rs`.
+
+<a id="adr-0916"></a>
+## ADR 0916 — The PR sample fits an hour
+ADR 0615's PR tier took 52-85 min of 60. A recall program counts its `code` pairs; the census is sampled. `cover.mjs`.

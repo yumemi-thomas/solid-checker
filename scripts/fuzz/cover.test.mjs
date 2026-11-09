@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cover, gridRows, ledgerIds, requiredIds, sample } from "./cover.mjs";
+import { censusIds, cover, familyIds, gridRows, ledgerIds, requiredIds, sample, wholeGrid } from "./cover.mjs";
 
 const row = (id, code, context, variant, layer) => ({ id, side: "misuse", code, context, variant, binding: "direct", layer });
 
@@ -40,6 +40,36 @@ describe("the covering sample", () => {
     expect(shown.length).toBeGreaterThan(0);
     expect(shown.every((one) => one.id.startsWith("mx-flush-in-action-") && one.side === "misuse" && one.grid === "mx-base")).toBe(true);
     expect(gridRows("lg-base", { codes: ["STRICT_READ_UNTRACKED"] }).every((one) => one.side === "legal")).toBe(true);
+  });
+  it("asks a recall program across codes only for its pairs with its code, and within a code for every pair (ADR 0916)", () => {
+    const four = (grid) => [["a", "l1"], ["b", "l2"], ["a", "l2"], ["b", "l1"]].map(([context, layer], at) => ({ ...row(`${grid}-${at}`, "X", context, "v1", layer), grid }));
+    expect(cover(four("mx-base")).ids.length).toBe(4);
+    expect(cover(four("mx-recall")).ids.length).toBe(2);
+    expect(cover(four("lg-recall")).ids.length).toBe(2);
+    expect(cover(four("mx-recall"), { perCode: true }).ids.length).toBe(4);
+  });
+  it("takes the census into the pull request's sample, every (code, context) pair of it, and runs it whole beside the per-code one", () => {
+    expect(wholeGrid("mx-census", "all")).toBe(false);
+    expect(wholeGrid("mx-census", "per-code")).toBe(true);
+    expect(wholeGrid("mx-census", undefined)).toBe(true);
+    expect(wholeGrid("mx-recall", "per-code")).toBe(false);
+    const codes = ["STRICT_READ_UNTRACKED"];
+    const census = gridRows("mx-census", { codes });
+    expect(census.map((one) => one.id)).toEqual(censusIds({ codes }));
+    const { byGrid } = sample({ grids: ["mx-census"], codes });
+    const chosen = new Set(byGrid["mx-census"]);
+    const pairsOf = (list) => new Set(list.map((one) => `${one.code}|${one.context}`));
+    expect(pairsOf(census.filter((one) => chosen.has(one.id)))).toEqual(pairsOf(census));
+  });
+  it("takes a program of each open family no required program answers, the same at one seed (ADR 0916)", () => {
+    const family = { idPrefix: "", code: "X", contexts: ["root"], variantPrefix: "v2", outcome: "false-clean", item: "x" };
+    const picked = familyIds(rows, [], { families: [family], seed: 1 });
+    expect(picked).toHaveLength(1);
+    expect(["d", "f"].includes(picked[0]) && rows.find((one) => one.id === picked[0]).code).toBe("X");
+    expect(familyIds(rows, [], { families: [family], seed: 1 })).toEqual(picked);
+    expect(familyIds(rows, ["d"], { families: [family] })).toEqual([]);
+    expect(familyIds(rows, [], { families: [{ ...family, code: "Z" }] })).toEqual([]);
+    expect(sample({ grids: ["mx-recall"], codes: ["STRICT_READ_UNTRACKED"], families: [{ idPrefix: "mx-strict-read-untracked-", code: "STRICT_READ_UNTRACKED", contexts: ["ref-row"], variantPrefix: "store-dstr-", outcome: "false-clean", item: "x" }] }).byGrid["mx-recall"].some((id) => id.includes("-ref-row-"))).toBe(true);
   });
   it("gives each grid its share", () => {
     const { byGrid, programs } = sample({ grids: ["mx-base", "lg-base"], codes: ["STRICT_READ_UNTRACKED"] });

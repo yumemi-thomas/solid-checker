@@ -1,8 +1,9 @@
 name: Fuzz smoke
 
-# The fuzzer's tiers below the full grids (ADR 0615; the full grids stay in fuzz-audit.yml). A pull request that can move a verdict: the census and the
-# all-pairs sample (cover.mjs), the ledger's programs and the behaviour manifests within it, at a fixed seed, so a failure belongs to the pull request.
-# Nightly, or by hand before a merge: the pairs within each code, the nightly lane on a seed of the day. A run judges a program as the audit does and
+# The fuzzer's tiers below the full grids (ADR 0615; the full grids stay in fuzz-audit.yml). A pull request that can move a verdict: the all-pairs
+# sample (cover.mjs; the census in it, a recall program by its pairs with its code, ADR 0916), the ledger's programs and the behaviour manifests within
+# it, at a fixed seed, so a failure belongs to the pull request. Nightly, or by hand before a merge: the whole census and the pairs within each code,
+# the nightly lane on a seed of the day. A run judges a program as the audit does and
 # fails on what the audit fails on. Runtime records are keyed by program bytes, never the checker: a push to main records the fixed sample's, and a pull
 # request reads them (11.4 programs a second against 6.4 cold, on these runners).
 
