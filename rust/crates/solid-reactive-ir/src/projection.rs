@@ -713,9 +713,8 @@ pub fn project_findings(
     );
     if capabilities.leaf_operations {
         findings.extend(
-            program
-                .leaf_operations
-                .iter()
+            distinct_leaf_operations(&program.leaf_operations)
+                .into_iter()
                 // A call written in the tracked scope has the rule's own finding.
                 .filter(|operation| {
                     !operation.observer_guarded()
@@ -857,6 +856,42 @@ pub fn project_findings(
 /// adjacent and equal, projected to adjacent equal findings, and
 /// [`finish_findings`]'s stable sort kept them adjacent and its `dedup`
 /// dropped them. Projecting one row of such a run leaves the same findings.
+/// ADR 0918: a function several owner calls receive by value is walked once
+/// per call, so the same operation at the same place comes once per
+/// registration, each under its own call-site gate. One finding stands for
+/// them, a proven one when any registration proves it (the operation throws
+/// on that registration's run). Order is the first registration's.
+fn distinct_leaf_operations(
+    operations: &[crate::LeafOwnerOperation],
+) -> Vec<&crate::LeafOwnerOperation> {
+    let same = |a: &crate::LeafOwnerOperation, b: &crate::LeafOwnerOperation| {
+        a.kind == b.kind
+            && a.owner == b.owner
+            && a.via == b.via
+            && a.fix == b.fix
+            && a.possible == b.possible
+            && a.identity_unproven == b.identity_unproven
+            && a.computation_error_unobserved == b.computation_error_unobserved
+    };
+    let mut kept: Vec<&crate::LeafOwnerOperation> = Vec::with_capacity(operations.len());
+    let mut at: crate::HashMap<&Location, Vec<usize>> = crate::HashMap::default();
+    for operation in operations {
+        let slots = at.entry(&operation.location).or_default();
+        match slots.iter().find(|slot| same(kept[**slot], operation)) {
+            Some(slot) => {
+                if kept[*slot].uncertain && !operation.uncertain {
+                    kept[*slot] = operation;
+                }
+            }
+            None => {
+                slots.push(kept.len());
+                kept.push(operation);
+            }
+        }
+    }
+    kept
+}
+
 fn distinct_runs<T>(rows: &[T], same: fn(&T, &T) -> bool) -> impl Iterator<Item = &T> {
     rows.iter()
         .enumerate()

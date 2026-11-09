@@ -211,8 +211,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 5252,
-      "end": 5268,
+      "start": 4883,
+      "end": 4892,
       "fixes": 0
     }
   ]

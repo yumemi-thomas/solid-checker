@@ -8,8 +8,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-named-callback/App.tsx",
-      "start": 1910,
-      "end": 1912,
+      "start": 1844,
+      "end": 1847,
       "fixes": 0
     },
     {

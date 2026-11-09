@@ -29,11 +29,17 @@ The callback must be a directly written function literal, an exact function
 reference, or a closed local callback return. For the last form, the adapter
 must have one unconditional return of a function literal or its exact callback
 parameter; the returned function is then checked in its own synchronous extent.
+A function named by value in the same file (a `const` or function declaration,
+a chain of `const` copies, a receiver-closed object literal's data slot) is
+walked as the literal is, each operation reported where it runs in the body,
+once however many leaf calls take it (ADR 0918); one in another file is
+reported at the argument.
 Exactly resolved project helpers are followed transitively: a function or
 `const` arrow, an import a path or alias resolves inside the program, and a
 method declared in `C` of a `const` bound to `new C(...)`. Conditional,
-aliased, wrapper-built, package, or otherwise unresolved callbacks produce
-`reactive-dispatch-unresolved` instead of being guessed. A nested function
+wrapper-built, package, or otherwise unresolved callbacks (a slot written or
+an object that escapes) produce `reactive-dispatch-unresolved` instead of being
+guessed. A nested function
 merely created by the callback executes outside the leaf extent, except a
 callback a project helper calls in its own body (`run(() => createMemo(…))`,
 through further such helpers, not in a parameter list or after an `await`):

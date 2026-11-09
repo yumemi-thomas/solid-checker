@@ -152,7 +152,14 @@ pub(super) fn leaf_owner_operations_for_file(
         // trusting a name, package, conditional, or wrapper with unknown
         // behavior. Every other valid opaque shape becomes SC9012.
         let callback_literal = callback_argument_literal(file, region);
-        if callback_literal.is_none() && file.ast.call_at(region).is_none() {
+        // ADR 0918: a callback named by value (a `const` or function
+        // declaration, a `const` copy of one, a receiver-closed literal's
+        // slot) whose function is in this file is walked as a literal is,
+        // so each operation is reported where it runs in the body.
+        let by_value = (callback_literal.is_none() && file.ast.call_at(region).is_none())
+            .then(|| callback_value_in_file(lookup, file, region))
+            .flatten();
+        if callback_literal.is_none() && by_value.is_none() && file.ast.call_at(region).is_none() {
             let callback_span = file.ast.peel_ts_sugar_span(region);
             // Preserve the identifier path's existing diagnostic anchor: the
             // owner receives the identifier itself, while the forbidden body
@@ -210,6 +217,7 @@ pub(super) fn leaf_owner_operations_for_file(
             }
         }
         let Some((callback_file, leaf_callback)) = callback_literal
+            .or(by_value)
             .map(|callback| (file, callback))
             .or_else(|| callback_argument_function(lookup, file, region, 8))
         else {
@@ -496,7 +504,10 @@ pub(super) fn leaf_owner_operations_for_file(
             // a returned function as cleanup. That is a 2.0 idea: 1.x's
             // leaf owner threads return values elsewhere, so offering the
             // rewrite there would introduce a bug, not fix one.
-            let fix = (primitive.primitive() == Some(Primitive::OnCleanup)
+            // A body named by value may have other callers, where the
+            // rewrite would change what runs (ADR 0918).
+            let fix = (by_value.is_none()
+                && primitive.primitive() == Some(Primitive::OnCleanup)
                 && owner
                     .primitive()
                     .is_some_and(|owner| dialect.accepts_cleanup_return(owner)))
@@ -658,6 +669,39 @@ fn callback_argument_function<'a>(
         | solid_facts::ast::ReturnValueKind::Member
         | solid_facts::ast::ReturnValueKind::Other => None,
     }
+}
+
+/// ADR 0918: the function a callback argument holds by value, when it is
+/// declared in `file`: what [`crate::owners::exact_function_argument`]
+/// resolves (a `const` holding the function, a chain of `const` copies, a
+/// receiver-closed object literal's data slot), or else the exact function
+/// the identifier's symbol names (a function declaration). A generator runs
+/// none of its body when called, so it is never one; neither is a function
+/// in another file, which stays the summary at the argument.
+fn callback_value_in_file<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &'a FileFacts,
+    argument: Span,
+) -> Option<&'a solid_facts::ast::FunctionFact> {
+    let function = match crate::owners::exact_function_argument(file, argument, lookup) {
+        Some((path, span)) => {
+            if path != file.path.as_str() {
+                return None;
+            }
+            file.ast.function_at(span)?
+        }
+        None => {
+            let symbol = lookup
+                .entities()
+                .at(file.path.as_str(), file.ast.peel_ts_sugar_span(argument))?;
+            let (callback_file, function) = lookup.function_for_symbol(symbol)?;
+            if callback_file.path != file.path {
+                return None;
+            }
+            function
+        }
+    };
+    (!function.generator).then_some(function)
 }
 
 /// The sole unconditional return of a local callback adapter.
