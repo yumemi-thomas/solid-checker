@@ -89,6 +89,24 @@ describe("the workflow's lean and full audits", () => {
     expect(workflow).toContain("name: oracle-${{ matrix.grid }}-part${{ matrix.part }}");
     expect(workflow).toContain('mv "$d" "$RUNNER_TEMP/oracle/${name%-part*}/part-${name##*-part}"');
   });
+  it("imports with no installed package: the pick and report jobs install none (run 42517832347 failed on call-starts.mjs's TypeScript)", () => {
+    // Each job's steps up to its `audit.mjs` call: checkout, setup-node, download-artifact, nothing that installs.
+    for (const job of ["pick", "report"]) {
+      const steps = workflow.slice(workflow.indexOf(`\n  ${job}:\n`), workflow.indexOf(`audit.mjs ${job}`));
+      expect(steps).not.toMatch(/npm (ci|install)|bun install|setup-bun/);
+    }
+    const probe = [
+      'import { isBuiltin, registerHooks } from "node:module";',
+      "registerHooks({ resolve(specifier, context, next) {",
+      '  if (!/^(node:|\\.|\\/|file:)/.test(specifier) && !isBuiltin(specifier)) throw new Error(`installed package: ${specifier}`);',
+      "  return next(specifier, context);",
+      "} });",
+      `await import(${JSON.stringify(new URL("./audit.mjs", import.meta.url).href)});`,
+    ].join("\n");
+    const run = spawnSync(process.execPath, ["--input-type=module", "-e", probe], { encoding: "utf8" });
+    expect(run.stderr).not.toContain("installed package");
+    expect(run.status).toBe(0);
+  });
 });
 
 describe("the audit's verdict", () => {

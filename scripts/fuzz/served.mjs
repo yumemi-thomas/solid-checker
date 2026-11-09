@@ -4,7 +4,10 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ts = createRequire(join(resolve(dirname(fileURLToPath(import.meta.url)), "../../packages/cli"), "package.json"))("typescript");
+// Loaded on first use, never on import (as call-starts.mjs): audit.mjs reaches this module through codes.mjs, and its `pick` and `report`
+// jobs run with no install and parse no program.
+let loaded = null;
+const typescript = () => (loaded ??= createRequire(join(resolve(dirname(fileURLToPath(import.meta.url)), "../../packages/cli"), "package.json"))("typescript"));
 
 /**
  * A module of the program besides App.tsx (`helpers.ts`, `el.ts`): a top-level `.ts`/`.tsx` source, not a declaration file, the
@@ -22,6 +25,7 @@ const COMPILED_HANDED = { insert: 1, effect: 0, memo: 0 };
  * checker row is on the expression. The value's own start, mapped back by the caller, is that expression's.
  */
 export function compiledHanded(code) {
+  const ts = typescript();
   const text = String(code ?? "");
   const file = ts.createSourceFile("served.js", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const imported = new Map();
