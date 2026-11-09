@@ -48,6 +48,17 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/named-apply-helper-callback/App.tsx",
+      "start": 1273,
+      "end": 1280,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/named-apply-helper-callback/App.tsx",
       "start": 1470,
       "end": 1477,
       "fixes": 0
