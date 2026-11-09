@@ -11,6 +11,7 @@ import { evaluate } from "./pipeline.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { requireTypeChecker, resolveTsc } from "./typecheck.mjs";
 import { runtimeEvents } from "./classify.mjs";
+import { inFileOf } from "./codes.mjs";
 
 const THROWS = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
 const options = parseArgs(process.argv.slice(2));
@@ -29,7 +30,7 @@ try {
     const value = results.get(built.id);
     const site = built.sites[0];
     const events = value.runtime ? runtimeEvents(value.runtime) : [];
-    const at = events.filter((event) => event.positions.some((position) => position.line === site.line));
+    const at = events.filter((event) => event.positions.some((position) => inFileOf(position) && position.line === site.line));
     const codes = [...new Set(at.map((event) => event.code))];
     const throws = codes.some((code) => THROWS.includes(code));
     const siteHits = value.runtime?.hits?.[site.hit] ?? null;

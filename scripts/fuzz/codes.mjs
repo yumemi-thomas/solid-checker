@@ -209,14 +209,20 @@ const handedCovers = (at, finding, code) => handedCodes.includes(code) && withho
 export const withheldAtStack = (finding, stack, mount = () => true, code = null) => (stack ?? []).some((frame, depth) =>
   (frame.handRead ? finding.line === frame.line
     : Number.isInteger(frame.column) && (frame.starts ?? [frame]).some((at) => finding.line === at.line && finding.column === at.column
-      && (!at.handed || handedCovers(at, finding, code))))
+      && (!at.handed || handedCovers(at, finding, code)) && !(at.compiled && withholdingRules.includes(finding.rule))))
   && (depth === 0 || !mount(frame)));
+
+export { isProgramModule } from "./served.mjs";
+
+/** Whether a recorded position is in `file` (a position with no file is App.tsx's, as the oracle and the hosts record it). */
+export const inFileOf = (position, file = "App.tsx") => (position.file ?? "App.tsx") === file;
 
 /**
  * The stack of a diagnostic's positions, innermost first, with another file's frames kept but blank: they place nothing, and depth stays
- * the depth in the whole stack, so the top authored frame is the real one (R20) and a deeper App.tsx frame still takes the mount test.
+ * the depth in the whole stack, so the top authored frame is the real one (R20) and a deeper frame of `file` still takes the mount test.
+ * `file` is App.tsx unless a finding of another module of the program is judged (matrix.mjs, ADR 0921): only that module's frames place it.
  */
-export const appStack = (positions) => (positions ?? []).map((position) => (position.file === "App.tsx" || position.file === undefined ? position : { file: position.file, line: -1 }));
+export const appStack = (positions, file = "App.tsx") => (positions ?? []).map((position) => (inFileOf(position, file) ? position : { file: position.file, line: -1 }));
 
 /**
  * A stack's frames with `starts` (call-starts.mjs `callStarts`): a frame in the callee of a call, `new`, tagged template or JSX tag also
@@ -224,9 +230,14 @@ export const appStack = (positions) => (positions ?? []).map((position) => (posi
  * the starts for a frame (at its depth) of the program's text, or null when the frame's file has none.
  */
 export const withStarts = (stack, startsOf) => (stack ?? []).map((frame, depth) => {
-  if (!Number.isInteger(frame.column) || !startsOf) return frame;
-  const starts = startsOf(frame, depth);
-  return starts ? { ...frame, starts } : frame;
+  if (!Number.isInteger(frame.column)) return frame;
+  const own = startsOf ? startsOf(frame, depth) : null;
+  // ADR 0921: the top frame at a compiled `insert`/`effect`/`memo` call (chrome-host.mjs records `compiled`) also stands for the start of
+  // the expression that call was handed, the computation Solid's diagnostic is about; for a claiming or declining finding only, never a
+  // withholding (`withheldAtStack`), and never deeper, where the frame is a call through it.
+  const compiled = depth === 0 ? (frame.compiled ?? []).filter((at) => Number.isInteger(at?.line) && Number.isInteger(at?.column)).map((at) => ({ line: at.line, column: at.column, compiled: true })) : [];
+  if (!compiled.length) return own ? { ...frame, starts: own } : frame;
+  return { ...frame, starts: [...(own ?? [{ line: frame.line, column: frame.column }]), ...compiled] };
 });
 
 /** Whether `finding` is an uncertifiable finding of a rule that declines `code` (the policy's `declining`). */

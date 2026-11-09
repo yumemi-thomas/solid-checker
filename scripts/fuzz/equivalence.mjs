@@ -26,7 +26,7 @@ import { chromeCacheFor } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { assertFindingsMapped, materializeForChecker, runChecker, siteVerdicts } from "./checker.mjs";
 import { disturbances, runtimeEvents } from "./classify.mjs";
-import { codesForRule, isDefectCode } from "./codes.mjs";
+import { codesForRule, inFileOf, isDefectCode } from "./codes.mjs";
 import { hitCount } from "./hits.mjs";
 import { isSite, walk } from "./model.mjs";
 import { shrink } from "./shrink.mjs";
@@ -216,7 +216,7 @@ export function runtimeAtSite(built, record, siteId, verdict) {
   const spans = [[site.line, site.line], ...spansOf(verdict)];
   const inside = (line) => spans.some(([from, to]) => from <= line && line <= to);
   const events = runtimeEvents(record.runtime);
-  const codes = [...new Set(events.filter((event) => isDefectCode(event.code) && event.positions.some((position) => inside(position.line))).map((event) => event.code))].sort();
+  const codes = [...new Set(events.filter((event) => isDefectCode(event.code) && event.positions.some((position) => inFileOf(position) && inside(position.line))).map((event) => event.code))].sort();
   const witness = record.runtime.witnesses?.find((candidate) => candidate.siteId === siteId);
   const ran = witness?.reached === true || hitCount(record.runtime.hits ?? null, site.hit) > 0;
   return { codes, ran, disturbed: disturbances(record.runtime, built.plan), line: site.line };

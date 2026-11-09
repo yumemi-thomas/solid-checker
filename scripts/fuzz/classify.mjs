@@ -32,7 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { withholdingRules, codeOfLogged, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, withheldAtStack, withStarts } from "./codes.mjs";
+import { withholdingRules, codeOfLogged, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, inFileOf, isProgramModule, withheldAtStack, withStarts } from "./codes.mjs";
 import { ORDER_LIMIT, hitCount } from "./hits.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
 import { registrationLines } from "./registration.mjs";
@@ -42,7 +42,8 @@ export const VERDICTS = ["candidate-false-positive", "candidate-false-clean", "c
 const rank = (verdict) => VERDICTS.indexOf(verdict);
 
 const inSpan = (finding, line) => finding.line <= line && line <= finding.endLine;
-const lines = (positions) => (positions ?? []).map((position) => position.line);
+// App.tsx's lines only: a frame in another module (`el.ts:2`, recorded with its own line) is no line of the findings judged here.
+const lines = (positions) => (positions ?? []).filter((position) => inFileOf(position)).map((position) => position.line);
 
 /**
  * The identifier chain (`r1`, `s1.v`, `props.items`) through the 1-based (line, column) of a program's `lines`, or null: the source a report
@@ -425,7 +426,9 @@ export function diagnosticItems(events, findings, registrationLines = () => [], 
     const claims = (finding, atSite) => coversCodeAt(event.code, finding, atSite);
     const unplacedDiagnostic = { code: event.code, line: null, message: event.message, severity, source: event.source, unplaced: true, frames: [] };
     if (!attributed.length) {
-      if (!placeless && event.positions.some((position) => Number.isInteger(position.line))) continue;
+      // Placed in a file that is not the program's (an oracle record's package frame): not this file's diagnostic. One placed only in
+      // another module of the program stays unplaced here (ADR 0921: only the matrix judge reads those modules' findings).
+      if (!placeless && event.positions.some((position) => Number.isInteger(position.line) && !isProgramModule(position.file))) continue;
       if (!placeless) {
         // Chrome gave a code with a place no position: the judge cannot place it. Unjudged, never a pass or a false clean (`unplaced`).
         items.push({ kind: "unplaced", reason: `${event.code}: Chrome gave no position, so no finding can be judged against it`, diagnostic: unplacedDiagnostic });
