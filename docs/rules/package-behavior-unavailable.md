@@ -18,10 +18,9 @@ the Vite and Solid plugin premises. Unsupported source selection, unavailable
 files, unresolved callback behavior and source-edge refusals keep the exact
 package obligation open, and so does selected source holding a call to a
 value that is not callable, which no project `tsc` run checks (ADR 0368). Missing
-module/type errors belong to TypeScript. An installed manifest that exists and
-cannot be read or parsed keeps the requirement, and a host-inference input that
-does (a dangling link, denied access, a bad manifest) is one project row,
-blocker `host-input-unreadable` (ADR 0915).
+module/type errors belong to TypeScript. An unreadable installed manifest keeps
+the requirement; an unreadable host-inference input is one row,
+`host-input-unreadable` (ADR 0915).
 
 Provide analyzable runtime source and the correct host configuration where
 supported. There is no contract, catalog or receipt workflow that can discharge
