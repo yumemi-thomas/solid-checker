@@ -12,7 +12,8 @@
 //!
 //! The walk is per entry: one entry that reports keeps the violation,
 //! whatever the function's other entries are. What it cannot follow is
-//! [`ThrowEnd::Open`], which changes nothing.
+//! [`ThrowEnd::Open`], which changes nothing, unless every place the walk
+//! stopped is written in a compute that stores its error (ADR 0914).
 
 use solid_dialect::{Execution, Primitive};
 use solid_facts::FileFacts;
@@ -59,15 +60,17 @@ pub(crate) fn throw_end(
     context: &StaticApiContext<'_>,
     thrower: Thrower,
 ) -> ThrowEnd {
-    let walk = Walk {
-        allowed,
-        context,
-        thrower,
-    };
+    let walk = Walk::new(allowed, context, thrower);
     match walk.site(file, site, THROW_DEPTH) {
         // Nothing followed reaches the site, and it is written in a compute
-        // that stores its error: that compute is the one run in view.
-        ThrowEnd::Open if walk.inside_unread_compute(file, site, THROW_DEPTH) => {
+        // that stores its error: that compute is the one run in view. ADR
+        // 0914: so is one around each function whose entries the walk could
+        // not find, when that is all that stopped it (`wrapUse()` in the
+        // arrow a constructor stores, the class written in a memo).
+        ThrowEnd::Open
+            if walk.inside_unread_compute(file, site, THROW_DEPTH)
+                || walk.stops_inside_unread_compute(file, THROW_DEPTH) =>
+        {
             ThrowEnd::Unobserved
         }
         end => end,
@@ -137,9 +140,54 @@ struct Walk<'w, 'c> {
     allowed: &'w [Span],
     context: &'w StaticApiContext<'c>,
     thrower: Thrower,
+    /// ADR 0914: where the walk ended [`ThrowEnd::Open`].
+    stops: std::cell::RefCell<Stops>,
+}
+
+/// The places a walk could not go on from.
+#[derive(Default)]
+struct Stops {
+    /// Functions with no entry the walk found, by file.
+    functions: Vec<(String, Span)>,
+    /// Any other open end (an observer question, an execution not read, a
+    /// lazy compute): the lexical fallback then proves nothing.
+    other: bool,
+}
+
+impl<'w, 'c> Walk<'w, 'c> {
+    fn new(allowed: &'w [Span], context: &'w StaticApiContext<'c>, thrower: Thrower) -> Self {
+        Self {
+            allowed,
+            context,
+            thrower,
+            stops: std::cell::RefCell::default(),
+        }
+    }
 }
 
 impl Walk<'_, '_> {
+    /// An open end that is not a function with no entry.
+    fn open(&self) -> ThrowEnd {
+        self.stops.borrow_mut().other = true;
+        ThrowEnd::Open
+    }
+
+    /// Every place the walk stopped is a function with no entry found, written
+    /// in `file` inside a compute that stores its error. Such a function runs
+    /// only where something holding it is called, and the walk found none: the
+    /// compute around it is the run in view, as it is for a site written there.
+    fn stops_inside_unread_compute(&self, file: &FileFacts, depth: usize) -> bool {
+        let stops = self.stops.borrow();
+        let functions = stops.functions.clone();
+        let other = stops.other;
+        drop(stops);
+        !other
+            && !functions.is_empty()
+            && functions.iter().all(|(path, function)| {
+                path == file.path.as_str() && self.inside_unread_compute(file, *function, depth)
+            })
+    }
+
     fn site(&self, file: &FileFacts, site: Span, depth: usize) -> ThrowEnd {
         let Some(depth) = depth.checked_sub(1) else {
             return ThrowEnd::Unobserved;
@@ -147,7 +195,7 @@ impl Walk<'_, '_> {
         let lookup = self.context.lookup;
         let observer = self.thrower == Thrower::UnderObserver;
         if observer && crate::execution_role::past_suspension(file, site, lookup).is_some() {
-            return ThrowEnd::Open;
+            return self.open();
         }
         // A climb that stopped is walked on from where it stopped.
         let climb = crate::execution_role::climb_in_place_layers(file, site, lookup)
@@ -157,7 +205,7 @@ impl Walk<'_, '_> {
                 .as_ref()
                 .is_some_and(|climb| climb.suspended.is_some())
         {
-            return ThrowEnd::Open;
+            return self.open();
         }
         let at = climb.map_or(site, |climb| climb.at);
         if caught(file, site) || caught(file, at) {
@@ -178,7 +226,7 @@ impl Walk<'_, '_> {
         }
         let Some(function) = function else {
             return if observer {
-                ThrowEnd::Open
+                self.open()
             } else {
                 ThrowEnd::Reported
             };
@@ -187,14 +235,14 @@ impl Walk<'_, '_> {
             callback.role == CallbackRoleKind::EventHandler && callback.span == function.span
         }) {
             return if observer {
-                ThrowEnd::Open
+                self.open()
             } else {
                 ThrowEnd::Reported
             };
         }
         if lookup.function_component_status(file, function) == ComponentStatus::Proven {
             return match (observer, handled_above(file, at, lookup, MOUNT_DEPTH)) {
-                (true, _) => ThrowEnd::Open,
+                (true, _) => self.open(),
                 (false, true) => ThrowEnd::Unobserved,
                 (false, false) => ThrowEnd::Reported,
             };
@@ -235,7 +283,7 @@ impl Walk<'_, '_> {
         let Some(primitive) = lookup.primitive_at_call(file, container.span) else {
             return match crate::owners::containing_body_function(&file.ast, at) {
                 Some(function) => self.entries(file, function, depth),
-                None => ThrowEnd::Open,
+                None => self.open(),
             };
         };
         let dialect = lookup.dialect;
@@ -268,7 +316,7 @@ impl Walk<'_, '_> {
             Some(Execution::Inline) if !(observer && deferred) => {
                 self.site(file, container.span, depth)
             }
-            _ => ThrowEnd::Open,
+            _ => self.open(),
         }
     }
 
@@ -501,7 +549,7 @@ impl Walk<'_, '_> {
         match (reaches_host, self.thrower) {
             (false, _) => ThrowEnd::Unobserved,
             (true, Thrower::Always) => ThrowEnd::Reported,
-            (true, Thrower::UnderObserver) => ThrowEnd::Open,
+            (true, Thrower::UnderObserver) => self.open(),
         }
     }
 
@@ -574,7 +622,7 @@ impl Walk<'_, '_> {
         let read_runs =
             reads().any(|read| SiteReach::new(lookup).site(file, read.span) == Reach::MayRun);
         if lazy && !read_runs {
-            return ThrowEnd::Open;
+            return self.open();
         }
         ThrowEnd::Unobserved
     }
@@ -586,12 +634,7 @@ impl Walk<'_, '_> {
         SiteReach::new(lookup).site(file, read) == Reach::MayRun
             && crate::execution_role::past_suspension(file, read, lookup).is_none()
             && !in_component_getter(file, read, lookup)
-            && Walk {
-                allowed: self.allowed,
-                context: self.context,
-                thrower: Thrower::Always,
-            }
-            .site(file, read, depth)
+            && Walk::new(self.allowed, self.context, Thrower::Always).site(file, read, depth)
                 == ThrowEnd::Reported
     }
 
@@ -618,7 +661,9 @@ impl Walk<'_, '_> {
                 )]
             });
         let mut end = ThrowEnd::Open;
+        let mut entered = false;
         for (reference, hand_off) in hand_offs {
+            entered = true;
             let entry = match hand_off {
                 HandOff::Call => file
                     .ast
@@ -654,6 +699,14 @@ impl Walk<'_, '_> {
                 ThrowEnd::Unobserved => end = ThrowEnd::Unobserved,
                 ThrowEnd::Open => {}
             }
+        }
+        // ADR 0914: a function with no entry found (a class constructor run by
+        // `new`, a member nothing here names) is where the walk stopped.
+        if !entered {
+            self.stops
+                .borrow_mut()
+                .functions
+                .push((file.path.to_string(), function.span));
         }
         end
     }

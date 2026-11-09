@@ -1241,3 +1241,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/top-window-local/node_modules/**
 !fixtures/reactive-ir/primitive-indirect-call/node_modules/
 !fixtures/reactive-ir/primitive-indirect-call/node_modules/**
+!fixtures/reactive-ir/stored-throw-class-member-wrapper/node_modules/
+!fixtures/reactive-ir/stored-throw-class-member-wrapper/node_modules/**
