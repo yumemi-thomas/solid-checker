@@ -161,7 +161,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   path claims no more (ADR 0694). A real read there stays a violation.
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
-  scope only stores has no execution role; a read there is reported as
+  scope only stores, or a forwarded callback in a flow row or named ref
+  (ADR 0920) has no execution role; a read there is reported as
   **uncertifiable**, never dropped. A read past the strict-read window (after
   an unconditional `await`) or in several non-reporting roles (ADR 0323) is
   proven silent.
