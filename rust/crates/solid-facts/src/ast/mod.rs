@@ -51,7 +51,9 @@ use thiserror::Error;
 /// 92 (review D36): `const local = S.key` and a slot whose default is exactly
 /// `S.key` are namespace member bindings; no ADR 0481 member alias in a file
 /// with a direct `eval` or a `with` statement.
-pub const AST_FACTS_SCHEMA: u32 = 92;
+/// 93 (ADR 0923): each `throw`'s operand, and a `catch` clause's identifier
+/// parameter.
+pub const AST_FACTS_SCHEMA: u32 = 93;
 
 mod argument_completion;
 mod completion_call_cover;
