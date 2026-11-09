@@ -1428,7 +1428,7 @@ At a check per core (24 slots on 12 vCPUs warm), each check still spread its rea
 
 <a id="adr-0598"></a>
 ## ADR 0598 — The recall grids are lean by default
-`--recall` omits `LEAN_DEMOTED` (matrix.mjs): mounts `show-fallback`, `show-keyed`, `for-signal`, `for-unkeyed`, `for-fallback`, `switch`, `repeat`, `loading`, `loading-on`, `errored`, `portal` and callback forms `function`, `let`; `--recall-full` restores them. On the VM (cd08cd408, seed 1, `--role-log`) a full run (mx-recall 754,182 and lg-recall 311,521 judged) and a lean run (438,426 and 185,791) both had 0 false positives, false cleans, wrong-rule, unexecuted and tsc-overlap, and hit the same 94 of 172 role arms. `redundancy.mjs` on the full run: each demoted mount answers as `show-signal` on every program (27,528 misuse and 11,022 legal each, 0 differ), `loading` as the root program, `function` and `let` as `const`; kept values differ (`dynamic` 11,784 misuse, `for-item` 4, `named` 310, `shared` 768). Nightly audits are lean; Sunday and manual `recall: full` runs are full; a report is compared only with an earlier audit of its mode. Trade: a defect only a demoted value shows is found weekly, not nightly; `rediscovery.json` `fullIds` pins such programs. Table: scripts/fuzz/README.md ("Demoting saturated recall values").
+`--recall` omits `LEAN_DEMOTED` (matrix.mjs: mounts such as `show-keyed`, `for-signal`, `loading`, `portal`, callback forms `function`, `let`); `--recall-full` restores them. Measured (VM, cd08cd408): full and lean runs alike, 0 false positives or false cleans, the same 94 of 172 role arms; each demoted value answers as a kept one (`redundancy.mjs`). Evidence: scripts/fuzz/README.md ("Demoting saturated recall values"). Nightly audits are lean; Sunday and manual `recall: full` runs are full; a report is compared only with an earlier audit of its mode. Trade: a defect only a demoted value shows is found weekly, not nightly; `rediscovery.json` `fullIds` pins such programs.
 
 <a id="adr-0599"></a>
 ## ADR 0599 — Editor latency: what a result chunk's stage proof holds, and per-declaration indexes
@@ -2370,6 +2370,10 @@ The walk found no entry of a class constructor or method and ended `Open`; a wra
 <a id="adr-0916"></a>
 ## ADR 0916 — The PR sample fits an hour
 ADR 0615's PR tier took 52-85 min of 60. A recall program counts its `code` pairs; the census is sampled. `cover.mjs`.
+
+<a id="adr-0917"></a>
+## ADR 0917 — Legal templates rc.21 Chrome contradicted
+lg-recall on 6c2e63ecf. `iter-*` (ADR 0803; 36,168 `not-legal`): `refresh(m)` has no slot (`markRefresh` reports under any owner), so only `signal`, `store`; a `module-barrel` tuple, made before App.tsx's patch runs, gets it first in `helpers.ts` (`moduleTop`). FLUSH_IN_ACTION `wh-action-late` (40 `disturbed`): `action()` throws when the body calls it; a handler calls it.
 
 <a id="adr-0918"></a>
 ## ADR 0918 — A leaf callback named by value is walked in its body
