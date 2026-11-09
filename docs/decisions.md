@@ -2351,6 +2351,10 @@ mx-recall on 6c2e63ecf, causes 7-8. The Chrome host mapped no frame outside App.
 ## ADR 0922 — A delete is reported at its operand's root
 mx-recall 6c2e63ecf: 36 `sw-delete-call` false cleans, U at the `(` of `delete (swId(s.a) as T).v`. The compiler drops the operand's `()`, `as`, `satisfies` and `!`; V8 gives a delete no position, so Chrome's frame is the operand's last positioned expression (a call, a link) or the statement. SC2003 reports a delete from its chain's root, through them (`delete_anchor`). An assignment, update or mutator call keeps the member's start (its frame is the property). Fuzz `sw-delete-link`, fixture `store-delete-anchor`.
 
+<a id="adr-0923"></a>
+## ADR 0923 — A thrown value's catch and a default export's importers are walked
+mx-recall at a0cbb930e (ADR 0921's judge): 414 false cleans, `use-throw*`, `use-namespace-throw`, `use-export-default-*`. A `throw` operand had no holder, so SC9012 sat on the thrown value, never at the `catch`'s call Chrome reports; a default export of a literal or call stopped at the export. Facts 93 record each `throw`'s operand and an identifier `catch` parameter. The census holds the operand (`value-thrown`, its row kept) and walks, as past an escape, the parameter of the innermost `try` around it in the same function, out of an anonymous synchronous IIFE through its one call; elsewhere the row stays at the `throw`. A default export is followed into the references of the compiler symbol declared exactly at that statement, reached from an import's alias target; its row stays. 414 to recall-gap, and REACTIVE_WRITE_IN_OWNED_SCOPE's 36 `use-write-throw`; nothing else moved (base, src, combo, pairs, legal).
+
 <a id="adr-0924"></a>
 ## ADR 0924 — `untrack` takes no parent's value
 `async-value-dstr` too (ADR 0628): it suspended, 11 mx-combo `harness` rows. Drawn, it is `local`.
