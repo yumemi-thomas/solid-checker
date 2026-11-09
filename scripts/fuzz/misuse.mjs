@@ -79,9 +79,10 @@ const valueSource = (source) => source === "prop-value" || source === "async-val
  * `props`/`context` need none; a value source needs a bare read (`w1()`) at the site and a binding that keeps the read there (an alias
  * of `props.w1` would read it on the alias's line); a template may refuse a source in a context (`sourcesNotIn`).
  */
-export function sourcesOf(code, variant, binding, context) {
+export function sourcesOf(code, variant, binding, context, { draw = false } = {}) {
   const spec = SPEC[code];
-  const excluded = spec.sourcesNotIn?.[context] ?? [];
+  // `draw` (a combination's draw list): a source a context refused after the combination grids were drawn (`drawHeld`) keeps its place.
+  const excluded = (spec.sourcesNotIn?.[context] ?? []).filter((source) => !(draw && spec.drawHeld?.[context]?.includes(source)));
   const sigs = spec.setup(variant, (prefix) => `${prefix}1`);
   if (!sigs.length) return ["local"];
   const isAsync = sigs.some((sig) => sig.kind === "async");
@@ -593,8 +594,10 @@ export const SPEC = {
   // at its site `disturbed` instead of judging it (60 lg-recall programs on the 644bd1a81 run, the `cb-*` forms of `memo`).
   // `untrack` (ADRs 0619, 0628): rc.21 throws for a source the body running it created, directly or through a hook it calls. A module
   // source or a parent's is another owner's: the read suspends, so no code (and a body re-run onto a fresh memo never ends).
+  // ADR 0924: `async-value-dstr` (ADR 0824) is a parent's too; with no `<Loading>` its NotReady fails `render`, so a combination's
+  // button never mounts (11 `harness` rows). `drawHeld`: a combination's draw keeps its place, and a draw of it takes `local`.
   // `labelled`: `untrack(fn, "label")` opens a window of its own, so it throws on any pending source.
-  PENDING_ASYNC_UNTRACKED_READ: { recallLegal: ["prop-unread-cap", "prop-unread-member", "prop-unread-lower"], legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"], untrack: ["module", "module-barrel", "async-prop", "async-value", "async-value-member", "async-context", "async-loading"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
+  PENDING_ASYNC_UNTRACKED_READ: { recallLegal: ["prop-unread-cap", "prop-unread-member", "prop-unread-lower"], legalLoading: { memo: true }, sourcesNotIn: { "effect-apply-guarded-rerun": ["module", "module-barrel"], "render-apply-guarded-rerun": ["module", "module-barrel"], untrack: ["module", "module-barrel", "async-prop", "async-value", "async-value-member", "async-value-dstr", "async-context", "async-loading"] }, drawHeld: { untrack: ["async-value-dstr"] }, legal: ["memo", "effect-apply-guarded", "render-apply-guarded", "effect-apply-guarded-closure", "render-apply-guarded-closure", "effect-apply-guarded-rerun", "render-apply-guarded-rerun"],
     // ADR 0635: an uninitialized derive refuses key probes.
     recallVariants: ["deferred", "labelled", "store-keys", "store-in", "store-has-own", "over-async"], recallMountsNotIn: { untrack: ["dynamic"] }, bindingsFor: (variant) => (variant?.startsWith("store-") ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     variantContexts: { deferred: ["body", "root", "effect-apply", "render-apply"], labelled: ["body", "root"], "store-keys": ["body", "root"], "store-in": ["body", "root"], "store-has-own": ["body", "root"], "over-async": ["body", "root", "untrack"] },
@@ -1978,9 +1981,12 @@ function buildOne(kit, plan = {}) {
     nameCallback(placed, context, plan.callback, kit);
   }
   // A drawn source (a combination program, `buildCombo`) is never a recall-only one (SOURCE_AXES.files): those are the `--recall`
-  // grids' shapes, and drawing them moved the combination grids' programs. Nor a grid-only one (`GRID_ONLY_SOURCES`).
-  const source = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context).filter((s) => !SOURCE_AXES.files.includes(s) && !GRID_ONLY_SOURCES.includes(s))) : plan.source ?? "local";
-  if (!sourcesOf(code, variant, binding, context).includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
+  // grids' shapes, and drawing them moved the combination grids' programs. Nor a grid-only one (`GRID_ONLY_SOURCES`). A held source
+  // (`drawHeld`, ADR 0924) is drawn as before and taken as `local`, so no other combination moves.
+  const takes = sourcesOf(code, variant, binding, context);
+  const drawn = plan.source === "draw" ? rng.pick(sourcesOf(code, variant, binding, context, { draw: true }).filter((s) => !SOURCE_AXES.files.includes(s) && !GRID_ONLY_SOURCES.includes(s))) : null;
+  const source = drawn === null ? plan.source ?? "local" : takes.includes(drawn) ? drawn : "local";
+  if (!takes.includes(source)) throw new Error(`${code}/${variant}/${binding} cannot take source ${source}`);
   // A parent source renders the component from its parent, plainly; the mount axis is not crossed with it, but in the pair grids
   // (`--pairs mount-source`), which name both: the parent then creates the values and mounts the component as the mount says.
   const paired = plan.source !== undefined && plan.source !== "draw" && plan.mount !== undefined && plan.mount !== "root";

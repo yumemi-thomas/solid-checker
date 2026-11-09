@@ -422,6 +422,24 @@ describe("combination programs", () => {
     expect(siteOf(a.built)).toMatchObject({ code: cell.code, primary: true });
     expect(uses.filter((site) => !site.primary).every((site) => site.code !== cell.code && site.bind === "direct")).toBe(true);
   });
+  it("takes `local` for a held source a combination drew (ADR 0924), and the draw list keeps its place", async () => {
+    const { cellList, combined, generateShape, gridShapes, mountsOption, shapeId } = await import("./matrix.mjs");
+    const { sourcesOf, sourcesOption } = await import("./misuse.mjs");
+    const code = "PENDING_ASYNC_UNTRACKED_READ";
+    // A parent's pending value read in `untrack` suspends: the grid no longer takes it there, the draw list still holds it.
+    expect(sourcesOf(code, undefined, "direct", "untrack")).not.toContain("async-value-dstr");
+    expect(sourcesOf(code, undefined, "direct", "untrack", { draw: true })).toContain("async-value-dstr");
+    expect(sourcesOf(code, undefined, "direct", "body")).toContain("async-value-dstr");
+    expect(gridShapes(code, "untrack", ["root"], sourcesOption("async")).some((shape) => shape.source === "async-value-dstr")).toBe(false);
+    // mx-combo's `direct-iife-c` drew it on 6c2e63ecf (a `harness` row: `render` failed, no button); it is a body's own memo now.
+    const cell = cellList({ codes: [code], contexts: ["untrack"] })[0];
+    const shapes = combined(gridShapes(code, "untrack", mountsOption("root,child,show,for")), true);
+    const index = shapes.findIndex((shape) => shapeId(cell, shape) === "mx-pending-async-untracked-read-untrack-x-direct-iife-c");
+    const { program, built } = generateShape({ seed: 1 }, cell, shapes[index], index);
+    expect(program.components[0].misuse.source).toBeUndefined();
+    expect(built.files["App.tsx"]).toContain("const a1 = createMemo(async () => 1);");
+    expect(built.files["App.tsx"]).not.toContain("= props;");
+  });
   it("judges the primary site without the claims that cover another use", async () => {
     const { judge } = await import("./matrix.mjs");
     const site = { line: 10, aux: [] };
