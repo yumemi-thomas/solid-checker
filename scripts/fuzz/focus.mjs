@@ -55,7 +55,7 @@ import { gridStanding, heldLine, ledgerCovers, manifestIds, offLedger, readOpenD
 import { GRIDS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
-import { FIXED_SEED, writeSample } from "./cover.mjs";
+import { FIXED_SEED, wholeGrid, writeSample } from "./cover.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
@@ -72,7 +72,7 @@ export { GRIDS } from "./focus-grids.mjs";
 const ORACLE_CAP = 25;
 /** The census's oracle strata. */
 const CENSUS_ORACLE_AXES = "code,outcome";
-/** The grid that takes no manifest: it holds every program it has, and answers to nothing recorded, so a run lists all of it. */
+/** The census grid: its own cells and oracle strata. It runs whole beside a sample but the pull request's (cover.mjs `wholeGrid`, ADR 0916). */
 export const whole = (grid) => grid === "mx-census";
 /** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall and pair ones. */
 export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall") && !grid.endsWith("-pairs"));
@@ -272,7 +272,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       if (!/^\d+\/\d+$/.test(options.shard) || !(count >= 1) || !(index < count)) throw new Error(`focus.mjs: --shard takes i/N with 0 <= i < N, not ${options.shard}`);
     }
     for (const key of ["budgetMs", "budgetMb", "idleStretchS", "perfThreshold"]) if (options[key] !== undefined && !(Number(options[key]) >= 0)) throw new Error(`focus.mjs: --${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} takes a non-negative number`);
-    // A smoke run is the census and a covering sample of every grid (ADR 0615), the behaviour manifests and the ledger's programs within it.
+    // A smoke run is a covering sample of every grid, the census in it or whole beside it (ADRs 0615, 0916), the behaviour manifests and the ledger's programs within it.
     if (options.smoke) {
       options.cover ??= "all";
       options.oracleCap ??= String(ORACLE_CAP);
@@ -316,7 +316,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
-    const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: options.grids.split(",").filter((grid) => !whole(grid)), runSeed: options.seed, dir: join(out, "cover") }) : null;
+    const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: options.grids.split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
     const runUnit = (grid, script, shape, unit, manifest) => {
       // Room for the grid before it starts: a run that fills the disk midway fails late, with ENOSPC rows (ADR 0519's preflight runs at
       // sync only; a run of many codes writes a directory per program).
