@@ -4,11 +4,11 @@
   "SC1001 binding-before-initialization": 7,
   "SC1001 build-constant-arm": 3,
   "SC1001 callback-invocation-unproven": 3,
-  "SC1001 callee-callback-timing": 400,
+  "SC1001 callee-callback-timing": 401,
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1128,
+  "SC1001 function-run-unplaced": 1138,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -95,7 +95,7 @@
   "SC5001 async-options-opaque": 17,
   "SC5001 async-provenance-unproven": 14,
   "SC5001 async-read-caught": 2,
-  "SC5001 async-read-unaccounted": 23,
+  "SC5001 async-read-unaccounted": 22,
   "SC5001 binding-before-initialization": 1,
   "SC5001 call-attributed-read": 3,
   "SC5001 callee-callback-timing": 6,
@@ -108,7 +108,7 @@
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 source-module-unresolved": 1,
-  "SC5001 source-pending-unproven": 341,
+  "SC5001 source-pending-unproven": 342,
   "SC5003 async-options-opaque": 30,
   "SC5003 async-provenance-unproven": 125,
   "SC5003 async-read-caught": 3,
@@ -172,7 +172,7 @@
   "SC9012 leaf-callback-opaque": 123,
   "SC9012 listener-reach": 52,
   "SC9012 package-callee": 23,
-  "SC9012 parameter-call-argument-unproven": 46,
+  "SC9012 parameter-call-argument-unproven": 50,
   "SC9012 parameter-default-unresolved": 5,
   "SC9012 parameter-member-path-unresolved": 20,
   "SC9012 parameter-member-target-unresolved": 141,
@@ -213,7 +213,7 @@
   "SC9012 value-to-unresolved-callee": 255,
   "SC9012 value-use-unclassified": 45,
   "SC9012 withheld-object-member": 51,
-  "SC9014 dialect-detection": 150,
+  "SC9014 dialect-detection": 151,
   "SC9014 router-release": 4,
   "SC9015 compiler-facts": 4,
   "SC9016 suppression-comments": 4
@@ -1580,6 +1580,16 @@
     "open": "reactive-ir/value-use-census"
    },
    "note": "ADR 0923: the default-exported literal's own position (ReviewArray `[ra]`, ReviewObject `{ c: ro }`) is no longer the walk's last use: its importers' uses are walked and hold the rows (Review.tsx, value-thrown at the throw and at the catch's call); the reference's own row at the export stays"
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-call-attributed",
+   "key": "SC5001 async-read-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 0920",
+   "kind": "relabel",
+   "relabeledTo": "SC5001 source-pending-unproven",
+   "note": "`FlowCarrierInMemo`: `hf` in a For row is no longer a proven deferral, so the pending read stays uncertifiable under the source's own blocker"
   }
  ],
  "renames": []
