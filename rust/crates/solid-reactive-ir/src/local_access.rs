@@ -2383,6 +2383,47 @@ impl LocalAccessContext<'_, '_> {
             .then_some(value)
     }
 
+    /// ADR 0929: each setter or action reference `call` hands whole to an
+    /// exact project function that calls that parameter in its own body
+    /// ([`crate::execution_role::helper_argument_run`]), with whether the run
+    /// is proven: every completion calls it directly, on the call's stack and
+    /// under its owner, and the parameter has no other use. Otherwise the
+    /// callee may call it on some paths, or also elsewhere.
+    fn parameter_carried_targets(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Vec<(solid_facts::core::Span, bool)> {
+        let ast = &file.ast;
+        let mut targets = Vec::new();
+        for (index, argument) in call.arguments.iter().enumerate() {
+            if argument.spread {
+                break;
+            }
+            let value = ast.peel_ts_sugar_span(argument.span);
+            if ast.member_at(value).is_some() {
+                continue;
+            }
+            let Some(symbol) = self.lookup.callee_symbol(file, value) else {
+                continue;
+            };
+            if !self.setters.contains_key(symbol) && !self.actions.contains_key(symbol) {
+                continue;
+            }
+            let Some(run) =
+                crate::execution_role::helper_argument_run(file, call, index, self.lookup)
+            else {
+                continue;
+            };
+            targets.push((
+                value,
+                run.every_completion
+                    && run.uses == crate::execution_role::ParameterUses::OnlyCalled,
+            ));
+        }
+        targets
+    }
+
     /// ADR 0516: the reference `f` of a `Function.prototype` dispatch callee
     /// (`f.call`, `f.apply`, or a call `f.bind(…)`, non-computed members)
     /// when `f` is a known setter, accessor or action.
@@ -2589,6 +2630,29 @@ impl LocalAccessContext<'_, '_> {
         // provably runs it is judged as its call at the carrier.
         if let Some(target) = self.inline_carried_target(file, call) {
             self.discover_call_as(file, call, target, allowed, result, seen);
+        }
+        // ADR 0929: a setter or action handed whole to an exact project
+        // function that calls that parameter in its own body is judged as its
+        // call here: proven where every completion calls it directly and the
+        // parameter has no other use, else an obligation where it would report.
+        for (target, proven) in self.parameter_carried_targets(file, call) {
+            if proven {
+                self.discover_call_as(file, call, target, allowed, result, seen);
+                continue;
+            }
+            let mut held = LocalAccessResult::default();
+            self.discover_call_as(file, call, target, allowed, &mut held, seen);
+            for write in &mut held.writes {
+                if write.execution.reports_disallowed_write() {
+                    Arc::make_mut(write).execution = ExecutionRole::Unknown;
+                }
+            }
+            for action in &mut held.action_invocations {
+                if action.execution.reports_disallowed_write() {
+                    Arc::make_mut(action).execution = ExecutionRole::Unknown;
+                }
+            }
+            append_local_access_result_owned(result, held);
         }
         // ADR 0516: `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` invoke `f`
         // through `Function.prototype`. With `f` a known setter, accessor or

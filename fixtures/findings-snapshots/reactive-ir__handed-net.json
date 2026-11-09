@@ -1,6 +1,16 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net/a1.tsx",
+      "start": 226,
+      "end": 235,
+      "fixes": 0
+    },
     {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
@@ -21,6 +31,16 @@
       "path": "fixtures/reactive-ir/handed-net/a13.tsx",
       "start": 211,
       "end": 218,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-net/a9.tsx",
+      "start": 232,
+      "end": 240,
       "fixes": 0
     },
     {

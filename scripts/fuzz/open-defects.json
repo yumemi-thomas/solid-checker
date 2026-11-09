@@ -933,10 +933,10 @@
   "causes": {
    "R-stacked": 194,
    "R-unplaced": 8,
-   "R-other": 7,
+   "R-other": 4,
    "R-neighbour-U": 9,
    "R-misplaced": 14,
-   "R-carrier": 57,
+   "R-carrier": 45,
    "census": 93,
    "g2d named hand-off": 34,
    "R-halted": 2

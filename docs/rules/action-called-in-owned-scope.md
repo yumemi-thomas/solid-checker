@@ -27,6 +27,8 @@ from a getter, `toString`, an iterator, a tag, a `Map` slot, a method, a
 constructor or an instance field) is uncertifiable too, never certified (ADR
 0715): Chrome throws when a render runs it. Module initialization (outside
 every function, a static block or field) has no owner and is silent.
+An action handed to a project function calling that parameter in its body is
+called at that call; U if only on some paths (ADR 0929).
 
 A `createRoot` body runs during the call with the new root as the ambient
 owner, and the action guard has no root exemption on any release: an action

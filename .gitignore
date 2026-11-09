@@ -1263,3 +1263,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/stored-throw-class-member-wrapper/node_modules/**
 !fixtures/reactive-ir/leaf-scope-by-value-callback/node_modules/
 !fixtures/reactive-ir/leaf-scope-by-value-callback/node_modules/**
+!fixtures/reactive-ir/leaf-generator-step/node_modules/
+!fixtures/reactive-ir/leaf-generator-step/node_modules/**
+!fixtures/reactive-ir/write-parameter-call/node_modules/
+!fixtures/reactive-ir/write-parameter-call/node_modules/**
