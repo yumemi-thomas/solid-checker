@@ -736,9 +736,11 @@ pub enum Detection {
         refusal: Option<&'static solid_dialect::RefusedRelease>,
     },
     /// Nothing resolved, or the nearest manifest's version field is not a
-    /// version (`workspace:*`, an empty or absent field). `manifest` is that
-    /// manifest when the walk stopped at one, and `None` when no
-    /// `node_modules/solid-js` was found at all.
+    /// version (`workspace:*`, an empty or absent field), or a manifest on
+    /// the walk exists and could not be read or parsed and nothing above it
+    /// refuses (ADR 0915; its version reads [`UNREADABLE_MANIFEST`]).
+    /// `manifest` is that manifest when the walk stopped at one, and `None`
+    /// when no `node_modules/solid-js` was found at all.
     ///
     /// A *number* never lands here. `0.5.0` and `3.0.0` are answers about an
     /// installed runtime, and an answer this build cannot honour is refused
@@ -929,12 +931,26 @@ fn unclassified_release_notice(
     let (_, installed, _) = resolved_solid_version(project)?;
     let language = by_version(dialect.vocabulary.version())?;
     let releases = resolved_releases(language.vocabulary, project, &manifest, &installed);
+    let gap = if installed == UNREADABLE_MANIFEST {
+        // ADR 0915: the manifest exists and could not be read or parsed.
+        let why = crate::observed::unobservable(&manifest).map_or_else(
+            || "it could not be read".to_owned(),
+            |(at, why)| format!("{}: {why}", at.display()),
+        );
+        format!(
+            "the solid-js manifest {} exists and could not be read ({why}), so which \
+             release the project runs is unknown ({SOLID_VERSION_UNCLASSIFIED})",
+            manifest.display()
+        )
+    } else {
+        format!(
+            "solid-js {installed:?} names no release this build classifies, so which \
+             release the project runs is unknown ({SOLID_VERSION_UNCLASSIFIED})"
+        )
+    };
     Some(ReleaseNotice {
         gaps: vec![solid_dialect::InstallationGap {
-            gap: format!(
-                "solid-js {installed:?} names no release this build classifies, so which \
-                 release the project runs is unknown ({SOLID_VERSION_UNCLASSIFIED})"
-            ),
+            gap,
             review: None,
             scope: None,
         }],
@@ -1034,7 +1050,16 @@ fn nearest_package_version(start: &Path, package: &str) -> Option<(String, PathB
             .join("node_modules")
             .join(package)
             .join("package.json");
-        let encoded = std::fs::read_to_string(&manifest).ok()?;
+        // ADR 0915: a manifest that exists and cannot be read or parsed stops
+        // the walk as an unread release, as Node stops there with an error;
+        // only nothing there moves on.
+        let Ok(encoded) = std::fs::read_to_string(&manifest) else {
+            return crate::observed::unobservable(&manifest)
+                .map(|_| (UNREADABLE_MANIFEST.to_owned(), manifest));
+        };
+        if !crate::observed::parses(encoded.as_bytes()) {
+            return Some((UNREADABLE_MANIFEST.to_owned(), manifest));
+        }
         let version = serde_json::from_str::<serde_json::Value>(&encoded)
             .ok()?
             .get("version")?
@@ -1043,6 +1068,11 @@ fn nearest_package_version(start: &Path, package: &str) -> Option<(String, PathB
         Some((version, manifest))
     })
 }
+
+/// The version spelled for a release manifest that exists and could not be
+/// read or parsed (ADR 0915): no release, so the review reads it as unread
+/// and the notice names it.
+pub const UNREADABLE_MANIFEST: &str = "(unreadable manifest)";
 
 /// The nearest installed `solid-js`, as
 /// `(classification, version as written, manifest path)`.
@@ -1061,22 +1091,33 @@ fn resolved_solid_version(
     } else {
         project.parent()?
     };
+    // ADR 0915: the nearest manifest that exists and could not be read or
+    // parsed (a dangling link at or above it, a permission error, broken
+    // JSON). The walk goes on past it, so an installation above that refuses
+    // still refuses; any other answer is not the release the project runs.
+    let mut unreadable: Option<PathBuf> = None;
     for directory in start.ancestors() {
         let manifest = directory
             .join("node_modules")
             .join("solid-js")
             .join("package.json");
         let Ok(encoded) = std::fs::read_to_string(&manifest) else {
+            if unreadable.is_none() && crate::observed::unobservable(&manifest).is_some() {
+                unreadable = Some(manifest);
+            }
             continue;
         };
         // A manifest that parses to no version string -- broken JSON, or no
-        // "version" field -- is treated exactly like an unreadable one: the
-        // walk continues, because a broken stub (a half-written install, an
-        // empty placeholder) must not mask a real installation higher up.
+        // "version" field -- does not stop the walk, because a broken stub (a
+        // half-written install, an empty placeholder) must not mask a refusal
+        // higher up. Broken JSON is remembered as unreadable (ADR 0915).
         let Some(version) = serde_json::from_str::<serde_json::Value>(&encoded)
             .ok()
             .and_then(|manifest| Some(manifest.get("version")?.as_str()?.to_owned()))
         else {
+            if unreadable.is_none() && !crate::observed::parses(encoded.as_bytes()) {
+                unreadable = Some(manifest);
+            }
             continue;
         };
         // Whatever the version field says, this is the nearest `solid-js` the
@@ -1086,13 +1127,21 @@ fn resolved_solid_version(
         // classifies as `UnmodelledMajor` and is refused, because a
         // resolvable-but-uncarried install is a contradicted answer rather
         // than an absence.
-        return Some((
-            solid_dialect::Version::for_solid_js(&version),
-            version,
-            manifest,
-        ));
+        let classification = solid_dialect::Version::for_solid_js(&version);
+        let refuses = classification.is_some_and(|classification| {
+            !matches!(
+                classification,
+                solid_dialect::Classification::Modelled(version) if by_version(version).is_some()
+            )
+        });
+        if let Some(unreadable) = unreadable
+            && !refuses
+        {
+            return Some((None, UNREADABLE_MANIFEST.to_owned(), unreadable));
+        }
+        return Some((classification, version, manifest));
     }
-    None
+    unreadable.map(|manifest| (None, UNREADABLE_MANIFEST.to_owned(), manifest))
 }
 
 /// The Solid 2 language: the vocabulary whose variant key is `None`,

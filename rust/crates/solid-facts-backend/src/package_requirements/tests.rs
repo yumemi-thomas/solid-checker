@@ -402,7 +402,9 @@ fn manifest_fields(populated: bool) -> (Fixture, Vec<(usize, bool)>) {
         ),
         ("m-dev", r#"{"devDependencies":{"solid-js":"2"}}"#, false),
         ("m-other", r#"{"dependencies":{"left-pad":"1"}}"#, false),
-        ("m-bad", "{", false),
+        // ADR 0915: a manifest that does not parse may name Solid; Node and
+        // every bundler stop at it with an error. Kept, never skipped.
+        ("m-bad", "{", true),
         ("m-array", "[]", false),
     ];
     let mut rows = Vec::new();
@@ -923,8 +925,12 @@ fn a_primitive_package_is_skipped_before_any_lookup() {
     assert!(reader.queried_reads().is_empty());
 }
 
+/// An unreadable importer manifest only stops the package-local edge test,
+/// which keeps the marker, so it folds like an absent one. An installed
+/// manifest that exists and cannot be read is unknown, never "no Solid
+/// dependency": it keeps the requirement (ADR 0915).
 #[test]
-fn an_unreadable_manifest_is_folded_like_an_absent_one() {
+fn an_unreadable_importer_manifest_folds_and_an_unreadable_installed_one_is_kept() {
     let solid = r#"{"dependencies":{"solid-js":"2"}}"#;
     // Unreadable importer directory: the walk continues to the root.
     let run = |importer_dir: Read, manifest: Read| {
@@ -951,10 +957,18 @@ fn an_unreadable_manifest_is_folded_like_an_absent_one() {
     let absent = run(Read::Absent, solid_manifest());
     assert!(!absent.is_empty());
     assert_eq!(run(Read::Unreadable, solid_manifest()), absent);
-    // An unreadable installed manifest raises nothing, as an absent one.
+    // An absent installed manifest raises nothing; an unreadable one is kept.
     let quiet = run(Read::Absent, Read::Absent);
     assert!(quiet.is_empty());
-    assert_eq!(run(Read::Absent, Read::Unreadable), quiet);
+    let unreadable = run(Read::Absent, Read::Unreadable);
+    assert!(
+        unreadable.requires_legacy("/x/i.ts", "../n/j.ts"),
+        "{unreadable:?}"
+    );
+    assert!(
+        format!("{unreadable:?}").contains("cannot be read or parsed"),
+        "{unreadable:?}"
+    );
 }
 
 #[test]

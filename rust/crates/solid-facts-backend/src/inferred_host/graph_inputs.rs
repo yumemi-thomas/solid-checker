@@ -369,7 +369,7 @@ pub(super) fn discovery_inputs(
     }
     let directory = fs::canonicalize(directory)
         .ok()
-        .required(directory, "cannot resolve application directory")?;
+        .read_from(directory, "cannot resolve application directory")?;
     let project = fs::canonicalize(&facts.project_id).ok().required(
         Path::new(&facts.project_id),
         "cannot resolve analyzed tsconfig",
@@ -381,6 +381,10 @@ pub(super) fn discovery_inputs(
         ));
     }
     let mut paths_observed = Vec::new();
+    // ADR 0915: every lookup below reports an input that exists and cannot be
+    // read where it meets it (`present`, `read_from`, the plugin audit), so a
+    // refusal needs no second pass over its witness (12,397 paths for one
+    // plugin closure, re-read on every daemon edit).
     application_inputs(&directory, &project, &mut paths_observed)?;
     // Refusal consumes only its witness. No app inventory, request parsing,
     // or manifest hashing is needed before the configuration can be admitted.
