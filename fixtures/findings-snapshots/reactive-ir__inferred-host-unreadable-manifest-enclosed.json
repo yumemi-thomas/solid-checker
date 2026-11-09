@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "blocker": "host-input-unreadable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/inferred-host-unreadable-manifest/variants/enclosed/tsconfig.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

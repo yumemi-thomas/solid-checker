@@ -105,8 +105,6 @@ An unresolved member dispatch raises no obligation at a call whose role is event
 ## ADR 0203 — A closed program has no unseen caller of an exported helper
 In a closed program an exported helper's `exported-parameter-member-dispatch` obligation is discharged when every reference to it or its aliases is its declaration, an import, an export specifier, or the callee of a call resolving to it. JSX renders, rendering props, values handed out, class members and unnamed functions keep it. Open programs are unchanged. Owner: `discharge_closed_program_export_dispatch`, `entered_only_through_call_expressions` in `rust/crates/solid-reactive-ir/src/attribution.rs`.
 
-
-
 <a id="adr-0204"></a>
 ## ADR 0204 — Three reads that run while a component renders
 (1) A read written directly in a function entered by a chain of plain identifier calls (no methods, at most eight hops; cycles prove nothing) is direct. (2) A callee's default-parameter accessor read runs at a call omitting that argument without spread. (3) A literal that is exactly a component prop runs during render when the child calls `props.<prop>` directly in its body. "Directly in a body" excludes nested parameter lists. Owners: `directly_entered_functions` (`rust/crates/solid-reactive-ir/src/interproc.rs`), `prop_literal_invoked_during_render` (`execution_role.rs`).
@@ -126,7 +124,6 @@ A method call in a leaf-owner callback is followed when the receiver is a `const
 ## ADR 0210 — Host callbacks and member calls in a leaf scope
 A standard-library call's arguments follow the audited timing table: inline callbacks (`forEach`, `map`, `call`/`apply` receiver, setter updaters, `Promise` executor) are walked like helper bodies; fresh-stack and deferred callbacks run after the scope; `PromiseLike.then` and unaudited callables leave SC9012 open, never a violation. Member calls are read from the resolved declaration, not the span's entity. ADR 0329 covers synchronous dispatch. Owners: `member_call_operations`, `standard_library_argument_operations` in `cleanup.rs`; `runtime_semantics.rs`.
 
-
 <a id="adr-0211"></a>
 ## ADR 0211 — A value whose origin fixes its class fixes its members
 A fresh built-in argument (array literal; `new` of Array/Date/Map/Set/WeakMap/WeakSet/RegExp/ArrayBuffer/DataView/typed array; `Array.from`/`of`, `Object.keys`/`values`/`entries`, `String.split`; species-built array results) runs prototype members that read no reactive state; an exact project class instance runs that class's own plain method. Followed through `const` only; void where the program may replace the member. Owners: `value_origin`, `class_method_symbol` in `rust/crates/solid-reactive-ir/src/indexes.rs`.
@@ -142,8 +139,6 @@ In a closed program a parameter-member obligation on a plain unwritten identifie
 ## ADR 0214 — A prop holds what every tag passes
 In a closed program an obligation on `props.name` is discharged when `props` is the component's sole plain parameter, never assigned; the component renders only through resolved JSX tags (a call, `createComponent`, rendering prop or other escape fails); and every tag passes a built-in value (a spreading tag fails, a missing attribute is `undefined`, `children` is not followed). Owners: `prop_holds_builtin`, `rendered_only_through_jsx`, `value_holds_builtin` in `attribution.rs`.
 
-
-
 <a id="adr-0215"></a>
 ## ADR 0215 — The value-flow proofs survive review
 Computed writes record their literal or `const` key; other computed prototype writes refuse every member; a binding is written if any assignment target or loop head references it. An exact class instance has the class's own members only if no constructor returns a value and no field, parameter property or computed element on the whole `extends` chain can define the member (unresolved proves nothing). Function values must be current. Owners: `class_instance_is_exact`, `function_value_is_current`, `binding_written` in `rust/crates/solid-reactive-ir/src/indexes.rs`.
@@ -154,8 +149,6 @@ Computed writes record their literal or `const` key; other computed prototype wr
 <a id="adr-0217"></a>
 ## ADR 0217 — Leaf scopes reach helpers, namespaces and more host callbacks
 Argumentless calls in helpers a leaf callback reaches get a resolved-call fact. `ns.f()` on a namespace import binding follows the exactly resolved exported function declaration or `const` function; computed members and aliases keep the obligation. Host rows: `Promise` executor and `NodeList.forEach` inline; global `addEventListener` and `MediaQueryList.addListener` deferred; `MediaSession.setActionHandler` fresh-stack. Owners: `rust/crates/solid-reactive-ir/src/cleanup.rs`, `runtime_semantics.rs`; `rust/crates/solid-facts-backend/src/demand_plan.rs`.
-
-
 
 <a id="adr-0218"></a>
 ## ADR 0218 — A callback every use of which is closed is not a strict read
@@ -187,15 +180,12 @@ An argument's getter runs at the call copying it only when the receiver is a fre
 ## ADR 0266 — Standard runtime configuration premise
 Assumed unless analyzed source holds a positively identified exact runtime reference: a call of `enableExternalSource`, or a value reference to `DEV` or `OBSERVE` (a named import used only in truthiness tests does not veto). Identity is the exact declaration name-node span the dialect lists, never spelling; type-only uses and unresolved references never veto. A veto makes every violation project-wide uncertifiable; there is no third state. Owners: `rust/crates/solid-reactive-ir/src/runtime_configuration.rs`, `rust/crates/solid-dialect/src/solid_2.rs`.
 
-
 <a id="adr-0268"></a>
 ## ADR 0268 — Standard hydration host
 Fourth clause of the standard runtime configuration premise: hydration runs on Solid's standard serializer runtime, with no custom `sharedConfig.load`/`has` or other host callback. A positively identified runtime reference to `sharedConfig` (via `solid-js/internal` or the server declarations) vetoes, except direct reads of `hydrating`/`done` and truthiness tests; standard `enableHydration`/`hydrate`/`render`/`renderToString` never veto, and the main-entry `sharedConfig`, lacking declaration identity, stays Assumed. Owner: `rust/crates/solid-reactive-ir/src/runtime_configuration.rs` (`HydrationHost`).
 <a id="adr-0269"></a>
 ## ADR 0269 — A browser-target config for client applications
 The ESLint adapter ships an opt-in `browser-<dialect>` config (`browser-v2`): the dialect config plus `settings.solidChecker.runtime.target: "browser"`, which a later `runtime` setting overrides. For client apps the user declares the target; nothing infers it. Owner: `packages/cli/eslint.cjs`.
-
-
 
 <a id="adr-0270"></a>
 ## ADR 0270 — Browser host from feasible execution reachability
@@ -228,14 +218,12 @@ A call TypeScript resolves to a `never`-returning signature is an exit; sites af
 ## ADR 0279 — Assertion and never signatures, and exact method callees
 The Type Facts producer states per resolved call whether the selected signature carries an `asserts` predicate or returns `never`; either makes the call a possible exit (a throw in an undeclared helper is outside the model). A method callee runs its declared body only for a module namespace member, an unwritten member of a `const` object literal, or a member of a `const` bound to `new C()` of the declaring class. Owners: `Call.AssertionSignature`/`NeverReturns` in the producer and `rust/crates/typefacts`; `member_runs_declared_method` in `execution_role.rs`.
 
-
 <a id="adr-0280"></a>
 ## ADR 0280 — A call's arguments decide its helper's branches
 A call proves parameter values (literals, callable types, omitted arguments) only over an exact mapping with no spread. For the leaf walk's first hop, a called helper's own reads and by-reference accessors, the walk decides `if`/`?:` tests and `&&`/`||`/`??` right operands over `typeof p`, truthiness and null/undefined comparisons, making sites guaranteed, possible or unreachable; results record a `FunctionSource` dependency. Owners: `argument_site_standings`, `rust/crates/solid-reactive-ir/src/argument_values.rs`; `Entry::CalledWith` in `cleanup.rs`.
 <a id="adr-0281"></a>
 ## ADR 0281 — A store member read inside an argument is no escape
 When ADR 0222 checks a returned store root, a reference inside a call argument escapes only if the member chain is the bare root, is itself an argument or callee, or is returned by a function; a chain consumed where written (statement, initializer, operand in a callback) does not escape. Owner: `member_chain_escapes` in `rust/crates/solid-reactive-ir/src/source_discovery.rs`.
-
 
 <a id="adr-0282"></a>
 ## ADR 0282 — Tuple slot closures through destructuring
@@ -255,7 +243,6 @@ A project function Gets `p.key` on every call when it is exact, current, synchro
 <a id="adr-0286"></a>
 ## ADR 0286 — A typed member root requires an unreplaced slot
 Before the typed-source fallback admits an object literal's property as a source, every read of that property symbol must be Closed: a `const` receiver, all references unwritten static member reads, initialized by an object literal (or an exact factory returning a fresh one) with that data property. Escaped receivers refuse silently; for interface-declared members only an Escaped read refuses. Owner: `LiteralMemberSlots` in `rust/crates/solid-reactive-ir/src/literal_member_slots.rs`.
-
 
 <a id="adr-0287"></a>
 ## ADR 0287 — A forwarding proxy reads its store
@@ -288,7 +275,6 @@ A store member chain warns as its head Get does: a known string key the dialect 
 ## ADR 0294 — A type is not a reactive source
 A declared type (`Accessor<T>`, `Signal`, `Store`) never makes a read reactive. A typed entity is a proven root only through a proven source of the same kind; a visible literal function is decided by its own body where the call is followed; anything else is a typed candidate, whose read in an untracked-reporting role is an SC9012 `type-only-source` obligation, never SC1001/SC1002. Owners: `typed_implementation`, `TypedSource` in `rust/crates/solid-reactive-ir/src/source_discovery.rs`; `local_access.rs`.
 
-
 <a id="adr-0295"></a>
 ## ADR 0295 — A declared Window realm decides `typeof window` in package source
 Opt-in `--runtime-realm window` (needs a browser target and dependency sources) declares that selected package modules run in an HTML Window realm: `typeof window`/`document` compared with `"undefined"` by `===`/`!==` folds, through `const` aliases and, with an initialization proof, module-level `var` aliases in modules outside import cycles. Declared, never inferred; other forms stay live. Owners: `fold_host_constant_branches_in_window_realm` (`rust/crates/solid-facts/src/ast/host_constants.rs`); `outside_import_cycles` (`dependency_sources.rs`).
@@ -296,15 +282,12 @@ Opt-in `--runtime-realm window` (needs a browser target and dependency sources) 
 ## ADR 0296 — One preparation path for dependency-source programs
 `prepare_program` returns the original tsconfig, host, selection and the sibling tsconfig's exact bytes; one-shot and daemon share it and `dependency_program.rs` (fold and bind). ADR 0311 supersedes daemon retention of source checks. Owners: `rust/crates/solid-facts-backend/src/dependency_sources.rs`, `dependency_program.rs`.
 
-
-
 <a id="adr-0297"></a>
 ## ADR 0297 — Source is the default under a declared host
 An ordinary analysis declaring both `--runtime-target` and `--runtime-build` without explicit selection runs as `--dependency-source '*'` when a Solid Vite plugin resolves from the project; otherwise it prints a note and analyzes no package from source. Selection assumes Vite with the Solid plugin reads `exports`. Non-ordinary modes keep their selection; `--no-dependency-source` is removed. Owners: `defaults_to_dependency_sources` (`rust/crates/solid-facts-backend/src/main.rs`); `effective_dependency_selection` (`check.rs`).
 <a id="adr-0299"></a>
 ## ADR 0299 — Calls of a stable exported object's own function
 `timer.useTicker()` on a named import of a package's `const` object resolves to its exact function when the object is a closed literal (optionally `Object.freeze`d: no spread, computed or numeric key, duplicate, accessor, `__proto__`), every value use of the receiver is an immediate member call of a function that cannot expose it, and ADR 0273's written-name index does not veto the member. Optional calls need both links proven non-nullish; generators refuse. Owner: `rust/crates/solid-reactive-ir/src/object_members.rs`.
-
 
 <a id="adr-0300"></a>
 ## ADR 0300 — The package integrity premise
@@ -333,7 +316,6 @@ Deleted 2026-10-19 with the dead package-contract surface: `PackageBoundary`'s e
 ## ADR 0311 — A dependency-source check is a fresh one-shot check
 An ordinary invocation with a non-empty effective dependency selection (named list, `*`, or the implicit default) never uses the retained analysis daemon and opens fresh Type Facts programs; `daemon::eligible` requires an empty selection and `--serve` refuses a non-empty one. Base mode (no selection) is unchanged. Not claimed: in-run filesystem coherence, WASM, direct retained sessions. Owner: `eligible`, `serve` in `rust/crates/solid-facts-backend/src/daemon.rs`.
 
-
 <a id="adr-0312"></a>
 ## ADR 0312 — Package contracts are removed
 Ordinary analysis uses project and selected dependency source and the dialect's reviewed runtime premises, no catalog, authored tier, bundled contract or receipt. The package boundary derives from `package_requirements`; behavior unavailable from source is an explicit uncertifiable SC9005, never a guessed violation. Removed CLI and ESLint settings refuse with a migration message; `--no-package-contracts` is a no-op; WASM `checkSync` keeps bare runtime package imports open. SC9005 is renamed `package-behavior-unavailable` (former `package-contract-incomplete` stays an alias in `rule-options.json` and ESLint configs), and JSON `coverageFamily` `package-contract` becomes `package-boundary`. Owners: `rust/crates/solid-facts-backend/src/package_requirements.rs`, `packages/cli/eslint.cjs`.
@@ -341,7 +323,6 @@ Ordinary analysis uses project and selected dependency source and the dialect's 
 <a id="adr-0313"></a>
 ## ADR 0313 — A string tag renders an intrinsic element
 `Dynamic` with a string-literal `component` is an intrinsic element for ADR 0218's event-only proof: the dialect names export and prop per release family (`intrinsic_tag_renderers`; Solid 2 `@solidjs/web` `Dynamic`/`component`); un-namespaced `on…` keys become listeners. The string must be proven per hop through attributes, `omit`/`merge` views and aliases; unknown spreads, getters and computed keys leave it unproven. Owners: `Dialect::intrinsic_tag_renderers`, `intrinsic_tag_prop` in `rust/crates/solid-reactive-ir/src/indexes.rs`.
-
 
 <a id="adr-0314"></a>
 ## ADR 0314 — A prototype write reaches only its chain
@@ -368,11 +349,9 @@ Per-call-site member dispatch trusts a value's implementations only if every par
 ## ADR 0321 — An argument literal's function property is its implementation
 An arrow or `function` expression that is exactly the value of a static-keyed property of an object literal written directly as a call argument has identity `literal-property:<file>:<start>:<end>` and adds no reads at the dispatch (its reads stay attributed where written); it resolves only when the callee only reads that parameter's members, without consulting the name census. Owners: `literal_property_function_symbol` in `rust/crates/solid-reactive-ir/src/interproc.rs`; `member_value_candidates` in `indexes.rs`.
 
-
 <a id="adr-0322"></a>
 ## ADR 0322 — A static namespace member binds like a named import
 A runtime namespace import whose every reference is a non-computed member object, a JSX member tag or a type-position use redirects each member to the selected module's export as `import { m }` would; its `NamespaceValue` obligation drops only if every namespace binding of the specifier qualifies and every member binds. Any value use refuses. `X.m()` is analyzed as a bare call. Owners: `namespace_static_members` in `rust/crates/solid-facts-backend/src/source_redirects.rs`; `namespace_import_redirected` in `package_requirements.rs`.
-
 
 <a id="adr-0323"></a>
 ## ADR 0323 — `children` is a tracked lazy memo; a props or store read in a callback follows its consumer
@@ -392,16 +371,13 @@ A function literal that is the whole child of a non-intrinsic element is the com
 ## ADR 0327 — A callback only an event runs has no owner
 A plain function literal is seeded unowned when every invocation ADR 0319's walk finds in owner mode (any primitive slot refuses; a call's role is event only when its carrying function is a compiler event handler) is an event dispatch, so an owner primitive directly in it is an SC4001 violation. Premise: an event handler runs unowned (synchronous dispatch from an owned scope breaks it; in the backlog). Owners: `unowned_event_literals` in `rust/crates/solid-reactive-ir/src/execution_role.rs` and `indexes.rs`; `owner_node` in `owners.rs`.
 
-
 <a id="adr-0328"></a>
 ## ADR 0328 — Uncertifiable results are internal
 Users see a finding that is not uncertifiable or is a project-level notice (`subjectKind: "project"`: SC9013, SC9014). Human formats show only those and `--certify` fails on a violation or notice; `--format json` and WASM keep every finding and the certification status; `--internal` restores the ADR 0202 tiers and strict certification; ESLint reports only user-facing findings. Owners: `user_facing`, `certify_fails`, `render_user` in `rust/crates/solid-facts-backend/src/snapshot_emission.rs`; `userFacing` in `packages/cli/eslint.cjs`.
 
-
 <a id="adr-0329"></a>
 ## ADR 0329 — A DOM call that dispatches synchronously is not trusted
 The leaf-scope walk refuses a call, optional or not, whose exact `lib.dom` declaration is `focus`, `blur`, `click`, `dispatchEvent`, `checkValidity` or `reportValidity` on any interface (and window globals), or `HTMLFormElement.reset`/`requestSubmit`, `HTMLElement.showPopover`/`hidePopover`/`togglePopover`, `HTMLDialogElement.show`/`showModal`/`close`/`requestClose`, `AbortController.abort`, `XMLHttpRequest.open`/`abort`, `Document.execCommand`. Tree mutation and attribute writes stay trusted (ADR 0642 corrects this for `remove`). Owner: `synchronously_dispatching_dom_member` in `rust/crates/solid-reactive-ir/src/cleanup.rs`.
-
 
 <a id="adr-0330"></a>
 ## ADR 0330 — A ref creation is SC6001 only in the unowned apply phase
@@ -735,7 +711,6 @@ Static prepass: app-game 106 to 39 ms, groove 37 to 15.
 <a id="adr-0414"></a>
 ## ADR 0414 — The memo begin's index builds and the warm-up's component lane use the analysis pool
 `indexes.rs` (`declaration_symbols`, the warm-up lanes), `indexes/callees.rs` (`bindings_by_reference`), `indexes/components.rs` (`functions_by_symbol`). (1) Whole-program indexes the first probe or warm-up lane touches build on the analysis pool with the serial builds' answers: bindings by reference per file, then per path shard (one path per shard keeps each key's first writer), then completed per path; declaration symbols per path run, a path's second run merged in table order; functions by symbol per file, merged in file order. (2) The warm-up's components lane, last to finish, takes the whole pool once others end. (3) Not built then: partial re-attestation of import identities. An edited file's ambient module or reference directive can change another file's resolution, so an unchanged importer is exact only with the producer's word on its resolution inputs (open-work section 2); ADR 0419 takes that word for in-place updates.
-
 
 <a id="adr-0415"></a>
 ## ADR 0415 — A source file's local ids survive an insert above them
@@ -1126,7 +1101,6 @@ ADR 0507's climb from a child's tag to the parent's returned tree may now pass t
 
 The child's body then runs during the parent's tree under an owner (the memo or the row), and a render effect created there runs its first apply on the call (`dist/dev.js:1851-1869`). `inert_parent` admits the holders and the row arrow. Not built: a non-literal `when` or `each`, `keyed`, `fallback`, a row taking the item, `<Switch>`/`<Match>`, `<Index>`. Fixture `child-mount-first-run`: `ShowParent` (uncertifiable under ADR 0507) and new `ForParent` are violations; new negatives `ShowBindingParent`, `ForEmptyParent`, `ForItemParent`. Probes `write/show-mount-first-run`, `pending-async/for-mount-first-run`. Review (Chrome-checked): whitespace text without a line break is a child the compiler keeps (`<For> {() => <C />} </For>` hands `For` an array, and the row never runs); and ADR 0503's first-run write, like ADR 0504's read, now needs no call written before it in the apply (`apply_runs_nothing_before`), since a pending read there throws first (fixture row `render-apply-first-run` `ReadThenWrite`; probes `write/for-inline-whitespace`, `write/apply-write-after-pending-read`).
 
-
 <a id="adr-0509"></a>
 ## ADR 0509 — A value a caller hands over is followed, or its use stays open
 The fuzzer's source axes (PR #149) hand the misuse component its signal, store, action or async memo through a prop, a context, a hook's return or a module export. Causes and fixes:
@@ -1173,26 +1147,21 @@ Without `--browser`, the oracle and the Chrome host run the headless shell the p
 ## ADR 0515 — Exact copies, named callbacks and assigned callees the fuzzer's recall grid found silent
 Each is the same value or call by construction, so every rule follows it (fail-closed facts, no name matching). In `solid-facts`: a `const` initialized by a conditional whose arms are both one `const` (`c ? r : r`) or by an inline identity arrow on it (`((x) => x)(r)`) aliases that variable (ADR 0463's fact); a slot of `const { k } = N` over a `const N = S` holding a namespace import is `S.k` (ADR 0459's fact); `(slot = f)()`, a plain assignment to a binding as callee, invokes `f` (ADR 0468's peel; not in an `async` function, whose after-await owner placement reads the operands and went silent on the peel). In the IR, a primitive's callback position names a function through an exact `const` copy only when every reference to the copy follows its declarator in the declarator's function (a copy reached from a nested function may run first and throw), and through a named function expression's binding whose own name is unreferenced (reads and `by_name_position` alike); a read in a function nested in a named callback climbs the in-place layers to its call, as in an inline callback.
 
-
 <a id="adr-0516"></a>
 ## ADR 0516 — The recall grid's remaining false cleans fail closed, and four spellings are exact
 Fable's read of the round-2 recall grid named ten causes. Without a sound proof the site is now an obligation, never silent: a function handed whole through a copy or object-literal slot no callback edge follows has unplaced reads and an owner seed both owned and unowned (`function_handed_unfollowed`); a named write callback at several positions or behind an adjusted inline role is unknown (`write_role_walk`); `f.call`, `f.apply` and `f.bind(…)(…)` of a local setter, action or accessor are `reactive-dispatch-unresolved`, except in an event handler, where every rule they stand for is legal; a read in a loop that awaits is after a suspension from the loop's start (`loop_suspension_start`); a hook value handed on after a suspension is an SC1002 obligation. A sync generator called in place whose iterator is used (`generator_iterator_used`: the result is not a discarded statement) runs its body where stepped, which nothing follows: an owner seed both ways, an SC2008/SC6002 origin marked mixed, an SC2006 step and SC1002 continuation marked uncertain, an open leaf-scope obligation; a discarded iterator stays silent. A named helper an action body calls, a named apply and a helper with callers outside the effect are reached (SC2006, SC2008) as uncertain unless every run is proven. Exact, so violations: a slot of a `let` destructuring of a namespace import nothing writes or redeclares (not a hoisted `var`), an exported slot (it holds the export wherever read; an importer's mention is its own import binding), a pattern nested over a literal holding the namespace once, a getter whose body is one `return` and a default the literal leaves unset (solid-facts schema 87), and `(x ||= h)()`'s operands. Not built: a namespace of a project module that `export *`s Solid, `LOADING_ON_OUTSIDE_HOLD` (no rule). Costs, uncertifiable where silent: an exported generator iterator, a copy handed on before its declarator, `runWithOwner(null, named)` after an await, a read after a loop that may await. Gate review: callback targets resolve a `const` copy, a `const` function expression and an object literal's member handed whole (`exact_function_argument`, ADR 0358's receiver closure), replacing an owned-and-unowned seed; a stepped generator gets a `MayRun` edge (after a suspension, `MayBeUnowned`), passing its call's role through for reads and, for writes, only from a handler; `f.call`/`f.bind()()`/array `f.apply` and a total composite callee are judged as `f()` at the written call (`discover_call_as`), a non-total one clean only where every operand's call is; an unwritten `let` function is current. Fable review: a default for a key `Object.prototype` supplies never applies, and a generator a scheduler calls runs none of its body (`MayBeUnowned`); fixture `dispatch-and-copies`. Settled cleanup (ADR 0488): an `onSettled` call that may follow an await (a loop's later iteration, a skippable await) takes the possible-continuation placement at the call, not its callback: uncertifiable (fixture `settled-cleanup-after-await`, `LoopAwaitLater`). Effect phase by value (`effect_phase::named_layer`): an apply named by a named function expression's binding (ADR 0515's `named_expression_binding`), its `const` copies (alias facts, transitively) or an object literal's data-property slot (only through ADR 0358's receiver closure, never the property's symbol, which another object of the type may share) is followed like the binding; any reference that is neither an effect-phase position nor a call the walk proves makes the origin mixed. SC6002 and SC2008 move from silent or `missing-owner` alone to their own rule (fixture `rc13-flush-in-effect-callback`: `applyCopy`, `expressionApply`, `applyBox`, uncertifiable `sharedCopy`, `sharedBox`). Leaf owner by value (`containing_leaf_owner`): a function whose every value position (`owners::exact_value_positions`: its binding, copies, a receiver-closed slot) is a leaf slot of one owner, with no other use, runs under that owner, its reads judged as in the leaf (fixture `dispatch-and-copies`, `LeafByCopy`).
-
 
 <a id="adr-0517"></a>
 ## ADR 0517 — The recall grid's certified false cleans: exact names, climbed layers, and obligations where no proof exists
 The baseline of `0acd56c72` (all eight grids, every code) had 3,044 false cleans on `mx-recall`, most certified, none elsewhere; Chrome confirmed three false positives before a declarator. Each fix is exact or an obligation; none matches a name. Before a declarator: a callback position whose mention may precede the function's declarator (`const early = () => createMemo(write); early(); const write = …`) gives the function an unknown role, and a violation after an unordered mention written before its declarator in the same function (`[1].forEach(() => { r(); count(); })`) is uncertifiable. Namespace barrels: a static member of a namespace import of a project module (`import * as S from "./solid"` over `export *` or a named re-export) is the primitive its property's symbol resolves to; SC2008 and SC6002 take the package from the callee's exact symbol's declarations when Type Facts relocates no signature (one package, else nothing). After an await: the async computation is found through ADR 0516's `exact_function_argument` (a named function expression's binding, an object-literal slot), and a composite callee the producer never lists (`(slot = r)()`) in the function's own body (total, one accessor, dominated: a read; else an obligation). A read summary carries `r.call(…)`, `r.bind(…)()` (decided) and composite callees (undecided). Named callbacks: one named at a `createRoot`/`runWithOwner` position is placed at the call when that is its sole entry (`by_name_position`), JSX it writes keeping the compiler's role, else unknown (not async callbacks); a read in its in-place layers climbs to the layer's call, past the callback's own awaits; `named_callback_write_role` climbs layers before scanning positions, and several owner-keeping positions with no rejection are unknown; `resolve`/`until` climbed into a function a tracked position names is SC2004/SC2005. `LOADING_ON_OUTSIDE_HOLD`: rule `loading-on-outside-hold` (SC5006, warning) is an obligation only, at a `<Loading on>` (or spread) whose children render a component, hold an unproven read, or read an async source referenced outside it; a constant `on` never re-arms; the fuzzer claims the code, placeless. Open programs: the provider census runs, and a read with no provider found is SC4002 uncertifiable (amends ADR 0352). Probes: `scripts/fuzz/probes/{tdz,barrel,named-callback}/`, `read-after-await/exact-*`, `strict-read/dispatch-*`; fixtures `named-callback-tdz`, `namespace-solid-barrel`, `after-await-exact-callbacks`, `dispatch-read-through-closure`, `loading-on-outside-hold`, `named-inheriting-callback`, `rc13-flush-in-effect-callback/Barrels.ts`.
 
-
 <a id="adr-0518"></a>
 ## ADR 0518 — A top-level `await` leaves pending-read findings unproven
 SC5003 (`async-outside-loading-boundary`) claimed every rendered read of an async source outside a `Loading` boundary, assuming the source pending at the read's first run. A top-level `await` suspends module evaluation (microtasks run, timers too if it waits on one), so a node created before it (a module-scope memo, or a module-scope hook instance a root already read) can settle by the mount, and a settled read needs no boundary (rc.17 warns nothing). The fuzzer's `module-hook-shared` source found 50 such legal programs reported (`const shared = useVals(); createRoot(…shared.a1()…); await …; export function C1() { createRenderEffect(() => { shared.a1(); … }) }`), false positives confirmed in Chrome. Fix: `ModuleCensus::may_settle_before_mount` (a project module with a top-level `await`, or a load the census cannot see) sets `AsyncRead::settle_unproven`, and projection then makes SC5003 uncertifiable; its `ssrSource: "client"` wording stays, since that throws on the server whatever the client's timing. Premise: no dependency module awaits at its top level (the census does not scan installed packages; SC5001's apply proofs refuse any unseen load). Trade: any top-level `await` in a project makes every SC5003 uncertifiable, even for a memo the reading body creates; which nodes the checkpoint settles is not modeled. Fixture variants `pending-source-first-run/{module-render-read,module-render-await}` (violation, uncertifiable); `scripts/fuzz/rediscovery.json` records the rediscovery. Review (Chrome-confirmed false positive): SC5001 on a component-body or root read had the same gap (`settled-body`: rc.17 warns `STRICT_READ_UNTRACKED`, the checker proved SC5001), so the flag makes SC5001 uncertifiable too, except an apply's first-run row (ADR 0510's own proof). Those proofs (`render_runs_first`, `module_scope_only_creates`, `module_scope_may_run`) now also count `for await` and `await using`. Precision cost: an unread module memo stays pending through an `await` (`module-body-await` throws in Chrome) yet is uncertifiable. The generator's `settled` variant also takes `body` and `root`. Variants `module-body-settled`, `module-body-await`, `module-for-await` (uncertifiable).
 
-
 <a id="adr-0519"></a>
 ## ADR 0519 — The fuzzer's runs end with an answer: a supervised browser, deadlines, and disks that hold a full run
 A night of full-grid runs hung or failed silently five ways: a dead browser stayed the executor's zombie, the grid waiting with no error; a disk out of inodes failed late with ENOSPC and harness rows; mx-recall in one process exhausted Node's heap; a VM paused by a sleeping host left a grid step waiting on no child; editing the oracle's claim table re-ran every cached runtime record. The executor (`scripts/fuzz/exec`) now supervises its children: each is reaped on exit, with the exit and the browser's last stderr lines logged; the DevTools connection fails at once (every waiting and later command, a page's event wait within a second); startup and the Vite helper's calls have deadlines; a batch whose browser died reruns its failed programs on a new browser, at most three restarts per executor (each logged), then they are harness rows, never verdicts; shutdown kills and waits on both children. `exec.mjs` bounds the start, every request and close, killing the executor on a missed deadline or malformed output, so a grid fails instead of hanging. `focus.mjs` streams each grid's log live, kills a grid process after `--grid-timeout` (120 minutes), gives recall grids a 12 GB heap, runs one process per code with `--split-codes`, deletes `cases/` with `--prune-cases`, and reports a grid that judged nothing. `vm.sh` keeps runs and caches on the VM's data disk (a local block device, never the host's virtiofs share), refuses to sync below 10 GiB or 10% of inodes, and `detach` runs a command that outlives the SSH session. The runtime cache key hashes `runtime-oracle.mjs` without its `codeRules` table (`oracleRecordHash`), which only judges a record, and takes the spawned Node's version. Caches and focus outputs live under `$TMPDIR/*.noindex` (Spotlight indexing slowed timed tests). The runtimes run on Node, never the caller's `process.execPath` (`scripts/lib/node-runtime.mjs`): under the bun running the repository's tests the fast path ran on bun, where rc.17 reported no `UNTRACKED_READ_AFTER_AWAIT` for a read after an `await` through a wrapper, failing `misuse-fire.test.mjs` on every machine. Outcomes are unchanged:
-
 
 <a id="adr-0520"></a>
 ## ADR 0520 — An action body is placed by its callers, and a yielded promise detaches the next step
@@ -1209,7 +1178,6 @@ Recall context `ref-factory-body` (1,030 certified false cleans of STRICT_READ_U
 <a id="adr-0526"></a>
 ## ADR 0526 — A standard-library write of a store's proxy and a destructuring leaf are store writes
 Store recall variants (3,246 certified false cleans of STORE_WRITE_OUTSIDE_SETTER, 210 wrong-rule): `Object.assign(s, { v: 7 })`, `Reflect.set(s, "v", 7)` and `Object.defineProperty(s, "v", { value: 7 })` were clean everywhere; `({ v: s.v } = { v: 7 })` was an SC1001 read in a body, else nothing. rc.17 warns STORE_WRITE_OUTSIDE_SETTER for each outside the setter and stores nothing (the `set` and `defineProperty` traps return `true` after warning: `@solidjs/signals` `dist/dev.js:5420-5451`, `:5691-5697`, `:5743-5749`; 700 runs, no STRICT_READ for the destructuring). Causes: `no_direct_mutation` reads `assignments`, whose pattern target is the whole pattern; no arm read reflective writes; `local_access` kept a pattern leaf as a Get. Fix: `AstFacts::is_plain_write_target` and `destructuring_assignment_leaves` (a `write_targets` entry inside a plain assignment's object or array pattern, not itself an assignment target) make each leaf a written member for the write arm and a non-read for `local_access` and pre-suspension store reads. `no_store_standard_library_write` reports a call whose callee Type Facts resolves to the standard library's `ObjectConstructor.assign`, `Reflect.set` or `ObjectConstructor.defineProperty` with the store's bare identifier as first argument root, with an assignment's exemptions (`store_write_standing`: the setter window, the draft) and handed-container obligation (ADR 0509). Silent: a shadowed `Object`, a project `assign`, a spread first argument, the store in another argument (`Object.assign({}, s, …)` copies), a copy target. A past-root target (`Object.assign(s.o, …)`) is uncertifiable, silent where a link is nullish under strictNullChecks (ADR 0465); with a `Readonly` store root the arm is silent (unmeasured, though the calls type-check). Fixture `store-standard-library-writes`. Cost: such a write of a handed container (`Object.assign(accessors, …)`, `Object.defineProperty(props, …)`) becomes an ADR 0509 obligation like `accessors.v = 1` (five, in `compound-components-escapes`, `provider-array-vetoes`, `spread-prop-backing`). Residuals (unmeasured): `Object.defineProperties`, `Reflect.defineProperty`, `Reflect.deleteProperty`, a `for` head's destructuring pattern; no ADR 0491 literal-link proof past the root.
-
 
 <a id="adr-0527"></a>
 ## ADR 0527 — Refs, setup positions, flow bodies, store operations and action bodies enter the recall grids, with the placements they proved wrong
@@ -1661,7 +1629,7 @@ A `clientOnly` body's first mount goes through a gate memo (quiet); a later one 
 
 <a id="adr-0700"></a>
 ## ADR 0700 — A `solid-js` version naming no release is a notice, not a clean
-A resolved `node_modules/solid-js/package.json` whose version names no release (`nightly`, `workspace:*`) was `Detection::Defaulted`: certified under the default dialect though an unknown `solid-js` runs. `release_notice` now gives the SC9014 notice (context blocker `solid-version-unclassified`) when the default selects the dialect; an explicit `--dialect` is a decision. No `solid-js` at all keeps the default, no notice. Owners: `solid-facts-backend/src/dialect.rs` (`unclassified_release_notice`).
+A `solid-js` manifest whose version names no release (`nightly`, `workspace:*`) certified. Now, when the default selects the dialect, SC9014 (blocker `solid-version-unclassified`); `--dialect` is a decision; no `solid-js` keeps the default, silent. Owner: `unclassified_release_notice` (`dialect.rs`).
 
 <a id="adr-0701"></a>
 ## ADR 0701 — Every effect constructor's function slot
@@ -2310,7 +2278,6 @@ The primitive rules read names, so `const held = box.m; held(f)` or `const { Err
 ## ADR 0885 — SC3002 takes `action`'s handed walk
 `onFlush` and `action` test one guard. SC3002 stopped at the lexical role, so `runWithOwner(owner, () => Reflect.apply(hf, null, []))` in a handler, with `hf` calling `onFlush`, was certified where Chrome warns ON_FLUSH_IN_OWNED_SCOPE. It now takes `handed_write_execution`, as SC2002 does. An earlier slice measured no change on 581 direct ids and left this out: those ids held none of the layered shapes.
 
-
 <a id="adr-0900"></a>
 ## ADR 0900 — A violation whose lines ran only after Solid halted is a halted claim
 Coordinator's ruling (Part 17) on the census twin `flw-flow-for-async`: an async `For` child hands `insert` a Promise, `insertBefore` throws, Solid reports REACTIVITY_HALTED, and the V's site runs afterwards with the engine stopped, so its code cannot fire. The halt counts whatever triggered it (a DOM error from the program is the program's own failure) when it is recorded and the hit order places it before the claimed effect could fire. The grid host now records each diagnostic's place in the hit-order log (`orderAt`, chrome-host/runner.tsx; records made before are stale). `haltPlace` (classify.mjs): the first halt precedes every hit of the V's counters, each hit in the log, is `halted-claim`, counted exactly (`haltedClaim`), listed by id (`R-halted`), not a false positive and no #173 blocker. A halt with no place (no `orderAt`, a full log, a hit the log misses) is `unplaced`, never a halted claim. A counter that ran before the halt keeps the false positive. Frozen twins: `Part17/*` in judge-frozen.json.
@@ -2366,6 +2333,10 @@ Owner (2026-11-09): each report site has its own ADR 0560 site-reach bound (exha
 <a id="adr-0914"></a>
 ## ADR 0914 — A throw walk's stop in an unread compute is unobserved
 The walk found no entry of a class constructor or method and ended `Open`; a wrapper's site outside the memo kept a V (W's FP). Such stops, all in this file inside an unread compute: U. `stored_throw.rs`.
+
+<a id="adr-0915"></a>
+## ADR 0915 — Unreadable is not absent
+Absent: `lstat` ENOENT/ENOTDIR, no dangling link above. Else unobservable: SC9005 (`host-input-unreadable`) or SC9014. `observed.rs`.
 
 <a id="adr-0916"></a>
 ## ADR 0916 — The PR sample fits an hour

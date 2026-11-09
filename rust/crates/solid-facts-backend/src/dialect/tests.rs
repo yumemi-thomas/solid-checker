@@ -526,6 +526,134 @@ fn a_broken_nearer_manifest_does_not_mask_an_installation_higher_up() {
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+/// ADR 0915: a `solid-js` manifest that exists and cannot be read or parsed
+/// is not an absence. The walk still goes past it, so an installation above
+/// that refuses still refuses (pinned above); anything else above, or
+/// nothing, is not the release the project runs, and the default carries
+/// ADR 0700's unclassified notice naming the unreadable manifest.
+#[test]
+fn an_unreadable_solid_js_manifest_is_an_unknown_release_not_an_absence() {
+    let root = std::env::temp_dir().join(format!(
+        "solid-checker-dialect-unreadable-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    let inner = root.join("workspace/node_modules/solid-js");
+    std::fs::create_dir_all(&inner).unwrap();
+    std::fs::create_dir_all(root.join("workspace/src")).unwrap();
+    let project = root.join("workspace/src/tsconfig.json");
+    std::fs::write(&project, "{}").unwrap();
+    let unreadable = |detection: Detection| match detection {
+        Detection::Defaulted {
+            manifest: Some(manifest),
+        } => manifest,
+        other => panic!("an unreadable manifest is an unknown release: {other:?}"),
+    };
+
+    // Broken JSON, nothing above.
+    std::fs::write(inner.join("package.json"), "{ not json").unwrap();
+    assert_eq!(
+        unreadable(detect_detailed(&project)),
+        inner.join("package.json")
+    );
+    let notice = release_notice(default_dialect(), &project).expect("unknown release");
+    assert_eq!(notice.blocker, Some(SOLID_VERSION_UNCLASSIFIED));
+    assert_eq!(notice.installed, UNREADABLE_MANIFEST);
+    assert!(
+        notice.gaps[0].gap.contains("could not be read (")
+            && notice.gaps[0].gap.contains("not valid JSON"),
+        "{:?}",
+        notice.gaps
+    );
+
+    // Broken JSON over a supported install: Node stops at the nearer one with
+    // an error, so the outer release is not what runs.
+    let outer = root.join("node_modules/solid-js");
+    std::fs::create_dir_all(&outer).unwrap();
+    std::fs::write(
+        outer.join("package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        unreadable(detect_detailed(&project)),
+        inner.join("package.json")
+    );
+
+    // A version-less manifest is not unreadable: the walk reads the outer one.
+    std::fs::write(inner.join("package.json"), r#"{"name":"solid-js"}"#).unwrap();
+    assert!(matches!(
+        detect_detailed(&project),
+        Detection::Installed { manifest, .. } if manifest == outer.join("package.json")
+    ));
+
+    // A dangling link where the package directory was (a link into a deleted
+    // store or worktree): Node skips it; the checker cannot read the release.
+    #[cfg(unix)]
+    {
+        std::fs::remove_dir_all(&inner).unwrap();
+        std::os::unix::fs::symlink(root.join("deleted-store/solid-js"), &inner).unwrap();
+        assert_eq!(
+            unreadable(detect_detailed(&project)),
+            inner.join("package.json")
+        );
+        let notice = release_notice(default_dialect(), &project).expect("unknown release");
+        assert!(
+            notice.gaps[0].gap.contains("does not resolve"),
+            "{:?}",
+            notice.gaps
+        );
+        std::fs::remove_file(&inner).unwrap();
+    }
+
+    // Nothing there: the outer install, as before.
+    std::fs::remove_dir_all(root.join("workspace/node_modules")).unwrap();
+    assert!(matches!(
+        detect_detailed(&project),
+        Detection::Installed { manifest, .. } if manifest == outer.join("package.json")
+    ));
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// ADR 0915: a release owner whose manifest cannot be parsed is an unread
+/// release (the review's gap), never skipped for one further up.
+#[test]
+fn an_unreadable_release_owner_manifest_is_an_unread_release() {
+    let root = std::env::temp_dir().join(format!(
+        "solid-checker-dialect-unreadable-owner-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    for (package, version) in [("solid-js", "2.0.0-rc.0"), ("@solidjs/web", "2.0.0-rc.0")] {
+        let directory = root.join("node_modules").join(package);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("package.json"),
+            format!(r#"{{"name":"{package}","version":"{version}"}}"#),
+        )
+        .unwrap();
+    }
+    let web = root.join("app/node_modules/@solidjs/web");
+    std::fs::create_dir_all(&web).unwrap();
+    std::fs::write(web.join("package.json"), "{ not json").unwrap();
+    std::fs::create_dir_all(root.join("app")).unwrap();
+    let project = root.join("app/tsconfig.json");
+    std::fs::write(&project, "{}").unwrap();
+    let Detection::Installed { releases, .. } = detect_detailed(&project) else {
+        panic!("solid-js resolves above");
+    };
+    let owner = releases
+        .iter()
+        .find(|release| release.package == "@solidjs/web")
+        .expect("@solidjs/web is a release owner");
+    assert_eq!(owner.version.as_deref(), Some(UNREADABLE_MANIFEST));
+    assert_eq!(
+        owner.manifest.as_deref(),
+        Some(web.join("package.json").as_path())
+    );
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 /// The three outcomes `detect` collapses, kept apart -- and the manifest
 /// path a refusal has to name. The walk is unbounded, so the deciding
 /// `package.json` is frequently not the one beside the project, and a
