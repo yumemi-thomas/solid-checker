@@ -412,7 +412,40 @@ pub(super) fn semantic_role_before_awaits(
                 {
                     return role_arm!("callee_roles.named-callback-called-in-place", called);
                 }
-                return role_arm!("callee_roles.named-callback-untracked", role);
+                // ADR 0920: as `control-flow-nested`, a closure nested in the
+                // callback that the climb above did not place (reads only
+                // reach this branch) is no proven deferral. The callback's
+                // own body keeps its answer, as does a closure its in-place
+                // layers or inline carriers run there (`[1].forEach(f)` in a
+                // named handler).
+                let in_body = |at: Span| {
+                    crate::owners::containing_ast_function(&file.ast, at)
+                        .is_none_or(|function| function.span == callback.span)
+                };
+                if in_body(span)
+                    || super::write_roles::climb_in_place_layers(file, span, lookup).is_some_and(
+                        |climb| {
+                            !climb.exhausted
+                                && climb.suspended.is_none()
+                                && !climb.in_list
+                                && in_body(climb.at)
+                        },
+                    )
+                    || carried_into_callback(file, span, callback.span, lookup, 4)
+                {
+                    return role_arm!("callee_roles.named-callback-untracked", role);
+                }
+                let nested = nested_unplaced_role(
+                    file,
+                    span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    classifying,
+                    true,
+                );
+                return role_arm!("callee_roles.named-callback-untracked-nested", nested);
             }
             // A closure whose binding only inline carriers in the callback's
             // body (or in closures they carry) take (`[1].forEach(hf)`,
@@ -671,184 +704,15 @@ pub(super) fn semantic_role_before_awaits(
                 None => role_arm!("callee_roles.allowed-climb", role),
             };
         }
-        // ADR 0516: the climb stops at a generator, whose body runs when its
-        // iterator is stepped, not when it is created: no deferral is proven.
-        // One stepped at its own call (`(function* () { … })().next()`) runs
-        // there, some of it or none, so a role that reports nothing at that
-        // call is its role; anything else is unplaced. A generator that is
-        // itself the primitive's callback (`action(function* () { … })`) is
-        // that callback, placed as it was. A write or an action is placed by
-        // the write walk's own arm (ADR 0521, `stepped_generator_in_place`),
-        // which asks the call's write role: this read role knows no write
-        // adjustment, so a root between the call and a handler would be
-        // skipped.
-        if let Some(function) =
-            crate::owners::containing_ast_function(&file.ast, span).filter(|function| {
-                function.generator
-                    && !allowed.iter().any(|region| {
-                        file.ast.peel_ts_sugar_span(*region) == function.span
-                            || *region == function.span
-                    })
-            })
-        {
-            if classifying.contains(&write_classification_marker()) {
-                return role_arm!(
-                    "callee_roles.allowed-generator-write",
-                    ExecutionRole::Unknown
-                );
-            }
-            // An async generator's body past an `await` runs on a later task.
-            if let Some(created) = crate::owners::generator_iterator_used(file, function)
-                .filter(|_| !function.r#async)
-                .filter(|created| crate::owners::iterator_stepped_at(file, created.span))
-            {
-                let role = semantic_execution_role_within(
-                    file,
-                    created.span,
-                    allowed,
-                    entities,
-                    symbol_names,
-                    lookup,
-                    classifying,
-                );
-                if !role.reports_untracked_read() && !role.reports_unplaced() {
-                    return role_arm!("callee_roles.allowed-generator-stepped", role);
-                }
-            }
-            return role_arm!("callee_roles.allowed-generator", ExecutionRole::Unknown);
-        }
-        // ADR 0547: an action's generator runs its first synchronous slice on
-        // the stack of whoever calls the action, in that caller's strict-read
-        // window: a read there is placed at the action's callers.
-        if !classifying.contains(&write_classification_marker())
-            && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
-            && let Some((call, index)) =
-                crate::owners::stepped_action_generator(file, function, lookup)
-            && lookup
-                .primitive_at_call(file, call.span)
-                .is_some_and(|primitive| {
-                    dialect.action_step_inherits_calling_window(primitive, index)
-                })
-        {
-            return action_step_role(
-                file,
-                function,
-                span,
-                allowed,
-                entities,
-                symbol_names,
-                lookup,
-                classifying,
-            );
-        }
-        // ADR 0539: the cleanup an effect's apply returns runs on the effect's
-        // rerun in the apply's strict-read window, where rc.17 warns on a
-        // read; the owner's disposal calls it outside the window, and nothing
-        // orders that disposal against the rerun: unplaced, unless the
-        // effect's compute provably tracks nothing.
-        if !classifying.contains(&write_classification_marker())
-            && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
-            && super::write_roles::windowed_returned_cleanup(file, function, lookup)
-                == Some(super::write_roles::WindowedCleanup::MayRerun)
-        {
-            return role_arm!(
-                "callee_roles.allowed-effect-cleanup-rerun",
-                ExecutionRole::Unknown
-            );
-        }
-        // ADR 0695: a cleanup runs at its owner's disposal, in no window, unless
-        // code in the project can dispose an owner on a stack of its own.
-        let disposal = super::write_roles::runs_in_disposal(file, span, lookup);
-        if disposal == super::write_roles::DisposalReach::Only {
-            return if lookup.project_may_dispose() {
-                role_arm!(
-                    "callee_roles.allowed-disposal-reachable",
-                    ExecutionRole::Unknown
-                )
-            } else {
-                role_arm!(
-                    "callee_roles.allowed-nested-disposal",
-                    ExecutionRole::DeferredCallback
-                )
-            };
-        }
-        // The value an effect's compute returns, where the apply never calls it.
-        if crate::owners::containing_ast_function(&file.ast, span)
-            .is_some_and(|function| returned_to_idle_apply(file, function, lookup))
-        {
-            return role_arm!(
-                "callee_roles.allowed-nested-never-called",
-                ExecutionRole::DeferredCallback
-            );
-        }
-        // A function only a host keeps or a scheduler runs, in a project that
-        // dispatches nothing on its own stack (ADR 0535, `addEventListener`).
-        if let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
-            && let Some(name) = crate::owners::function_binding_name(file, function)
-            && !lookup.synchronous_event_dispatch_present()
-        {
-            use crate::local_access::HandOff;
-            let mut hand_offs = Vec::new();
-            crate::local_access::binding_hand_offs(file, name.span, lookup, &mut hand_offs);
-            if hand_offs
-                .iter()
-                .any(|hand_off| matches!(hand_off, HandOff::Retained | HandOff::FreshStack))
-                && hand_offs.iter().all(|hand_off| {
-                    matches!(
-                        hand_off,
-                        HandOff::Retained | HandOff::FreshStack | HandOff::Value
-                    )
-                })
-            {
-                return role_arm!(
-                    "callee_roles.allowed-nested-host-kept",
-                    ExecutionRole::DeferredCallback
-                );
-            }
-        }
-        // A cleanup that may run off a disposal: `onCleanup` hands out a handle,
-        // and a call of it runs the callback on the caller's stack (`a13`).
-        if crate::owners::containing_ast_function(&file.ast, span).is_some_and(|function| {
-            file.ast
-                .arguments_containing(function.span)
-                .any(|(call, index)| {
-                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
-                        && lookup.primitive_at_call(file, call.span) == Some(Primitive::OnCleanup)
-                })
-        }) {
-            return role_arm!(
-                "callee_roles.allowed-cleanup-off-disposal",
-                ExecutionRole::Unknown
-            );
-        }
-        // Proven off this stack: a function only events invoke, a fresh stack,
-        // a callback the engine runs on its own schedule.
-        if disposal == super::write_roles::DisposalReach::NotIn {
-            return role_arm!(
-                "callee_roles.allowed-nested-off-stack",
-                ExecutionRole::DeferredCallback
-            );
-        }
-        // A callback a primitive takes is placed by that primitive's own
-        // arm, and a scheduler's runs on a fresh stack. Nothing above placed
-        // anything else, so no silence is proven.
-        if crate::owners::containing_ast_function(&file.ast, span)
-            .is_some_and(|function| function_placed_by_dialect(file, function.span, lookup))
-        {
-            return role_arm!(
-                "callee_roles.allowed-primitive-callback",
-                ExecutionRole::DeferredCallback
-            );
-        }
-        if fresh_stack_callback_call(file, span, lookup).is_some() {
-            return role_arm!(
-                "callee_roles.allowed-nested-fresh-stack",
-                ExecutionRole::DeferredCallback
-            );
-        }
-        return role_arm!(
-            "callee_roles.allowed-unplaced-nested",
-            ExecutionRole::Unknown
+        return nested_unplaced_role(
+            file,
+            span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+            false,
         );
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, lookup) {
@@ -933,6 +797,25 @@ pub(super) fn semantic_role_before_awaits(
                 "callee_roles.control-flow-tracked-region",
                 ExecutionRole::TrackedJsx
             );
+        }
+        // ADR 0920: a read in a nested function no layer above placed (a
+        // callback handed parameter to parameter, `forward-N`) is no proven
+        // deferral. It takes the allowed regions' nested answer: deferred
+        // where a fact puts it off the callback's stack, else unplaced.
+        if role == ExecutionRole::DeferredCallback
+            && !classifying.contains(&write_classification_marker())
+        {
+            let nested = nested_unplaced_role(
+                file,
+                span,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+                true,
+            );
+            return role_arm!("callee_roles.control-flow-nested", nested);
         }
         return role_arm!("callee_roles.control-flow", role);
     }
@@ -1064,6 +947,209 @@ pub(super) fn semantic_role_before_awaits(
         );
     }
     role_arm!("callee_roles.unplaced", ExecutionRole::Unknown)
+}
+
+/// Where a site in a function nested in a window region runs when no layer
+/// runs that function in place there (ADR 0469's climb found none): proven
+/// off the region's stack (a primitive's own callback, a scheduler's fresh
+/// stack, a function only a host keeps or only events invoke, a cleanup
+/// nothing can dispose on a chosen stack) or unplaced. The allowed regions
+/// ask it, and since ADR 0920 a flow component's children callback and a
+/// named untracked callback (a ref, an apply) do too: a callback handed
+/// parameter to parameter is no proven deferral.
+#[allow(clippy::too_many_arguments)]
+fn nested_unplaced_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+    direct: bool,
+) -> ExecutionRole {
+    let dialect = lookup.dialect;
+    // ADR 0516: the climb stops at a generator, whose body runs when its
+    // iterator is stepped, not when it is created: no deferral is proven.
+    // One stepped at its own call (`(function* () { … })().next()`) runs
+    // there, some of it or none, so a role that reports nothing at that
+    // call is its role; anything else is unplaced. A generator that is
+    // itself the primitive's callback (`action(function* () { … })`) is
+    // that callback, placed as it was. A write or an action is placed by
+    // the write walk's own arm (ADR 0521, `stepped_generator_in_place`),
+    // which asks the call's write role: this read role knows no write
+    // adjustment, so a root between the call and a handler would be
+    // skipped.
+    if let Some(function) =
+        crate::owners::containing_ast_function(&file.ast, span).filter(|function| {
+            function.generator
+                && !allowed.iter().any(|region| {
+                    file.ast.peel_ts_sugar_span(*region) == function.span
+                        || *region == function.span
+                })
+        })
+    {
+        if classifying.contains(&write_classification_marker()) {
+            return role_arm!(
+                "callee_roles.allowed-generator-write",
+                ExecutionRole::Unknown
+            );
+        }
+        // An async generator's body past an `await` runs on a later task.
+        if let Some(created) = crate::owners::generator_iterator_used(file, function)
+            .filter(|_| !function.r#async)
+            .filter(|created| crate::owners::iterator_stepped_at(file, created.span))
+        {
+            let role = semantic_execution_role_within(
+                file,
+                created.span,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            );
+            if !role.reports_untracked_read() && !role.reports_unplaced() {
+                return role_arm!("callee_roles.allowed-generator-stepped", role);
+            }
+        }
+        return role_arm!("callee_roles.allowed-generator", ExecutionRole::Unknown);
+    }
+    // ADR 0547: an action's generator runs its first synchronous slice on
+    // the stack of whoever calls the action, in that caller's strict-read
+    // window: a read there is placed at the action's callers.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+        && let Some((call, index)) = crate::owners::stepped_action_generator(file, function, lookup)
+        && lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| dialect.action_step_inherits_calling_window(primitive, index))
+    {
+        return action_step_role(
+            file,
+            function,
+            span,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+        );
+    }
+    // ADR 0539: the cleanup an effect's apply returns runs on the effect's
+    // rerun in the apply's strict-read window, where rc.17 warns on a
+    // read; the owner's disposal calls it outside the window, and nothing
+    // orders that disposal against the rerun: unplaced, unless the
+    // effect's compute provably tracks nothing.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+        && super::write_roles::windowed_returned_cleanup(file, function, lookup)
+            == Some(super::write_roles::WindowedCleanup::MayRerun)
+    {
+        return role_arm!(
+            "callee_roles.allowed-effect-cleanup-rerun",
+            ExecutionRole::Unknown
+        );
+    }
+    // ADR 0695: a cleanup runs at its owner's disposal, in no window, unless
+    // code in the project can dispose an owner on a stack of its own.
+    let disposal = super::write_roles::runs_in_disposal(file, span, lookup);
+    if disposal == super::write_roles::DisposalReach::Only {
+        return if lookup.project_may_dispose() {
+            role_arm!(
+                "callee_roles.allowed-disposal-reachable",
+                ExecutionRole::Unknown
+            )
+        } else {
+            role_arm!(
+                "callee_roles.allowed-nested-disposal",
+                ExecutionRole::DeferredCallback
+            )
+        };
+    }
+    // The value an effect's compute returns, where the apply never calls it.
+    if crate::owners::containing_ast_function(&file.ast, span)
+        .is_some_and(|function| returned_to_idle_apply(file, function, lookup))
+    {
+        return role_arm!(
+            "callee_roles.allowed-nested-never-called",
+            ExecutionRole::DeferredCallback
+        );
+    }
+    // A function only a host keeps or a scheduler runs, in a project that
+    // dispatches nothing on its own stack (ADR 0535, `addEventListener`).
+    if let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+        && let Some(name) = crate::owners::function_binding_name(file, function)
+        && !lookup.synchronous_event_dispatch_present()
+    {
+        use crate::local_access::HandOff;
+        let mut hand_offs = Vec::new();
+        crate::local_access::binding_hand_offs(file, name.span, lookup, &mut hand_offs);
+        if hand_offs
+            .iter()
+            .any(|hand_off| matches!(hand_off, HandOff::Retained | HandOff::FreshStack))
+            && hand_offs.iter().all(|hand_off| {
+                matches!(
+                    hand_off,
+                    HandOff::Retained | HandOff::FreshStack | HandOff::Value
+                )
+            })
+        {
+            return role_arm!(
+                "callee_roles.allowed-nested-host-kept",
+                ExecutionRole::DeferredCallback
+            );
+        }
+    }
+    // A cleanup that may run off a disposal: `onCleanup` hands out a handle,
+    // and a call of it runs the callback on the caller's stack (`a13`).
+    if crate::owners::containing_ast_function(&file.ast, span).is_some_and(|function| {
+        file.ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && lookup.primitive_at_call(file, call.span) == Some(Primitive::OnCleanup)
+            })
+    }) {
+        return role_arm!(
+            "callee_roles.allowed-cleanup-off-disposal",
+            ExecutionRole::Unknown
+        );
+    }
+    // Proven off this stack: a function only events invoke, a fresh stack,
+    // a callback the engine runs on its own schedule. `NotIn` says only that
+    // one run is outside a disposal; under a flow row or a named callback
+    // (`direct`, ADR 0920) it climbs to the component, so the function the
+    // site's in-place layers end in must itself be proven off the stack.
+    if disposal == super::write_roles::DisposalReach::NotIn
+        && (!direct || super::write_roles::runs_off_callback_stack(file, span, lookup))
+    {
+        return role_arm!(
+            "callee_roles.allowed-nested-off-stack",
+            ExecutionRole::DeferredCallback
+        );
+    }
+    // A callback a primitive takes is placed by that primitive's own
+    // arm, and a scheduler's runs on a fresh stack. Nothing above placed
+    // anything else, so no silence is proven.
+    if crate::owners::containing_ast_function(&file.ast, span)
+        .is_some_and(|function| function_placed_by_dialect(file, function.span, lookup))
+    {
+        return role_arm!(
+            "callee_roles.allowed-primitive-callback",
+            ExecutionRole::DeferredCallback
+        );
+    }
+    if fresh_stack_callback_call(file, span, lookup).is_some() {
+        return role_arm!(
+            "callee_roles.allowed-nested-fresh-stack",
+            ExecutionRole::DeferredCallback
+        );
+    }
+    role_arm!(
+        "callee_roles.allowed-unplaced-nested",
+        ExecutionRole::Unknown
+    )
 }
 
 /// The `classifying` entry that marks a write-legality classification, which

@@ -1187,6 +1187,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/setter-callback-in-helper/node_modules/**
 !fixtures/reactive-ir/flow-iife-tracked/node_modules/
 !fixtures/reactive-ir/flow-iife-tracked/node_modules/**
+!fixtures/reactive-ir/forwarded-callback-nested-window/node_modules/
+!fixtures/reactive-ir/forwarded-callback-nested-window/node_modules/**
 !fixtures/reactive-ir/show-child-pending-read/node_modules/
 !fixtures/reactive-ir/show-child-pending-read/node_modules/**
 !fixtures/reactive-ir/handed-closure-pending-read/node_modules/
