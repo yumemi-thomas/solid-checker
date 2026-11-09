@@ -957,9 +957,9 @@
   "causes": {
    "R-stacked": 194,
    "R-unplaced": 8,
-   "R-other": 32,
-   "R-neighbour-U": 79,
-   "R-misplaced": 33,
+   "R-other": 7,
+   "R-neighbour-U": 48,
+   "R-misplaced": 29,
    "R-carrier": 139,
    "census": 93,
    "g2d named hand-off": 34,
