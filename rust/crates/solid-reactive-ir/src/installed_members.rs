@@ -250,12 +250,218 @@ fn push(file: &FileFacts, site: Span, defects: &mut Vec<StaticDefect>) {
     });
 }
 
+/// The objects this file names that an install put a member on, for the Gets
+/// and writes of them (`installed_object_accesses`).
+#[derive(Default)]
+struct Installed {
+    /// An object's expression, and the install's own member (not an access).
+    objects: Vec<(Span, Option<Span>)>,
+    /// The functions whose `this` an install was handed (`None`: outside any
+    /// function with a `this` of its own).
+    receivers: Vec<Option<Span>>,
+    /// An install operation was read and called where this does not follow:
+    /// any object may be the one it lands on.
+    anywhere: bool,
+}
+
+/// The innermost function with a `this` of its own around `span`.
+fn this_function(file: &FileFacts, span: Span) -> Option<Span> {
+    file.ast
+        .functions
+        .iter()
+        .filter(|function| {
+            function.kind != solid_facts::ast::FunctionKind::Arrow
+                && function.span != span
+                && function.span.contains(span)
+        })
+        .map(|function| function.span)
+        .min_by_key(|function| function.end - function.start)
+}
+
+/// ADR 0925: the object an install was handed. `this` is the receiver of
+/// the function around it and, where that function is a method of an object
+/// literal, the literal (`t.install()`).
+fn mark_object(file: &FileFacts, span: Span, installed: &mut Installed) {
+    let span = file.ast.peel_ts_sugar_span(span);
+    if file.source_text(span) != Some("this") {
+        installed.objects.push((span, None));
+        return;
+    }
+    let function = this_function(file, span);
+    installed.receivers.push(function);
+    let Some(function) = function else {
+        return;
+    };
+    let Some(literal) = file
+        .ast
+        .object_properties
+        .iter()
+        .find(|property| property.value == function)
+        .and_then(|property| {
+            file.ast
+                .object_get_shapes
+                .iter()
+                .map(|shape| shape.span)
+                .filter(|object| object.contains(property.span))
+                .min_by_key(|object| object.end - object.start)
+        })
+    else {
+        return;
+    };
+    installed.objects.push((literal, None));
+    // The literal's other methods see the same `this`.
+    for property in own_properties(file, literal) {
+        if file
+            .ast
+            .function_at(property.value)
+            .is_some_and(|method| method.kind != solid_facts::ast::FunctionKind::Arrow)
+        {
+            installed.receivers.push(Some(property.value));
+        }
+    }
+}
+
+/// ADR 0925: what a call of an install operation put a member on: the
+/// object it was handed (`shift` arguments in, past `.call`'s receiver), and
+/// for `Object`'s forms the call itself, which returns that object.
+fn mark_targets(
+    file: &FileFacts,
+    receiver: &str,
+    name: &str,
+    call: &CallFact,
+    shift: usize,
+    installed: &mut Installed,
+) {
+    if receiver == "Object" {
+        installed.objects.push((call.span, None));
+    }
+    if name == "create" || name == "set" {
+        return;
+    }
+    match argument(call, shift) {
+        Some(object) => mark_object(file, object.span, installed),
+        None => installed.anywhere = true,
+    }
+}
+
+/// ADR 0925: the calls through a name an install operation was read into
+/// (`const dp = Object.defineProperty`, `const { defineProperty } = Object`):
+/// each is that install. Any other use of the name loses its arguments.
+fn follow_name(
+    file: &FileFacts,
+    receiver: &str,
+    name: &str,
+    declaration: Span,
+    installed: &mut Installed,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let ast = &file.ast;
+    for &(reference, _) in ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, target)| *target == declaration)
+    {
+        match ast
+            .calls
+            .iter()
+            .find(|call| ast.peel_ts_sugar_span(call.callee) == reference)
+        {
+            Some(call) if call_is_clear(file, receiver, name, call) => {}
+            Some(call) => {
+                push(file, call.span, defects);
+                mark_targets(file, receiver, name, call, 0, installed);
+            }
+            None => installed.anywhere = true,
+        }
+    }
+}
+
+/// ADR 0925: the uses of a name the global itself was read into
+/// (`const O = Object`): `O.defineProperty(…)` is that install, another
+/// member names no install, and any other use hands the operations on.
+fn follow_receiver(
+    file: &FileFacts,
+    receiver: &str,
+    declaration: Span,
+    installed: &mut Installed,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let ast = &file.ast;
+    for &(reference, _) in ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, target)| *target == declaration)
+    {
+        let Some(member) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == reference)
+        else {
+            installed.anywhere = true;
+            continue;
+        };
+        let Some(name) = member_name(file, member).filter(|name| installs(receiver, name)) else {
+            continue;
+        };
+        match ast
+            .calls
+            .iter()
+            .find(|call| ast.peel_ts_sugar_span(call.callee) == member.span)
+        {
+            Some(call) if call_is_clear(file, receiver, name, call) => {}
+            Some(call) => {
+                push(file, call.span, defects);
+                mark_targets(file, receiver, name, call, 0, installed);
+            }
+            None => {
+                push(file, member.span, defects);
+                follow_read(file, receiver, name, member.span, installed, defects);
+            }
+        }
+    }
+}
+
+/// ADR 0925: an install operation read and not called: through a `const`
+/// alias or `.call`, the calls are followed; anything else lands anywhere.
+fn follow_read(
+    file: &FileFacts,
+    receiver: &str,
+    name: &str,
+    member: Span,
+    installed: &mut Installed,
+    defects: &mut Vec<StaticDefect>,
+) {
+    let ast = &file.ast;
+    let alias = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|value| ast.peel_ts_sugar_span(value) == member)
+    });
+    if let Some(name_span) = alias.and_then(|binding| binding.names.first()) {
+        follow_name(file, receiver, name, name_span.span, installed, defects);
+        return;
+    }
+    let called = ast.members.iter().find(|outer| {
+        ast.peel_ts_sugar_span(outer.object) == member && member_name(file, outer) == Some("call")
+    });
+    match called.and_then(|outer| {
+        ast.calls
+            .iter()
+            .find(|call| ast.peel_ts_sugar_span(call.callee) == outer.span)
+    }) {
+        Some(call) => mark_targets(file, receiver, name, call, 1, installed),
+        None => installed.anywhere = true,
+    }
+}
+
 /// ADR 0643's obligations of one file.
 pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
     let ast = &file.ast;
-    // The objects a store prototype was put on, for the Gets and writes of
-    // them this file names (`installed_object_accesses`).
-    let mut installed = Vec::new();
+    // The objects a store prototype or an accessor was put on, for the Gets
+    // and writes of them this file names (`installed_object_accesses`).
+    let mut installed = Installed::default();
     for property in &ast.object_properties {
         let key = file
             .source_text(property.key)
@@ -273,7 +479,7 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
                 .filter(|object| object.contains(property.span))
                 .min_by_key(|object| object.end - object.start)
             {
-                installed.push((object, Some(property.span)));
+                installed.objects.push((object, Some(property.span)));
             }
         }
     }
@@ -285,7 +491,9 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
             && !prototype_is_plain(file, assignment.value_span, DEPTH)
         {
             push(file, member.span, defects);
-            installed.push((ast.peel_ts_sugar_span(member.object), Some(member.span)));
+            installed
+                .objects
+                .push((ast.peel_ts_sugar_span(member.object), Some(member.span)));
         }
     }
     // The key handed on: `set("__proto__", store)` reaches `o[k] = v` in a
@@ -315,17 +523,45 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
                 .iter()
                 .any(|literal| literal.span == member.span);
             if ast.computed_members.binary_search(&member.span).is_ok() && !literal_key {
-                installed.push((ast.peel_ts_sugar_span(member.object), Some(member.span)));
+                installed
+                    .objects
+                    .push((ast.peel_ts_sugar_span(member.object), Some(member.span)));
             }
         }
     }
-    // Anything but a direct call reads the operation and loses its arguments.
+    // Anything but a direct call reads the operation and loses its arguments,
+    // unless the read is a destructured name whose calls are followed.
     for binding in &ast.bindings {
-        if binding
+        let Some(receiver) = binding
             .initializer
-            .is_some_and(|value| global_receiver(file, value).is_some())
-        {
-            push(file, binding.pattern, defects);
+            .and_then(|value| global_receiver(file, value))
+        else {
+            continue;
+        };
+        push(file, binding.pattern, defects);
+        if binding.shape == solid_facts::ast::BindingShape::Identifier {
+            if let Some(name) = binding.names.first() {
+                follow_receiver(file, receiver, name.span, &mut installed, defects);
+            }
+            continue;
+        }
+        for name in &binding.names {
+            match binding
+                .object_slots
+                .iter()
+                .find(|slot| slot.local.span == name.span)
+            {
+                Some(slot) if installs(receiver, &slot.property) => follow_name(
+                    file,
+                    receiver,
+                    &slot.property,
+                    name.span,
+                    &mut installed,
+                    defects,
+                ),
+                Some(_) => {}
+                None => installed.anywhere = true,
+            }
         }
     }
     for member in &ast.members {
@@ -340,6 +576,16 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
                     .is_some_and(|value| slot_is_clear(file, value.span, value.runtime_value_kind))
             }) {
                 push(file, member.span, defects);
+                if call.is_some() {
+                    let object = ast.peel_ts_sugar_span(member.object);
+                    if file.source_text(object) == Some("this") {
+                        mark_object(file, object, &mut installed);
+                    } else {
+                        installed.objects.push((object, Some(member.span)));
+                    }
+                } else {
+                    installed.anywhere = true;
+                }
             }
             continue;
         }
@@ -355,28 +601,54 @@ pub(crate) fn check_file(file: &FileFacts, defects: &mut Vec<StaticDefect>) {
             .find(|call| ast.peel_ts_sugar_span(call.callee) == member.span)
         {
             Some(call) if call_is_clear(file, receiver, name, call) => {}
-            Some(call) => push(file, call.span, defects),
-            None => push(file, member.span, defects),
+            Some(call) => {
+                push(file, call.span, defects);
+                mark_targets(file, receiver, name, call, 0, &mut installed);
+            }
+            None => {
+                push(file, member.span, defects);
+                follow_read(file, receiver, name, member.span, &mut installed, defects);
+            }
         }
     }
     installed_object_accesses(file, &installed, defects);
 }
 
 /// ADR 0643 amendment: each Get or write this file writes of an object a
-/// store prototype was put on, at the member's property (where V8 places the
-/// access, and so Chrome's frame): the object itself, a binding it was
-/// declared or assigned in (the install's own object binding), or a call
-/// handed it whole (`merge(o, …).v`, whose result reads through it, placed
-/// at that call). Where the `__proto__` key is handed on, every object a
-/// non-literal key writes is such an object. The
-/// install's obligation does not say which access runs where; each access
-/// is its own, so a rule's site is never left with no row.
+/// store prototype or an accessor was put on, at the member's property
+/// (where V8 places the access, and so Chrome's frame): the object itself, a
+/// binding it was declared or assigned in (the install's own object binding),
+/// a `const` that names one, `this` in the function an install was handed it
+/// (and, for a method of a literal, the literal), or a call handed it whole
+/// (`merge(o, …).v`, whose result reads through it, placed at that call).
+/// Where the `__proto__` key is handed on, every object a non-literal key
+/// writes is such an object; where an install operation is called where this
+/// does not follow (ADR 0925), every access is. The install's obligation does
+/// not say which access runs where; each access is its own, so a rule's site
+/// is never left with no row.
 fn installed_object_accesses(
     file: &FileFacts,
-    installed: &[(Span, Option<Span>)],
+    installed: &Installed,
     defects: &mut Vec<StaticDefect>,
 ) {
     let ast = &file.ast;
+    if installed.objects.is_empty() && installed.receivers.is_empty() && !installed.anywhere {
+        return;
+    }
+    let sites = |member: Span| {
+        installed
+            .objects
+            .iter()
+            .any(|&(_, site)| site == Some(member))
+    };
+    if installed.anywhere {
+        for member in &ast.members {
+            if !sites(member.span) {
+                push(file, member.property, defects);
+            }
+        }
+        return;
+    }
     // The declaration a span names: an identifier's, or the binding a value
     // initializes.
     let declaration_of = |span: Span| {
@@ -392,37 +664,70 @@ fn installed_object_accesses(
                 .map(|name| name.span)
         })
     };
-    let targets = installed
+    let objects = installed
+        .objects
         .iter()
-        .map(|&(object, _)| (object, declaration_of(object)))
+        .map(|&(object, _)| object)
         .collect::<Vec<_>>();
-    let is_object = |span: Span| {
-        let span = ast.peel_ts_sugar_span(span);
-        targets.iter().any(|&(object, declaration)| {
-            span == object
-                || declaration.is_some_and(|declaration| {
-                    span == declaration || ast.reference_declaration(span) == Some(declaration)
-                })
-        })
+    let mut declarations = objects
+        .iter()
+        .filter_map(|&object| declaration_of(object))
+        .collect::<Vec<_>>();
+    let is_this = |span: Span| {
+        file.source_text(span) == Some("this")
+            && installed.receivers.contains(&this_function(file, span))
     };
+    let is_object = |span: Span, declarations: &[Span]| {
+        let span = ast.peel_ts_sugar_span(span);
+        objects.contains(&span)
+            || is_this(span)
+            || declarations.iter().any(|&declaration| {
+                span == declaration || ast.reference_declaration(span) == Some(declaration)
+            })
+    };
+    // ADR 0925: a `const` holding an installed object names it too
+    // (`const self = this`, `const u = t`).
+    for _ in 0..DEPTH {
+        let aliases = ast
+            .bindings
+            .iter()
+            .filter(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding
+                        .initializer
+                        .is_some_and(|value| is_object(value, &declarations))
+            })
+            .filter_map(|binding| binding.names.first().map(|name| name.span))
+            .filter(|name| !declarations.contains(name))
+            .collect::<Vec<_>>();
+        if aliases.is_empty() {
+            break;
+        }
+        declarations.extend(aliases);
+    }
     for member in &ast.members {
-        if installed.iter().any(|&(_, site)| site == Some(member.span)) {
+        if sites(member.span) {
             continue;
         }
         let receiver = ast.peel_ts_sugar_span(member.object);
+        // The object itself, written or read through: Chrome's frame is the
+        // member's property.
+        if is_object(receiver, &declarations) {
+            push(file, member.property, defects);
+            continue;
+        }
+        // A call handed the object reads through it in its own body (a
+        // package's proxy): Chrome's frame is the call's.
         let through_call = ast.calls.iter().any(|call| {
             call.span == receiver
                 && call
                     .arguments
                     .iter()
-                    .any(|argument| !argument.spread && is_object(argument.span))
+                    .any(|argument| !argument.spread && is_object(argument.span, &declarations))
         });
-        // A call handed the object reads through it in its own body (a
-        // package's proxy): Chrome's frame is the call's.
         if through_call {
             push(file, receiver, defects);
-        } else if is_object(receiver) {
-            push(file, member.property, defects);
         }
     }
 }
