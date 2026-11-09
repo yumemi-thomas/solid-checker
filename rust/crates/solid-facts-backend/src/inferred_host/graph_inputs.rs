@@ -369,7 +369,7 @@ pub(super) fn discovery_inputs(
     }
     let directory = fs::canonicalize(directory)
         .ok()
-        .required(directory, "cannot resolve application directory")?;
+        .read_from(directory, "cannot resolve application directory")?;
     let project = fs::canonicalize(&facts.project_id).ok().required(
         Path::new(&facts.project_id),
         "cannot resolve analyzed tsconfig",
@@ -381,11 +381,16 @@ pub(super) fn discovery_inputs(
         ));
     }
     let mut paths_observed = Vec::new();
-    application_inputs(&directory, &project, &mut paths_observed)?;
+    // ADR 0915: a refusal decided after reading an input that could not be
+    // observed is that input's, whatever reason the walk gave.
+    application_inputs(&directory, &project, &mut paths_observed)
+        .map_err(|refusal| refusal.or_unobservable(&paths_observed))?;
     // Refusal consumes only its witness. No app inventory, request parsing,
     // or manifest hashing is needed before the configuration can be admitted.
-    let config = configuration(&directory, &mut paths_observed)?;
-    let paths = paths_targets(&directory, &project)?;
+    let config = configuration(&directory, &mut paths_observed)
+        .map_err(|refusal| refusal.or_unobservable(&paths_observed))?;
+    let paths = paths_targets(&directory, &project)
+        .map_err(|refusal| refusal.or_unobservable(&paths_observed))?;
     Ok(DiscoveryInputs {
         directory,
         config,

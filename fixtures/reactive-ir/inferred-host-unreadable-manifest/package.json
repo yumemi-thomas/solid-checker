@@ -1,0 +1,5 @@
+{
+  "name": "inferred-host-unreadable-manifest",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build" }

@@ -30,6 +30,8 @@ mod dispatch_veto_reads_process;
 mod forwarding_refresh_process;
 #[path = "harness_process.rs"]
 mod harness_process;
+#[path = "host_inputs_unobservable_process.rs"]
+mod host_inputs_unobservable_process;
 #[path = "idle_shadow_process.rs"]
 mod idle_shadow_process;
 #[path = "imported_const_process.rs"]

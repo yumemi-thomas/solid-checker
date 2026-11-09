@@ -225,10 +225,18 @@ pub(super) fn static_fact_requests(ast: &solid_facts::ast::AstFacts) -> Vec<Stri
         .collect()
 }
 
+/// `None` when the input exists and cannot be observed (ADR 0915,
+/// `crate::observed`): a dangling symlink at or above it, a permission
+/// error, a package manifest that does not parse. Only a path with nothing
+/// there is `absent`.
 pub(super) fn identity(path: &Path) -> Option<String> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => Some(metadata),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Some("absent".into()),
+        Err(error) if crate::observed::absent_kind(error.kind()) => {
+            return crate::observed::broken_ancestor(path)
+                .is_none()
+                .then(|| "absent".into());
+        }
         Err(_) => None,
     };
     if metadata
@@ -273,6 +281,7 @@ pub(super) fn identity(path: &Path) -> Option<String> {
         ));
     }
     match fs::read(path) {
+        Ok(bytes) if crate::observed::manifest(path) && !crate::observed::parses(&bytes) => None,
         Ok(bytes) => Some(format!("sha256:{:x}", Sha256::digest(bytes))),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some("absent".into()),
         Err(_) => None,
@@ -378,14 +387,16 @@ fn dangling_link(path: &Path) -> Option<String> {
     }
 }
 
-pub(super) fn inventory_paths(directory: &Path, paths: &mut Vec<PathBuf>) -> Option<()> {
+/// Every input below `directory`; `Err` names the entry that could not be
+/// listed (ADR 0915: an unobservable input, never a smaller inventory).
+pub(super) fn inventory_paths(directory: &Path, paths: &mut Vec<PathBuf>) -> Result<(), PathBuf> {
     paths.push(directory.to_path_buf());
-    for entry in fs::read_dir(directory).ok()? {
-        let entry = entry.ok()?;
+    for entry in fs::read_dir(directory).map_err(|_| directory.to_path_buf())? {
+        let entry = entry.map_err(|_| directory.to_path_buf())?;
         if entry.file_name() == ".git" || entry.file_name() == "node_modules" {
             continue;
         }
-        let kind = entry.file_type().ok()?;
+        let kind = entry.file_type().map_err(|_| entry.path())?;
         if kind.is_symlink() {
             paths.push(entry.path());
             continue;
@@ -410,7 +421,7 @@ pub(super) fn inventory_paths(directory: &Path, paths: &mut Vec<PathBuf>) -> Opt
             }
         }
     }
-    Some(())
+    Ok(())
 }
 
 pub(super) fn input_manifest(
@@ -422,7 +433,7 @@ pub(super) fn input_manifest(
     let _stage = HostStage::new("manifest-identity");
     let mut inventory = Vec::new();
     inventory_paths(directory, &mut inventory)
-        .required(directory, "cannot inventory application inputs")?;
+        .map_err(|at| DiscoveryRefusal::unobservable(&at, "cannot inventory application inputs"))?;
     let mut paths = inferred_host_graph_input_paths(
         directory,
         Path::new(&facts.project_id),
@@ -439,7 +450,7 @@ pub(super) fn input_manifest(
         let path = Path::new(file.path.as_str());
         if fs::canonicalize(path)
             .ok()
-            .required(path, "cannot resolve analyzed source")?
+            .read_from(path, "cannot resolve analyzed source")?
             .as_path()
             != path
         {
@@ -458,7 +469,7 @@ pub(super) fn input_manifest(
         }
         let source = fs::read_to_string(path)
             .ok()
-            .required(path, "cannot read analyzed source")?;
+            .read_from(path, "cannot read analyzed source")?;
         if solid_facts::core::SourceHash::of(&source) != file.source_hash {
             return Err(DiscoveryRefusal::new(path, "analyzed source bytes changed"));
         }
@@ -478,7 +489,7 @@ pub(super) fn input_manifest(
                 source_identities
                     .remove(&path)
                     .or(fingerprint)
-                    .required(&path, "cannot fingerprint input")?,
+                    .observed(&path, "cannot fingerprint input")?,
             ))
         })
         .collect()

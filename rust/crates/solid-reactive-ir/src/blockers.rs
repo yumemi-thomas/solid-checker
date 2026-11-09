@@ -319,6 +319,11 @@ pub(crate) fn for_rule(code: &str) -> &'static str {
     }
 }
 
+/// ADR 0915: host inference read an input that exists and could not be
+/// observed (a dangling symlink, a permission error, a package manifest that
+/// does not parse). Emitted by the backend (`check::fail_closed`).
+pub(crate) const HOST_INPUT_UNREADABLE: &str = "host-input-unreadable";
+
 /// ADR 0840: a standard method of a census member on a receiver no fact
 /// proves real, while the program may put a function at that member of an
 /// object of its own.

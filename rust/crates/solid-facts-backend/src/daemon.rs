@@ -2342,6 +2342,7 @@ fn answer_with(
         solid_facts_backend::InferredHost {
             hosts,
             note: inference_note,
+            unobservable,
         },
     ) = solid_facts_backend::check::package_inputs(
         directory,
@@ -2411,7 +2412,12 @@ fn answer_with(
     // Written out before the answer: the client's log is whole when it
     // returns.
     solid_reactive_ir::configure_role_log(None);
-    let (analysis, diagnostic_timings) = analyzed?;
+    let (mut analysis, diagnostic_timings) = analyzed?;
+    // ADR 0915: as the one-shot check, an unreadable discovery input keeps
+    // the answer from certifying.
+    if let Some(unobservable) = &unobservable {
+        analysis = solid_facts_backend::check::fail_closed(&analysis, &state.project, unobservable);
+    }
     phases.mark("analyze");
     checkpoint()?;
     let report = crate::json_output::go_compatible_report(&analysis.snapshot)?;
