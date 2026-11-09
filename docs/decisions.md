@@ -2332,4 +2332,4 @@ The walk found no entry of a class constructor or method and ended `Open`; a wra
 
 <a id="adr-0915"></a>
 ## ADR 0915 — Unreadable is not absent
-Absent is `lstat` ENOENT/ENOTDIR, no dangling link above. A dangling link, denied access or bad `package.json` is not: host inference SC9005 `host-input-unreadable`; dialect SC9014. `observed.rs`.
+Absent is `lstat` ENOENT/ENOTDIR, no dangling link above. A dangling link, denied access or bad `package.json` is not: host inference SC9005 `host-input-unreadable`; dialect SC9014; installed manifest SC9005. `observed.rs`.

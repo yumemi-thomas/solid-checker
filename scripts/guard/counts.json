@@ -150,7 +150,7 @@
   "SC8014 preference-read-unproven": 7,
   "SC8015 preference-read-unproven": 13,
   "SC9005 host-input-unreadable": 3,
-  "SC9005 package-source-unavailable": 60,
+  "SC9005 package-source-unavailable": 62,
   "SC9012 async-prop-getter": 3,
   "SC9012 closed-parameter-member-dispatch": 68,
   "SC9012 composite-callee-unresolved": 9,

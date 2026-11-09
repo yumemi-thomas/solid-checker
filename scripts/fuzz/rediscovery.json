@@ -7341,5 +7341,11 @@
    "lg-dynamic-static-promise-flush-read-stored-x-wrapper-handoff-assign-this"
   ],
   "rediscovered": "focus.mjs --codes DYNAMIC_STATIC_PROMISE over the six default grids plus mx-recall and lg-recall: a62c14ae1's release 1 false positive (this id, static-dynamic-async-source/violation@4); the ADR 0914 tree 0 (uncertifiable, computation-error-unobserved), nothing needs a look, mx-recall unchanged (4606 agree, 1777 recall-gap). Fixture stored-throw-class-member-wrapper: FuzzShape and MethodInMemo V on a62c14ae1, U here; ReadMemo and InBody V on both"
+ },
+ {
+  "finding": "an input that exists and cannot be read was read as absent or ended in a certifying refusal: a dangling node_modules link above inferred-host-alias-congruent (into a deleted worktree) refused host inference ('cannot fingerprint input') and the ordinary analysis certified what a real install or a real absence leaves uncertifiable; the same for denied access to it, an unparsable application, enclosing or installed package.json in discovery, an unparsable or unreadable installed manifest in the package boundary (no SC9005), and an unreadable or dangling solid-js manifest in dialect detection (silent default)",
+  "found": "the Job B brief (2026-11-09): a worktree whose ancestor node_modules was a dangling symlink certified the fixture on old and new binaries",
+  "fixed": "ADR 0915",
+  "outside": "the generator cannot express a filesystem state: every grid program is source text and package file text written into a fresh case directory inside the pinned install (checker.mjs), with no symlink, mode bit or broken manifest; every run passes --runtime-target browser, which bypasses host inference; and the oracle builds each case with Vite, which stops with an error on a broken manifest, so there is no runtime verdict to judge. Pinned instead: process test host_inputs_unobservable_process (dangling and permission-denied node_modules above the project, a dangling and an unreadable package directory, a dangling and an unreadable solid-js, each one-shot and retained, against the healthy twins), fixtures inferred-host-unreadable-manifest (and variants/enclosed), inferred-host-unreadable-package-manifest, package-manifest-unparsable with its twin package-manifest-parsed, and unit tests in observed.rs, dialect/tests.rs and package_requirements/tests.rs"
  }
 ]
