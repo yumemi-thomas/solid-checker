@@ -21,8 +21,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // inserts, not strict-read callbacks.
         // Two of them are uncertifiable reads in the closures the two `nested`
         // memos return (ADR 0452), pinned below. One more since ADR 0535,
-        // pinned as incidental below.
-        ("strict-read-untracked", 21),
+        // pinned as incidental below. ADR 0920: one more, the cleanup a named
+        // apply returns, pinned below.
+        ("strict-read-untracked", 22),
         // ADR 0516: one is the uncertifiable read after `loopAwait`'s loop,
         // pinned below. ADR 0870: two more, the reads after
         // `conditionalAwait`'s and `shortCircuitAwait`'s skippable awaits.
@@ -247,6 +248,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 // body, a memo) may drain an apply under an owner, so its
                 // writes are uncertifiable, not legal.
                 ("no-write-in-pure-computation", 4),
+                // ADR 0920: `click`, the cleanup the named `applyLater`
+                // returns, runs on a rerun in the apply's window (ADR 0539):
+                // an obligation, as `effect-apply-valid.tsx`'s `later`.
+                ("strict-read-untracked", 1),
             ]
             .as_slice(),
         ),
@@ -302,10 +307,6 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         (
             "owned-scope-valid.tsx",
             &["action-called-in-owned-scope"][..],
-        ),
-        (
-            "effect-apply-extended-valid.tsx",
-            &["strict-read-untracked"][..],
         ),
         ("after-await-valid.tsx", &["reactive-read-after-await"][..]),
         (

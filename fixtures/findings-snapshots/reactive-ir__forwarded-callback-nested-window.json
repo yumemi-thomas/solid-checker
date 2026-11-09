@@ -1,0 +1,104 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 571,
+      "end": 572,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 608,
+      "end": 615,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 920,
+      "end": 921,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 949,
+      "end": 956,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 1312,
+      "end": 1313,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 1341,
+      "end": 1348,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 2190,
+      "end": 2191,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 2215,
+      "end": 2222,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

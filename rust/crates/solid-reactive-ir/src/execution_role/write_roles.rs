@@ -989,6 +989,44 @@ fn inside_disposal_callback(
     })
 }
 
+/// ADR 0920: whether the site at `span` runs off the stack of the window
+/// callback around it: the function its in-place layers end in, or any
+/// function around the site (what it holds is created when it runs), is a
+/// scheduler's fresh-stack argument, an event handler literal, or a function
+/// only events enter. [`runs_in_disposal`]'s `NotIn` needs one run outside a
+/// disposal and climbs a flow row to its component; this asks the functions
+/// themselves. A layer past an await or in a parameter list, or an exhausted
+/// climb, places nothing.
+pub(super) fn runs_off_callback_stack(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let off_stack = |function: &solid_facts::ast::FunctionFact| {
+        matches!(layer_run(file, function, lookup), LayerRun::FreshStack)
+            || is_event_handler_literal(file, function)
+            || event_only_entries(file, function, lookup)
+            || stored_function_called_only_by_events(file, function, lookup)
+    };
+    let climbed = match climb_in_place_layers(file, span, lookup) {
+        None => Some(span),
+        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => {
+            Some(climb.at)
+        }
+        Some(_) => None,
+    };
+    let at_climb = climbed.is_some_and(|at| {
+        crate::owners::owning_function(&file.ast, at).is_some_and(|function| {
+            !function.generator && function.body.contains(at) && off_stack(function)
+        })
+    });
+    at_climb
+        || file
+            .ast
+            .functions_owning(span)
+            .any(|function| function.body.contains(span) && off_stack(function))
+}
+
 /// Whether `function` is a literal the compiler reads as an event handler (a
 /// JSX attribute's value on an element) of an event only the host delivers. A
 /// user's event runs it outside any disposal, whatever else dispatches:
