@@ -2368,5 +2368,5 @@ Owner (2026-11-09): each report site has its own ADR 0560 site-reach bound (exha
 The walk found no entry of a class constructor or method and ended `Open`; a wrapper's site outside the memo kept a V (W's FP). Such stops, all in this file inside an unread compute: U. `stored_throw.rs`.
 
 <a id="adr-0916"></a>
-## ADR 0916 — The pull request's sample fits an hour
-ADR 0615's tier: 75,091 programs, 52-85 min of 60. In `--cover all` a recall program counts only its pairs with `code`; the census joins the cover: 33,192. `cover.mjs`.
+## ADR 0916 — The PR sample fits an hour
+ADR 0615's PR tier took 52-85 min of 60. A recall program counts its `code` pairs; the census is sampled. `cover.mjs`.
