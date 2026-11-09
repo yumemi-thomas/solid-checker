@@ -187,7 +187,7 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete/App.tsx",
-      "start": 2656,
+      "start": 2657,
       "end": 2683,
       "fixes": 0
     },

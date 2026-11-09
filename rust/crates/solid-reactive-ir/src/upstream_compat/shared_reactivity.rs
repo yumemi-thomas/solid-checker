@@ -1824,7 +1824,7 @@ fn push_unproven_container_write(
             name: text(file, root).to_owned(),
             target: DirectMutationTarget::Store,
         },
-        location: location(file.path.shared(), site),
+        location: location(file.path.shared(), sink.anchor(file, site)),
         analysis_context: "unproven-container-root".to_owned(),
         fixes: vec![],
         uncertain: true,
@@ -1892,7 +1892,7 @@ fn handed_container_write(
                     name,
                     target: DirectMutationTarget::Store,
                 },
-                location: location(file.path.shared(), site),
+                location: location(file.path.shared(), sink.anchor(file, site)),
                 analysis_context: if proven {
                     String::new()
                 } else if sink_open {
@@ -1945,6 +1945,34 @@ impl SinkWrite {
             linked: false,
         }
     }
+
+    /// Where the write at `site` is reported: a delete at
+    /// [`delete_anchor`], every other write at its site.
+    fn anchor(self, file: &FileFacts, site: Span) -> Span {
+        if self.delete {
+            delete_anchor(file, site)
+        } else {
+            site
+        }
+    }
+}
+
+/// ADR 0922: where a `delete` of the member at `member` is reported. The
+/// compiler drops the operand's parentheses, `as`, `satisfies` and `!`
+/// (`delete (id(s.a) as T).v` runs as `delete id(s.a).v`), and V8 gives the
+/// delete no position of its own: its frame is the last positioned
+/// expression the operand evaluates (the call `id(…)`, the link `a` in
+/// `delete s.a.v`) or the statement. Each lies in the chain's root,
+/// reached through those wrappers, so the row starts there and ends with
+/// the member. An assignment, an update or a mutator call keeps its site:
+/// its frame is the written property, which the member's start already
+/// stands for.
+fn delete_anchor(file: &FileFacts, member: Span) -> Span {
+    let mut root = file.ast.peel_ts_sugar_span(member);
+    while let Some(access) = file.ast.member_at(root) {
+        root = file.ast.peel_ts_sugar_span(access.object);
+    }
+    Span::new(root.start.max(member.start), member.end)
 }
 
 /// How many parameter hops [`ParameterFlow`] climbs, as [`handed_container`].
@@ -2021,7 +2049,7 @@ fn push_parameter_store_flow(
             name,
             target: DirectMutationTarget::Store,
         },
-        location: location(file.path.shared(), site),
+        location: location(file.path.shared(), sink.anchor(file, site)),
         analysis_context: if proven {
             String::new()
         } else if sink_open {
@@ -6042,7 +6070,7 @@ fn no_store_delete(
                 name: name.as_str().to_owned(),
                 target: store_target(context, symbol),
             },
-            location: location(file.path.shared(), member),
+            location: location(file.path.shared(), delete_anchor(file, member)),
             analysis_context: analysis_context.to_owned(),
             fixes: vec![],
             uncertain: uncertain || optional || typed_store.is_some() || standing.unproven(),

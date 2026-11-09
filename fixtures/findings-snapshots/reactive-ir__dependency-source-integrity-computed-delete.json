@@ -74,7 +74,7 @@
       "blocker": "unproven-container-root",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-computed-delete/App.tsx",
-      "start": 2863,
+      "start": 2864,
       "end": 2910,
       "fixes": 0
     }

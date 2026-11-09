@@ -37,7 +37,8 @@ symbol:
 - a `delete` of a bare or parenthesized static member path (`delete
   store.a.b`) whose property Type Facts proves optional and not readonly
   (ADR 0461), its links past the root judged as an assignment's (ADR 0465,
-  below); a missing fact makes it uncertifiable;
+  below); a missing fact makes it uncertifiable. Reported from the chain's
+  root through `()`, `as`, `satisfies` and `!`, Chrome's frame (ADR 0922);
 - a call of one of the nine in-place `Array.prototype` methods (`push`, `pop`,
   `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) on a
   path of the store. The callee must resolve through Type Facts to the
@@ -104,15 +105,12 @@ literal, a getter, a used setter or a module-scope store leaves it
 uncertifiable. Fixtures `store-write-chain-links`,
 `store-write-chain-links-loose`, `store-setter-extent`, `store-write-literal-links`.
 
-The runtime drops all of them outside a setter: the proxy's `set` trap
-returns `true` without storing (`@solidjs/signals@2.0.0-rc.17`
-`dist/dev.js:5691-5700`), and an in-place array method reaches it once per
-element and for `length`. Probed on rc.17: `delete`, all nine mutators, and a
-write to a projection result outside its compute function are dropped
-(STORE_WRITE_OUTSIDE_SETTER, `:5420-5455`); the trap for `delete` is
-`:5761-5767`. TypeScript accepts the mutators and projection writes on rc.17
-(`Store<T> = T`; a nested array is mutable on every release), which the
-tsc oracle checks against the published typings.
+The runtime drops all of them outside a setter: the `set` trap returns
+`true` without storing (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5691-5700`;
+`deleteProperty` `:5761-5767`), an array method once per element and for
+`length`. Probed on rc.17: `delete`, the nine mutators and a projection write
+warn STORE_WRITE_OUTSIDE_SETTER. TypeScript accepts the mutators and projection
+writes (`Store<T> = T`), which the tsc oracle checks on the published typings.
 
 Two writes are exempt because rc.17 commits them (probed, with the value read
 after `flush()`). Each holds while a window is open, a dynamic extent rather
@@ -151,26 +149,19 @@ function this does not know, leaves it uncertifiable. Fixture
 
 Not reported, deliberately:
 
-- `delete` of a required or readonly property: tsc reports TS2790 (under
-  strictNullChecks) or TS2704. Only a property the checker marks optional and
-  not readonly (`v?: T`, `Partial<T>`) is reported, through the Type Fact
-  `writableOptionalProperty`. An operand TypeScript is proven to reject
-  (`deleteOperandRejected`: TS2790, TS2704, TS18011 under the program's own
-  options) is silent. Any other operand (an element access `store["v"]` or
-  `store.rec[k]`, an index signature, a non-optional `T | undefined`, which tsc
-  accepts without `exactOptionalPropertyTypes`, an `unknown`) is uncertifiable,
-  `delete-operand-unproven` (ADR 0829). A type
-  assertion on the operand (`delete store.v!`, `delete (store.v as T)`) is
-  TS2703, silent. Where both compilers suppress the rejection on the
-  operand's own line (`// @ts-ignore` or `@ts-expect-error` above it, a
-  leading `// @ts-nocheck`), nothing reports the delete and it reaches the
-  trap: the operand is judged as the member under the assertion, and a
-  rejected one as proven (ADR 0830). Where only one compiler may suppress it,
-  or the file is JavaScript, it is uncertifiable. A link that may be `undefined` or `null` (`store.o.b` with `o?:`)
-  is TS18048/TS18047: both silent. Any other chain past the root
-  (`store.a.b`) is uncertifiable: without `strictNullChecks` a link's type
-  proves nothing at run time. An optional chain may skip the delete:
-  uncertifiable (ADR 0791). A cast root is the store (ADR 0790); an exact `const` alias of the store is the store
+- `delete` of a required or readonly property (TS2790, TS2704). Only a
+  property Type Facts proves optional and writable
+  (`writableOptionalProperty`) is reported; one proven rejected
+  (`deleteOperandRejected`: TS2790, TS2704, TS18011 under the program's
+  options) is silent; any other operand (`store["v"]`, `store.rec[k]`, an
+  index signature, a non-optional `T | undefined`, `unknown`) is
+  uncertifiable, `delete-operand-unproven` (ADR 0829). An assertion on the
+  operand (`delete store.v!`, `delete (store.v as T)`) is TS2703, silent;
+  where both compilers suppress it on its line, the delete reaches the trap
+  and is judged as the member under it, else uncertifiable (ADR 0830). A
+  link that may be nullish (`store.o.b`, `o?:`) is TS18048/TS18047, silent;
+  any other chain past the root is uncertifiable without `strictNullChecks`.
+  An optional chain may skip the delete: uncertifiable (ADR 0791). A cast root is the store (ADR 0790); an exact `const` alias of the store is the store
   (ADR 0463), for an assignment and a `delete` alike. Pinned in the tsc oracle and ownership cases
   `…/delete-required-property/001`, `…/delete-optional-property/001`,
   `…/delete-computed-required/001`; fixture

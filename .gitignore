@@ -733,6 +733,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-setter-extent/node_modules/**
 !fixtures/reactive-ir/store-delete/node_modules/
 !fixtures/reactive-ir/store-delete/node_modules/**
+!fixtures/reactive-ir/store-delete-anchor/node_modules/
+!fixtures/reactive-ir/store-delete-anchor/node_modules/**
 !fixtures/reactive-ir/tsc-suppressed-rejections/node_modules/
 !fixtures/reactive-ir/tsc-suppressed-rejections/node_modules/**
 !fixtures/reactive-ir/projection-writes/node_modules/
