@@ -8,7 +8,7 @@
       "blocker": "unproven-container-root",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-object-alias/App.tsx",
-      "start": 307,
+      "start": 308,
       "end": 373,
       "fixes": 0
     },

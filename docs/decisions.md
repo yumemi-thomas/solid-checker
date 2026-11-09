@@ -2347,6 +2347,10 @@ mx-recall, 6c2e63ecf: 272 STRICT_READ_UNTRACKED false cleans, silent: a callback
 ## ADR 0921 — The matrix judge reads a module's frames and a compiled call's value
 mx-recall on 6c2e63ecf, causes 7-8. The Chrome host mapped no frame outside App.tsx and the checker's rows there were dropped: SC9012 at Chrome's `el.ts:2:29` read as a false clean. A program module's frames now map through its own transform; its rows (`moduleFindings`) count only at its own exact frames, as App.tsx's do. The dev compiler maps `insert`/`effect`/`memo` to the element, attribute or fragment: a top frame there records the start of the value it was handed (`compiled`, an exact map segment), for a claiming or declining row only. Open: a spread, `createReaction`'s tracker, SC2003's `delete (f() as T).v`. `served.mjs`.
 
+<a id="adr-0922"></a>
+## ADR 0922 — A delete is reported at its operand's root
+mx-recall 6c2e63ecf: 36 `sw-delete-call` false cleans, U at the `(` of `delete (swId(s.a) as T).v`. The compiler drops the operand's `()`, `as`, `satisfies` and `!`; V8 gives a delete no position, so Chrome's frame is the operand's last positioned expression (a call, a link) or the statement. SC2003 reports a delete from its chain's root, through them (`delete_anchor`). An assignment, update or mutator call keeps the member's start (its frame is the property). Fuzz `sw-delete-link`, fixture `store-delete-anchor`.
+
 <a id="adr-0924"></a>
 ## ADR 0924 — `untrack` takes no parent's value
 `async-value-dstr` too (ADR 0628): it suspended, 11 mx-combo `harness` rows. Drawn, it is `local`.

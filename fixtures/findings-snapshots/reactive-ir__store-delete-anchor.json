@@ -1,0 +1,137 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 745,
+      "end": 777,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 868,
+      "end": 881,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 1047,
+      "end": 1086,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 1179,
+      "end": 1193,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 1363,
+      "end": 1391,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "store-write-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 1482,
+      "end": 1491,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2114,
+      "end": 2147,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2292,
+      "end": 2324,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2371,
+      "end": 2384,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2431,
+      "end": 2459,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2506,
+      "end": 2541,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "store-write-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2588,
+      "end": 2597,
+      "fixes": 0
+    }
+  ]
+}
