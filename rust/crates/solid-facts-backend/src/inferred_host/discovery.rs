@@ -271,7 +271,7 @@ fn discover_root_files(
             let html_path = directory.join("index.html");
             let source = fs::read_to_string(&html_path)
                 .ok()
-                .required(&html_path, "cannot read HTML entry")?;
+                .read_from(&html_path, "cannot read HTML entry")?;
             for entry in html_entries_at(&html_path, &source)? {
                 let path = directory.join(entry);
                 if fs::canonicalize(&path)
@@ -799,7 +799,7 @@ fn process_static_load(
                 .required(&input, "non-UTF-8 route manifest input")?
                 .to_owned();
             let observed = graph_identity(manifest, &input)
-                .required(&input, "cannot fingerprint route manifest input")?;
+                .observed(&input, "cannot fingerprint route manifest input")?;
             manifest.inputs.insert(key, observed);
         }
         if !loadable {
@@ -823,7 +823,7 @@ fn process_static_load(
                 .required(&input, "non-UTF-8 resource input")?
                 .to_owned();
             let observed = graph_identity(manifest, &input)
-                .required(&input, "cannot fingerprint resource input")?;
+                .observed(&input, "cannot fingerprint resource input")?;
             manifest.inputs.insert(key, observed);
         }
         let admitted = resource.as_ref().is_some_and(|resource| {
@@ -1030,7 +1030,7 @@ fn discover_package_static_load(
                 .required(&input, "non-UTF-8 provisional package input")?
                 .to_owned();
             let observed = graph_identity(manifest, &input)
-                .required(&input, "cannot fingerprint provisional package input")?;
+                .observed(&input, "cannot fingerprint provisional package input")?;
             manifest.inputs.insert(key, observed);
         }
         if unsupported_loader || (resolver_active && facts.runtime_resolutions.is_none()) {
@@ -1085,7 +1085,7 @@ fn discover_package_static_load(
             .required(&input, "non-UTF-8 static package input")?
             .to_owned();
         let observed = graph_identity(manifest, &input)
-            .required(&input, "cannot fingerprint static package input")?;
+            .observed(&input, "cannot fingerprint static package input")?;
         manifest.inputs.insert(key, observed);
     }
     let loadable = deduped

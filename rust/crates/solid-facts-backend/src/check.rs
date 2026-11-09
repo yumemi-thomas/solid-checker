@@ -301,21 +301,26 @@ pub fn run(
     let crate::InferredHost {
         hosts,
         note: inference_note,
+        unobservable,
     } = inferred;
     if let Some(inference_note) = inference_note {
         note(&inference_note);
     }
-    let (analysis, diagnostic_timings) = crate::analyze_project_inputs_measured_with_enablement(
-        options.dialect,
-        Path::new(&facts.project_id),
-        &sources,
-        &facts,
-        solid_reactive_ir::AnalysisInputs {
-            boundary: &boundary,
-            hosts: hosts.as_ref(),
-        },
-        requested_enablement(),
-    )?;
+    let (mut analysis, diagnostic_timings) =
+        crate::analyze_project_inputs_measured_with_enablement(
+            options.dialect,
+            Path::new(&facts.project_id),
+            &sources,
+            &facts,
+            solid_reactive_ir::AnalysisInputs {
+                boundary: &boundary,
+                hosts: hosts.as_ref(),
+            },
+            requested_enablement(),
+        )?;
+    if let Some(unobservable) = &unobservable {
+        analysis = fail_closed(&analysis, Path::new(&facts.project_id), unobservable);
+    }
     Ok(Outcome {
         analysis,
         diagnostic_timings,
@@ -352,6 +357,64 @@ pub fn package_inputs(
     let inferred =
         crate::inferred_project_host_with_note(directory, runtime, dialect.vocabulary, facts)?;
     Ok((boundary, inferred))
+}
+
+/// The blocker of [`fail_closed`]'s row (ADR 0915). The same name as
+/// `solid-reactive-ir`'s `blockers::HOST_INPUT_UNREADABLE`.
+pub const HOST_INPUT_UNREADABLE: &str = "host-input-unreadable";
+
+/// ADR 0915: host inference was refused on an input that exists and could not
+/// be read (a dangling symlink at or above it, a permission error, a package
+/// manifest that does not parse). The ordinary analysis that follows a
+/// refusal could certify, and an admitted host never does, so an unreadable
+/// input would read as a stronger result than any state it may be in. The
+/// analysis keeps its findings, gains one `SC9005` row naming the input, and
+/// does not certify.
+#[must_use]
+pub fn fail_closed(
+    analysis: &DiagnosticAnalysis,
+    project: &Path,
+    unobservable: &crate::HostInputUnobservable,
+) -> Arc<DiagnosticAnalysis> {
+    let mut snapshot = analysis.snapshot.clone();
+    let at = |path: &Path| crate::SourceLocation {
+        path: path.display().to_string(),
+        start_byte: 0,
+        end_byte: 0,
+        line: 1,
+        column: 1,
+    };
+    let input = unobservable.path.display();
+    snapshot.findings.push(crate::SnapshotFinding {
+        id: "SC9005".into(),
+        rule: "package-behavior-unavailable".into(),
+        kind: "uncertifiable".into(),
+        severity: "error".into(),
+        message: format!(
+            "{input} exists and could not be read ({}), so how the application loads its modules and installed packages is unknown: its browser host was not inferred, and the project is not certified",
+            unobservable.reason
+        ),
+        hint: "Repair the input (reinstall the dependencies, fix the symlink or its permissions, or the manifest) and check again. A path with nothing there reads as absent, as Node resolves it; a dangling link, an unreadable directory or a manifest that does not parse does not (ADR 0915)."
+            .into(),
+        analysis_context: HOST_INPUT_UNREADABLE.into(),
+        subject_kind: "file".into(),
+        coverage_family: String::new(),
+        coverage_subject: String::new(),
+        primary_location: at(project),
+        related_locations: Vec::new(),
+        evidence: vec![crate::SnapshotEvidence {
+            message: format!("discovery read {input} here and could not observe it"),
+            location: Some(at(&unobservable.path)),
+        }],
+        fixes: Vec::new(),
+    });
+    if snapshot.status != "violation" {
+        snapshot.status = "uncertifiable".into();
+    }
+    Arc::new(DiagnosticAnalysis {
+        program: Arc::clone(&analysis.program),
+        snapshot,
+    })
 }
 
 fn project_directory(project_id: &str) -> PathBuf {

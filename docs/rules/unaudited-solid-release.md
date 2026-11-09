@@ -32,6 +32,7 @@ rc.9's.
 | release, per package | result |
 | --- | --- |
 | a `solid-js` version naming no release (`nightly`, `workspace:*`) | analyzed under the default dialect, **this notice**, blocker `solid-version-unclassified` (ADR 0700) |
+| a `solid-js` manifest that cannot be read or parsed, no refusing install above | the same (ADR 0915) |
 | `2.0.0-rc.21` (the audited release) | analyzed with rc.17's answers, `onFlush`, `from`, and the pending throw through `untrack` (ADRs 0619, 0622) |
 | `2.0.0-rc.17` | analyzed with rc.13's answers except spread listeners (`on` + uppercase), the unguarded `createOptimistic` setter, `latest` absorbing a pending read and `hydrate` possibly deferring `code` (the rc.17 review); a notice only where the project reaches `setLinkClaim`, a new callback-taking export, unless `--rendering csr` is declared (only server rendering runs its handler); its other new callback exports (`createDeferred`, `dynamicComponent`, `dispatchAsInteraction`, `lazyModule`, `onHydrationEnd`) are modelled on the rc.17 triple and named only on a mixed install |
 | `2.0.0-rc.13` | analyzed with rc.13's answers, **this notice**: older than the audited release |

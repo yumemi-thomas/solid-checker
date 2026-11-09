@@ -44,8 +44,10 @@ The checker resolves the dialect from the nearest
   `3.0.0`) → the project is **refused** with `SC9013` and nothing else is
   reported (ADR 0110 § 1). A fixture pinned this way asserts a refusal, not
   its own subject;
-- stub missing, unparsable, or the version field is not a version
-  (`workspace:*`) → silent fallback to the v2 default.
+- stub missing → silent fallback to the v2 default; the version field not a
+  version (`workspace:*`), or a stub that exists and cannot be read or parsed
+  → the v2 default with the SC9014 `solid-version-unclassified` notice
+  (ADRs 0700, 0915), unless an install above refuses.
 
 So a fixture without its stub is a **no-op that still passes**. And because
 `.gitignore` blocks `**/node_modules/` globally, every fixture stub needs its

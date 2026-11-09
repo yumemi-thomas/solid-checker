@@ -30,7 +30,7 @@ pub(super) fn paths_targets(
     for input in inputs.into_iter().rev() {
         let source = fs::read_to_string(&input)
             .ok()
-            .required(&input, "cannot read inherited path mappings")?;
+            .read_from(&input, "cannot read inherited path mappings")?;
         let value = host_config::jsonc(&source).required(&input, "invalid path-mapping JSONC")?;
         let Some(options) = value.get("compilerOptions") else {
             continue;

@@ -81,12 +81,15 @@ const CONFIGS: &[&str] = &[
     "vite.config.cjs",
 ];
 
-/// Discovery refusal is explanation only, never diagnostic authority.
+/// Discovery refusal is explanation only, never diagnostic authority, unless
+/// an input it read was unobservable (ADR 0915): then the ordinary analysis
+/// that follows a refusal must not certify.
 #[derive(Debug)]
 struct DiscoveryRefusal {
     path: PathBuf,
     line: Option<usize>,
     reason: String,
+    unobservable: bool,
 }
 
 impl DiscoveryRefusal {
@@ -95,7 +98,37 @@ impl DiscoveryRefusal {
             path: path.to_owned(),
             line: None,
             reason: reason.into(),
+            unobservable: false,
         }
+    }
+
+    /// An input exists and could not be read (`crate::observed`): a dangling
+    /// symlink at or above it, a permission error, a manifest that does not
+    /// parse.
+    fn unobservable(path: &Path, what: &str) -> Self {
+        let (path, why) = crate::observed::unobservable(path)
+            .unwrap_or_else(|| (path.to_owned(), "could not be read".into()));
+        Self {
+            path,
+            line: None,
+            reason: format!("{what}: {why}"),
+            unobservable: true,
+        }
+    }
+
+    /// A refusal decided after reading `observed`. When one of those reads
+    /// failed, the refusal may be that failure's consequence (a dangling
+    /// config reads as no config), so it is the unobservable input's.
+    fn or_unobservable(self, observed: &[PathBuf]) -> Self {
+        if self.unobservable {
+            return self;
+        }
+        observed
+            .iter()
+            .find(|path| identity(path).is_none())
+            .map_or(self, |path| {
+                Self::unobservable(path, "unreadable discovery input")
+            })
     }
 
     fn at(path: &Path, source: &str, offset: usize, reason: impl Into<String>) -> Self {
@@ -119,12 +152,67 @@ impl DiscoveryRefusal {
 
 trait Required<T> {
     fn required(self, path: &Path, reason: &str) -> Result<T, DiscoveryRefusal>;
+    /// An observation of `path` that failed is an unobservable input.
+    fn observed(self, path: &Path, reason: &str) -> Result<T, DiscoveryRefusal>;
+    /// A read of `path` that failed: unobservable when something is there
+    /// that could not be read or parsed, else the refusal `reason`.
+    fn read_from(self, path: &Path, reason: &str) -> Result<T, DiscoveryRefusal>;
 }
 
 impl<T> Required<T> for Option<T> {
     fn required(self, path: &Path, reason: &str) -> Result<T, DiscoveryRefusal> {
         self.ok_or_else(|| DiscoveryRefusal::new(path, reason))
     }
+
+    fn observed(self, path: &Path, reason: &str) -> Result<T, DiscoveryRefusal> {
+        self.ok_or_else(|| DiscoveryRefusal::unobservable(path, reason))
+    }
+
+    fn read_from(self, path: &Path, reason: &str) -> Result<T, DiscoveryRefusal> {
+        self.ok_or_else(|| {
+            if crate::observed::unobservable(path).is_some() {
+                DiscoveryRefusal::unobservable(path, reason)
+            } else {
+                DiscoveryRefusal::new(path, reason)
+            }
+        })
+    }
+}
+
+/// Whether something is at `path`, as a lookup step: `Ok(false)` only when
+/// nothing is there (ADR 0915); an input that exists and cannot be followed
+/// or read is an unobservable refusal, never an absence. One `stat` on the
+/// present path, the cost `Path::exists` had; a miss adds the `lstat` walk.
+fn present(path: &Path, what: &str) -> Result<bool, DiscoveryRefusal> {
+    present_in(path, what, &mut crate::observed::Ancestors::default())
+}
+
+/// [`present`] sharing one walk's ancestor classifications (a loop over many
+/// candidates in the same directories).
+fn present_in(
+    path: &Path,
+    what: &str,
+    ancestors: &mut crate::observed::Ancestors,
+) -> Result<bool, DiscoveryRefusal> {
+    if fs::metadata(path).is_ok() {
+        return Ok(true);
+    }
+    match crate::observed::unobservable_in(path, ancestors) {
+        Some(_) => Err(DiscoveryRefusal::unobservable(path, what)),
+        None => Ok(false),
+    }
+}
+
+/// An input discovery read and could not observe (ADR 0915). Inference is
+/// refused, as for any refusal, and the ordinary analysis that follows does
+/// not certify: it names this blocker instead.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HostInputUnobservable {
+    /// The input that could not be read: the path itself, or the dangling
+    /// link or unreadable directory above it.
+    pub path: PathBuf,
+    /// Why, in words: what discovery was reading and what failed.
+    pub reason: String,
 }
 
 /// What host inference returns: the host that selected the browser execution
@@ -136,11 +224,32 @@ impl<T> Required<T> for Option<T> {
 pub struct InferredHost {
     pub hosts: Option<ProjectHostIndex>,
     pub note: Option<String>,
+    /// Set when the refusal rests on an input discovery could not read: the
+    /// ordinary analysis then cannot certify ([`crate::check::fail_closed`]).
+    pub unobservable: Option<HostInputUnobservable>,
 }
 
 impl InferredHost {
     fn without_host(note: Option<String>) -> Self {
-        Self { hosts: None, note }
+        Self {
+            hosts: None,
+            note,
+            unobservable: None,
+        }
+    }
+
+    fn refused(refusal: &DiscoveryRefusal) -> Self {
+        Self {
+            hosts: None,
+            note: Some(format!(
+                "solid-checker: note: browser host not inferred: {}",
+                refusal.message()
+            )),
+            unobservable: refusal.unobservable.then(|| HostInputUnobservable {
+                path: refusal.path.clone(),
+                reason: refusal.reason.clone(),
+            }),
+        }
     }
 }
 
@@ -176,23 +285,41 @@ pub fn inferred_project_host_with_note(
     }
     let inputs = match discovery_inputs(directory, facts, dialect) {
         Ok(inputs) => inputs,
-        Err(reason) => return Ok(InferredHost::without_host(refused(reason.message()))),
+        Err(reason) => return Ok(InferredHost::refused(&reason)),
+    };
+    // An empty graph is a refusal decided over its manifest's inputs; one
+    // that could not be read makes it that input's (ADR 0915). Phase-1 inputs
+    // were checked where they were read; only the graph's own failed
+    // observations are asked again.
+    let empty = |index: &ProjectHostIndex| {
+        let observed = index
+            .manifest
+            .inputs
+            .iter()
+            .filter(|(_, identity)| identity.as_str() == "unreadable")
+            .map(|(path, _)| PathBuf::from(path))
+            .collect::<Vec<_>>();
+        let refusal = DiscoveryRefusal::new(directory, index.manifest.reason.clone())
+            .or_unobservable(&observed);
+        if refusal.unobservable {
+            InferredHost::refused(&refusal)
+        } else {
+            InferredHost::without_host(refused(index.manifest.reason.clone()))
+        }
     };
     let mut index = match discovered_index_with_inputs(&inputs, facts, dialect, false) {
-        Ok(index) if index.is_empty() => {
-            return Ok(InferredHost::without_host(refused(index.manifest.reason)));
-        }
+        Ok(index) if index.is_empty() => return Ok(empty(&index)),
         Ok(index) => index,
-        Err(reason) => return Ok(InferredHost::without_host(refused(reason.message()))),
+        Err(reason) => return Ok(InferredHost::refused(&reason)),
     };
     // The provisional graph schedules manifest capture; it supplies no final
     // authority. Build the admitted graph only after that capture, inside the
     // replay below, and compare every observation with the complete generation.
     if let Err(reason) = attach_discovery_inputs(&mut index, &inputs, facts, dialect, true) {
-        return Ok(InferredHost::without_host(refused(reason.message())));
+        return Ok(InferredHost::refused(&reason));
     }
     if index.is_empty() {
-        return Ok(InferredHost::without_host(refused(index.manifest.reason)));
+        return Ok(empty(&index));
     }
     // No argument/child/prop edge is installed by native syntax discovery.
     let selection = HostStage::new("callback-host-selection");
@@ -215,6 +342,7 @@ pub fn inferred_project_host_with_note(
     Ok(InferredHost {
         hosts: Some(index),
         note: Some(note),
+        unobservable: None,
     })
 }
 

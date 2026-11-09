@@ -148,9 +148,11 @@ pub fn unsupplied_package_boundary(facts: &solid_facts::ProjectFacts) -> Package
     boundary
 }
 
-/// The filesystem lookups the discovery below makes, and nothing else. A read
-/// error is an answer the discovery folds into "no manifest" at every site, so
-/// it returns the `io::Result` untouched and the boundary stays infallible.
+/// The filesystem lookups the discovery below makes, and nothing else. It
+/// returns the `io::Result` untouched and the boundary stays infallible: the
+/// owner walk folds a read error into "no manifest" (which keeps the marker),
+/// and an installed manifest that exists and cannot be read or parsed keeps
+/// the requirement (ADR 0915).
 trait ManifestReader {
     fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
 }
@@ -173,7 +175,7 @@ fn external_package_boundary_with(
     let mut owners = HashMap::new();
     // One read of each manifest per boundary: many imports resolve to the
     // same package, and every one asked the same question of the same file.
-    let mut solid_users: HashMap<&str, bool> = HashMap::new();
+    let mut solid_users: HashMap<&str, SolidUse> = HashMap::new();
     // The files the program holds, looked up once per import below.
     let held: HashSet<&str> = facts.files.iter().map(|file| file.path.as_str()).collect();
     if let Some(imports) = &facts.resolved_imports {
@@ -253,17 +255,28 @@ fn external_package_boundary_with(
                     "a runtime namespace import of selected source is not redirected",
                 );
             }
-            if package.is_some()
-                && import.resolution == solid_facts::ImportResolution::NodeModules
-                && import.package_manifest.as_deref().is_some_and(|manifest| {
+            let solid_use = match import.package_manifest.as_deref() {
+                Some(manifest)
+                    if import.resolution == solid_facts::ImportResolution::NodeModules =>
+                {
                     *solid_users
                         .entry(manifest)
                         .or_insert_with(|| manifest_uses_solid(reader, manifest))
-                })
+                }
+                _ => SolidUse::No,
+            };
+            // ADR 0915: a manifest that exists and cannot be read or parsed
+            // may name a Solid package, whether or not a name was read from it.
+            if (package.is_some() && solid_use == SolidUse::Yes)
+                || solid_use == SolidUse::Unreadable
             {
                 record(
                     UnanalyzableReason::LegacyRequirementFallback,
-                    "an installed package whose manifest names a Solid package",
+                    if solid_use == SolidUse::Unreadable {
+                        "an installed package whose manifest exists and cannot be read or parsed, so whether it names a Solid package is unknown"
+                    } else {
+                        "an installed package whose manifest names a Solid package"
+                    },
                 );
                 let name = crate::dependency_sources::package_name(&import.text);
                 for refusal in refusals.iter().filter(|refusal| match &refusal.root {
@@ -400,18 +413,37 @@ fn owning_named_manifest(
     answer
 }
 
-fn manifest_uses_solid(reader: &dyn ManifestReader, path: &str) -> bool {
-    reader
-        .read(Path::new(path))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-        .is_some_and(|manifest| {
-            ["dependencies", "peerDependencies", "optionalDependencies"]
-                .into_iter()
-                .filter_map(|field| manifest[field].as_object())
-                .flat_map(|dependencies| dependencies.keys())
-                .any(|name| name == "solid-js" || name.starts_with("@solidjs/"))
-        })
+/// What an installed package's manifest says about Solid.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SolidUse {
+    /// It names a Solid package among its dependencies.
+    Yes,
+    /// It names none, or there is no manifest there.
+    No,
+    /// It exists and cannot be read or parsed (ADR 0915): unknown, never no.
+    Unreadable,
+}
+
+fn manifest_uses_solid(reader: &dyn ManifestReader, path: &str) -> SolidUse {
+    let bytes = match reader.read(Path::new(path)) {
+        Ok(bytes) => bytes,
+        Err(error) if crate::observed::absent_kind(error.kind()) => return SolidUse::No,
+        Err(_) => return SolidUse::Unreadable,
+    };
+    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
+    let Ok(manifest) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return SolidUse::Unreadable;
+    };
+    if ["dependencies", "peerDependencies", "optionalDependencies"]
+        .into_iter()
+        .filter_map(|field| manifest[field].as_object())
+        .flat_map(|dependencies| dependencies.keys())
+        .any(|name| name == "solid-js" || name.starts_with("@solidjs/"))
+    {
+        SolidUse::Yes
+    } else {
+        SolidUse::No
+    }
 }
 
 #[cfg(test)]

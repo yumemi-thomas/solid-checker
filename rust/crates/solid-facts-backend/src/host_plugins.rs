@@ -17,10 +17,50 @@ struct Pin {
 // plugin dependency closures. A new pass always starts with an empty map.
 pub(super) type PackageAudits = BTreeMap<PathBuf, (serde_json::Value, String)>;
 
+/// Why an audit refused, and the first input it met that exists and could
+/// not be read (ADR 0915): set, the refusal is that input's, never a reason
+/// to fall back to an analysis that may certify.
+#[derive(Debug)]
+pub(super) struct AuditRefusal {
+    pub reason: String,
+    pub unobservable: Option<PathBuf>,
+}
+
+/// One audit's first unobservable input (ADR 0915) and the ancestor
+/// classifications its checks share.
+#[derive(Default)]
+struct Observer {
+    first: Option<PathBuf>,
+    ancestors: crate::observed::Ancestors,
+}
+
+impl Observer {
+    /// Records `path` when nothing earlier is and it exists and cannot be
+    /// read or parsed. Asked only after a read of it failed.
+    fn note(&mut self, path: &Path) {
+        if self.first.is_none()
+            && crate::observed::unobservable_in(path, &mut self.ancestors).is_some()
+        {
+            self.first = Some(path.to_owned());
+        }
+    }
+}
+
 pub(super) fn installed(
     directory: &Path,
     name: &str,
     inputs: &mut Vec<PathBuf>,
+) -> Option<PathBuf> {
+    installed_observed(directory, name, inputs, &mut Observer::default())
+}
+
+/// [`installed`], noting a candidate that exists and cannot be read (a
+/// dangling link, denied access) where the walk moves on (ADR 0915).
+fn installed_observed(
+    directory: &Path,
+    name: &str,
+    inputs: &mut Vec<PathBuf>,
+    observer: &mut Observer,
 ) -> Option<PathBuf> {
     for ancestor in directory.ancestors() {
         let candidate = ancestor.join("node_modules").join(name);
@@ -28,23 +68,36 @@ pub(super) fn installed(
         inputs.push(candidate.clone());
         inputs.push(candidate.join("package.json"));
         if candidate.join("package.json").is_file() {
-            return fs::canonicalize(candidate).ok();
+            let root = fs::canonicalize(&candidate).ok();
+            if root.is_none() {
+                observer.note(&candidate);
+            }
+            return root;
         }
+        observer.note(&candidate.join("package.json"));
     }
     None
 }
 
-fn tree(directory: &Path, files: &mut Vec<PathBuf>, inputs: &mut Vec<PathBuf>) -> Option<()> {
+/// `Err(Some(path))`: an entry that exists and cannot be read (ADR 0915);
+/// `Err(None)`: a tree the audit refuses as it is (a symlink that resolves,
+/// a special file).
+fn tree(
+    directory: &Path,
+    files: &mut Vec<PathBuf>,
+    inputs: &mut Vec<PathBuf>,
+) -> Result<(), Option<PathBuf>> {
     inputs.push(directory.to_owned());
-    for entry in fs::read_dir(directory).ok()? {
-        let entry = entry.ok()?;
+    let unreadable = || Some(directory.to_owned());
+    for entry in fs::read_dir(directory).map_err(|_| unreadable())? {
+        let entry = entry.map_err(|_| unreadable())?;
         if entry.file_name() == "node_modules" {
             continue;
         }
         let path = entry.path();
-        let kind = entry.file_type().ok()?;
+        let kind = entry.file_type().map_err(|_| Some(path.clone()))?;
         if kind.is_symlink() {
-            return None;
+            return Err(fs::metadata(&path).is_err().then_some(path));
         }
         if kind.is_dir() {
             tree(&path, files, inputs)?;
@@ -52,28 +105,30 @@ fn tree(directory: &Path, files: &mut Vec<PathBuf>, inputs: &mut Vec<PathBuf>) -
             inputs.push(path.clone());
             files.push(path);
         } else {
-            return None;
+            return Err(None);
         }
     }
-    Some(())
+    Ok(())
 }
 
 fn package_tree(
     root: &Path,
     inputs: &mut Vec<PathBuf>,
     generation: Option<&BTreeMap<String, String>>,
-) -> Option<(serde_json::Value, Vec<PathBuf>)> {
+) -> Result<(serde_json::Value, Vec<PathBuf>), Option<PathBuf>> {
     let path = root.join("package.json");
-    let bytes = fs::read(&path).ok()?;
+    let bytes =
+        fs::read(&path).map_err(|_| crate::observed::unobservable(&path).map(|_| path.clone()))?;
     if let Some(expected) = generation.and_then(|inputs| inputs.get(path.to_str()?))
         && expected != &format!("sha256:{:x}", Sha256::digest(&bytes))
     {
-        return None;
+        return Err(None);
     }
-    let manifest: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| Some(path.clone()))?;
     let mut files = Vec::new();
     tree(root, &mut files, inputs)?;
-    Some((manifest, files))
+    Ok((manifest, files))
 }
 
 pub(super) fn audit(
@@ -82,19 +137,39 @@ pub(super) fn audit(
     inputs: &mut Vec<PathBuf>,
     packages: &mut PackageAudits,
     generation: Option<&BTreeMap<String, String>>,
-) -> Result<(), String> {
-    let closure = closure(directory, specifier, inputs, packages, generation)?;
+) -> Result<(), AuditRefusal> {
+    let mut observer = Observer::default();
+    let refused = |reason: String, unobservable: Option<PathBuf>| AuditRefusal {
+        reason,
+        unobservable,
+    };
+    let closure = match closure_observed(
+        directory,
+        specifier,
+        inputs,
+        packages,
+        generation,
+        &mut observer,
+    ) {
+        Ok(closure) => closure,
+        Err(reason) => return Err(refused(reason, observer.first)),
+    };
     let pins: Vec<Pin> = serde_json::from_str(include_str!("host-plugin-pins.json"))
-        .map_err(|error| format!("invalid compiled host plugin pins: {error}"))?;
+        .map_err(|error| refused(format!("invalid compiled host plugin pins: {error}"), None))?;
     if pinned(&pins, &closure) {
         Ok(())
     } else {
-        Err(format!(
-            "{}: unaudited installed closure {}@{} sha256:{}",
-            closure.root.display(),
-            closure.name,
-            closure.version,
-            closure.digest
+        // An edge read as absent past a candidate that could not be read
+        // (`installed_observed`) is in the digest: the refusal is that input's.
+        Err(refused(
+            format!(
+                "{}: unaudited installed closure {}@{} sha256:{}",
+                closure.root.display(),
+                closure.name,
+                closure.version,
+                closure.digest
+            ),
+            observer.first,
         ))
     }
 }
@@ -117,12 +192,33 @@ fn pinned(pins: &[Pin], closure: &Closure) -> bool {
     })
 }
 
+#[cfg(test)]
 pub(super) fn closure(
     directory: &Path,
     specifier: &str,
     inputs: &mut Vec<PathBuf>,
     packages: &mut PackageAudits,
     generation: Option<&BTreeMap<String, String>>,
+) -> Result<Closure, String> {
+    closure_observed(
+        directory,
+        specifier,
+        inputs,
+        packages,
+        generation,
+        &mut Observer::default(),
+    )
+}
+
+/// [`closure`], noting the first input that exists and could not be read or
+/// parsed (ADR 0915), from the reads the audit makes anyway.
+fn closure_observed(
+    directory: &Path,
+    specifier: &str,
+    inputs: &mut Vec<PathBuf>,
+    packages: &mut PackageAudits,
+    generation: Option<&BTreeMap<String, String>>,
+    observer: &mut Observer,
 ) -> Result<Closure, String> {
     let name = match specifier {
         "filesystem-routing/vite" => "filesystem-routing",
@@ -132,17 +228,22 @@ pub(super) fn closure(
         "vitest/config" => "vitest",
         name => name,
     };
-    let root = installed(directory, name, inputs).ok_or_else(|| {
+    let root = installed_observed(directory, name, inputs, observer).ok_or_else(|| {
         format!(
             "plugin {name} is not installed above {}",
             directory.display()
         )
     })?;
-    let manifest: serde_json::Value = serde_json::from_slice(
-        &fs::read(root.join("package.json"))
-            .map_err(|error| format!("{}: {error}", root.join("package.json").display()))?,
-    )
-    .map_err(|error| format!("{}: {error}", root.join("package.json").display()))?;
+    let manifest_path = root.join("package.json");
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).map_err(|error| {
+            observer.note(&manifest_path);
+            format!("{}: {error}", manifest_path.display())
+        })?)
+        .map_err(|error| {
+            observer.note(&manifest_path);
+            format!("{}: {error}", manifest_path.display())
+        })?;
     if manifest
         .get("name")
         .and_then(serde_json::Value::as_str)
@@ -184,7 +285,10 @@ pub(super) fn closure(
             .get(&root)
             .map(|(manifest, _)| manifest.clone())
             .or_else(|| serde_json::from_slice(&fs::read(root.join("package.json")).ok()?).ok())
-            .ok_or_else(|| format!("{}: unreadable plugin dependency manifest", root.display()))?;
+            .ok_or_else(|| {
+                observer.note(&root.join("package.json"));
+                format!("{}: unreadable plugin dependency manifest", root.display())
+            })?;
         let mut dependencies = BTreeSet::new();
         for field in ["dependencies", "optionalDependencies", "peerDependencies"] {
             if let Some(deps) = manifest.get(field).and_then(serde_json::Value::as_object) {
@@ -194,7 +298,7 @@ pub(super) fn closure(
         let edges = dependencies
             .into_iter()
             .map(|name| {
-                let target = installed(&root, &name, inputs);
+                let target = installed_observed(&root, &name, inputs, observer);
                 if let Some(target) = &target {
                     pending.push(target.clone());
                 }
@@ -248,7 +352,10 @@ pub(super) fn closure(
     let mut files = Vec::new();
     for (root, observed, paths) in observations {
         inputs.extend(paths);
-        let (manifest, observed_files) = observed.ok_or_else(|| {
+        let (manifest, observed_files) = observed.map_err(|at| {
+            if observer.first.is_none() {
+                observer.first = at;
+            }
             format!(
                 "{}: unreadable or symlink-bearing plugin package tree",
                 root.display()
@@ -289,8 +396,10 @@ pub(super) fn closure(
                 identity.as_deref()?.strip_prefix("sha256:")?.to_owned(),
             ))
         };
-        let (path, digest) =
-            row().ok_or_else(|| format!("{}: cannot fingerprint plugin file", path.display()))?;
+        let (path, digest) = row().ok_or_else(|| {
+            observer.note(&path);
+            format!("{}: cannot fingerprint plugin file", path.display())
+        })?;
         trees
             .get_mut(&root)
             .expect("observed tree")
