@@ -296,10 +296,21 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-carrier-call-attributed/App.tsx",
+      "start": 3110,
+      "end": 3119,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
-      "blocker": "async-read-unaccounted",
+      "blocker": "source-pending-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/async-carrier-call-attributed/App.tsx",
       "start": 3110,
