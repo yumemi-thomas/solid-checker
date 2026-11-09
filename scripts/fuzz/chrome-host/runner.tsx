@@ -7,6 +7,7 @@ import { captureArtifact } from '@solidjs/diagnostics';
 import { OBSERVE, flush } from 'solid-js';
 import { render } from '@solidjs/web';
 import { installVirtualClock } from './virtual-clock.mjs';
+import { errorListeners } from './error-listeners.mjs';
 
 // The program and its clock are named in the URL's fragment (chrome-host.mjs), so every program loads the same cached page.
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
@@ -114,21 +115,11 @@ async function runCase() {
   };
   // A throw inside a window `error` listener is never dispatched to the error listeners (Part 16, B2: the program's own report-error
   // listener called dynamic(), which threw; only Playwright's pageerror saw it). The program's listeners are wrapped: what one throws is
-  // recorded, then rethrown, so the page sees what it would have.
-  const wrapped = new WeakMap<object, EventListener>();
+  // recorded, then rethrown, so the page sees what it would have. They see at most ERROR_EVENT_CAP error events: a listener that raises
+  // the next one loops in one microtask checkpoint and the page never returns a record (error-listeners.mjs).
+  const listeners = errorListeners({ own: onError, onThrow: (e: any) => errors.push({ phase, kind: 'error-listener', ...describeError(e) }) });
+  const { wrapped, wrapFor } = listeners;
   const addListener = window.addEventListener, removeListener = window.removeEventListener;
-  const wrapFor = (listener: any): any => {
-    if (!listener || listener === onError) return listener;
-    let wrap = wrapped.get(listener);
-    if (!wrap) {
-      wrap = function (this: any, event: Event) {
-        try { return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event); }
-        catch (e) { errors.push({ phase, kind: 'error-listener', ...describeError(e) }); throw e; }
-      };
-      wrapped.set(listener, wrap);
-    }
-    return wrap;
-  };
   window.addEventListener = function (this: any, type: string, listener: any, options?: any) {
     return addListener.call(this, type, type === 'error' ? wrapFor(listener) : listener, options);
   } as typeof window.addEventListener;
@@ -229,6 +220,7 @@ async function runCase() {
     console.error = oldError; console.warn = oldWarn;
     (window as any).__scResolve({
       id, wallMs: Math.round(performance.now() - started), failure, witnesses, hits, order, hitsDom, quiescent,
+      ...(listeners.state.withheld ? { errorEventsWithheld: listeners.state.withheld } : {}),
       diagnostics: diagnostics.map(d => ({ code: d.code, message: d.message, loc: d.loc, siteKind: d.siteKind, phase: d.phase, orderAt: d.orderAt, positions: servedFrames(d.stack) })),
       errors: errors.filter(e => e.phase !== 'dispose').map(e => ({ phase: e.phase, kind: e.kind, message: e.message, cause: e.cause?.message ?? null,
         positions: [...servedFrames(e.stack), ...servedFrames(e.cause?.stack)] })),

@@ -80,7 +80,8 @@ export function ownerProblems(list) {
 }
 
 /** Whether a row answers an entry: same id prefix, code, contexts, source and variant prefix. */
-const answers = (entry, row) => String(row.id).startsWith(entry.idPrefix) && entry.code === row.code
+/** Whether a grid row is of an entry's family (`{ idPrefix, code, contexts?, source?, variantPrefix? }`), its outcome aside. */
+export const answers = (entry, row) => String(row.id).startsWith(entry.idPrefix) && entry.code === row.code
   && (!entry.contexts || entry.contexts.includes(row.context)) && (!entry.source || entry.source === row.source) && (!entry.variantPrefix || String(row.variant ?? "").startsWith(entry.variantPrefix));
 
 /** The entry of a grid row (`{ idPrefix, code, variantPrefix?, contexts?, source?, outcome, item }`) with `outcome`, or null. */
