@@ -19,7 +19,7 @@ import {
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
-import { FLIP_READ_CONTEXTS, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, SYNC_COMPUTE_LINES, flipReadContext, openSignal } from "./flip-read.mjs";
+import { FLIP_READ_CONTEXTS, FLIP_READ_CONTEXT_ONLY, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, SYNC_COMPUTE_LINES, flipReadContext, openSignal } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
 import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
 
@@ -69,6 +69,8 @@ export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct"];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module");
+/** A source whose values `helpers.ts` creates at its own scope (print.mjs `moduleFiles`), before App.tsx runs a statement of its own. */
+export const moduleScoped = (source) => source === "module" || source === "module-barrel";
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
 const valueSource = (source) => source === "prop-value" || source === "async-value" || source === "async-value-member" || source === "async-value-dstr";
 
@@ -695,6 +697,7 @@ for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS, FLIP_GEN_CONTEX
   for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
 }
 for (const legal of [FLIP_READ_LEGAL, FLIP_WRITE_LEGAL]) for (const [code, added] of Object.entries(legal)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
+for (const [code, only] of Object.entries(FLIP_READ_CONTEXT_ONLY)) SPEC[code].contextOnly = { ...SPEC[code].contextOnly, ...only };
 for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   const spec = SPEC[code];
   const setup = spec.setup;
@@ -1996,7 +1999,9 @@ function buildOne(kit, plan = {}) {
     : placed.loading ? [loadingView(held.name, [child(kit.name("v"), read(heldAsync.name))]), ...placed.view, button(kit.name("b"), [expr(write(held.name, 2))])]
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
-    sigs: [...sigs, ...heldOwn, ...onOwn, ...(placed.sigs ?? [])], body: placed.body, view, ...(placed.hoisted ? { hoisted: placed.hoisted } : {}), ...(placed.top ? { top: placed.top } : {}),
+    sigs: [...sigs, ...heldOwn, ...onOwn, ...(placed.sigs ?? [])], body: placed.body, view, ...(placed.hoisted ? { hoisted: placed.hoisted } : {}),
+    // ADR 0917: a context's `moduleTop` must run before the values; a module source creating them at its scope prints it there instead.
+    ...(placed.moduleTop && moduleScoped(source) ? { moduleTop: placed.moduleTop } : placed.top ? { top: placed.top } : {}),
     ...(placed.files ? { files: placed.files, importLines: placed.importLines ?? [] } : {}),
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
     misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}) },
