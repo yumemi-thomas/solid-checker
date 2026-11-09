@@ -30,8 +30,8 @@ use crate::runtime_semantics::{is_inline_standard_callback, standard_call_name};
 use solid_facts::FileFacts;
 use solid_facts::ast::{ArrayElementKind, CallFact, FunctionFact, IdentifierRole};
 use solid_facts::core::Span;
-use std::cell::OnceCell;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use typefacts::AsyncFunctionFact;
 
 /// Helper-in-helper nesting the scan follows before it gives up (a possible
@@ -102,9 +102,9 @@ pub(super) struct PreAwait<'f, 'a> {
     files: HashMap<&'f str, &'f FileFacts>,
     /// Project functions by the property name they are declared under: what
     /// a member read or a member call may run.
-    methods: OnceCell<HashMap<String, Vec<(&'f FileFacts, &'f FunctionFact)>>>,
+    methods: OnceLock<HashMap<String, Vec<(&'f FileFacts, &'f FunctionFact)>>>,
     /// ADR 0350: the accessors of signals that only ever hold numbers.
-    number_accessors: OnceCell<HashSet<SymbolId>>,
+    number_accessors: OnceLock<HashSet<SymbolId>>,
 }
 
 impl<'f, 'a> PreAwait<'f, 'a> {
@@ -115,8 +115,8 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                 .iter()
                 .map(|file| (file.path.as_str(), file))
                 .collect(),
-            methods: OnceCell::new(),
-            number_accessors: OnceCell::new(),
+            methods: OnceLock::new(),
+            number_accessors: OnceLock::new(),
         }
     }
 

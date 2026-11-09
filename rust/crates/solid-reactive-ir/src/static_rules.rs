@@ -1548,18 +1548,20 @@ fn tracked_async_computation_context(
                 // copy, an object literal's member (`createMemo(box.cb)`).
                 if call.arguments.first().is_some_and(|argument| {
                     file.ast.peel_ts_sugar_span(argument.span) == range
-                        || crate::owners::exact_function_argument(
+                        || index.exact_arguments.names(
                             file,
-                            argument.span,
+                            call_index,
+                            0,
                             ctx.semantic_lookup,
+                            |path, span| {
+                                // An object literal property's producer span
+                                // starts at its key; the function ends where
+                                // it does.
+                                path == file.path.as_str()
+                                    && span.end == range.end
+                                    && span.start >= range.start
+                            },
                         )
-                        .is_some_and(|(path, span)| {
-                            // An object literal property's producer span starts
-                            // at its key; the function ends where it does.
-                            path == file.path.as_str()
-                                && span.end == range.end
-                                && span.start >= range.start
-                        })
                 }) {
                     candidates.insert((file_index, call_index));
                 }
@@ -1608,6 +1610,93 @@ struct AsyncComputations<'t> {
     roots: AsyncSymbolRoots<'t>,
     /// `(file index, call index)` pairs in project order.
     by_argument_root: std::collections::HashMap<String, Vec<(usize, usize)>>,
+    /// Each call argument's exact function, asked once per file.
+    exact_arguments: ExactArguments<'t>,
+}
+
+/// A value per analyzed file, computed once per build on its first question:
+/// for an answer that is a function of the build and one file alone.
+pub(super) struct FileOnce<'t, T> {
+    files: &'t [solid_facts::FileFacts],
+    /// Per file, in `files` order.
+    values: Vec<std::sync::OnceLock<T>>,
+}
+
+impl<'t, T> FileOnce<'t, T> {
+    pub(super) fn new(files: &'t [solid_facts::FileFacts]) -> Self {
+        Self {
+            files,
+            values: files.iter().map(|_| std::sync::OnceLock::new()).collect(),
+        }
+    }
+
+    /// `file`'s value, computed by `init` on the first question; `None` for
+    /// a file that is not one of the list's.
+    pub(super) fn get(
+        &self,
+        file: &solid_facts::FileFacts,
+        init: impl FnOnce() -> T,
+    ) -> Option<&T> {
+        // The slot `file` is, by its address in the file list (as
+        // `SemanticLookup::own_file`).
+        let slot = (std::ptr::from_ref(file) as usize)
+            .checked_sub(self.files.as_ptr() as usize)
+            .map(|offset| offset / std::mem::size_of::<solid_facts::FileFacts>().max(1))
+            .filter(|&slot| {
+                self.files
+                    .get(slot)
+                    .is_some_and(|own| std::ptr::eq(own, file))
+            })?;
+        Some(self.values[slot].get_or_init(init))
+    }
+}
+
+/// ADR 0516's [`crate::owners::exact_function_argument`] of every argument of
+/// every call of a file, resolved once per build on the first question about
+/// that file: an answer is a function of the build and the argument alone,
+/// and each async function's proof (the tracked computation receiving it, a
+/// wrapper handing it on) asked it of every argument of its file.
+pub(super) struct ExactArguments<'t>(FileOnce<'t, FileArguments>);
+
+/// One file's exact argument functions, per call, per argument.
+type FileArguments = Vec<Vec<Option<(String, Span)>>>;
+
+impl<'t> ExactArguments<'t> {
+    fn new(files: &'t [solid_facts::FileFacts]) -> Self {
+        Self(FileOnce::new(files))
+    }
+
+    /// Whether the exact function of argument `argument` of call `call` of
+    /// `file` is one `accept` takes.
+    pub(super) fn names(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: usize,
+        argument: usize,
+        lookup: &crate::SemanticLookup<'_>,
+        accept: impl FnOnce(&str, Span) -> bool,
+    ) -> bool {
+        let resolve = |span: Span| crate::owners::exact_function_argument(file, span, lookup);
+        let resolved = self.0.get(file, || {
+            file.ast
+                .calls
+                .iter()
+                .map(|call| {
+                    call.arguments
+                        .iter()
+                        .map(|argument| resolve(argument.span))
+                        .collect()
+                })
+                .collect()
+        });
+        match resolved {
+            Some(resolved) => resolved[call][argument]
+                .as_ref()
+                .is_some_and(|(path, span)| accept(path, *span)),
+            None => resolve(file.ast.calls[call].arguments[argument].span)
+                .is_some_and(|(path, span)| accept(&path, span)),
+        }
+    }
 }
 
 /// One build's [`AsyncComputations`], built on first use: only a function with
@@ -1620,14 +1709,14 @@ impl<'t> SharedAsyncComputations<'t> {
     fn get(&self, ctx: &AnalysisContext<'t>) -> &AsyncComputations<'t> {
         self.0.get_or_init(|| {
             let facts: &'t solid_facts::ProjectFacts = ctx.facts;
-            AsyncComputations::new(ctx, &facts.typescript)
+            AsyncComputations::new(ctx, facts)
         })
     }
 }
 
 impl<'t> AsyncComputations<'t> {
-    fn new(ctx: &AnalysisContext<'_>, table: &'t solid_facts::TypeScriptTable) -> Self {
-        let roots = AsyncSymbolRoots::new(table);
+    fn new(ctx: &AnalysisContext<'_>, facts: &'t solid_facts::ProjectFacts) -> Self {
+        let roots = AsyncSymbolRoots::new(&facts.typescript);
         let mut by_argument_root = std::collections::HashMap::<String, Vec<(usize, usize)>>::new();
         for (file_index, file) in crate::base::reads::all_files(ctx.facts).iter().enumerate() {
             for (call_index, call) in file.ast.calls.iter().enumerate() {
@@ -1647,6 +1736,7 @@ impl<'t> AsyncComputations<'t> {
         Self {
             roots,
             by_argument_root,
+            exact_arguments: ExactArguments::new(crate::base::reads::all_files(facts)),
         }
     }
 }
@@ -1667,10 +1757,19 @@ fn member_reads_after_await(
     ),
     analysis_context: &str,
     store_tracking: &dyn Fn(&SymbolId, Option<&str>) -> pre_await::Tracking,
+    longer_path_objects: &FileOnce<'_, crate::HashSet<Span>>,
 ) {
     let (file, ast_function, boundary) = site;
-    // `read_as_part_of_longer_path` for every member, asked once.
-    let mut longer_path_objects = None;
+    // `read_as_part_of_longer_path` for every member, asked once per build.
+    let computed;
+    let longer_path_objects =
+        match longer_path_objects.get(file, || crate::local_access::longer_path_objects(file)) {
+            Some(objects) => objects,
+            None => {
+                computed = crate::local_access::longer_path_objects(file);
+                &computed
+            }
+        };
     for member in &file.ast.members {
         if member.span.start < boundary || !ast_function.body.contains(member.span) {
             continue;
@@ -1702,10 +1801,7 @@ fn member_reads_after_await(
         // Only the complete member chain reads a store path; its prefixes are
         // the same read's steps. ADR 0612: the object of a written member is
         // read on its own, as in a strict-read window (ADR 0498).
-        if longer_path_objects
-            .get_or_insert_with(|| crate::local_access::longer_path_objects(file))
-            .contains(&member.span)
-        {
+        if longer_path_objects.contains(&member.span) {
             continue;
         }
         if file.ast.is_no_get_target(member.span) {

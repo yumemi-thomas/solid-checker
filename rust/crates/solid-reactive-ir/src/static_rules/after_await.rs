@@ -78,7 +78,7 @@ const MAX_WALKS_PER_FUNCTION: usize = 16;
 
 /// One function whose continuation is part of a tracked async computation:
 /// the computation itself, or a helper its returned promise awaits.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct Member {
     function: Arc<AsyncFunctionFact>,
     context: String,
@@ -146,29 +146,41 @@ struct Walk<'m> {
     past_on_some_path: bool,
 }
 
-struct Reach<'f, 'a> {
-    ctx: &'f AnalysisContext<'a>,
+/// What every [`Reach`] of one build reads and none writes: built once per
+/// build and shared by the driver's and the workers' walks.
+struct Shared<'f, 'a> {
     files: HashMap<&'f str, &'f FileFacts>,
     facts: HashMap<(&'f str, u64, u64), &'f AsyncFunctionFact>,
     /// The producer's facts by end offset: an object method's span ends where its function does (ADR 0351).
     facts_by_end: HashMap<(&'f str, u64), Vec<&'f AsyncFunctionFact>>,
-    done: HashSet<WalkKey>,
-    /// ADR 0871: how many walks each function has had.
-    walks: HashMap<(String, u64, u64), usize>,
     pre: PreAwait<'f, 'a>,
     /// Whether any function of the project is a generator: only then may a
     /// computation step one (ADR 0820).
     has_generators: bool,
+    /// Each file's objects of longer member paths (`member_reads_after_await`).
+    longer_path_objects: super::FileOnce<'f, HashSet<Span>>,
+}
+
+struct Reach<'s, 'f, 'a> {
+    ctx: &'f AnalysisContext<'a>,
+    files: &'s HashMap<&'f str, &'f FileFacts>,
+    facts: &'s HashMap<(&'f str, u64, u64), &'f AsyncFunctionFact>,
+    facts_by_end: &'s HashMap<(&'f str, u64), Vec<&'f AsyncFunctionFact>>,
+    done: HashSet<WalkKey>,
+    /// ADR 0871: how many walks each function has had.
+    walks: HashMap<(String, u64, u64), usize>,
+    pre: &'s PreAwait<'f, 'a>,
+    has_generators: bool,
+    longer_path_objects: &'s super::FileOnce<'f, HashSet<Span>>,
     /// Each function's [`Self::generator_calls`], once per build: the walk
     /// over the functions it calls is a function of the build alone, and a
     /// function is asked once per member walk and once by the run's filter.
     generator_calls: std::cell::RefCell<crate::HashMap<(&'f str, Span), Vec<GeneratorCall<'f>>>>,
 }
 
-impl<'f, 'a> Reach<'f, 'a> {
+impl<'f, 'a> Shared<'f, 'a> {
     fn new(ctx: &'f AnalysisContext<'a>) -> Self {
-        Reach {
-            ctx,
+        Shared {
             files: crate::base::reads::all_files(ctx.facts)
                 .iter()
                 .map(|file| (file.path.as_str(), file))
@@ -207,12 +219,27 @@ impl<'f, 'a> Reach<'f, 'a> {
                 }
                 by_end
             },
-            done: HashSet::default(),
-            walks: HashMap::default(),
             pre: PreAwait::new(ctx),
             has_generators: crate::base::reads::all_files(ctx.facts)
                 .iter()
                 .any(|file| file.ast.functions.iter().any(|function| function.generator)),
+            longer_path_objects: super::FileOnce::new(crate::base::reads::all_files(ctx.facts)),
+        }
+    }
+}
+
+impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
+    fn new(ctx: &'f AnalysisContext<'a>, shared: &'s Shared<'f, 'a>) -> Self {
+        Reach {
+            ctx,
+            files: &shared.files,
+            facts: &shared.facts,
+            facts_by_end: &shared.facts_by_end,
+            done: HashSet::default(),
+            walks: HashMap::default(),
+            pre: &shared.pre,
+            has_generators: shared.has_generators,
+            longer_path_objects: &shared.longer_path_objects,
             generator_calls: std::cell::RefCell::default(),
         }
     }
@@ -223,7 +250,8 @@ pub(super) fn run<'a>(
     computations: &SharedAsyncComputations<'a>,
     draft: &mut ProgramDraft,
 ) {
-    let mut reach = Reach::new(ctx);
+    let shared = Shared::new(ctx);
+    let mut reach = Reach::new(ctx, &shared);
     // The members each function starts with, in order. Building one reads
     // the build alone, never the walks' state.
     // The members each function starts with, in order. Deciding and
@@ -237,7 +265,7 @@ pub(super) fn run<'a>(
         .collect::<Vec<_>>();
     let candidates = crate::pipeline::parallel_balanced_with_state(
         &functions,
-        || Reach::new(ctx),
+        || Reach::new(ctx, &shared),
         |reach, function| reach.may_report(function),
     );
     let candidates = functions
@@ -253,7 +281,7 @@ pub(super) fn run<'a>(
         let index = computations.get(ctx);
         crate::pipeline::parallel_balanced_with_state(
             &candidates,
-            || Reach::new(ctx),
+            || Reach::new(ctx, &shared),
             |reach, function| reach.start_member(index, function),
         )
         .into_iter()
@@ -267,19 +295,100 @@ pub(super) fn run<'a>(
     // the workers, and the driver below, unchanged in order, files a
     // speculative walk where its span answers agree and walks it again in
     // place otherwise.
-    let speculated = crate::pipeline::parallel_balanced_with_state(
-        &starts,
-        || (Reach::new(ctx), draft.speculative()),
-        |(reach, template), member| reach.speculate(template, member),
-    );
-    for (member, speculated) in starts.into_iter().zip(speculated) {
-        let mut speculated = Some(speculated);
+    let mut speculated = speculate_waves(ctx, &shared, draft, &starts);
+    for member in starts {
         let mut queue = vec![member];
         while let Some(member) = queue.pop() {
-            reach.report_member(draft, &member, &mut queue, speculated.take());
+            let ahead = speculated.take(&member);
+            reach.report_member(draft, &member, &mut queue, ahead);
         }
     }
     unlisted_async_computations(ctx, &reach, draft);
+}
+
+/// The walks done ahead of the driver, by member ([`speculate_waves`]).
+#[derive(Default)]
+struct Ahead(crate::HashMap<(String, u64, u64), Vec<(Member, Speculated)>>);
+
+impl Ahead {
+    /// The walk of exactly `member`, if one was done ahead.
+    fn take(&mut self, member: &Member) -> Option<Speculated> {
+        let kept = self.0.get_mut(&Reach::key(&member.function))?;
+        let at = kept.iter().position(|(ahead, _)| ahead == member)?;
+        Some(kept.swap_remove(at).1)
+    }
+
+    fn holds(&self, member: &Member) -> bool {
+        self.0
+            .get(&Reach::key(&member.function))
+            .is_some_and(|kept| kept.iter().any(|(ahead, _)| ahead == member))
+    }
+
+    fn of_function(&self, member: &Member) -> usize {
+        self.0
+            .get(&Reach::key(&member.function))
+            .map_or(0, Vec::len)
+    }
+}
+
+/// How many waves of queued members are walked ahead of the driver.
+const AHEAD_WAVES: usize = 8;
+
+/// ADR 0909: the starting members' walks, then the walks of the members
+/// those queue, wave by wave, each on the workers. A member is walked ahead
+/// once, and at most [`MAX_WALKS_PER_FUNCTION`] per function (the driver
+/// walks no more before ADR 0871's bound rewrites a member, which then is
+/// another member, walked in place). The driver uses a walk only for
+/// exactly its member.
+fn speculate_waves<'f, 'a>(
+    ctx: &'f AnalysisContext<'a>,
+    shared: &Shared<'f, 'a>,
+    draft: &ProgramDraft,
+    starts: &[Member],
+) -> Ahead {
+    let mut ahead = Ahead::default();
+    let mut wave = starts.to_vec();
+    for _ in 0..AHEAD_WAVES {
+        if wave.is_empty() {
+            break;
+        }
+        // A member's walk is costly (a tenth to half a millisecond): a few
+        // already pay for the threads.
+        let walks = crate::pipeline::parallel_balanced_with_state_from(
+            4,
+            &wave,
+            || (Reach::new(ctx, shared), draft.speculative()),
+            |(reach, template), member| reach.speculate(template, member),
+        );
+        let mut next = Vec::new();
+        for (member, walk) in wave.into_iter().zip(walks) {
+            for queued in &walk.queued {
+                if !ahead.holds(queued)
+                    && !next.contains(queued)
+                    && ahead.of_function(queued)
+                        + next
+                            .iter()
+                            .filter(|other: &&Member| {
+                                Reach::key(&other.function) == Reach::key(&queued.function)
+                            })
+                            .count()
+                        < MAX_WALKS_PER_FUNCTION
+                {
+                    next.push(queued.clone());
+                }
+            }
+            if !ahead.holds(&member) {
+                ahead
+                    .0
+                    .entry(Reach::key(&member.function))
+                    .or_default()
+                    .push((member, walk));
+            }
+        }
+        next.retain(|member| !ahead.holds(member));
+        wave = next;
+    }
+    ahead
 }
 
 /// A member's walk done ahead of the driver ([`Reach::speculate`]).
@@ -360,7 +469,7 @@ fn primitive_parameter(ctx: &AnalysisContext<'_>, file: &FileFacts, declaration:
 /// (`await`, `for await`) is an obligation, never silence.
 fn unlisted_async_computations(
     ctx: &AnalysisContext<'_>,
-    reach: &Reach<'_, '_>,
+    reach: &Reach<'_, '_, '_>,
     draft: &mut ProgramDraft,
 ) {
     for file in crate::base::reads::all_files(ctx.facts) {
@@ -861,7 +970,7 @@ fn chain_calls<'f>(
     awaited.chain(returned).collect()
 }
 
-impl<'f, 'a> Reach<'f, 'a> {
+impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
     fn key(function: &AsyncFunctionFact) -> (String, u64, u64) {
         (
             function.expression.path.to_string(),
@@ -890,7 +999,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// promise on a computation's flight. Cheap and syntactic-plus-exact: the
     /// computation proof, which scans the project, runs only when it holds.
     fn has_promise_seed(&self, function: &'f AsyncFunctionFact) -> bool {
-        let Some((file, ast_function)) = ast_function(&self.files, function) else {
+        let Some((file, ast_function)) = ast_function(self.files, function) else {
             return false;
         };
         chain_calls(file, ast_function)
@@ -924,7 +1033,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     }
 
     fn has_try_handler(&self, function: &AsyncFunctionFact) -> bool {
-        ast_function(&self.files, function).is_some_and(|(file, function)| {
+        ast_function(self.files, function).is_some_and(|(file, function)| {
             file.ast
                 .try_head_awaits
                 .iter()
@@ -937,7 +1046,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// ADR 0870: whether the function holds an `await` of its own: one a
     /// branch may skip dominates nothing, so the producer lists no call for it.
     fn has_own_await(&self, function: &'f AsyncFunctionFact) -> bool {
-        ast_function(&self.files, function).is_some_and(|(file, ast_function)| {
+        ast_function(self.files, function).is_some_and(|(file, ast_function)| {
             file.ast.awaits.iter().any(|awaited| {
                 ast_function.body.contains(*awaited)
                     && written_directly_in(&file.ast, ast_function, *awaited)
@@ -946,7 +1055,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     }
 
     fn has_implicit_suspension(&self, function: &'f AsyncFunctionFact) -> bool {
-        ast_function(&self.files, function).is_some_and(|(file, ast_function)| {
+        ast_function(self.files, function).is_some_and(|(file, ast_function)| {
             file.ast.implicit_suspensions.iter().any(|suspension| {
                 ast_function.body.contains(*suspension)
                     && written_directly_in(&file.ast, ast_function, *suspension)
@@ -1007,7 +1116,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             .ctx
             .dialect
             .reports_member_reads_after_await()
-            .then(|| member_read_site(&self.files, function))
+            .then(|| member_read_site(self.files, function))
             .flatten();
         !(function.calls_after_await.is_empty()
             && member_site.is_none()
@@ -1029,8 +1138,8 @@ impl<'f, 'a> Reach<'f, 'a> {
         // ADR 0873: a compute a project wrapper's parameter hands on.
         let (context, handed) = match tracked_async_computation_context(ctx, function, index) {
             Some(context) => (context, None),
-            None => match ast_function(&self.files, function).and_then(|(file, function)| {
-                super::handed_compute::handed_compute(ctx, file, function)
+            None => match ast_function(self.files, function).and_then(|(file, function)| {
+                super::handed_compute::handed_compute(ctx, &index.exact_arguments, file, function)
             })? {
                 super::handed_compute::HandedCompute::Tracked(context) => (context, None),
                 super::handed_compute::HandedCompute::Unplaced { via } => (
@@ -1046,11 +1155,11 @@ impl<'f, 'a> Reach<'f, 'a> {
         // An owner a `dispose` function can reach may be gone when the
         // continuation resumes: the runtime then reads in a disposed
         // computation and stays silent, so every read is an obligation.
-        let conditional = owner_may_be_disposed(ctx, &self.files, &function)
+        let conditional = owner_may_be_disposed(ctx, self.files, &function)
             .then_some(AfterAwaitObligation::OwnerMayBeDisposed)
             .or(handed);
         // ADR 0820: past a generator's leading `yield` nothing is tracked.
-        let windows = if ast_function(&self.files, &function)
+        let windows = if ast_function(self.files, &function)
             .is_some_and(|(file, function)| leading_yield(file, function))
         {
             Vec::new()
@@ -1105,7 +1214,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         let member_site = ctx
             .dialect
             .reports_member_reads_after_await()
-            .then(|| member_read_site(&self.files, function))
+            .then(|| member_read_site(self.files, function))
             .flatten();
         let mut walk = Walk {
             member,
@@ -1298,7 +1407,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         // A total callee every operand of which names one accessor, after an
         // await that dominates it, is that accessor's read; any other is an
         // obligation, never silence.
-        if let Some((file, ast_function)) = ast_function(&self.files, function) {
+        if let Some((file, ast_function)) = ast_function(self.files, function) {
             for candidate in &file.ast.calls {
                 if !ast_function.body.contains(candidate.span)
                     || crate::owners::containing_ast_function(&file.ast, candidate.span)
@@ -1390,7 +1499,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         }
         // The promise chain first: it records which function literals become
         // members, so the callback walk below leaves their obligations to them.
-        if let Some((file, ast_function)) = ast_function(&self.files, function) {
+        if let Some((file, ast_function)) = ast_function(self.files, function) {
             for (call, carried) in chain_calls(file, ast_function) {
                 walk.carried = carried;
                 // ADR 0872: a helper called past the member's first suspension
@@ -1407,9 +1516,14 @@ impl<'f, 'a> Reach<'f, 'a> {
             walk.past_on_some_path = false;
         }
         if let Some(site) = member_site {
-            member_reads_after_await(ctx, draft, site, &member.context, &|symbol, text| {
-                self.pre.store_key(&member.windows, symbol, text)
-            });
+            member_reads_after_await(
+                ctx,
+                draft,
+                site,
+                &member.context,
+                &|symbol, text| self.pre.store_key(&member.windows, symbol, text),
+                self.longer_path_objects,
+            );
             let (file, ast_function, boundary) = site;
             for call in file.ast.calls_within(ast_function.body) {
                 if call.span.start >= boundary
@@ -1432,7 +1546,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         for (file, template) in after_await_templates {
             self.visit_template(draft, &mut walk, file, template, 0);
         }
-        if let Some((file, ast_function)) = ast_function(&self.files, function) {
+        if let Some((file, ast_function)) = ast_function(self.files, function) {
             // A catch/finally may follow a rejected await even though the
             // producer has no normal-flow dominance fact for its reads.
             for head in &file.ast.try_head_awaits {
@@ -1553,6 +1667,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 (file, function, boundary),
                 &walk.member.context,
                 &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
+                self.longer_path_objects,
             );
             // A member read the `await` proof already reported stays as it
             // was reported there (a violation proven by the await wins).
@@ -1627,6 +1742,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 (file, function, boundary),
                 &walk.member.context,
                 &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
+                self.longer_path_objects,
             );
             // Past the boundary by position only: the other arm of the await's
             // `if` runs with no await before it.
@@ -1833,7 +1949,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// `yield`, or it reaches a call of one.
     fn steps_generator(&self, function: &AsyncFunctionFact) -> bool {
         self.has_generators
-            && ast_function(&self.files, function).is_some_and(|(file, function)| {
+            && ast_function(self.files, function).is_some_and(|(file, function)| {
                 first_yield_end(file, function).is_some()
                     || !self.generator_calls(file, function).is_empty()
             })
@@ -2265,6 +2381,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 (helper_file, helper, helper.body.start),
                 &walk.member.context,
                 &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
+                self.longer_path_objects,
             );
         }
         // A read in the helper's prefix, behind a branch or a loop too, runs on
@@ -2449,6 +2566,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 (file, callback, callback.body.start),
                 &walk.member.context,
                 &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
+                self.longer_path_objects,
             );
         }
         for call in file.ast.calls_within(callback.body) {
