@@ -592,6 +592,8 @@ export const SUB_VALUE_WRITES = {
   "sw-param-pattern": { ...SUB_WRITE, text: (o) => `const w = ({ a }: { a: { v: number } }) => { a.v = 7; }; w(${o});` },
   "sw-rest": { ...SUB_WRITE, text: (o) => `const w = (...xs: { v: number }[]) => { xs[0].v = 7; }; w(${o}.a);` },
   "sw-delete-call": { ...SUB_WRITE, text: (o) => `${SUB_IDS} delete (swId(${o}.a) as { v?: number }).v;` },
+  // ADR 0922: a cast link; Chrome's frame is the link `a`, the row was at the `(`.
+  "sw-delete-link": { ...SUB_WRITE, text: (o) => `delete (${o}.a as { v?: number }).v;` },
   "sw-await": { ...SUB_WRITE, text: (o) => `void (async () => { (await Promise.resolve(${o}.a)).v = 7; })();` },
   "sw-then": { ...SUB_WRITE, text: (o) => `void Promise.resolve(${o}.a).then((x) => { x.v = 7; });` },
   "sw-map-get": { ...SUB_WRITE, text: (o) => `new Map([[1, ${o}.a]]).get(1)!.v = 7;` },

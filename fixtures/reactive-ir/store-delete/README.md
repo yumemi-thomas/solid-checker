@@ -7,26 +7,20 @@
 where it reports the assignment `store.path = x`, with the same exemptions
 (ADR 0461).
 
-TypeScript reports `delete` of a required property (TS2790 under
-strictNullChecks) and of a readonly one (TS2704), so the operand must carry the
-Type Fact `writableOptionalProperty`: the checker resolves the property symbol
-and marks it optional and not readonly, which type-checks under every compiler
-option for a bare or parenthesized operand. A chain past the root (`store.a.b`) gets the
-assignment form's verdict (ADR 0465): silent when a link's domain may hold
-`null` or `undefined` (TS18047/TS18048), a violation under strictNullChecks
-(this project is strict) when every link excludes both, uncertifiable without
-it. A missing fact also makes the delete uncertifiable.
+TypeScript reports `delete` of a required (TS2790) or readonly (TS2704)
+property, so the operand must carry the Type Fact `writableOptionalProperty`.
+A chain past the root (`store.a.b`) gets the assignment's verdict (ADR 0465):
+silent when a link may be nullish (TS18047/TS18048), a violation when every
+link excludes both under strictNullChecks, uncertifiable otherwise or without
+a fact.
 
-Reported: an optional property of the store deleted in the body, an effect's
-apply, inside a wrapper function, a parenthesized operand, inside another
-store's setter, through a namespace-imported `S.createStore` (`Namespace.tsx`),
-through a projection result, through a `const` alias of the store (ADR
-0463), and the nested paths (`store.a.b` in the body and a handler,
-`store.o.b` narrowed by `if (store.o)`; rc.17 in Chrome:
-`STORE_WRITE_OUTSIDE_SETTER` for all three).
+Reported: an optional property deleted in the body, an effect's apply, a
+wrapper, a parenthesized operand, another store's setter, a namespace import
+(`Namespace.tsx`), a projection, a `const` alias (ADR 0463), and nested paths
+(`store.a.b` in the body and a handler, `store.o.b` under `if (store.o)`).
 
-Silent: inside the store's own setter callback (commits, rc.17 probe), on the
-setter's draft, on a plain object, through a shadowing parameter. Uncertifiable since
+Silent: in the store's own setter (it commits), on its draft, on a plain
+object, through a shadowing parameter. Uncertifiable since
 ADR 0829 (Chrome warns, `tsc` accepts; the producer proves the operand neither
 optional and writable nor rejected): a non-optional property whose type
 includes `undefined` and a computed key here, and in `Unproven.tsx` a literal
@@ -35,7 +29,7 @@ nested computed key, `unknown` and a literal-typed variable key. Its
 `RejectedKeys` (TS2790: a required static key, the same as a literal computed
 key, a tuple element) stays silent. Uncertifiable since ADR 0791: an optional
 chain, which may skip the delete. A cast root (`delete (store as { v?: number }).v`) is
-reported since ADR 0790: the flow reads it as the store (Chrome, rc.21, warns).
+reported (ADR 0790), from `store` (ADR 0922).
 
 `Rejected.tsx` is TypeScript's and silent: `delete store.v!` and `delete
 (store.v as T)` (TS2703), and a link that may be `undefined` or `null`
