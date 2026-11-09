@@ -2362,3 +2362,7 @@ They join ADR 0413's chunks. A chunk records each source-table entry it asks (`l
 <a id="adr-0912"></a>
 ## ADR 0912 — Site reach is bounded per report site and kept per function
 Owner (2026-11-09): ADR 0560's site-reach bound was shared by a build's report sites in location order; each site now has its own (exhausted: undecided, uncertifiable, as before). A site's query derives one answer, whether its function runs, so answers per function by fresh queries are shared by its sites, run on the workers and kept across edits (`ReachChunks`: file unchanged, same query method, recorded reads hold; shadow and verify modes recompute). `ir-edit-fuzz --family reach` moves them. Nothing moved. app-game 60 to 6.5 ms.
+
+<a id="adr-0914"></a>
+## ADR 0914 — A throw walk's stop in an unread compute is unobserved
+The walk found no entry of a class constructor or method and ended `Open`; a wrapper's site outside the memo kept a V (W's FP). Such stops, all in this file inside an unread compute: U. `stored_throw.rs`.
