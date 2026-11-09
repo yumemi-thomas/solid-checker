@@ -15,7 +15,7 @@
 import {
   walk, domExpr, listenExpr, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, asyncDeclaredSignal, asyncMaybeSignal, storeAsyncSignal, storeRawSignal, storeClassSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, CHAIN_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
-  CBP_CALLS, CBP_FORMS, cbProp, namedButton,
+  CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -956,8 +956,28 @@ const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) 
   const mixed = spec.contexts.includes("body") || spec.contexts.includes("handler") ? "misuse" : (spec.legal ?? []).includes("body") && (spec.legal ?? []).includes("handler") ? "legal" : null;
   return [code, { misuse: [...placed("misuse"), ...(mixed === "misuse" ? ["handler-mixed"] : [])], legal: [...placed("legal"), ...(mixed === "legal" ? ["handler-mixed"] : []), ...DEAD_CONTEXTS] }];
 }));
+/**
+ * ADR 0927 (silence audit rows 1-4, Chrome rc.21): code a closed `untrack` writes and something else runs later, each its base
+ * context at run time. A function it keeps in a `Set`, an array or a `Map`, called later from the body, `untrack` or a handler
+ * (`kept-<collection>-<at>`); a flow element it creates (`flow-untrack-<form>`: the row or child runs in its own window, as
+ * `flow-<form>`); an effect it or a `<For>` row creates whose compute returns the site's function, which the apply calls inside
+ * `void` (`apply-void-call-*`: in the apply), or only names (`apply-void-value-*`: never runs, legal for every code).
+ */
+export const KEPT_CONTEXTS = { "kept-set-body": "body", "kept-array-body": "body", "kept-map-body": "body", "kept-set-untrack": "untrack", "kept-set-handler": "handler" };
+export const FLOW_UNTRACK_CONTEXTS = Object.fromEntries(FLOW_FORMS.map((form) => [`flow-untrack-${form}`, `flow-${form}`]));
+export const APPLY_VOID_CONTEXTS = { "apply-void-call-untrack": "effect-apply", "apply-void-call-row": "effect-apply" };
+export const APPLY_VOID_UNRUN = ["apply-void-value-untrack", "apply-void-value-row"];
+const LATER_RUN_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
+  const spec = SPEC[code];
+  const at = (kind) => [
+    ...Object.entries({ ...KEPT_CONTEXTS, ...APPLY_VOID_CONTEXTS }).filter(([, base]) => (kind === "misuse" ? spec.contexts : spec.legal ?? []).includes(base)),
+    ...Object.entries(FLOW_UNTRACK_CONTEXTS).filter(([, base]) => (FLOW_PLACEMENT[code]?.[kind] ?? []).includes(base)),
+  ].map(([context]) => context);
+  return [code, { misuse: at("misuse"), legal: [...at("legal"), ...APPLY_VOID_UNRUN] }];
+}));
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS];
+export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+  ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN];
 
 /**
  * ADR 0613: the site in an effect apply, with a synchronous `flush()` the program calls after the effect is created: in the body
@@ -1060,13 +1080,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1804,6 +1824,24 @@ function recallContext(context, stmts, kit) {
       const kept = decl(run, call(ref(kit.ensureHelper("returnCb")), [fn(stmts)]));
       return context === "fire-return-body" ? { body: [kept, expr(call(ref(run)))], view: [] } : { body: [kept], view: [button(kit.name("b"), [expr(call(ref(run)))])] };
     }
+    // ADR 0927 (KEPT_CONTEXTS): the site's function, written in a closed `untrack`, kept in a collection and run later.
+    case "kept-set-body": case "kept-array-body": case "kept-map-body": case "kept-set-untrack": case "kept-set-handler": {
+      const [, kind, at] = /^kept-([a-z]+)-([a-z]+)$/.exec(context);
+      const kept = kit.name("kept");
+      const f = kit.name("kf");
+      const made = { set: "new Set<() => void>()", array: "[] as Array<() => void>", map: "new Map<number, () => void>()" }[kind];
+      const put = { set: `${kept}.add(${f})`, array: `${kept}.push(${f})`, map: `${kept}.set(1, ${f})` }[kind];
+      const run = expr(domExpr(`${kept}.forEach((g) => g())`));
+      const body = [decl(kept, domExpr(made)), expr(prim("untrack", fn([decl(f, fn(stmts)), expr(domExpr(put))])))];
+      if (at === "handler") return { body, view: [button(kit.name("b"), [run])] };
+      return { body: [...body, at === "untrack" ? expr(prim("untrack", fn([run]))) : run], view: [] };
+    }
+    // ADR 0927 (APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN): an effect whose compute returns the site's function; the apply calls it in `void`, or names it.
+    case "apply-void-call-untrack": case "apply-void-call-row": case "apply-void-value-untrack": case "apply-void-value-row": {
+      const effect = expr(prim("effect", fn([ret(fn(stmts))], { concise: true }), { apply: fn([expr(domExpr(context.includes("-call-") ? "void v()" : "void v"))]) }));
+      if (context.endsWith("-row")) return { body: [], view: [flowEl(kit.name("v"), "for", [effect])] };
+      return { body: [expr(prim("untrack", fn([effect])))], view: [] };
+    }
     // HANDLER_CONTEXTS: a handler passed by name (a `const`, a `function`, Solid's `[h, 1]` bound form), and one the body also calls.
     case "handler-named-const": case "handler-named-function": case "handler-tuple": case "handler-mixed": {
       // `hd`, not `h`: the same-file helpers are `hN` (generate.mjs ensureHelper), and a handler of that name would shadow one.
@@ -1858,6 +1896,12 @@ function recallContext(context, stmts, kit) {
         if (form !== "named") return { body: [], view: [cbProp(kit.name("v"), fn(stmts), call, form)] };
         const r = kit.name("run");
         return { body: [decl(r, fn(stmts, { form: "function" }))], view: [cbProp(kit.name("v"), ref(r), call, form)] };
+      }
+      // `flow-untrack-<form>` (ADR 0927): the flow element created in a closed `untrack`, inserted by the view.
+      const closed = /^flow-untrack-(.+)$/.exec(context)?.[1];
+      if (closed && FLOW_FORMS.includes(closed)) {
+        const el = kit.name("fe");
+        return { body: [decl(el, prim("untrack", fn([ret(jsxExpr(flowEl(kit.name("v"), closed, stmts)))])))], view: [mounted(kit.name("v"), domExpr(`{${el}}`))] };
       }
       // `flow-<form>` (FLOW_CONTEXTS): the site in the body of a flow component's function child.
       const flow = /^flow-(.+)$/.exec(context)?.[1];

@@ -7871,5 +7871,110 @@
    "mx-store-write-outside-setter-timer-sw-delete-link-wrapper-module-helper"
   ],
   "rediscovered": "matrix.mjs --grid --recall --ids, fresh runtime cache, release builds of 6e33e0b08 and this fix: sw-delete-call 36 false-clean to 36 recall-gap; sw-delete-link 24 misplaced (direct, wrapper) and 12 false-clean (alias) to 24 agree and 12 recall-gap; the other 1,476 sw-* programs unchanged"
+ },
+ {
+  "finding": "ADR 0927 row 1: a named function an allowed region (a closed untrack, onSettled, a flow row) puts in a Set, an array or a Map, called later by project code (a component body), took callee_roles.allowed-nested-host-kept: collection insertion was a HandOff::Retained like addEventListener, DeferredCallback, silent",
+  "found": "the silence audit of origin/main 9785faf29 (/Users/thomas/dev/sc-scratch.noindex/silence-audit/report.md, rows 1-4), its probes confirmed in Chrome on rc.21 (replay.mjs --confirm-with-chrome: six false cleans)",
+  "fixed": "ADR 0927",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-kept-array-body-memo-direct-none",
+   "mx-strict-read-untracked-kept-array-body-signal-direct-none",
+   "mx-strict-read-untracked-kept-map-body-memo-direct-none",
+   "mx-strict-read-untracked-kept-map-body-signal-direct-none",
+   "mx-strict-read-untracked-kept-set-body-memo-direct-none",
+   "mx-strict-read-untracked-kept-set-body-signal-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes <the 24 codes with cells there> --grids mx-recall,lg-recall -- --contexts <KEPT_CONTEXTS, FLOW_UNTRACK_CONTEXTS, APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN>: origin/main 579876599 release 998 mx-recall false cleans (STRICT_READ_UNTRACKED 758, PRIMITIVE_IN_EFFECT_CALLBACK 180, FLUSH_IN_EFFECT_CALLBACK 60), exit 1; the ADR 0927 tree 6, all in the open wrapper entry (504 false clean to agree, 488 to recall gap, 1,116 recall gap to agree); lg-recall 0 false positive on both, 321 clean to uncertifiable"
+ },
+ {
+  "finding": "ADR 0927 rows 3-4: a For/Show/Match/Repeat element created in a closed untrack: its row or child body took callee_roles.allowed-nested-off-stack (runs_in_disposal NotIn, which climbs the row to the untrack), DeferredCallback, silent; rc.21 runs the row in its own strict-read window. The primitive-callback arm after it answered DeferredCallback for any primitive callback",
+  "found": "the silence audit of origin/main 9785faf29 (/Users/thomas/dev/sc-scratch.noindex/silence-audit/report.md, rows 1-4), its probes confirmed in Chrome on rc.21 (replay.mjs --confirm-with-chrome: six false cleans)",
+  "fixed": "ADR 0927",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-flow-untrack-for-memo-direct-none",
+   "mx-strict-read-untracked-flow-untrack-for-signal-direct-none",
+   "mx-strict-read-untracked-flow-untrack-for-unkeyed-memo-direct-none",
+   "mx-strict-read-untracked-flow-untrack-for-unkeyed-signal-direct-none",
+   "mx-strict-read-untracked-flow-untrack-match-memo-direct-none",
+   "mx-strict-read-untracked-flow-untrack-match-signal-direct-none",
+   "mx-strict-read-untracked-flow-untrack-repeat-memo-direct-none",
+   "mx-strict-read-untracked-flow-untrack-repeat-signal-direct-none",
+   "mx-strict-read-untracked-flow-untrack-show-keyed-memo-direct-none",
+   "mx-strict-read-untracked-flow-untrack-show-keyed-signal-direct-none",
+   "mx-strict-read-untracked-flow-untrack-show-memo-direct-none",
+   "mx-strict-read-untracked-flow-untrack-show-signal-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes <the 24 codes with cells there> --grids mx-recall,lg-recall -- --contexts <KEPT_CONTEXTS, FLOW_UNTRACK_CONTEXTS, APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN>: origin/main 579876599 release 998 mx-recall false cleans (STRICT_READ_UNTRACKED 758, PRIMITIVE_IN_EFFECT_CALLBACK 180, FLUSH_IN_EFFECT_CALLBACK 60), exit 1; the ADR 0927 tree 6, all in the open wrapper entry (504 false clean to agree, 488 to recall gap, 1,116 recall gap to agree); lg-recall 0 false positive on both, 321 clean to uncertifiable"
+ },
+ {
+  "finding": "ADR 0927 row 2: an effect's compute returns a function and the apply calls it inside void (`(v) => { void v(); }`): returned_to_idle_apply read the source text `void` before the parameter as never called (callee_roles.allowed-nested-never-called), silent in a closed untrack or a For row",
+  "found": "the silence audit of origin/main 9785faf29 (/Users/thomas/dev/sc-scratch.noindex/silence-audit/report.md, rows 1-4), its probes confirmed in Chrome on rc.21 (replay.mjs --confirm-with-chrome: six false cleans)",
+  "fixed": "ADR 0927",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-apply-void-call-row-memo-direct-none",
+   "mx-strict-read-untracked-apply-void-call-row-signal-direct-none",
+   "mx-strict-read-untracked-apply-void-call-untrack-memo-direct-closure",
+   "mx-strict-read-untracked-apply-void-call-untrack-memo-direct-none",
+   "mx-strict-read-untracked-apply-void-call-untrack-signal-direct-closure",
+   "mx-strict-read-untracked-apply-void-call-untrack-signal-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes <the 24 codes with cells there> --grids mx-recall,lg-recall -- --contexts <KEPT_CONTEXTS, FLOW_UNTRACK_CONTEXTS, APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN>: origin/main 579876599 release 998 mx-recall false cleans (STRICT_READ_UNTRACKED 758, PRIMITIVE_IN_EFFECT_CALLBACK 180, FLUSH_IN_EFFECT_CALLBACK 60), exit 1; the ADR 0927 tree 6, all in the open wrapper entry (504 false clean to agree, 488 to recall gap, 1,116 recall gap to agree); lg-recall 0 false positive on both, 321 clean to uncertifiable"
+ },
+ {
+  "finding": "ADR 0927: a primitive created in the function an effect's compute returns, which the apply calls: effect_phase walked the returned function to the compute (ADR 0541) and never into the apply that receives it, no origin, silent (the apply-void-call shapes found it; plain `v()` is the same)",
+  "found": "the ADR 0927 fuzzer shapes (apply-void-call-*), origin/main 579876599",
+  "fixed": "ADR 0927",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-apply-void-call-row-effect-direct-closure",
+   "mx-primitive-in-effect-callback-apply-void-call-row-effect-direct-none",
+   "mx-primitive-in-effect-callback-apply-void-call-row-memo-direct-closure",
+   "mx-primitive-in-effect-callback-apply-void-call-row-memo-direct-none",
+   "mx-primitive-in-effect-callback-apply-void-call-row-root-direct-closure",
+   "mx-primitive-in-effect-callback-apply-void-call-row-root-direct-none",
+   "mx-primitive-in-effect-callback-apply-void-call-untrack-effect-direct-closure",
+   "mx-primitive-in-effect-callback-apply-void-call-untrack-effect-direct-none",
+   "mx-primitive-in-effect-callback-apply-void-call-untrack-memo-direct-closure",
+   "mx-primitive-in-effect-callback-apply-void-call-untrack-memo-direct-none",
+   "mx-primitive-in-effect-callback-apply-void-call-untrack-root-direct-closure",
+   "mx-primitive-in-effect-callback-apply-void-call-untrack-root-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes <the 24 codes with cells there> --grids mx-recall,lg-recall -- --contexts <KEPT_CONTEXTS, FLOW_UNTRACK_CONTEXTS, APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN>: origin/main 579876599 release 998 mx-recall false cleans (STRICT_READ_UNTRACKED 758, PRIMITIVE_IN_EFFECT_CALLBACK 180, FLUSH_IN_EFFECT_CALLBACK 60), exit 1; the ADR 0927 tree 6, all in the open wrapper entry (504 false clean to agree, 488 to recall gap, 1,116 recall gap to agree); lg-recall 0 false positive on both, 321 clean to uncertifiable"
+ },
+ {
+  "finding": "ADR 0927: flush() in the function an effect's compute returns, which the apply calls: the same effect_phase hole",
+  "found": "the ADR 0927 fuzzer shapes (apply-void-call-*), origin/main 579876599",
+  "fixed": "ADR 0927",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-apply-void-call-row-x-direct-closure",
+   "mx-flush-in-effect-callback-apply-void-call-row-x-direct-none",
+   "mx-flush-in-effect-callback-apply-void-call-untrack-x-direct-closure",
+   "mx-flush-in-effect-callback-apply-void-call-untrack-x-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes <the 24 codes with cells there> --grids mx-recall,lg-recall -- --contexts <KEPT_CONTEXTS, FLOW_UNTRACK_CONTEXTS, APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN>: origin/main 579876599 release 998 mx-recall false cleans (STRICT_READ_UNTRACKED 758, PRIMITIVE_IN_EFFECT_CALLBACK 180, FLUSH_IN_EFFECT_CALLBACK 60), exit 1; the ADR 0927 tree 6, all in the open wrapper entry (504 false clean to agree, 488 to recall gap, 1,116 recall gap to agree); lg-recall 0 false positive on both, 321 clean to uncertifiable"
+ },
+ {
+  "finding": "OPEN: a read in a same-file helper (the wrapper binding) called from the function an effect's compute returns, which the apply calls, is silent: the returned function has no caller edge, so the helper's summary reaches no call site (body form `createEffect(() => () => { wrapUse(); }, (v) => { v(); })` silent on origin/main too; its STORE_WRITE_OUTSIDE_SETTER twins carry it as a secondary). Not an ADR 0927 arm",
+  "found": "the ADR 0927 fuzzer shapes (apply-void-call-untrack, wrapper binding)",
+  "fixed": "open (docs/open-work.md, ADR 0927)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-apply-void-call-untrack-memo-wrapper-closure",
+   "mx-strict-read-untracked-apply-void-call-untrack-memo-wrapper-iife",
+   "mx-strict-read-untracked-apply-void-call-untrack-memo-wrapper-none",
+   "mx-strict-read-untracked-apply-void-call-untrack-signal-wrapper-closure",
+   "mx-strict-read-untracked-apply-void-call-untrack-signal-wrapper-iife",
+   "mx-strict-read-untracked-apply-void-call-untrack-signal-wrapper-none"
+  ]
  }
 ]

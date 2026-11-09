@@ -2354,3 +2354,7 @@ mx-recall 6c2e63ecf: 36 `sw-delete-call` false cleans, U at the `(` of `delete (
 <a id="adr-0924"></a>
 ## ADR 0924 — `untrack` takes no parent's value
 `async-value-dstr` too (ADR 0628): it suspended, 11 mx-combo `harness` rows. Drawn, it is `local`.
+
+<a id="adr-0927"></a>
+## ADR 0927 — Four silent arms answer from facts
+Silence audit rows 1-4 (origin/main 9785faf29); each probe is a false clean in Chrome rc.21. (1) `Set.add`, `Array.push`/`unshift`, `Map.set` keep a function for project code: `HandOff::Unfollowed`, no longer `Retained` (a host listener keeps ADR 0535's proof). (2) `returned_to_idle_apply` proves an idle apply from facts: an exact primitive with an apply slot (`apply_callback_argument`), an arrow apply with at most one identifier parameter, every reference an inert operand; `void v()` calls `v`. `effect_phase` follows a compute's returned function into an apply that may call it: an obligation. (3) The control-flow arm answers a flow element inside an allowed region; elsewhere `NotIn` needs `runs_off_callback_stack` (ADR 0920) unless the site is in the region's own callback. (4) A primitive callback nested there asks its arm: tracked, a flow role, else U. Fuzz `KEPT_CONTEXTS`, `FLOW_UNTRACK_CONTEXTS`, `APPLY_VOID_*`: origin/main 998 mx-recall false cleans, this tree 6 (open-work); 1,116 recall gaps proven. Fixture `latent-silent-arms`.
