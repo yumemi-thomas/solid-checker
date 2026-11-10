@@ -309,6 +309,12 @@ pub(crate) enum PremiseKind {
     /// The site is in an instance field initializer, which runs when an
     /// instance is constructed.
     InstanceFieldInitializer,
+    /// The site is in the callback of a resolved setter call whose write guard
+    /// provably throws first: `ownedWrite` is proven off and the call's role
+    /// reports a disallowed write, so the callback never runs and the write is
+    /// the claim (SC2001, ADR 0932). Unknown or `ownedWrite: true` never
+    /// carry it. The span is the setter call, where the violation stands.
+    SetterGuardThrowsFirst,
     /// The site is in a function that returns JSX and is also handed to code
     /// that may call it as a plain function.
     UndecidedComponent,
