@@ -462,6 +462,8 @@ bun scripts/dialect-manifests.mjs validate
 bun scripts/repro-budget.mjs
 # The one-way uncertifiable count against its ledger (endstage-report.md 1b).
 node scripts/guard/count.mjs
+# The rises of that count, named per fixture and fact: unnamed ones are printed, never a failure (ADR 0955).
+node scripts/guard/rises.mjs
 # A ratchet on raw cross-file reads in the reactive IR (ADR 0383).
 bun scripts/ir-read-lint.mjs
 # A ratchet on the code shapes that decide a silence without a fact (ADR 0933, phase B).

@@ -119,7 +119,7 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
 }
 
 /** The base revision's snapshots, `fixture -> snapshot`, or null when it has none. */
-function snapshotsAt(revision) {
+export function snapshotsAt(revision) {
   const listing = git("ls-tree", "-r", revision, `${SNAPSHOTS}/`);
   if (!listing) return null;
   const blobs = listing.split("\n").map((line) => /^\d+ blob ([0-9a-f]+)\t(.+)$/.exec(line)).filter((m) => m && m[2].endsWith(".json"));
@@ -139,12 +139,12 @@ function snapshotsAt(revision) {
   return snapshots;
 }
 
-function git(...args) {
+export function git(...args) {
   const run = spawnSync("git", args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 28 });
   return run.status === 0 ? run.stdout.trim() : null;
 }
 
-function baseLedger() {
+export function baseLedger() {
   const revisions = process.env.COUNT_BASE ? [process.env.COUNT_BASE] : ["origin/main", "origin/claude/flip-census"].map((ref) => git("merge-base", "HEAD", ref)).filter(Boolean);
   for (const revision of revisions) {
     const text = git("show", `${revision}:${LEDGER}`);

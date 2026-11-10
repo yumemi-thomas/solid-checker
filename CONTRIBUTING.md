@@ -138,6 +138,11 @@ published runtime and declaration bytes and record exact versions and integrity.
 Do not infer JSX execution behavior from transformed output. Do not expose
 tsrs or Oxc nodes across fact-domain interfaces.
 
+A veto or a fail-closed change (a new uncertifiable result, a wider or narrower veto formula) says what it moved before it merges (ADR 0955):
+
+1. `make corpus-delta OLD=<the base build's solid-checker-rust> DELTA_HAZARDS=<hazard ids the change reads>` (or `DELTA_BLOCKERS=<kinds>`, or `DELTA_ARGS=--all` for a change that reads no recorded hazard) runs the old and the new release checkers on the corpus projects whose old results hold those hazards, and on controls that must not move. It prints the uncertifiable and violation deltas per project and per blocker kind; a new violation, a moved control or a project the checker could not answer fails it. Paste the table in the pull request. `--baseline <an old corpus-sweep report>` skips the old runs.
+2. `node scripts/guard/rises.mjs` lists, per existing fixture, the `code blocker` keys whose uncertifiable rows rose against the base; `--append "ADR NNNN" --fact "<the hazards, formula or missing fact>"` names them in `scripts/guard/rises.json`. An unnamed rise is printed and never a failure; the list is append-only; `counts.json` is not rekeyed.
+
 ## The pre-release run and the reproduction set
 
 Precision work iterates on `fixtures/uncertifiable-repro` (ADR 0446), a few

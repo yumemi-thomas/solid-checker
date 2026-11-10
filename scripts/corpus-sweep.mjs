@@ -128,6 +128,8 @@ function run(row) {
         // that the cause classifier (scripts/uncertifiable-causes.mjs) reads.
         premises: payload?.premises ?? [],
         findings: payload?.findings ?? [],
+        // ADR 0947's table of the hazards the rows' `blockedBy.fired` name: the scope of scripts/corpus-delta.mjs (ADR 0955).
+        hazards: payload?.hazards ?? [],
         metrics: payload?.metrics ?? null,
         parseError,
         stderr: exitCode !== 0 || parseError ? errorText.slice(-4000) : "",

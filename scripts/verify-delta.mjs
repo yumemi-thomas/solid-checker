@@ -252,8 +252,12 @@ export const CHECKS = {
   "guard-count": {
     why:
       "the one-way uncertifiable count (endstage-report.md 1b): the ledger matches the snapshots, and a fall " +
-      "against the base names an ADR, a proof and a fixture on each side",
-    command: ["node", "scripts/guard/count.mjs"],
+      "against the base names an ADR, a proof and a fixture on each side; its rises are named per fixture and fact " +
+      "(ADR 0955), an unnamed one printed and never a failure",
+    commands: [
+      ["node", "scripts/guard/count.mjs"],
+      ["node", "scripts/guard/rises.mjs"],
+    ],
   },
   "witnesses": {
     why:
