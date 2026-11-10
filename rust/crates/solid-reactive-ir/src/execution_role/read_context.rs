@@ -339,7 +339,10 @@ pub(crate) fn async_execution_role(
     execution: ExecutionRole,
 ) -> ExecutionRole {
     if execution == ExecutionRole::DeferredCallback && file.ast.any_jsx_containing(span) {
-        ExecutionRole::TrackedJsx
+        role_arm!(
+            "read_context.async_execution_role.deferred-in-jsx",
+            ExecutionRole::TrackedJsx
+        )
     } else {
         execution
     }

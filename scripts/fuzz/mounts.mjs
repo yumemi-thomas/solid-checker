@@ -13,9 +13,17 @@
 //
 // The forms follow the rc.17 typings (solid-js types/client/flow.d.ts, @solidjs/web types/index.d.ts): `<Dynamic>` is deprecated
 // there, so the dynamic mount is `dynamic()`.
+//
+// The wrapper mounts (WRAP_MOUNTS, ASYNC_OUTSIDE_LOADING_BOUNDARY only: misuse.mjs `wrapMounts`) render the child through a user
+// component whose body holds a `<Loading>` and the child's `props.children` (ADR 0668: the cover walk reads `children` inside it):
+//
+//   wrap-real     `props.children` inside the `<Loading>`: covered (legal)    wrap-alias    `const p = props; p.children`: covered (legal)
+//   wrap-foreign  the children render outside; `other.children` is inside     wrap-outside  the same with `other.label` inside
 
 export const RECALL_MOUNTS = ["show-signal", "show-later", "show-fallback", "show-keyed", "for-signal", "for-item", "for-unkeyed", "for-fallback",
   "switch", "repeat", "loading", "loading-on", "errored", "dynamic", "portal"];
+/** The wrapper mounts: a user component around the child, with a `<Loading>` of its own (misuse.mjs `wrapMounts`, `recall.test.mjs`). */
+export const WRAP_MOUNTS = ["wrap-real", "wrap-alias", "wrap-foreign", "wrap-outside"];
 /** Mounts whose child renders only after the parent's button (`pm<N>`) is clicked. */
 export const LATER_MOUNTS = ["show-later"];
 
@@ -28,7 +36,7 @@ const indented = (lines) => lines.map((line) => `${INDENT}${line}`);
  * @param {string[]} wrapped the child's JSX lines (`<C1 />`, or wrapped in a provider by a source)
  * @param {{ index: number, name: string, used: Set<string>, web: Set<string> }} at the parent's number, the child's name, and the
  *   import sets (`solid-js`, `@solidjs/web`) the printer fills
- * @returns {{ lines: string[], prelude: string[] } | null}
+ * @returns {{ lines: string[], prelude: string[], module?: string[] } | null} `module`: declarations at module scope, above the parent
  */
 export function mountParts(mount, wrapped, { index, name, used, web }) {
   const on = `on${index}`;
@@ -54,6 +62,26 @@ export function mountParts(mount, wrapped, { index, name, used, web }) {
     case "errored": used.add("Errored"); return { prelude: [], lines: ["<Errored fallback={<p>e</p>}>", ...indented(wrapped), "</Errored>"] };
     case "dynamic": web.add("dynamic"); return { prelude: [`const D${index} = dynamic(() => ${name});`], lines: [`<D${index} />`] };
     case "portal": web.add("Portal"); return { prelude: [], lines: ["<Portal>", ...indented(wrapped), "</Portal>"] };
+    case "wrap-real": case "wrap-alias": case "wrap-foreign": case "wrap-outside": return wrappedBy(mount, wrapped, index, used);
     default: return null;
   }
+}
+
+/** The wrapper mounts' parts: the wrapper `Wrap<N>` at module scope and the parent's lines around the child. */
+function wrappedBy(mount, wrapped, index, used) {
+  used.add("Loading");
+  const wrapper = `Wrap${index}`;
+  const holding = (children) => ["<Loading fallback={0}>", ...indented(children), "</Loading>"];
+  const body = {
+    "wrap-real": { before: [], view: holding(["{props.children}"]) },
+    "wrap-alias": { before: ["const p = props;"], view: holding(["{p.children}"]) },
+    // The real children render outside the boundary; the `<Loading>` holds the `children` of another object (ADR 0668).
+    "wrap-foreign": { before: ["const other = { children: 1 };"], view: ["<div>", ...indented(["{props.children}", ...holding(["<span>{other.children}</span>"])]), "</div>"] },
+    "wrap-outside": { before: ["const other = { label: 1 };"], view: ["<div>", ...indented(["{props.children}", ...holding(["<span>{other.label}</span>"])]), "</div>"] },
+  }[mount];
+  return {
+    prelude: [],
+    module: [`function ${wrapper}(props: { children: any }) {`, ...indented(body.before), `${INDENT}return (`, ...indented(indented(body.view)), `${INDENT});`, "}", ""],
+    lines: [`<${wrapper}>`, ...indented(wrapped), `</${wrapper}>`],
+  };
 }
