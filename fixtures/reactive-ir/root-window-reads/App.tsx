@@ -50,12 +50,14 @@ export function PropsInRootInEvent(props: { x: number }) {
   return <div onClick={() => createRoot(() => console.log(props.x))} />;
 }
 
-// Where the call has no window: nothing is reported.
+// In a computation the call has no window, and the read is stale (ADR 0932,
+// as `runWithOwner`'s, ADR 0443): reported, with no runtime warning.
 export function RootInMemo() {
   const [count] = createSignal(0);
   const m = createMemo(() => createRoot(() => count()));
   return <div>{m()}</div>;
 }
+// Where the call has no window: nothing is reported.
 export function RootInEvent() {
   const [count] = createSignal(0);
   return <div onClick={() => createRoot(() => console.log(count()))} />;

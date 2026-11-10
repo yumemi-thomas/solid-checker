@@ -138,6 +138,144 @@
       "start": 2405,
       "end": 2412,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 504,
+      "end": 512,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 654,
+      "end": 666,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 707,
+      "end": 714,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 866,
+      "end": 874,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 1009,
+      "end": 1017,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 1161,
+      "end": 1169,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 1326,
+      "end": 1370,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 1343,
+      "end": 1369,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 1389,
+      "end": 1396,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 1985,
+      "end": 1991,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "mount-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 2211,
+      "end": 2218,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 2468,
+      "end": 2476,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx",
+      "start": 2791,
+      "end": 2799,
+      "fixes": 0
     }
   ]
 }

@@ -1,0 +1,57 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owned-write-updater-read/App.tsx",
+      "start": 324,
+      "end": 327,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "owned-write-option-unread",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owned-write-updater-read/App.tsx",
+      "start": 554,
+      "end": 569,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owned-write-updater-read/App.tsx",
+      "start": 565,
+      "end": 568,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owned-write-updater-read/App.tsx",
+      "start": 789,
+      "end": 804,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owned-write-updater-read/App.tsx",
+      "start": 994,
+      "end": 1009,
+      "fixes": 0
+    }
+  ]
+}
