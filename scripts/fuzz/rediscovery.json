@@ -9755,5 +9755,23 @@
    "lg-context-not-found-wrap-erroredcall-real-x-direct-none"
   ],
   "rediscovered": "main 4f2d529f5: 2 false-positive; 1c30dad41 and later: 2 uncertifiable (computation-error-unobserved)"
+ },
+ {
+  "finding": "`Number.isFinite` replaced through a helper that writes its parameter under a key no literal names (`patch(Number, \"isFinite\", f)` with `Object.assign(target, { [key]: impl })`, `Reflect.set`, `target[key] = impl`, `defineProperty`) was certified clean: the value-only row said the call never runs its argument, and no patch named `Number`; Chrome (rc.21) warns STRICT_READ_UNTRACKED in the function the replacement runs",
+  "found": "proof-log phase C seam shapes (bseam-isfinite-*), Chrome-confirmed (replay-seam isfinite-read)",
+  "fixed": "ADR 0939 (claude/intrinsic-patch-seam)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-bseam-isfinite-assign-signal-direct-none",
+   "mx-strict-read-untracked-bseam-isfinite-assign-memo-direct-none",
+   "mx-strict-read-untracked-bseam-isfinite-reflect-signal-direct-none",
+   "mx-strict-read-untracked-bseam-isfinite-reflect-memo-direct-none",
+   "mx-strict-read-untracked-bseam-isfinite-index-signal-direct-none",
+   "mx-strict-read-untracked-bseam-isfinite-index-memo-direct-none",
+   "mx-strict-read-untracked-bseam-isfinite-define-signal-direct-none",
+   "mx-strict-read-untracked-bseam-isfinite-define-memo-direct-none"
+  ],
+  "rediscovered": "batch-7 d79da3034 (release): 8 false-clean; ADR 0939: 8 recall-gap (standard-member-impostor at `Number.isFinite`). On batch-7 after ADR 0936 the generator's programs are already uncertifiable (site accounting of the unplaced function); a function also placed in JSX is not (fixture handed-root-patch: certified before, Chrome warns), which the generator's harness does not separate"
  }
 ]

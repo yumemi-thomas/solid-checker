@@ -490,6 +490,115 @@ pub(crate) fn intrinsic_census(file: &FileFacts) -> (bool, Vec<u32>) {
     (obtained, calls)
 }
 
+/// ADR 0939: where a file hands standard roots on ([`standard_root_uses`]).
+#[derive(Default)]
+pub(crate) struct RootUses {
+    /// A root is a method's receiver or a listed read-only builtin's argument:
+    /// standard code, while nothing replaced it.
+    pub(crate) received: bool,
+    /// Each call that receives a root as an argument: (ordinal, index).
+    pub(crate) arguments: Vec<(usize, usize)>,
+}
+
+/// ADR 0939: where the file hands a standard root on as a value (a global's
+/// name, `X.prototype`, the global object or a member of it), by
+/// [`handed_on`]'s rules: `None` when it goes somewhere no call fact records
+/// (stored, returned, spread, an export, sloppy `this`).
+pub(crate) fn standard_root_uses(file: &FileFacts) -> Option<RootUses> {
+    let ast = &file.ast;
+    let at_calls: AtCalls = std::cell::RefCell::new(Vec::new());
+    let erased = |span: Span| {
+        ast.type_names
+            .iter()
+            .chain(&ast.type_queries)
+            .any(|erased| erased.contains(span))
+    };
+    let written = |span: Span| {
+        ast.write_targets
+            .iter()
+            .chain(&ast.deleted_targets)
+            .any(|target| ast.peel_ts_sugar_span(*target) == span)
+    };
+    let mut received = false;
+    for identifier in &ast.identifiers {
+        if identifier.role != ast::IdentifierRole::Reference
+            || ast.reference_declaration(identifier.span).is_some()
+        {
+            continue;
+        }
+        let Some(name) = file.source_text(identifier.span) else {
+            continue;
+        };
+        if matches!(name, "undefined" | "NaN" | "Infinity") || erased(identifier.span) {
+            continue;
+        }
+        // The root value: through the global object's members (`window.Number`,
+        // `globalThis[k]`) and `.prototype`; a write ends it (a patch).
+        let mut root = identifier.span;
+        let mut global = WINDOW_NAMES.contains(&name);
+        for _ in 0..8 {
+            let Some(member) = ast.member_with_peeled_object(root) else {
+                break;
+            };
+            let key = member_key(file, member);
+            if written(member.span) || !(global || key == Some("prototype")) {
+                break;
+            }
+            // An unnamed member (`window[k]`) is a root, and the walk ends
+            // there: `handed_on` follows it on as possibly `Function`.
+            global = global && key.is_some_and(|key| WINDOW_NAMES.contains(&key));
+            root = member.span;
+        }
+        // The common uses first, as [`handed_on`] answers them for an
+        // intrinsic: called (`setTimeout(f)`), or read through a plain member
+        // (`Math.max`), a method call's receiver (`console.log(x)`).
+        if ast.any_call_with_peeled_callee(root) {
+            continue;
+        }
+        if let Some(member) = ast.member_with_peeled_object(root)
+            && member_key(file, member)
+                .is_some_and(|key| !matches!(key, "prototype" | "__proto__" | "constructor"))
+            && !written(member.span)
+            && !tagged(file, member.span)
+        {
+            received |= ast.any_call_with_peeled_callee(member.span);
+            continue;
+        }
+        if handed_on(file, root, Obtained::Intrinsic, HANDED_BUDGET, &at_calls) {
+            return None;
+        }
+    }
+    // Sloppy code's `this` may be the global object: any use (review D4).
+    let sloppy = !crate::execution_role::file_is_module(file)
+        && file.source.match_indices("this").any(|(at, _)| {
+            let word = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+            let after = file.source[at + 4..].chars().next();
+            !file.source[..at].chars().next_back().is_some_and(word)
+                && !after.is_some_and(word)
+                && u32::try_from(at).is_ok_and(|at| sloppy_this(file, Span::new(at, at + 4)))
+        });
+    if sloppy {
+        return None;
+    }
+    let mut uses = RootUses {
+        received,
+        arguments: Vec::new(),
+    };
+    for (call, slot, _) in at_calls.into_inner() {
+        match slot {
+            Slot::Argument(index) => {
+                // A call no fact records at its span is no seen callee.
+                let ordinal = ast.calls.iter().position(|fact| fact.span == call)?;
+                uses.arguments.push((ordinal, index));
+            }
+            _ => uses.received = true,
+        }
+    }
+    uses.arguments.sort_unstable();
+    uses.arguments.dedup();
+    Some(uses)
+}
+
 /// A call that receives an obtained value: `(call span, where, kind)`.
 type AtCalls = std::cell::RefCell<Vec<(Span, Slot, Obtained)>>;
 

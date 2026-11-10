@@ -53,6 +53,17 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-path-find-open-key/wire.ts",
       "start": 191,
+      "end": 205,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-path-find-open-key/wire.ts",
+      "start": 191,
       "end": 212,
       "fixes": 0
     },

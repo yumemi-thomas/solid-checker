@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return-prototype/App.tsx",
+      "start": 392,
+      "end": 398,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/host-dead-return-prototype/App.tsx",
       "start": 399,
       "end": 406,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return-prototype/App.tsx",
+      "start": 491,
+      "end": 504,
       "fixes": 0
     }
   ]

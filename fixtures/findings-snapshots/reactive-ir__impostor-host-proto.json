@@ -5,11 +5,55 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
+      "start": 210,
+      "end": 218,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "installed-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
       "start": 242,
       "end": 360,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
+      "start": 242,
+      "end": 263,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
+      "start": 274,
+      "end": 287,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
+      "start": 288,
+      "end": 309,
       "fixes": 0
     },
     {

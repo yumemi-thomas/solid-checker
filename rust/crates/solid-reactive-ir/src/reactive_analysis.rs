@@ -709,12 +709,25 @@ pub(crate) fn collect_project<'facts>(
                 call.callee.location(file.path.as_str()),
                 crate::blockers::STANDARD_MEMBER_IMPOSTOR,
             );
-            if let Some(detail) = file
-                .ast
-                .member_at(file.ast.peel_ts_sugar_span(call.callee))
-                .and_then(|member| file.source_text(member.property))
-                .and_then(|member| crate::base::contributions::impostor_detail(member, holders))
-            {
+            // ADR 0939: a call a handed standard root withholds names the write.
+            let root_detail = ctx
+                .semantic_lookup
+                .resolved_standard_call_name(file, call.callee)
+                .filter(|name| {
+                    crate::base::contributions::handed_root_patch(name, &|hazard| {
+                        ctx.semantic_lookup.hazard_present(hazard)
+                    })
+                })
+                .and_then(|name| {
+                    let member = name.rsplit_once('.').map_or(name, |(_, member)| member);
+                    crate::base::contributions::handed_root_detail(files, member)
+                });
+            if let Some(detail) = root_detail.or_else(|| {
+                file.ast
+                    .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                    .and_then(|member| file.source_text(member.property))
+                    .and_then(|member| crate::base::contributions::impostor_detail(member, holders))
+            }) {
                 row.analysis_context = crate::blockers::with_detail(
                     crate::blockers::STANDARD_MEMBER_IMPOSTOR,
                     &detail,

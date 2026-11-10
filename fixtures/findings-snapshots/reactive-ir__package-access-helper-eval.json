@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 306,
+      "end": 310,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",

@@ -2398,6 +2398,44 @@ fn returned_invocations_through_random_edits_equal_a_fresh_store() {
 #[path = "../accessor_provenance/tests/resolver_memos.rs"]
 mod resolver_memos;
 
+/// The base hazards of a one-file project.
+fn hazards_of(source: &str) -> Vec<super::Hazard> {
+    let project = Project {
+        files: vec![("/fixture/app.ts".to_owned(), source.to_owned())],
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    };
+    let facts = facts(&project).unwrap();
+    let ast_indexes = facts
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+        .collect::<HashMap<_, _>>();
+    let symbols = entity_symbols(&facts);
+    let references = OnceLock::new();
+    let table = super::FileTable::new(&facts.files);
+    let views = Views {
+        table: &table,
+        files: &facts.files,
+        sources: ViewSources {
+            ast_indexes: &ast_indexes,
+            symbols: &symbols,
+            typescript: &facts.typescript,
+            references: &references,
+            resolutions: None,
+        },
+        constants: BuildConstants {
+            dialect: &solid_dialect::Solid2,
+        },
+    };
+    views
+        .contribution(table.slot_id(0), super::contributions::hazards)
+        .slot(0)
+        .iter()
+        .map(|(hazard, _)| *hazard)
+        .collect::<Vec<_>>()
+}
+
 /// ADR 0876 where R1f's member census asks it (`standard_member_intact`): a
 /// write to a project's own `prototype` member vetoes the standard member of
 /// its name once some `prototype` key may be anyone's (`Foo.prototype.k = f`
@@ -2406,40 +2444,7 @@ mod resolver_memos;
 #[test]
 fn an_own_prototype_write_vetoes_the_standard_member() {
     let vetoed = |source: &str| {
-        let project = Project {
-            files: vec![("/fixture/app.ts".to_owned(), source.to_owned())],
-            schemes: HashMap::default(),
-            unreferenced: Vec::new(),
-        };
-        let facts = facts(&project).unwrap();
-        let ast_indexes = facts
-            .files
-            .iter()
-            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
-            .collect::<HashMap<_, _>>();
-        let symbols = entity_symbols(&facts);
-        let references = OnceLock::new();
-        let table = super::FileTable::new(&facts.files);
-        let views = Views {
-            table: &table,
-            files: &facts.files,
-            sources: ViewSources {
-                ast_indexes: &ast_indexes,
-                symbols: &symbols,
-                typescript: &facts.typescript,
-                references: &references,
-                resolutions: None,
-            },
-            constants: BuildConstants {
-                dialect: &solid_dialect::Solid2,
-            },
-        };
-        let hazards = views
-            .contribution(table.slot_id(0), super::contributions::hazards)
-            .slot(0)
-            .iter()
-            .map(|(hazard, _)| *hazard)
-            .collect::<Vec<_>>();
+        let hazards = hazards_of(source);
         let present = |hazard| hazards.contains(&hazard);
         (
             super::contributions::patch_vetoed("Array.forEach", &present),
@@ -2471,4 +2476,53 @@ fn an_own_prototype_write_vetoes_the_standard_member() {
         )),
         (false, false)
     );
+}
+
+/// ADR 0939: a standard root handed on beside a write of a key no literal
+/// names on an object not made there withholds every standard member; either
+/// alone, or a root only `map` calls, or a write to a fresh object, does not.
+#[test]
+fn a_handed_root_with_an_open_write_withholds_standard_members() {
+    let withheld = |source: &str| {
+        // A module: a classic script's top-level names are globals it patches.
+        let hazards = hazards_of(&format!("export {{}}; {source}"));
+        let present = |hazard| hazards.contains(&hazard);
+        super::contributions::patch_vetoed("NumberConstructor.isFinite", &present)
+            && super::contributions::reached_patch("NumberConstructor.isFinite", &present)
+    };
+    let helper =
+        "const patch = (t: any, k: string, f: unknown) => { Object.assign(t, { [k]: f }); };";
+    assert!(withheld(&format!(
+        "{helper} patch(Number, \"isFinite\", () => 1);"
+    )));
+    assert!(withheld(&format!(
+        "{helper} patch(globalThis.Number, \"isFinite\", () => 1);"
+    )));
+    assert!(withheld(&format!(
+        "{helper} patch(Number.prototype, \"toFixed\", () => 1);"
+    )));
+    assert!(withheld(&format!(
+        "{helper} const all = [Number]; patch(all[0], \"isFinite\", () => 1);"
+    )));
+    assert!(withheld(
+        "const set = (t: any, f: unknown) => { t.isFinite = f; }; set(Number, () => 1);"
+    ));
+    // A named key that is another member leaves this one.
+    assert!(!withheld(
+        "const set = (t: any, f: unknown) => { t.isNaN = f; }; set(Number, () => 1);"
+    ));
+    assert!(!withheld(&format!(
+        "{helper} const own = {{}}; patch(own, \"isFinite\", () => 1);"
+    )));
+    // No resolution names `map` here (no type facts): handed on, fail closed.
+    // `handed-root-patch-unhanded` has the resolved `map`, which keeps it.
+    assert!(withheld(&format!(
+        "{helper} const xs = [\"1\"].map(Number); patch({{}}, \"k\", xs);"
+    )));
+    assert!(!withheld(
+        "const box = (v: unknown, k: string) => { const held: any = {}; held[k] = v; return held; }; box(Number, \"n\");"
+    ));
+    assert!(!withheld(&format!(
+        "{helper} const Number = {{ n: 1 }}; patch(Number, \"isFinite\", () => 1);"
+    )));
 }

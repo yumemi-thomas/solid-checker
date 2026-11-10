@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 140,
+      "end": 146,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 181,
+      "end": 202,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -27,11 +49,44 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 395,
+      "end": 408,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 560,
+      "end": 583,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
       "start": 560,
       "end": 583,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 560,
+      "end": 571,
       "fixes": 0
     },
     {
@@ -98,6 +153,28 @@
       "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
       "start": 836,
       "end": 850,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 854,
+      "end": 865,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 998,
+      "end": 1009,
       "fixes": 0
     },
     {

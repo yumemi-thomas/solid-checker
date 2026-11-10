@@ -487,6 +487,21 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// The standard function the call at `callee` resolves to, before any veto.
+    pub(crate) fn resolved_standard_call_name(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a str> {
+        resolved_callee_call_in(
+            file,
+            self.ast_indexes.get(file.path.as_str()),
+            callee,
+            |span| self.entity_at(file.path.as_str(), span),
+        )
+        .and_then(crate::runtime_semantics::standard_call_name)
+    }
+
     /// ADR 0840: whether the impostor census withholds the standard call at
     /// `callee` ([`crate::base::contributions::impostor_veto`]).
     pub(crate) fn impostor_withheld(&self, file: &FileFacts, callee: Span) -> bool {
@@ -498,7 +513,10 @@ impl<'a> SemanticLookup<'a> {
         )
         .and_then(crate::runtime_semantics::standard_call_name)
         .is_some_and(|name| {
-            crate::base::contributions::impostor_veto(
+            // ADR 0939: a standard root handed on may hold any member.
+            crate::base::contributions::handed_root_patch(name, &|hazard| {
+                self.hazard_present(hazard)
+            }) || crate::base::contributions::impostor_veto(
                 file,
                 callee,
                 name,
