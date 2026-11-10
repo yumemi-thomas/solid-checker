@@ -29,6 +29,7 @@ import { SEAM_CONTEXT_NAMES, seamContext, seamPlacement } from "./seam-shapes.mj
 import { REF_LAYER_CONTEXT_NAMES, refLayerContext, refLayerPlacement } from "./ref-layer-shapes.mjs";
 import { PL_CONTEXT_NAMES, plContext, plNotVariants, plPlacement } from "./primitive-layer-shapes.mjs";
 import { CONTEXT_PACKAGE } from "./package.mjs";
+import { PKG_ENTRIES, packageSite, parsePkg } from "./package-site.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -1303,6 +1304,22 @@ export const AUX = "@@AUX@@";
  *   the imports; `preludeLines` go at the top of the component body; AUX in a line marks the call the runtime frame sits in.
  */
 export function describeUse(node, signals) {
+  const base = describeProjectUse(node, signals);
+  return node.pkg ? describePackageUse(node, base, (node.sigs ?? []).map((name) => signals.get(name))) : base;
+}
+
+// ADR 0957: a package site's description is a function of the node and its project description, which a render, the module files and the
+// package files all ask for, so it is made once per node (a program tree is not edited after it is built).
+const packageUses = new WeakMap();
+function describePackageUse(node, base, sigs) {
+  if (packageUses.has(node)) return packageUses.get(node);
+  const moved = packageSite(base, node.pkg.entry, MODULE, { own: node.pkg.own, sigs });
+  const out = { ...base, text: moved.text, solid: moved.solid, web: moved.web, namespaces: moved.namespaces, moduleLines: moved.moduleLines, preludeLines: [], contextLine: undefined, importLines: moved.importLines, files: moved.files, pkgFiles: moved.pkgFiles };
+  packageUses.set(node, out);
+  return out;
+}
+
+function describeProjectUse(node, signals) {
   const spec = SPEC[node.code];
   const sigs = (node.sigs ?? []).map((name) => signals.get(name));
   const target = spec.call(node, sigs);
@@ -2204,7 +2221,12 @@ function buildOne(kit, plan = {}) {
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
   const layer = plan.layer ?? rng.weighted([[5, "none"], [3, "closure"], [2, "helper"], [1, "iife"], [1, "closure+helper"]]);
   const sigs = spec.setup(variant, kit.name);
-  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : plan.source === "package-hook" ? { hook: CONTEXT_PACKAGE.hookName } : {}) });
+  // ADR 0957: `plan.pkg` is an entry (package-site.mjs): the site's text is in a package, and the program writes the entry. The direct binding only: the
+  // other bindings change how the project reaches an API, and a package reaches its own.
+  const pkg = plan.pkg === undefined ? undefined : parsePkg(plan.pkg);
+  if (pkg && !PKG_ENTRIES.includes(pkg.entry)) throw new Error(`unknown package entry ${plan.pkg}`);
+  if (plan.pkg !== undefined && binding !== "direct") throw new Error(`a package site takes the direct binding, not ${binding}`);
+  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : plan.source === "package-hook" ? { hook: CONTEXT_PACKAGE.hookName } : {}), ...(pkg ? { pkg: { entry: pkg.entry, ...(pkg.own ? { own: true } : {}) } } : {}) });
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
@@ -2241,7 +2263,7 @@ function buildOne(kit, plan = {}) {
     // ADR 0917: a context's `moduleTop` must run before the values; a module source creating them at its scope prints it there instead.
     ...(placed.moduleTop && moduleScoped(source) ? { moduleTop: placed.moduleTop } : placed.top ? { top: placed.top } : {}),
     ...(placed.files ? { files: placed.files, importLines: placed.importLines ?? [] } : {}),
-    shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
-    misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}) },
+    shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}${plan.pkg !== undefined ? `/pk:${plan.pkg}` : ""}`,
+    misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}), ...(plan.pkg !== undefined ? { pkg: plan.pkg } : {}) },
   };
 }
