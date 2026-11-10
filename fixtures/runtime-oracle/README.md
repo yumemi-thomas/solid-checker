@@ -68,4 +68,6 @@ The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding 
 
 A diagnostic covers a finding when the finding's lines include the diagnostic's site or one of its application frames, and its code claims the finding's rule. The runtime attributes a read to the call that led to it, so the read's own line is a frame, not the site. `oracle-frame-covered-sc1004` pins this: a `components-return-once` finding at a props read (`App.tsx:9`) is a frame of the `STRICT_READ_UNTRACKED` diagnostic sited at `Parent`'s call (`App.tsx:17`), and must not print as `static-only`.
 
+A code judged by file (`fileJudgedCodes` in the script, ADR 0946; each is a placeless code of scripts/fuzz/codes.mjs, which codes.test.mjs checks) is covered by a finding of a rule that claims it, or an uncertifiable one of a rule that declines it, anywhere in the diagnostic's file; never by line, and a withholding covers none. So far it is `CAUGHT_REACTIVE_READ` only: rc.21 reports it at the line the compute is created on, while the checker's finding is at the read inside its `try`; `oracle-dev-caught-reactive-read` pins it (a `Caught` memo reported by SC5008 in the file, and a `Rethrown` control that reports nothing). The other placeless codes keep the line judge.
+
 The `identity` and `thrown` observation kinds have no committed case yet.

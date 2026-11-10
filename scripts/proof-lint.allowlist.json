@@ -5,6 +5,10 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
@@ -16,6 +20,10 @@
         "count": 9,
         "why": "`this` is a reserved word (its text is the ThisExpression); `arguments` is a spelling used only to refuse a proof (the true branch returns None/false); `Reflect` and `Proxy` are matched only where `reference_declaration(..)` is none, so no binding shadows the global, or are refused when one exists"
       },
+      "silent-unmatched-slot": {
+        "count": 4,
+        "why": "pending-review"
+      },
       "text-premise": {
         "count": 1,
         "why": "pending-review"
@@ -25,6 +33,10 @@
       "name-only-match": {
         "count": 1,
         "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_dependencies.rs": {
@@ -45,9 +57,19 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_queries.rs": {
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_values.rs": {
       "default-on-missing": {
         "count": 3,
+        "why": "pending-review"
+      },
+      "primitive-name-match": {
+        "count": 2,
         "why": "pending-review"
       }
     },
@@ -61,6 +83,10 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/attribution.rs": {
@@ -71,6 +97,14 @@
       "name-only-match": {
         "count": 4,
         "why": "`keyed` and `when` are the prop names of an element already resolved to the dialect's `Show` (`known_primitive(..) == Some(Show)`, never a lookalike); `arguments` is a spelling used only to refuse a proof (the true branch returns false)"
+      },
+      "primitive-name-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/contributions.rs": {
@@ -81,6 +115,10 @@
       "name-only-match": {
         "count": 5,
         "why": "a spelled runtime or standard name tied to an exact fact, or one that only adds hazards: `preload` is `lazy()`'s own method on an object `ReturnedUses` resolves to the exact symbols holding the factory's result (the span adds a use, never removes one); `prototype` picks the standard-root patch, resolved by `file.standard_root` (otherwise `UnownedPrototype`, owned by `PrototypeOwnerAt`); `Symbol.for` is the global `Symbol` (no declaration) and a non-computed member; a bare `Reflect` mention and a `require` call the facts did not record as a load only add the `Unknown` and `UnmodeledRequire` hazards"
+      },
+      "silent-unmatched-slot": {
+        "count": 4,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {
@@ -101,14 +139,30 @@
         "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
       }
     },
+    "rust/crates/solid-reactive-ir/src/base/memo/build.rs": {
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/callback_host.rs": {
       "default-on-missing": {
         "count": 1,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
         "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/callback_return.rs": {
       "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/carrier_runs.rs": {
+      "primitive-name-match": {
         "count": 1,
         "why": "pending-review"
       }
@@ -121,10 +175,22 @@
       "name-only-match": {
         "count": 1,
         "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
+      },
+      "primitive-name-match": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/directives.rs": {
       "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
       }
@@ -145,12 +211,20 @@
       "default-on-missing": {
         "count": 1,
         "why": "loop control of a `retain`: a candidate no arm joins yet (`None`) is kept undecided for the next round, so the default keeps a candidate open and decides nothing silent"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role.rs": {
       "default-on-missing": {
         "count": 1,
         "why": "`within` is an optional filter of which compiler facts may place the span: `None` means the caller asked for no restriction, which is the question `execution_role_where` is asked without it, not a verdict"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       },
       "untagged-silent-role": {
         "count": 4,
@@ -190,6 +264,14 @@
         "count": 3,
         "why": "pending-review"
       },
+      "primitive-name-match": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
+      },
       "untagged-silent-role": {
         "count": 3,
         "why": "pending-review"
@@ -213,6 +295,10 @@
       "name-only-match": {
         "count": 1,
         "why": "`children` is a prop name used only to REFUSE: a component's sole child expression is its `children` prop, and a `children` attribute competes with it, so the true branch refuses the flow (the comment at the site says both refuse)"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       },
       "untagged-silent-role": {
         "count": 4,
@@ -251,9 +337,17 @@
       "default-on-missing": {
         "count": 3,
         "why": "pending-review"
+      },
+      "primitive-name-match": {
+        "count": 6,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
+      "primitive-name-match": {
+        "count": 3,
+        "why": "pending-review"
+      },
       "untagged-silent-role": {
         "count": 1,
         "why": "pending-review"
@@ -263,17 +357,33 @@
       "default-on-missing": {
         "count": 2,
         "why": "`call_in_jsx_expression`: with no owning function (module scope) any JSX around the call counts, the answer that ends a climb; `call_may_run_code`: a call that resolves to no primitive may run code, the answer that makes a claim uncertifiable. Neither answer extends a claim."
+      },
+      "primitive-name-match": {
+        "count": 2,
+        "why": "`supplied_owner` asks whether the call that is the owner argument, or the initializer of the `const` that is, is `getOwner()`: the one primitive whose value is the owner `runWithOwner` takes, so the question names that call, not a class of calls that behave alike."
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/write_components.rs": {
       "default-on-missing": {
         "count": 1,
         "why": "`walk_step`: with no bounded walk open (`None`) there is no bound to exceed, so the step is allowed; the step counter never produces a role or a verdict"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs": {
       "default-on-missing": {
         "count": 11,
+        "why": "pending-review"
+      },
+      "primitive-name-match": {
+        "count": 6,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 6,
         "why": "pending-review"
       },
       "untagged-silent-role": {
@@ -297,12 +407,20 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/callees.rs": {
       "name-only-match": {
         "count": 1,
         "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
+      },
+      "primitive-name-match": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
@@ -335,6 +453,16 @@
       "name-only-match": {
         "count": 3,
         "why": "`markRaw` is a presence veto (any mention makes store values possibly raw, the conservative answer); `createElement` is accepted only on a receiver `global_dom_variable` proves to be `document`; `addEventListener` is matched only as a bare identifier with `reference_declaration(..).is_none()` (the global) that is not a member property"
+      },
+      "primitive-name-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/flush_census.rs": {
+      "primitive-name-match": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/hand_outs.rs": {
@@ -346,6 +474,10 @@
     "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
       "default-on-missing": {
         "count": 3,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
         "why": "pending-review"
       }
     },
@@ -367,6 +499,10 @@
       "name-only-match": {
         "count": 1,
         "why": "`.length` is accepted as a primitive only on a receiver whose value origin is proven a built-in (`ValueOrigin::Builtin`) and only where the project never reassigns `length` on built-ins (`member_may_be_reassigned_on_builtin`), so the spelling is combined with a proof of the receiver"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
@@ -393,6 +529,12 @@
       "name-only-match": {
         "count": 3,
         "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/callback_chain.rs": {
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/completeness.rs": {
@@ -427,12 +569,20 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs": {
       "name-only-match": {
         "count": 2,
         "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative; `null` is a reserved literal, its source text identifies exactly the null literal"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/return_escape.rs": {
@@ -482,8 +632,28 @@
         "count": 2,
         "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
       },
+      "primitive-name-match": {
+        "count": 15,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
+      },
       "untagged-silent-role": {
         "count": 26,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/local_access/open_compute.rs": {
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/name_matcher.rs": {
+      "silent-unmatched-slot": {
+        "count": 1,
         "why": "pending-review"
       }
     },
@@ -504,6 +674,10 @@
         "count": 1,
         "why": "pending-review"
       },
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "pending-review"
+      },
       "untagged-silent-role": {
         "count": 1,
         "why": "pending-review"
@@ -517,6 +691,14 @@
       "name-only-match": {
         "count": 11,
         "why": "a spelled prop key beside an exact fact, never a binding: a JSX attribute name (`when`, `fallback`, `each`, `value`, `ref`) is tested only where the element resolves exactly (`element_primitive`, `jsx_primitive_name`, or the holder's `reference_declaration` is the context declaration) or as a refusal (`!= Some(\"ref\")`, `!= Some(\"value\")`); `children` covers only where `is_props_of` resolves the member's object to the component's props parameter or an exact `const` alias (the foreign-object false clean, ADR 0668), and its second use only answers `Unresolved`"
+      },
+      "primitive-name-match": {
+        "count": 5,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
@@ -524,8 +706,18 @@
         "count": 1,
         "why": "`default` is the key the dialect's `lazy` reads from the loader's module (`renders_loaded_default_argument` for the exact primitive at the call); an own `then` is a spelled refusal"
       },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
+      },
       "untagged-silent-role": {
         "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/callback_owners.rs": {
+      "primitive-name-match": {
+        "count": 3,
         "why": "pending-review"
       }
     },
@@ -537,6 +729,10 @@
       "name-only-match": {
         "count": 4,
         "why": "`null` is a reserved literal; `undefined` is matched only where `reference_declaration(..).is_none()` (the global); `value` and `children` are prop names of a provider element the census has already resolved, and `children` is read off a member whose object `reference_declaration` binds to the wrapper's own props parameter"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs": {
@@ -547,6 +743,14 @@
       "name-only-match": {
         "count": 1,
         "why": "`bind` only follows a transport shape toward the object, whose primitive `referenced_primitive` resolves exactly first; the name describes the transport, never a primitive"
+      },
+      "primitive-name-match": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       },
       "text-premise": {
         "count": 1,
@@ -563,10 +767,18 @@
       "default-on-missing": {
         "count": 2,
         "why": "pending-review"
+      },
+      "primitive-name-match": {
+        "count": 2,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
       "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "primitive-name-match": {
         "count": 1,
         "why": "pending-review"
       }
@@ -575,10 +787,20 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "primitive-name-match": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/owner_graph.rs": {
       "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/package_boundary.rs": {
+      "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
       }
@@ -599,10 +821,24 @@
       "name-only-match": {
         "count": 1,
         "why": "`__proto__` is a spelling used only to REFUSE a proof (a `__proto__` attribute is lowered to an entry that installs a prototype on the props object; the true branch returns None): a miss or a shadowing declaration only makes the check more conservative"
+      },
+      "primitive-name-match": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/projection.rs": {
       "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/proof_universe.rs": {
+      "primitive-name-match": {
         "count": 1,
         "why": "pending-review"
       }
@@ -627,6 +863,10 @@
       "name-only-match": {
         "count": 1,
         "why": "`routes` is the option key of the config handed to the exact router `create` call (`locals.calls(.., &locals.create)`), in a closed `this`-free literal"
+      },
+      "silent-unmatched-slot": {
+        "count": 4,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/router_params.rs": {
@@ -637,6 +877,10 @@
       "name-only-match": {
         "count": 1,
         "why": "a write of `apply` beside `useAction` only vetoes the proof (the function returns the reason it gives up)"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/server_rules.rs": {
@@ -647,17 +891,33 @@
       "name-only-match": {
         "count": 1,
         "why": "`serializeArgs` is an option key of the exact `configureServerFunctionsClient` call (declaration name and origin module checked); options that are not a closed literal leave the proof `Unresolved`, and a closed one without the key is the `Disabled` proof"
+      },
+      "primitive-name-match": {
+        "count": 3,
+        "why": "the three comparisons only choose the word `status` or `header` in a finding's message (wording of SC7005 after the dialect decided the call is an http-response primitive); whether a finding exists was decided before them"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/source_discovery/discover_file.rs": {
       "name-only-match": {
         "count": 2,
         "why": "`children` and `keyed` are prop keys read off an element the caller resolved to a dialect primitive: `children` only collects a candidate expression, and a `keyed` that no proven function decides is the ambiguous `DynamicFlag`, for which the dialect claims no accessor"
+      },
+      "primitive-name-match": {
+        "count": 4,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/source_discovery/post_passes.rs": {
       "default-on-missing": {
         "count": 2,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
         "why": "pending-review"
       }
     },
@@ -669,6 +929,10 @@
       "name-only-match": {
         "count": 2,
         "why": "`keyed` is the prop key of an element whose `jsx_primitive_name` is a known dialect primitive (`known_primitive`); the accessor parameters are the dialect's answer for that primitive and key form"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs": {
@@ -679,6 +943,10 @@
       "name-only-match": {
         "count": 1,
         "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_api.rs": {
@@ -689,6 +957,14 @@
       "name-only-match": {
         "count": 1,
         "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is"
+      },
+      "primitive-name-match": {
+        "count": 8,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 3,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules.rs": {
@@ -700,6 +976,14 @@
     "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
       "default-on-missing": {
         "count": 11,
+        "why": "pending-review"
+      },
+      "primitive-name-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
         "why": "pending-review"
       }
     },
@@ -723,12 +1007,28 @@
       "name-only-match": {
         "count": 3,
         "why": "`Promise` as a constructor callee and `undefined` are matched only where `reference_declaration(..)` is none, so no binding shadows the global; `null` is a literal keyword"
+      },
+      "primitive-name-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
       "name-only-match": {
         "count": 1,
         "why": "`fallback` is read only off an element with `element_primitive == Errored` (`handled_above`)"
+      },
+      "primitive-name-match": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/symbols.rs": {
@@ -747,6 +1047,10 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
@@ -757,6 +1061,14 @@
       "name-only-match": {
         "count": 7,
         "why": "no silence is granted by the spelling: `.apply` only adds a call to `reactive_source_uncaptured`'s candidates (`hands_over_a_source`), whose callee is then resolved exactly (`caller_target`, `undescribed_callee`); `arguments` is the implicit binding (`reference_declaration` none) and a bare mention only keeps the parameter walk running; `keyed` and `each` are prop keys of an element `primitives.jsx` resolved to `For`; `class` on a lowercase-led tag only makes a position type-owned, which yields an uncertifiable blocker or the same silence the unrecognized position gets (`type_owned_position`, ADR 0830)"
+      },
+      "primitive-name-match": {
+        "count": 5,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 4,
+        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/structure.rs": {
@@ -773,6 +1085,14 @@
       "name-only-match": {
         "count": 4,
         "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
+      },
+      "primitive-name-match": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "pending-review"
       }
     }
   }

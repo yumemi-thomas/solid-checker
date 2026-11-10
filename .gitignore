@@ -1317,3 +1317,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/slot-run-action-step/node_modules/**
 !fixtures/reactive-ir/slot-run-after-await/node_modules/
 !fixtures/reactive-ir/slot-run-after-await/node_modules/**
+!fixtures/reactive-ir/context-package-no-default/node_modules/
+!fixtures/reactive-ir/context-package-no-default/node_modules/**

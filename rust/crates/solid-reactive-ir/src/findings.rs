@@ -253,7 +253,12 @@ impl Finding {
             };
         }
         let mut evidence = vec![EvidenceStep {
-            message: if requirement.operation == crate::OwnerRequirementOperation::ContextProvider {
+            message: if requirement.operation == crate::OwnerRequirementOperation::ContextProvider
+                && through_dependency.is_some()
+            {
+                // ADR 0943: the context is a package's, created with no default; whose provider sits above the call is not proven.
+                "the package reads its context under a reactive owner, the context was created with no default, and no provider is proven above this call".into()
+            } else if requirement.operation == crate::OwnerRequirementOperation::ContextProvider {
                 "the read runs under a reactive owner, and the analyzed program has no provider for this context, so Solid finds no value".into()
             } else if requirement.after_await {
                 "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
@@ -291,7 +296,10 @@ impl Finding {
             message.push_str(
                 "; this call runs it inside a package analyzed as source, under this call's owner context",
             );
+            let provider_question =
+                requirement.operation == crate::OwnerRequirementOperation::ContextProvider;
             if uncertain
+                && !provider_question
                 && !runtime_uncertain
                 && !conditional_owner
                 && !later_run_unowned
@@ -302,9 +310,11 @@ impl Finding {
                     ", which solid-checker cannot prove provides an owner on every path to it",
                 );
             }
-            hint.push_str(
-                " The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot).",
-            );
+            hint.push_str(if provider_question {
+                " The read is in the package: render a provider for the package's context above this call."
+            } else {
+                " The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
+            });
             evidence.insert(
                 0,
                 EvidenceStep {
@@ -317,7 +327,12 @@ impl Finding {
                 location: Some(operation.clone()),
             });
         }
-        if provider_open {
+        if provider_open && through_dependency.is_some() {
+            // ADR 0943: not the program's openness: the package's own code may provide its context.
+            message.push_str(
+                "; but the context is a package's, which may provide it itself, and no provider is proven above this call, so this is not proven",
+            );
+        } else if provider_open {
             message.push_str(
                 "; but the program is open, and code the analysis does not see may render a provider above this reader, so this is not proven",
             );

@@ -141,9 +141,11 @@ pub(crate) enum ContextVerdict {
     Free(bool),
     /// A provider may supply it somewhere: each read needs its own proof.
     Open,
-    /// Created with a default the syntax proves, or in a package: a read
-    /// never throws for want of a provider here (unchanged by ADR 0713).
-    Silent,
+    /// Created with a default the syntax proves: a read never throws for want
+    /// of a provider here (unchanged by ADR 0713). The premise is the fact it
+    /// rests on, named (ADR 0943). A package's context with no proven default
+    /// is never this: its providers are not the project's to census.
+    Silent(crate::proof_log::PremiseKind),
 }
 
 /// A candidate's name, whether its file exports it, and whether its lack of
@@ -167,13 +169,26 @@ fn file_candidates(
             continue;
         }
         let proven = default_absent(lookup, file, call);
-        if dependency || proven.is_none() {
+        // ADR 0943: a verdict for the bindings the call initializes, when the
+        // census need not close them: a default the syntax proves is silent as
+        // a named premise; a dependency's context with none proven is open (an
+        // obligation per read, unless a provider is proven above it). The
+        // package's own source says it has no default, and a router or a dialog
+        // may provide it itself: its providers are not this program's to census.
+        let verdict = match proven {
+            None => Some(ContextVerdict::Silent(
+                crate::proof_log::PremiseKind::ContextDefaultProven,
+            )),
+            Some(_) if dependency => Some(ContextVerdict::Open),
+            Some(_) => None,
+        };
+        if let Some(verdict) = verdict {
             for binding in &file.ast.bindings {
                 if binding.call_initializer == Some(call.span) {
                     found.push((
                         location(file.path.shared(), binding.pattern),
                         (String::new(), false, false),
-                        Some(ContextVerdict::Silent),
+                        Some(verdict),
                     ));
                 }
             }
