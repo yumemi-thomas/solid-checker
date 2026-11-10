@@ -141,9 +141,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   primitive (its own compute tracks), `untrack` around the call or the read, JSX
   the callback writes, a call after an await the compute reaches (that is
   [reactive-read-after-await](reactive-read-after-await.md)'s, also through an
-  immediately invoked function), and a call `tsc` rejects. `createRoot` is
-  `runWithOwner(createOwner(), …)` but was not probed in a computation, so it
-  keeps its role (`fixtures/reactive-ir/run-with-owner-in-computation`).
+  immediately invoked function), and a call `tsc` rejects. `createRoot` reports
+  the same (ADR 0932).
+- **A setter's updater runs on the setter's stack** unless the guard throws
+  first; `ownedWrite: true` skips it (ADR 0932).
 - **A read an await may precede is uncertifiable.** Past an unconditional
   `await` the window is closed and the read is silent. Past a conditional
   (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a

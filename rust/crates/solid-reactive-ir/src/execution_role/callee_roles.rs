@@ -836,6 +836,21 @@ pub(super) fn semantic_role_before_awaits(
             );
             return role_arm!("callee_roles.control-flow-nested", nested);
         }
+        // ADR 0932: a write in a handler literal nested in the row is off
+        // the row's stack only while no dispatch runs it there
+        // (`el.dispatchEvent(…)` in the row runs it under the row's owner).
+        if role == ExecutionRole::DeferredCallback
+            && file.ast.functions_owning(span).any(|function| {
+                function.body.contains(span)
+                    && super::write_roles::is_event_handler_literal(file, function)
+            })
+            && !super::write_roles::runs_off_callback_stack(file, span, lookup)
+        {
+            return role_arm!(
+                "callee_roles.control-flow-dispatched-handler",
+                ExecutionRole::Unknown
+            );
+        }
         return role_arm!("callee_roles.control-flow", role);
     }
     {
@@ -2536,9 +2551,9 @@ pub(super) fn inheriting_call_role(
     match at_call {
         // The listener is cleared and no window is open there. For a call
         // that clears tracking and leaves the window as it found it
-        // (`runWithOwner`, ADR 0443) the read is stale and unwarned: it is
-        // reported. For one the engine does not model that way
-        // (`createRoot`) it stays the silent deferred role.
+        // (`runWithOwner`, ADR 0443; `createRoot`, ADR 0932) the read is
+        // stale and unwarned: it is reported. For one the dialect does not
+        // model that way it stays the silent deferred role.
         ExecutionRole::TrackedJsx if clears_tracking => {
             // A call `tsc` rejects is its subject, not this rule's.
             if lookup

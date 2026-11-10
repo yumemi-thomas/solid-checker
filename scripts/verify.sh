@@ -384,6 +384,10 @@ gates_lane() {
   # and no Chrome; `--chrome` re-records by hand.
   lane_step witnesses
   node scripts/flip/check.mjs all --recorded --bin "$checker_bin" --typefacts "$PWD/bin/solid-typefacts"
+  # ADR 0933: the proof log over the fixtures; every site ends in a row, an obligation, a discard or a stated silence.
+  lane_step proof-gate
+  SOLID_CHECKER_BIN="$checker_bin" \
+    SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/proof-gate.mjs
 }
 
 # The packed owned check, installed in isolation, against this checker. The
