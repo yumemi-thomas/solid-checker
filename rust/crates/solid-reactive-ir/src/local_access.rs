@@ -2200,6 +2200,18 @@ impl LocalAccessContext<'_, '_> {
             if counts {
                 result.strict_read_obligations += 1;
             }
+        } else if unproven_use {
+            // ADR 0934 (owner, 2026-11-10, superseding ADR 0222's option B):
+            // a use no fact follows (handed to a call, aliased, a JSX prop)
+            // runs the helper where nothing here places it: the read is
+            // unplaced at its definition, never silent.
+            let mut open = read;
+            open.execution = ExecutionRole::Unknown;
+            let counts = counts_as_strict_read_root(file, site, open.execution, self.lookup);
+            result.reads.push(Arc::new(open));
+            if counts {
+                result.strict_read_obligations += 1;
+            }
         }
     }
 
@@ -7002,17 +7014,27 @@ impl LocalAccessContext<'_, '_> {
             identifier.span == receiver
                 && identifier.role == solid_facts::ast::IdentifierRole::Reference
         });
-        let prop_head = receiver_is_identifier
-            && self
-                .entities
-                .get(&location(
-                    file.path.shared(),
-                    file.ast.peel_ts_sugar_span(member.object),
-                ))
-                .is_some_and(|symbol| {
-                    self.prop_sources.contains_key(symbol)
-                        && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
-                });
+        // Type Facts keeps no entity at an identifier under a TypeScript
+        // wrapper (`(props as P)["value"]`); the binder resolves it, as below.
+        let head_symbol = receiver_is_identifier
+            .then(|| {
+                self.entities
+                    .get(&location(file.path.shared(), receiver))
+                    .cloned()
+                    .or_else(|| {
+                        crate::source_discovery::reference_symbol(
+                            file,
+                            receiver,
+                            self.entities,
+                            self.lookup,
+                        )
+                    })
+            })
+            .flatten();
+        let prop_head = head_symbol.as_ref().is_some_and(|symbol| {
+            self.prop_sources.contains_key(symbol)
+                && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+        });
         if !prop_head && read_as_part_of_longer_path(file, member) {
             return;
         }
