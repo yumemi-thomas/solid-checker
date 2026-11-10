@@ -329,6 +329,22 @@ pub(crate) fn project_callee_at_parameter<'a>(
     project_callee_in(lookup, file, call, index)
 }
 
+/// ADR 0928: [`project_callee_at_parameter`] for a spread at `index`: exact
+/// when no argument before it is a spread, so its elements start at the
+/// parameter at `index`.
+pub(crate) fn project_callee_at_spread<'a>(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
+    callee_in(lookup, file, call, index)
+}
+
 /// [`project_callee_at_parameter`] over a callee world: the lookup, or a
 /// memo computation whose every answer is a recorded read.
 pub(crate) fn project_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
@@ -336,6 +352,21 @@ pub(crate) fn project_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     index: usize,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
+    callee_in(world, file, call, index.saturating_add(1))
+}
+
+/// [`project_callee_in`], exact only with no spread among the first
+/// `checked` arguments.
+fn callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    checked: usize,
 ) -> Option<(
     &'a solid_facts::FileFacts,
     &'a solid_facts::ast::FunctionFact,
@@ -353,11 +384,11 @@ pub(crate) fn project_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>
             !call
                 .arguments
                 .iter()
-                .take(index.saturating_add(1))
+                .take(checked)
                 .any(|argument| argument.spread),
         ));
     }
-    declared_callee_in(world, file, call, index)
+    declared_in(world, file, call, checked)
 }
 
 /// [`project_callee_at_parameter`] without the object-member index, for a
@@ -374,14 +405,14 @@ pub(crate) fn declared_callee_at_parameter<'a>(
     &'a solid_facts::ast::FunctionFact,
     bool,
 )> {
-    declared_callee_in(lookup, file, call, index)
+    declared_in(lookup, file, call, index.saturating_add(1))
 }
 
-fn declared_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+fn declared_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
     world: &W,
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
-    index: usize,
+    checked: usize,
 ) -> Option<(
     &'a solid_facts::FileFacts,
     &'a solid_facts::ast::FunctionFact,
@@ -412,7 +443,7 @@ fn declared_callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
         && !call
             .arguments
             .iter()
-            .take(index.saturating_add(1))
+            .take(checked)
             .any(|argument| argument.spread);
     Some((callee_file, callee, exact))
 }

@@ -94,7 +94,7 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
       "start": 806,
-      "end": 815,
+      "end": 813,
       "fixes": 0
     },
     {

@@ -35,17 +35,6 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/carried-call/App.tsx",
-      "start": 511,
-      "end": 512,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/carried-call/App.tsx",
@@ -158,6 +147,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/carried-call/App.tsx",
+      "start": 2048,
+      "end": 2071,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/carried-call/App.tsx",
       "start": 2056,
       "end": 2057,
       "fixes": 0
@@ -181,17 +181,6 @@
       "path": "fixtures/reactive-ir/carried-call/App.tsx",
       "start": 2285,
       "end": 2300,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/carried-call/App.tsx",
-      "start": 2293,
-      "end": 2294,
       "fixes": 0
     }
   ]
