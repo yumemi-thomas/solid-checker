@@ -1,6 +1,6 @@
 {
  "version": 1,
- "checker": "origin/claude/batch-7 815d5af27 (debug build); ref-layer-after-await: claude/async-ref-layer-fp-registry (ADR 0938, debug build)",
+ "checker": "claude/batch-7 83c49a1a6 (debug build, ablated)",
  "pairs": {
   "kept-collection": {
    "codes": {
@@ -690,7 +690,7 @@
     },
     "REACTIVE_WRITE_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 81,
+      "programs": 82,
       "clean": 6,
       "violation": 13
      },
@@ -857,6 +857,22 @@
      "legal": {
       "programs": 2,
       "clean": 2,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "ref-layer-after-await": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 4
+     },
+     "legal": {
+      "programs": 4,
+      "clean": 4,
       "violation": 0
      }
     }
@@ -8764,7 +8780,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -8804,7 +8820,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -8844,7 +8860,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -8884,7 +8900,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -8924,7 +8940,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -8964,7 +8980,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9004,7 +9020,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9044,7 +9060,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9084,7 +9100,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9124,7 +9140,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9164,7 +9180,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9204,7 +9220,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9244,7 +9260,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9284,7 +9300,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9324,7 +9340,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9364,7 +9380,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9404,7 +9420,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9444,7 +9460,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9484,7 +9500,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9524,7 +9540,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9564,7 +9580,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9604,7 +9620,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9644,7 +9660,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9684,7 +9700,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9724,7 +9740,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9764,7 +9780,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9804,7 +9820,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9844,7 +9860,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9884,7 +9900,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9924,7 +9940,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -9964,7 +9980,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10004,7 +10020,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10044,7 +10060,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10084,7 +10100,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10124,7 +10140,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10164,7 +10180,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10204,7 +10220,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10244,7 +10260,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10284,7 +10300,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10324,7 +10340,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10364,7 +10380,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10404,7 +10420,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10444,7 +10460,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10484,7 +10500,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10524,7 +10540,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10564,7 +10580,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10604,7 +10620,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10644,7 +10660,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10684,7 +10700,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -10724,7 +10740,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -11033,22 +11049,6 @@
      "legal": {
       "programs": 16,
       "clean": 16,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "ref-layer-after-await": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 4,
-      "clean": 0,
-      "violation": 4
-     },
-     "legal": {
-      "programs": 4,
-      "clean": 4,
       "violation": 0
      }
     }
