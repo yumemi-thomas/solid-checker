@@ -1,6 +1,6 @@
 {
  "version": 1,
- "checker": "origin/claude/batch-7 815d5af27 (debug build)",
+ "checker": "origin/claude/batch-7 815d5af27 (debug build); ref-layer-after-await: claude/async-ref-layer-fp-registry (ADR 0938, debug build)",
  "pairs": {
   "kept-collection": {
    "codes": {
@@ -10917,9 +10917,33 @@
      }
     }
    }
+  },
+  "ref-layer-after-await": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 4
+     },
+     "legal": {
+      "programs": 4,
+      "clean": 4,
+      "violation": 0
+     }
+    }
+   }
   }
  },
  "arms": {
+  "body_roles.layered_window_after_awaits.unreported": [
+   {
+    "pair": "ref-layer-after-await",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-ref-iife-await",
+    "decisive": true
+   }
+  ],
   "body_roles.window_after_awaits.unreported": [
    {
     "pair": "callback-forms",
@@ -10945,6 +10969,12 @@
     "pair": "primitive-contexts",
     "code": "STRICT_READ_UNTRACKED",
     "context": "async",
+    "decisive": false
+   },
+   {
+    "pair": "ref-layer-after-await",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-ref-each-await",
     "decisive": false
    }
   ],

@@ -2401,7 +2401,7 @@ Proof-log B1-B6. (1) An open program's export or namespace hand-out (`entered_by
 
 <a id="adr-0935"></a>
 ## ADR 0935 — Every silence has a pair
-A clean rests on a premise. `scripts/fuzz/boundary.mjs` gives each silent-capable arm (137, ADR 0886), named end, `PremiseKind` and table row a pair of programs that differ only in the premise's fact, a fixture, or a stated reason; `boundary.test.mjs` fails on one with none and on a stale gap (`boundary-gaps.mjs`). Table rows get `tbl-*` contexts with a shadow twin (invariant 3). `boundary.mjs verify` measures what the pairs separate. `barm-*` (`arm-shapes.mjs`): arms no fixture reached. `wrap-*` (`boundary-shapes.mjs`): a wrapper of `props.children` in a boundary. `boundary-seams.mjs` lists the cases two checks leave to each other.
+A clean rests on a premise. `scripts/fuzz/boundary.mjs` gives each silent-capable arm (137, ADR 0886), named end, `PremiseKind` and table row a pair of programs that differ only in the premise's fact, a fixture, or a stated reason; `boundary.test.mjs` fails on one with none and on a stale gap (`boundary-gaps.mjs`). Table rows get `tbl-*` contexts with a shadow twin (invariant 3). `boundary.mjs verify` measures the pairs. `barm-*` (`arm-shapes.mjs`): arms no fixture reached. `wrap-*` (`boundary-shapes.mjs`): `props.children` wrapped in a boundary. `barm-ref-*`: a `ref` layer after an await. `boundary-seams.mjs`: cases two checks leave to each other.
 
 <a id="adr-0936"></a>
 ## ADR 0936 — Every site of the universe ends in a row or a named silence, or it is uncertifiable

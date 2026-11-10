@@ -81,6 +81,8 @@ export const PAIRS = {
   "generator-steps": { fact: "the generator's steps run in the body's window (a spread in the body), or out of it (the same spread in a click handler), or nothing steps it", codes: TABLE_CODES, contexts: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never"] },
   "generator-loop-awaits": { fact: "the async function that drains a sync generator awaits between the steps, or does not", codes: ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"], contexts: ["barm-gen-drain", "barm-gen-await"] },
   "flow-climb-after-await": { fact: "the layer that holds the read runs in a flow row's body window, or after an await of its outer layer", codes: ["STRICT_READ_UNTRACKED"], contexts: ["barm-climb-sync", "barm-climb-await"] },
+  // ADR 0935 (ref-layer-shapes.mjs): a layer that runs in place inside an intrinsic `ref` callback, before an await of the callback (the component's window) or after it.
+  "ref-layer-after-await": { fact: "the layer that holds the read runs in the `ref` callback before any await (in the element's creation window) or after one (a later task)", codes: ["STRICT_READ_UNTRACKED"], contexts: ["barm-ref-iife-sync", "barm-ref-iife-await", "barm-ref-each-sync", "barm-ref-each-await"] },
 };
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
@@ -190,7 +192,7 @@ premise("value-only-api-does-not-run-its-argument", {
   source: "runtime_semantics.rs:526 `timing_behavior` (ValueOnly); local_access.rs:9656 `hand_off_at` (HandOff::Value)", tablePairs: ["value"],
 });
 
-// ---- the arm-coverage shapes (arm-shapes.mjs): premises of the arms the fixtures left unwitnessed ----------------------------------
+// ---- the arm-coverage shapes (arm-shapes.mjs, ref-layer-shapes.mjs): premises of the arms the fixtures left unwitnessed ----------------------------------
 premise("generator-steps-run-where-stepped", {
   claim: "Calling a generator runs none of its body; each step runs the next segment on the stack of the code that makes it, so a site in the body takes the role at its steps, a generator nothing steps never runs, and a step the stepping async function makes after one of its suspensions has no owner.",
   source: "callee_roles.rs:203-255 (ADR 0851); write_roles.rs:2520 `generator_step_resumption`, :2556-2666", adr: "0935",
@@ -201,6 +203,11 @@ premise("flow-row-layer-after-an-await-leaves-the-window", {
   claim: "A layer that runs in place inside a flow row's body runs in the row's window only until the function that calls it suspends: past an await it runs on a later task, in no window.",
   source: "callee_roles.rs:741-790 `control-flow-climb-after-await`", adr: "0935",
   arms: ["callee_roles.control-flow-climb-after-await"], pairs: ["flow-climb-after-await"],
+});
+premise("ref-callback-layer-after-an-await-leaves-the-window", {
+  claim: "A layer that runs in place inside an intrinsic `ref` callback runs in the element's creation window only until the callback suspends: past an await it runs on a later task, in no window.",
+  source: "execution_role/body_roles.rs `layered_window_after_awaits` (ADR 0938); @solidjs/web dist/web.dev.js:1016-1022", adr: "0935",
+  arms: ["body_roles.layered_window_after_awaits.unreported", "execution_role.ref_applied_read_role.unreported"], pairs: ["ref-layer-after-await"],
 });
 
 // ---- boundary wrappers (boundary-shapes.mjs): the cover walks consult a user component's body, by the property's spelling ------------------------------
