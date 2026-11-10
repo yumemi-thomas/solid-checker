@@ -72,6 +72,11 @@ export const PAIRS = {
   "callback-prop-call": { fact: "the component calls its callback prop in its body (a window), in a handler, or never", codes: WINDOW_CODES, contexts: ["cbp-body", "cbp-handler", "cbp-never", "cbp-attached"] },
   "primitive-contexts": { quality: "family", fact: "the site in the callback of a primitive the dialect places in a window, out of it, or in a body", codes: WINDOW_CODES,
     contexts: ["body", "memo", "effect-compute", "effect-apply", "render-compute", "render-apply", "tracked", "settled", "untrack", "root", "owner-null", "jsx", "handler", "timer", "then", "micro", "async"] },
+  // ADR 0935: a user component wrapping `props.children` in a boundary (boundary-shapes.mjs), the children inside (real), beside it or foreign (misuse).
+  "wrap-loading-call": { fact: "`createLoadingBoundary(() => props.children, ...)` holds the children, or they stand beside it (or a foreign `.children` is inside)", codes: ["ASYNC_OUTSIDE_LOADING_BOUNDARY"], contexts: ["wrap-loadingcall-real", "wrap-loadingcall-outside", "wrap-loadingcall-shadow"] },
+  "wrap-errored": { fact: "`<Errored fallback={(e) => ...}>` holds the children, or they stand beside it (or a foreign `.children` is inside)", codes: ["CONTEXT_NOT_FOUND"], contexts: ["wrap-errored-real", "wrap-errored-outside", "wrap-errored-shadow"] },
+  "wrap-errored-call": { fact: "`createErrorBoundary(() => props.children, ...)` holds the children, or they stand beside it (or a foreign `.children` is inside)", codes: ["CONTEXT_NOT_FOUND"], contexts: ["wrap-erroredcall-real", "wrap-erroredcall-outside", "wrap-erroredcall-shadow"] },
+  "wrap-provider": { fact: "`<Ctx value>` holds the children, or they stand beside it (or a foreign `.children` is inside)", codes: ["CONTEXT_NOT_FOUND"], contexts: ["wrap-provider-real", "wrap-provider-outside", "wrap-provider-shadow"] },
   // ADR 0935 (arm-shapes.mjs): the arms no fixture and no other pair of the registry reached (the arm ablation of the fixture projects listed them as unwitnessed).
   "generator-steps": { fact: "the generator's steps run in the body's window (a spread in the body), or out of it (the same spread in a click handler), or nothing steps it", codes: TABLE_CODES, contexts: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never"] },
   "generator-loop-awaits": { fact: "the async function that drains a sync generator awaits between the steps, or does not", codes: ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"], contexts: ["barm-gen-drain", "barm-gen-await"] },
@@ -196,6 +201,14 @@ premise("flow-row-layer-after-an-await-leaves-the-window", {
   claim: "A layer that runs in place inside a flow row's body runs in the row's window only until the function that calls it suspends: past an await it runs on a later task, in no window.",
   source: "callee_roles.rs:741-790 `control-flow-climb-after-await`", adr: "0935",
   arms: ["callee_roles.control-flow-climb-after-await"], pairs: ["flow-climb-after-await"],
+});
+
+// ---- boundary wrappers (boundary-shapes.mjs): the cover walks consult a user component's body, by the property's spelling ------------------------------
+premise("boundary-wrapper-holds-the-children", {
+  claim: "A user component whose body wraps `props.children` in a boundary (Loading, Errored, a context provider) covers, handles or provides what it is given; children beside the boundary, or a foreign object's `.children` inside it, are not covered.",
+  source: "owners/async_context.rs:48 `loading_cover_at` (`children_in_loading`, by the property's spelling); stored_throw.rs:817 `handled_above`; owners/context_census.rs:640",
+  pairs: ["wrap-loading-call", "wrap-errored", "wrap-errored-call", "wrap-provider"], adr: "0935",
+  note: "The Loading JSX form is the proof-log agent's (branch claude/proof-log-phase-b, mounts.mjs WRAP_MOUNTS: wrap-real, wrap-alias, wrap-foreign, wrap-outside); not repeated here.",
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------

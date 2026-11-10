@@ -15,7 +15,8 @@ import { describe, test } from "vitest";
 
 import { ARM_GAPS, END_GAPS, KIND_GAPS, TABLE_GAP_GROUPS } from "./boundary-gaps.mjs";
 import { DIALECT_SOURCES, DIALECT_VOCABULARY, DISPATCH_PAIRS, EXPECTED_UNEXECUTED, PREMISES, WITNESSES, allPairs, coveredArms, dialectClassification, pairCells, problemsOf, resolvePair, sideOf, snapshotOf, tablePairs } from "./boundary.mjs";
-import { REPO, dialectQuestions, dropPasses, namedEnds, premiseKinds, silentArms, tableEntries, taggedArms } from "./boundary-inventory.mjs";
+import { REPO, deferrals, dialectQuestions, dropPasses, namedEnds, premiseKinds, silentArms, tableEntries, taggedArms } from "./boundary-inventory.mjs";
+import { NOT_SEAMS, SEAMS } from "./boundary-seams.mjs";
 import { SPEC } from "./misuse.mjs";
 import { TABLE_GAPS, TABLE_ROWS, tableContexts } from "./table-shapes.mjs";
 import { fileURLToPath } from "node:url";
@@ -232,5 +233,37 @@ describe("what a run reports", () => {
     assert.deepEqual(reportedLegal.map((entry) => entry.id), ["handler-write", "zero-read"]);
     assert.deepEqual(silentMisuse.map((entry) => entry.id), ["misuse-silent"]);
     assert.match(EXPECTED_UNEXECUTED.ruling, /2026-11-10/);
+  });
+});
+
+describe("the seams", () => {
+  const hits = deferrals();
+  const at = (entry, hit) => hit.file.startsWith(entry.file) && entry.match.test(hit.text);
+  test("a comment that hands a case to another check is a seam or states why it is not", () => {
+    assert.ok(hits.length > 20, "an extractor that finds nothing proves nothing");
+    for (const hit of hits) {
+      const named = SEAMS.filter((seam) => seam.sites.some((site) => at(site, hit))).length + NOT_SEAMS.filter((entry) => at(entry, hit)).length;
+      assert.equal(named, 1, `${hit.file}:${hit.line} "${hit.text}" is in ${named} list(s): add it to SEAMS (the two checks, the case between them, the evidence) or to NOT_SEAMS (the reason)`);
+    }
+  });
+
+  test("no entry is stale: each matches a comment now in the source", () => {
+    for (const seam of SEAMS) for (const site of seam.sites) assert.ok(hits.some((hit) => at(site, hit)), `seam ${seam.id}: no comment matches ${site.match}`);
+    for (const entry of NOT_SEAMS) assert.ok(hits.some((hit) => at(entry, hit)), `NOT_SEAMS ${entry.file}: no comment matches ${entry.match}`);
+  });
+
+  test("a seam has evidence that exists (a pair, a fixture) or a stated gap, never both", () => {
+    const ids = new Set();
+    for (const seam of SEAMS) {
+      assert.ok(!ids.has(seam.id), `duplicate seam ${seam.id}`);
+      ids.add(seam.id);
+      assert.equal(seam.between?.length, 2, `${seam.id}: names the two checks`);
+      assert.ok(seam.case?.length > 30, `${seam.id}: states the case that falls between them`);
+      const evidence = (seam.pairs?.length ?? 0) + (seam.fixtures?.length ?? 0);
+      assert.ok(Boolean(evidence) !== Boolean(seam.gap), `${seam.id}: evidence (pairs, fixtures) or a gap, not both and not neither`);
+      for (const pair of seam.pairs ?? []) assert.ok(pairIds.has(pair), `${seam.id}: no pair ${pair}`);
+      for (const fixture of seam.fixtures ?? []) assert.ok(existsSync(join(REPO, "fixtures", fixture)), `${seam.id}: no fixture ${fixture}`);
+      if (seam.gap) assert.ok(seam.gap.length > 40, `${seam.id}: the gap states why`);
+    }
   });
 });

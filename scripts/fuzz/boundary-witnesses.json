@@ -1,6 +1,6 @@
 {
  "version": 1,
- "checker": "origin/claude/batch-7 d79da3034 (debug build)",
+ "checker": "origin/claude/batch-7 815d5af27 (debug build)",
  "pairs": {
   "kept-collection": {
    "codes": {
@@ -709,6 +709,70 @@
      "legal": {
       "programs": 4,
       "clean": 4,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "wrap-loading-call": {
+   "codes": {
+    "ASYNC_OUTSIDE_LOADING_BOUNDARY": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "wrap-errored": {
+   "codes": {
+    "CONTEXT_NOT_FOUND": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "wrap-errored-call": {
+   "codes": {
+    "CONTEXT_NOT_FOUND": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "wrap-provider": {
+   "codes": {
+    "CONTEXT_NOT_FOUND": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 1,
       "violation": 0
      }
     }
@@ -11666,6 +11730,12 @@
     "pair": "primitive-contexts",
     "code": "STRICT_READ_UNTRACKED",
     "context": "memo",
+    "decisive": true
+   },
+   {
+    "pair": "wrap-provider",
+    "code": "CONTEXT_NOT_FOUND",
+    "context": "wrap-provider-real",
     "decisive": true
    }
   ],
