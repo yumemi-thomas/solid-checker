@@ -560,7 +560,7 @@
       },
       "text-premise": {
         "count": 1,
-        "why": "pending-review"
+        "why": "JSX grammar: a child of an element whose source starts with `{` is exactly an expression container, since a text child cannot contain an unescaped brace; this is a syntactic test of the node's own source, not a spelling match on a symbol"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
