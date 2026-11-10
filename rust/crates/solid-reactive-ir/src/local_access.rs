@@ -5922,6 +5922,7 @@ impl LocalAccessContext<'_, '_> {
             withdrawn_slot: false,
             pending_open: false,
             summary_attributed: false,
+            reported_at_origin: false,
             transported: false,
             kind: "accessor".into(),
             accessor: origin
@@ -7390,6 +7391,7 @@ impl LocalAccessContext<'_, '_> {
         ReactiveRead {
             withdrawn_slot: false,
             summary_attributed: false,
+            reported_at_origin: false,
             transported: false,
             kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                 "store-path".into()
@@ -7647,6 +7649,7 @@ impl LocalAccessContext<'_, '_> {
                 withdrawn_slot: false,
                 pending_open: false,
                 summary_attributed: false,
+                reported_at_origin: false,
                 transported: false,
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                     "store-path".into()
@@ -7902,6 +7905,7 @@ impl LocalAccessContext<'_, '_> {
             withdrawn_slot: false,
             pending_open: false,
             summary_attributed: false,
+            reported_at_origin: false,
             transported: false,
             kind: "store-path".into(),
             accessor: format!("{name} {form}").into(),
@@ -8084,6 +8088,7 @@ impl LocalAccessContext<'_, '_> {
                         withdrawn_slot: false,
                         pending_open: false,
                         summary_attributed: false,
+                        reported_at_origin: false,
                         transported: false,
                         kind: "accessor".into(),
                         accessor: name.to_string().into(),

@@ -8341,5 +8341,81 @@
    "mx-reactive-write-in-owned-scope-memo-use-write-throw-wrapper-none"
   ],
   "rediscovered": "focus.mjs --codes REACTIVE_WRITE_IN_OWNED_SCOPE --grids mx-recall -- --ids <the 36 lean use-write-throw programs>, #187's scripts both sides, one runtime cache: a0cbb930e's release 36 false cleans (9 ledger rows known open, 27 off the ledger); the ADR 0923 release (15c2244ad, the head's checker) 36 recall-gap, the 9 open-defect-fixed"
+ },
+ {
+  "finding": "ADR 0930 cause 10: JSX with a spread in a handler, timer, promise, microtask, async continuation, runWithOwner(null), effect apply, onSettled or createTrackedEffect (jsx-spread): the claiming row on the spread attribute read as misplaced or a false clean, because the dev compiler maps the compiled `spread(...)` call to nothing and Chrome's frame fell to the element's IIFE (`/>`) (a measurement artifact, not a checker miss)",
+  "found": "W's fc-causes report at e5f1b9b1d (causes 10, 12-14); the ledger held a sample of each (open-defects-rows.json, smoke seed 21400934)",
+  "fixed": "ADR 0930 (served.mjs compiledSpread, Chrome host record, codes.mjs withStarts)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-handler-jsx-spread-direct-none",
+   "mx-no-owner-effect-timer-jsx-spread-direct-none",
+   "mx-no-owner-effect-then-jsx-spread-direct-none",
+   "mx-no-owner-effect-micro-jsx-spread-direct-none",
+   "mx-no-owner-effect-async-jsx-spread-direct-none",
+   "mx-no-owner-effect-owner-null-jsx-spread-direct-none",
+   "mx-no-owner-effect-async-loop-jsx-spread-direct-none",
+   "mx-no-owner-effect-async-for-await-jsx-spread-direct-none",
+   "mx-no-owner-effect-async-finally-jsx-spread-direct-none"
+  ],
+  "rediscovered": "matrix.mjs --grid --ids, Chrome host, fresh runtime cache, the release build of origin/main 3ac5d91f9: old judge: 64 jsx-spread rows 46 misplaced, 18 false-clean; ADR 0930 judge, same checker: 46 agree, 18 recall-gap (Chrome host; the oracle confirmation path still reads them at the IIFE, `differs`). Smoke at seed 21400934: the 10 ledger rows open-defect-fixed"
+ },
+ {
+  "finding": "ADR 0930 cause 10: JSX with a spread in a handler, timer, promise, microtask, async continuation, runWithOwner(null), effect apply, onSettled or createTrackedEffect (jsx-spread): the claiming row on the spread attribute read as misplaced or a false clean, because the dev compiler maps the compiled `spread(...)` call to nothing and Chrome's frame fell to the element's IIFE (`/>`) (a measurement artifact, not a checker miss)",
+  "found": "W's fc-causes report at e5f1b9b1d (causes 10, 12-14); the ledger held a sample of each (open-defects-rows.json, smoke seed 21400934)",
+  "fixed": "ADR 0930 (served.mjs compiledSpread, Chrome host record, codes.mjs withStarts)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-effect-apply-jsx-spread-direct-none"
+  ],
+  "rediscovered": "matrix.mjs --grid --ids, Chrome host, fresh runtime cache, the release build of origin/main 3ac5d91f9: old judge: 64 jsx-spread rows 46 misplaced, 18 false-clean; ADR 0930 judge, same checker: 46 agree, 18 recall-gap (Chrome host; the oracle confirmation path still reads them at the IIFE, `differs`). Smoke at seed 21400934: the 10 ledger rows open-defect-fixed"
+ },
+ {
+  "finding": "ADR 0930 cause 10: JSX with a spread in a handler, timer, promise, microtask, async continuation, runWithOwner(null), effect apply, onSettled or createTrackedEffect (jsx-spread): the claiming row on the spread attribute read as misplaced or a false clean, because the dev compiler maps the compiled `spread(...)` call to nothing and Chrome's frame fell to the element's IIFE (`/>`) (a measurement artifact, not a checker miss)",
+  "found": "W's fc-causes report at e5f1b9b1d (causes 10, 12-14); the ledger held a sample of each (open-defects-rows.json, smoke seed 21400934)",
+  "fixed": "ADR 0930 (served.mjs compiledSpread, Chrome host record, codes.mjs withStarts)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-settled-jsx-spread-direct-none",
+   "mx-primitive-in-forbidden-scope-tracked-jsx-spread-direct-none"
+  ],
+  "rediscovered": "matrix.mjs --grid --ids, Chrome host, fresh runtime cache, the release build of origin/main 3ac5d91f9: old judge: 64 jsx-spread rows 46 misplaced, 18 false-clean; ADR 0930 judge, same checker: 46 agree, 18 recall-gap (Chrome host; the oracle confirmation path still reads them at the IIFE, `differs`). Smoke at seed 21400934: the 10 ledger rows open-defect-fixed"
+ },
+ {
+  "finding": "ADR 0930 causes 12-13: a strict read behind a prop under `children(() => <K …/>)()` (guard-passed, net-nested-read, wd-prop-read, wd-prop-store-read): the claiming row at the call's start read as misplaced, because V8 places a call whose callee is no identifier at its `(` and the dev compiler's segments drift past a component's dev arguments, so that `(` mapped one column past the callee or onto a token inside (a measurement artifact, not a checker miss)",
+  "found": "W's fc-causes report at e5f1b9b1d (causes 10, 12-14); the ledger held a sample of each (open-defects-rows.json, smoke seed 21400934)",
+  "fixed": "ADR 0930 (served.mjs compiledCallParens and sourceCallStarts, Chrome host record)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-guard-passed-direct-helper",
+   "mx-strict-read-untracked-body-guard-passed-alias-helper",
+   "mx-strict-read-untracked-body-guard-passed-wrapper-helper",
+   "mx-strict-read-untracked-body-net-nested-read-direct-helper",
+   "mx-strict-read-untracked-body-net-nested-read-alias-helper",
+   "mx-strict-read-untracked-body-net-nested-read-wrapper-helper",
+   "mx-strict-read-untracked-iter-same-wd-prop-read-wrapper-helper",
+   "mx-strict-read-untracked-iter-same-wd-prop-store-read-direct-none",
+   "mx-strict-read-untracked-iter-same-wd-prop-store-read-alias-none",
+   "mx-strict-read-untracked-iter-same-wd-prop-store-read-wrapper-helper"
+  ],
+  "rediscovered": "matrix.mjs --grid --ids, Chrome host, fresh runtime cache, the release build of origin/main 3ac5d91f9: old judge: 20 misplaced (guard-passed 6, net-nested-read 6, wd-prop-read 2, wd-prop-store-read 6); ADR 0930 judge, same checker: 20 agree. Smoke at seed 21400934: the 7 ledger rows open-defect-fixed"
+ },
+ {
+  "finding": "ADR 0930 cause 14: a strict read past a generator's first yield, stepped by Array.from or a destructuring (gstep-from, gstep-destructure): SC1001's `summary-read-unplaced` U stood at the creation call `g()`, which runs none of the body and is on no stack of the read, so no row stood at Chrome's frame",
+  "found": "W's fc-causes report at e5f1b9b1d (causes 10, 12-14); the ledger held a sample of each (open-defects-rows.json, smoke seed 21400934)",
+  "fixed": "ADR 0930 (interproc/result_reads.rs)",
+  "grid": "mx-census",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-gstep-from-signal-direct-none",
+   "mx-strict-read-untracked-gstep-from-memo-direct-none",
+   "mx-strict-read-untracked-gstep-destructure-signal-direct-none",
+   "mx-strict-read-untracked-gstep-destructure-memo-direct-none"
+  ],
+  "rediscovered": "matrix.mjs --grid --census --ids, Chrome: 3ac5d91f9 4 false-clean, this fix 4 recall-gap (U at the read); the other 20 gstep programs' U moved to the read too, outcomes unchanged. Smoke at seed 21400934: the 4 ledger rows open-defect-fixed"
  }
 ]

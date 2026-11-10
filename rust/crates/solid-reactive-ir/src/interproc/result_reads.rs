@@ -508,6 +508,18 @@ fn call_result_reads(
                 Some(accessor_provenance::Callable::Function { .. })
             ) || lookup.function_value_is_current(callee_file, callee))
     });
+    // ADR 0930: calling a generator runs none of its body (ADR 0851), so its
+    // creation call is on no stack a read of the body has; such a row is
+    // reported at the read itself (its origin, in this file), where Solid
+    // reports it (`ReactiveRead::reported_at_origin`).
+    let generator_callee = ambiguous_candidates.is_none()
+        && match transported {
+            Some(accessor_provenance::Callable::Function { path, span }) => lookup
+                .file_by_path(path)
+                .and_then(|file| file.ast.function_at(*span)),
+            _ => lookup.function_for_symbol(symbol).map(|(_, callee)| callee),
+        }
+        .is_some_and(|callee| callee.generator);
     let activated_defaults =
         activated_default_reads(scope, dependencies, call, direct_callee, &label);
     let proof = DirectReadProof::new(scope, call, transported, direct_callee, target);
@@ -536,6 +548,8 @@ fn call_result_reads(
     effective.sort_by_key(|(direct, read)| (read.undecided, !*direct, read.transported));
     for (direct, read) in effective {
         let accessor = read.display.to_string();
+        let reported_at_origin =
+            generator_callee && !direct && read.origin.path.as_ref() == file.path.as_str();
         if seen.insert((
             callee.path.clone(),
             callee.start_byte,
@@ -568,6 +582,7 @@ fn call_result_reads(
                 callee_callback_timing: object_callable
                     || callee_callback_timing(file, timing_at, execution, lookup),
                 summary_attributed: !direct,
+                reported_at_origin,
                 transported: read.transported
                     || transported.is_some()
                     || super::transport_reads::source_origin(provenance, &read.symbol),
@@ -2325,6 +2340,7 @@ pub(super) fn dependency_getter_obligations(
                     withdrawn_slot: false,
                     pending_open: false,
                     summary_attributed: false,
+                    reported_at_origin: false,
                     transported: true,
                     kind: "reactive-getter".into(),
                     accessor: file.source_text(span).unwrap_or("returned getter").into(),

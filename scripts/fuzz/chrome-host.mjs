@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_FAST_INSTALL, ENTRY_SOURCE, installedVersions, pinnedProblems, stageCases } from "./fast.mjs";
 import { EXECUTOR_SOURCES } from "./exec.mjs";
 import { cleanPositions } from "./hits.mjs";
-import { compiledHanded, isProgramModule } from "./served.mjs";
+import { compiledCallParens, compiledHanded, compiledSpread, isProgramModule, sourceCallStarts } from "./served.mjs";
 import { pinnedBrowser } from "../playwright-browser.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -347,6 +347,9 @@ export async function startViteHost({ install = DEFAULT_FAST_INSTALL, oracleInst
  * text, no map, no original position, past its line) keeps its file and no position, so it still counts for depth (R20) and places nothing.
  * An App.tsx frame at a compiled `insert`, `effect` or `memo` call (call-starts.mjs `compiledHanded`) carries `compiled`: the source start
  * of the expression that call was handed, read from the served code and mapped the same way (codes.mjs `withStarts` reads it, top frame only).
+ * ADR 0930: so does a frame at the `(` of a call whose callee is no identifier (served.mjs `compiledCallParens`): the start of that call, a
+ * source call's; and a frame at a compiled `spread` (`compiledSpread`) the spread its `loc` names, as an `unmapped` frame when the map
+ * gives it no position.
  */
 export async function mapPositions(server, { TraceMap, originalPositionFor, traceSegment }, id, record, source, clean = (position) => position, moduleSource = () => undefined) {
   const servedOf = async (file) => {
@@ -360,6 +363,12 @@ export async function mapPositions(server, { TraceMap, originalPositionFor, trac
   const map = new TraceMap(served.map);
   // ADR 0921: a frame at a compiled `insert`/`effect`/`memo` call also records where the expression it was handed starts in the source.
   const handedAt = typeof served.code === "string" ? compiledHanded(served.code) : () => [];
+  // ADR 0930: a frame at a compiled `spread` call (no mapping of its own) records the spread the compiler names in its `loc`.
+  const spreadAt = typeof served.code === "string" ? compiledSpread(served.code, ["App.tsx", `cases/${id}/App.tsx`]) : () => [];
+  // ADR 0930: a frame at the `(` of a call whose callee is no identifier records that call's start, where the map has a segment exactly
+  // there and the source has such a call there.
+  const parenAt = typeof served.code === "string" ? compiledCallParens(served.code) : () => [];
+  const callStartsIn = source === undefined ? () => false : sourceCallStarts(source);
   const lines = source === undefined ? null : source.split("\n");
   const all = [...(record.diagnostics ?? []), ...(record.errors ?? []), ...(record.consoleErrorCauses ?? []).filter(Boolean)].flatMap((row) => row.positions ?? [])
     .concat((record.consoleErrorPositions ?? []).flat());
@@ -378,19 +387,30 @@ export async function mapPositions(server, { TraceMap, originalPositionFor, trac
   };
   const original = (positions) => (positions ?? []).flatMap((p) => {
     if (p.file !== undefined && p.file !== "App.tsx") return [inModule(p)];
+    const spread = spreadAt(p.line, p.column).flatMap((value) => {
+      if (lines && (value.line > lines.length || value.column - 1 >= lines[value.line - 1].length)) return [];
+      const start = clean(value);
+      return start ? [start] : [];
+    });
+    // ADR 0930: the source map gives a compiled spread call no position of its own; the frame then stands only for the spread its
+    // `loc` names (`unmapped`: no position of its own, codes.mjs `withStarts`).
+    const unmapped = spread.length ? [{ file: "App.tsx", ...spread[0], compiled: spread, unmapped: true }] : [];
     const at = originalPositionFor(map, { line: p.line, column: Math.max(0, p.column - 1) });
-    if (!at.line) return [];
-    if (lines && (at.line > lines.length || at.column >= lines[at.line - 1].length)) return [];
+    if (!at.line) return unmapped;
+    if (lines && (at.line > lines.length || at.column >= lines[at.line - 1].length)) return unmapped;
     const position = clean({ line: at.line, column: at.column + 1 });
-    if (!position) return [];
+    if (!position) return unmapped;
     // Only a value the compiler mapped where it starts: the mapping at or before it would be the call's own (its element's), not the value's.
-    const compiled = (traceSegment ? handedAt(p.line, p.column) : []).flatMap((value) => {
+    const exactly = (value, call = false) => {
       if (traceSegment(map, value.line - 1, value.column - 1)?.[0] !== value.column - 1) return [];
       const from = originalPositionFor(map, { line: value.line, column: value.column - 1 });
       if (!from.line || (lines && (from.line > lines.length || from.column >= lines[from.line - 1].length))) return [];
+      if (call && !callStartsIn({ line: from.line, column: from.column + 1 })) return [];
       const start = clean({ line: from.line, column: from.column + 1 });
       return start ? [start] : [];
-    });
+    };
+    const compiled = (traceSegment ? handedAt(p.line, p.column) : []).flatMap((value) => exactly(value))
+      .concat(traceSegment ? parenAt(p.line, p.column).flatMap((value) => exactly(value, true)) : [], spread);
     return [{ file: "App.tsx", ...position, ...(compiled.length ? { compiled } : {}) }];
   });
   return {
