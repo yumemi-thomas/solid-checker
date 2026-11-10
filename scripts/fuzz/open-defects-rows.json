@@ -93,6 +93,8 @@
    "mx-sync-node-received-async-action-from-settled-memo-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]},
    "mx-sync-node-received-async-action-from-tracked-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]},
    "mx-sync-node-received-async-action-from-tracked-memo-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]},
+   "mx-sync-node-received-async-apply-void-call-row-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async"]},
+   "mx-sync-node-received-async-apply-void-call-untrack-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async"]},
    "mx-sync-node-received-async-cbp-apply-destructured-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async"]},
    "mx-sync-node-received-async-cbp-apply-destructured-memo-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async"]},
    "mx-sync-node-received-async-cbp-apply-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async"]},
