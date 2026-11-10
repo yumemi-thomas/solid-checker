@@ -4,18 +4,18 @@
   "SC1001 binding-before-initialization": 7,
   "SC1001 build-constant-arm": 3,
   "SC1001 callback-invocation-unproven": 3,
-  "SC1001 callee-callback-timing": 404,
+  "SC1001 callee-callback-timing": 403,
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1325,
+  "SC1001 function-run-unplaced": 1326,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
-  "SC1001 read-backing-unproven": 371,
+  "SC1001 read-backing-unproven": 372,
   "SC1001 strict-read-unaccounted": 3,
-  "SC1001 summary-read-unplaced": 93,
+  "SC1001 summary-read-unplaced": 94,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
   "SC1002 generator-stepped": 11,
@@ -34,7 +34,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 466,
+  "SC2001 function-run-unplaced": 463,
   "SC2001 function-unentered": 2,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -1834,6 +1834,42 @@
    "kind": "relabel",
    "relabeledTo": "SC9012 parameter-call-argument-unproven",
    "note": "the 7 calls sit in exported helpers of an open program, which unseen code may enter: `call_result_reads` now walks them, so each keeps its SC9012 under the call-argument blocker"
+  },
+  {
+   "fixture": "reactive-ir/prop-callback-roles-after-await",
+   "key": "SC2001 function-run-unplaced",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 0938",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::window_after_awaits",
+   "fixtures": {
+    "proved": "reactive-ir/prop-callback-roles-after-await",
+    "open": "reactive-ir/arrow-bound-helper-module-loads"
+   },
+   "note": "writes in a callback past an await run ownerless, as the direct twin already did: the layer climb answers silent on every path"
+  },
+  {
+   "fixture": "reactive-ir/rc9-heldout-execution-shapes",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 0938",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::window_after_awaits",
+   "fixtures": {
+    "proved": "reactive-ir/rc9-heldout-execution-shapes",
+    "open": "reactive-ir/ref-await-in-place-layers"
+   },
+   "note": "a read only through a call past an await: the layer climb proves it silent"
+  },
+  {
+   "fixture": "reactive-ir/helper-prop-read",
+   "key": "SC1001 callee-callback-timing",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 0938",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced",
+   "note": "the read keeps its SC1001 row under the layer climb's blocker"
   }
  ],
  "renames": []
