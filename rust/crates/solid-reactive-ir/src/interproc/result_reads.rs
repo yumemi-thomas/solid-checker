@@ -238,7 +238,11 @@ fn call_result_reads(
         provenance,
         ..
     } = scope.context;
-    if !enclosing_render_function(file, call.span, lookup) {
+    // ADR 0934: a call outside any component is claimed where its function
+    // is called, unless unseen code enters that function: no call claims it.
+    if !enclosing_render_function(file, call.span, lookup)
+        && !crate::local_access::runs_in_function_entered_unseen(file, call.callee, lookup)
+    {
         return;
     }
     if crate::object_members::call_withheld(file, call.callee, lookup) {
@@ -432,6 +436,9 @@ fn call_result_reads(
             && !(execution == ExecutionRole::Unknown
                 && !inside_non_component_function(file, call.callee, lookup)
                 && !handed.is_some_and(|(_, carrier)| carrier.is_some()))
+            // ADR 0934: nor one in a function unseen code enters, whose calls
+            // no summary holds.
+            && !crate::local_access::runs_in_function_entered_unseen(file, call.callee, lookup)
         {
             // ADR 0771: a read this call makes through a value it hands over
             // has no row here, and an async source may be pending wherever the

@@ -16,4 +16,4 @@ uncertifiable. The callback itself runs from a microtask with no owner.
 
 Generators are placed as for [no-write-in-pure-computation](no-write-in-pure-computation.md) (ADRs 0851, 0853).
 
-A call that no row, SC9012, compiler discard or named silence ends is uncertifiable, blocker `on-flush-unaccounted` (ADR 0936).
+A call that no row, discard or named silence ends is uncertifiable: `on-flush-unaccounted` (ADR 0936).

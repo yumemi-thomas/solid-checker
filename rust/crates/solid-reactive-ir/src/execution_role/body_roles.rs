@@ -415,18 +415,31 @@ pub(super) fn named_closure_in_tracked_scope<'a>(
 /// same function): an ownerless continuation on a later task, never in a
 /// render window or a tracking scope.
 pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: Span) -> bool {
-    containing_ast_function(&file.ast, span).is_some_and(|function| {
-        // An async generator is resumed by its caller after each `yield`,
-        // synchronously, in whatever window or owner that caller has.
-        function.r#async
-            && !function.generator
-            && file.ast.unconditional_awaits.iter().any(|awaited| {
-                awaited.end <= span.start
-                    && function.body.contains(*awaited)
-                    && containing_ast_function(&file.ast, *awaited)
-                        .is_some_and(|owner| owner.span == function.span)
-            })
-    })
+    unconditional_await_before(file, span).is_some()
+}
+
+/// [`follows_unconditional_await`]'s proof: the `await` itself (ADR 0936 names
+/// it as the fact a silence rests on).
+pub(crate) fn unconditional_await_before(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Option<Span> {
+    let function = containing_ast_function(&file.ast, span)?;
+    // An async generator is resumed by its caller after each `yield`,
+    // synchronously, in whatever window or owner that caller has.
+    if !function.r#async || function.generator {
+        return None;
+    }
+    file.ast
+        .unconditional_awaits
+        .iter()
+        .find(|awaited| {
+            awaited.end <= span.start
+                && function.body.contains(**awaited)
+                && containing_ast_function(&file.ast, **awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+        })
+        .copied()
 }
 
 /// Whether `span` runs only after an await of its own function suspended: it
@@ -436,14 +449,21 @@ pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: S
 /// constructed or rendered, which may be under an owner again, so they are
 /// not included.
 pub(crate) fn follows_dominating_await(file: &solid_facts::FileFacts, span: Span) -> bool {
-    let Some(function) = continuation_function(file, span) else {
-        return false;
-    };
-    file.ast.dominating_awaits.iter().any(|(awaited, region)| {
-        region.contains(span)
-            && containing_ast_function(&file.ast, *awaited)
-                .is_some_and(|owner| owner.span == function.span)
-    })
+    dominating_await_before(file, span).is_some()
+}
+
+/// [`follows_dominating_await`]'s proof: the `await` itself.
+pub(crate) fn dominating_await_before(file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
+    let function = continuation_function(file, span)?;
+    file.ast
+        .dominating_awaits
+        .iter()
+        .find(|(awaited, region)| {
+            region.contains(span)
+                && containing_ast_function(&file.ast, *awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+        })
+        .map(|(awaited, _)| *awaited)
 }
 
 /// The async, non-generator function whose continuation `span` would run in,

@@ -10,6 +10,17 @@
       "start": 142,
       "end": 153,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-flow/source.ts",
+      "start": 141,
+      "end": 152,
+      "fixes": 0
     }
   ]
 }

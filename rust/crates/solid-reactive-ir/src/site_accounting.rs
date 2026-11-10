@@ -162,6 +162,15 @@ site_silences! {
     /// A read in a setter's updater, where the setter call's role reports
     /// nothing: the updater runs at the call, in a place the rule allows.
     CallSetterCallbackRoleSilent => "local_access.discover_call_as.setter-callback-role-silent",
+    /// A read at module scope, which no component or effect body owns: the
+    /// rc.21 runtime installs strict-read contexts only in those.
+    NoWindowModuleScope => "local_access.no_window.module-scope",
+    /// A read past an `await` its function reaches on every path: a later
+    /// task, off every caller's stack (ADR 0320).
+    NoWindowAfterAwait => "local_access.no_window.after-await",
+    /// A read in a function nothing enters (a closed program's export nothing
+    /// names, a private function nothing references): it never runs.
+    NoWindowNothingEnters => "local_access.no_window.nothing-enters",
     /// A store Get under a key the checker cannot spell, at a site whose role
     /// reports nothing.
     MemberRoleDoesNotReport => "local_access.discover_member.role-does-not-report",

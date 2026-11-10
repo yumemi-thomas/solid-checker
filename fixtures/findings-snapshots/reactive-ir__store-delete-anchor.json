@@ -93,7 +93,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "strict-read-unaccounted",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
       "start": 2295,
@@ -115,11 +115,22 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "strict-read-unaccounted",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
       "start": 2374,
       "end": 2381,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2431,
+      "end": 2438,
       "fixes": 0
     },
     {
@@ -134,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2505,
+      "end": 2539,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -142,6 +164,17 @@
       "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
       "start": 2506,
       "end": 2541,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-delete-anchor/App.tsx",
+      "start": 2588,
+      "end": 2595,
       "fixes": 0
     },
     {

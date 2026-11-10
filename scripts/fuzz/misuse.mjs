@@ -62,7 +62,9 @@ export const SOURCE_AXES = {
   async: ["async-prop", "async-value", "async-value-member", "async-value-dstr", "async-context", "async-loading"],
   // The recall axes (`--recall`): the values through a barrel module that re-exports `helpers.ts` (`lib.ts`), or a hook that is
   // `helpers.ts`'s default export. Not under `module`, so `--sources module` keeps its programs.
-  files: ["module-barrel", "module-default-hook"],
+  // ADR 0934: a prop value read through a TypeScript wrapper on `props` (`(props as typeof props).w1`), which Type Facts keeps no
+  // entity under (the binder resolves it).
+  files: ["module-barrel", "module-default-hook", "prop-value-cast"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** Sources the grids enumerate and a random draw never takes (as `gridVariants`): random programs and combinations keep theirs. */
@@ -72,7 +74,7 @@ export const parentSource = (source) => source !== "local" && !source.startsWith
 /** A source whose values `helpers.ts` creates at its own scope (print.mjs `moduleFiles`), before App.tsx runs a statement of its own. */
 export const moduleScoped = (source) => source === "module" || source === "module-barrel";
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
-const valueSource = (source) => source === "prop-value" || source === "async-value" || source === "async-value-member" || source === "async-value-dstr";
+const valueSource = (source) => source === "prop-value" || source === "prop-value-cast" || source === "async-value" || source === "async-value-member" || source === "async-value-dstr";
 
 /**
  * The sources a (code, variant, binding) can take: the template must have values (`setup`); `async` sources need an async value and
@@ -118,6 +120,7 @@ export function sourcesOption(value) {
  */
 export function sourcedName(source, name) {
   switch (source) {
+    case "prop-value-cast": return `(props as typeof props).${name}`;
     case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-value-member": case "async-loading": return `props.${name}`;
     // ADR 0823: the read is a body destructure of the props object, written where the read is.
     case "async-value-dstr": return `(() => { const { ${name} } = props; return ${name}; })()`;
@@ -993,10 +996,34 @@ const UPDATER_DISPATCH_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((
   const placed = (kind) => Object.entries(OWNED_UPDATER_CONTEXTS).filter(([, base]) => (kind === "misuse" ? spec.contexts.includes(base) : legalAt(base))).map(([context]) => context);
   return [code, { misuse: [...placed("misuse"), ...(row ? ["evt-row-dispatch"] : [])], legal: [...placed("legal"), ...(row ? ["evt-row-timer-dispatch"] : [])] }];
 }));
+/**
+ * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
+ * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
+ * the site in a function named as that handler (`onScroll={hd}`). The `-timer-` twins dispatch from a timer, on a fresh stack (legal).
+ * `export-namespace-call`: the site in an exported helper the body calls through its own module's namespace by a computed key
+ * (`self[k]()`), a call no summary follows, as an importer's is not (the entry's namespace loop and every fuzz caller are visible, so an
+ * unseen importer itself cannot be generated); `export-namespace-call-handler` makes the call in a click handler (legal).
+ */
+export const BODY_DISPATCH_CONTEXTS = { "evt-body-dispatch-helper": "misuse", "evt-body-dispatch-named": "misuse", "evt-body-timer-dispatch-helper": "legal", "evt-body-timer-dispatch-named": "legal" };
+export const UNSEEN_ENTRY_CONTEXTS = { "export-namespace-call": "misuse", "export-namespace-call-handler": "legal" };
+const BODY_DISPATCH_CODES = ["STRICT_READ_UNTRACKED", "REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
+const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
+  const spec = SPEC[code];
+  const row = BODY_DISPATCH_CODES.includes(code);
+  const placed = (kind) => (row ? Object.entries({ ...BODY_DISPATCH_CONTEXTS, ...UNSEEN_ENTRY_CONTEXTS }).filter(([, side]) => side === kind).map(([context]) => context) : []);
+  return [code, { misuse: placed("misuse"), legal: placed("legal") }];
+}));
+/**
+ * ADR 0934 (owner, 2026-11-10: a use nothing follows is uncertifiable, never ADR 0222's silence). `helper-handed-call`: the site in a
+ * component-local helper a `let` aliases, the alias called in the body (a use the helper's census cannot follow);
+ * `helper-handed-handler` calls it from a click (legal). The recall sources cross it, so `prop-value-cast` puts a props Get there.
+ */
+export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
+const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
 export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
-  ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS];
+  ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
 /**
  * ADR 0613: the site in an effect apply, with a synchronous `flush()` the program calls after the effect is created: in the body
@@ -1106,13 +1133,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1881,6 +1908,37 @@ function recallContext(context, stmts, kit) {
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [], view: [flowEl(kit.name("v"), "for", [made, context === "evt-row-dispatch" ? fire : expr(prim("timer", fn([fire])))])] };
+    }
+    // ADR 0934 (BODY_DISPATCH_CONTEXTS): a detached element's `onScroll` calls a helper holding the site, or is a function holding it,
+    // and the body dispatches the event, or a timer does.
+    case "evt-body-dispatch-helper": case "evt-body-dispatch-named": case "evt-body-timer-dispatch-helper": case "evt-body-timer-dispatch-named": {
+      const h = kit.name("hd");
+      const el = kit.name("el");
+      const named = context.endsWith("-named");
+      // Detached: nothing can click it (`undriven`); the dispatch is the driver.
+      const made = decl(el, jsxExpr(named ? button(kit.name("b"), [], { tag: "div", attrs: `onScroll={${h}}`, undriven: true })
+        : button(kit.name("b"), [expr(call(ref(h)))], { tag: "div", on: "onScroll", undriven: true })));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [decl(h, fn(stmts)), made, context.includes("-timer-") ? expr(prim("timer", fn([fire]))) : fire], view: [] };
+    }
+    // ADR 0934 (HELPER_HANDED_CONTEXTS): the helper aliased by a `let`, the alias called in the body or a click.
+    case "helper-handed-call": case "helper-handed-handler": {
+      const g = kit.name("g");
+      const al = kit.name("al");
+      const run = expr(domExpr(`${al}()`));
+      const made = [decl(g, fn(stmts)), decl(al, domExpr(g), { kw: "let" })];
+      return context === "helper-handed-call" ? { body: [...made, run], view: [] } : { body: made, view: [button(kit.name("b"), [run])] };
+    }
+    // ADR 0934 (UNSEEN_ENTRY_CONTEXTS): an exported module function, the component's values hoisted beside it, called through the
+    // module's own namespace by a key built at run time.
+    case "export-namespace-call": case "export-namespace-call-handler": {
+      const ex = kit.name("ex");
+      const run = expr(domExpr(`self[${JSON.stringify([ex.slice(0, 1), ex.slice(1)])}.join("") as "${ex}"]()`));
+      return {
+        hoisted: [decl(ex, fn(stmts, { form: "function" }), { exported: true })],
+        body: context === "export-namespace-call" ? [run] : [], view: context === "export-namespace-call" ? [] : [button(kit.name("b"), [run])],
+        files: {}, importLines: ['import * as self from "./App";'],
+      };
     }
     // HANDLER_CONTEXTS: a handler passed by name (a `const`, a `function`, Solid's `[h, 1]` bound form), and one the body also calls.
     case "handler-named-const": case "handler-named-function": case "handler-tuple": case "handler-mixed": {

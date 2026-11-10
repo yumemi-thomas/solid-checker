@@ -340,7 +340,7 @@ around it (ADR 0532, `fixtures/reactive-ir/write-climb-depth`).
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 
-A write that no row, SC9012, compiler discard or named silence ends is uncertifiable, blocker `write-unaccounted` (ADR 0936).
+A write that no row, discard or named silence ends is uncertifiable: `write-unaccounted` (ADR 0936).
 
 ## Why is this bad?
 

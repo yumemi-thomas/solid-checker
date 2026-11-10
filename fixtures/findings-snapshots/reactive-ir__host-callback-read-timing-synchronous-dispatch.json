@@ -11,6 +11,17 @@
       "start": 140,
       "end": 149,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-member-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/variants/synchronous-dispatch/App.tsx",
+      "start": 194,
+      "end": 201,
+      "fixes": 0
     }
   ]
 }

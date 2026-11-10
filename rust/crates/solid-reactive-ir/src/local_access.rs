@@ -2207,6 +2207,18 @@ impl LocalAccessContext<'_, '_> {
             if counts {
                 result.strict_read_obligations += 1;
             }
+        } else if unproven_use {
+            // ADR 0934 (owner, 2026-11-10, superseding ADR 0222's option B):
+            // a use no fact follows (handed to a call, aliased, a JSX prop)
+            // runs the helper where nothing here places it: the read is
+            // unplaced at its definition, never silent.
+            let mut open = read;
+            open.execution = ExecutionRole::Unknown;
+            let counts = counts_as_strict_read_root(file, site, open.execution, self.lookup);
+            result.reads.push(Arc::new(open));
+            if counts {
+                result.strict_read_obligations += 1;
+            }
         } else if !unproven_use {
             // ADR 0933: every reference of the helper is a call accounted at its
             // own site (a row there, or a proven non-strict position): the
@@ -2999,14 +3011,19 @@ impl LocalAccessContext<'_, '_> {
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
         }
         // ADR 0933: a read the program places elsewhere ends here with no row,
-        // on the facts that place its function.
+        // on the facts that place its function; ADR 0936: failing those, on
+        // the fact that no strict-read window can hold it.
         if (result.reads.len(), result.async_reads.len()) == rows_before {
+            let ends_before = result.ends.len();
             result.ends.end_with(
                 file,
                 call.span,
                 SiteSilence::UnreachedReadPlacedElsewhere,
                 || placement_premises(file, call.callee, self.lookup),
             );
+            if result.ends.len() == ends_before {
+                end_read_no_window(&mut result.ends, file, call.span, call.callee, self.lookup);
+            }
         }
     }
 
@@ -3656,7 +3673,8 @@ impl LocalAccessContext<'_, '_> {
         // the call's own role decides (a site in a parameter list names only
         // the reach query, ADR 0454). With no edge, carrier or scheduler to
         // name (a returned function nothing calls), a role the classifier
-        // decided reports nothing; otherwise the site stays unaccounted.
+        // decided reports nothing, or no strict-read window can hold the read
+        // ([`end_read_no_window`]); otherwise the site stays unaccounted.
         if self.accessors.contains_key(symbol)
             && (result.reads.len(), result.async_reads.len()) == rows_before
             && result.ends.len() == ends_before
@@ -3674,6 +3692,9 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     call.span,
                 );
+            }
+            if result.ends.len() == ends_before {
+                end_read_no_window(&mut result.ends, file, call.span, call.callee, self.lookup);
             }
         }
         // ADR 0294: a typed candidate read where an accessor read would be
@@ -7206,17 +7227,27 @@ impl LocalAccessContext<'_, '_> {
             identifier.span == receiver
                 && identifier.role == solid_facts::ast::IdentifierRole::Reference
         });
-        let prop_head = receiver_is_identifier
-            && self
-                .entities
-                .get(&location(
-                    file.path.shared(),
-                    file.ast.peel_ts_sugar_span(member.object),
-                ))
-                .is_some_and(|symbol| {
-                    self.prop_sources.contains_key(symbol)
-                        && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
-                });
+        // Type Facts keeps no entity at an identifier under a TypeScript
+        // wrapper (`(props as P)["value"]`); the binder resolves it, as below.
+        let head_symbol = receiver_is_identifier
+            .then(|| {
+                self.entities
+                    .get(&location(file.path.shared(), receiver))
+                    .cloned()
+                    .or_else(|| {
+                        crate::source_discovery::reference_symbol(
+                            file,
+                            receiver,
+                            self.entities,
+                            self.lookup,
+                        )
+                    })
+            })
+            .flatten();
+        let prop_head = head_symbol.as_ref().is_some_and(|symbol| {
+            self.prop_sources.contains_key(symbol)
+                && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+        });
         if !prop_head && read_as_part_of_longer_path(file, member) {
             return;
         }
@@ -7403,12 +7434,22 @@ impl LocalAccessContext<'_, '_> {
                     return;
                 }
                 if !(unplaced || placed_nowhere(file, member.span, self.lookup)) {
+                    let ends_before = result.ends.len();
                     result.ends.end_with(
                         file,
                         member.span,
                         SiteSilence::MemberPlacedElsewhere,
                         || placement_premises(file, member.span, self.lookup),
                     );
+                    if result.ends.len() == ends_before {
+                        end_read_no_window(
+                            &mut result.ends,
+                            file,
+                            member.span,
+                            member.span,
+                            self.lookup,
+                        );
+                    }
                     return;
                 }
                 execution = ExecutionRole::Unknown;
@@ -9408,8 +9449,67 @@ fn placed_nowhere(
     // ADR 0874: a withheld call proves no run, and an impostor may make one.
     crate::execution_role::runs_in_withheld_layer(file, span, lookup)
         || function_escapes_unfollowed(file, span, lookup)
+        || runs_in_function_entered_unseen(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
         || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
+}
+
+/// ADR 0934: whether `span` sits in a function that is no component, or in one
+/// nested in such a function, that code the program does not hold may enter
+/// ([`crate::execution_role::entered_by_unseen_code`]: an export of an open
+/// program, a namespace hand-out). The summaries claim a helper's reads at its
+/// calls; these entries are calls no summary holds, so the reads are placed
+/// nowhere, as the write walk's census already answers (`walk-unknown-11`).
+/// The walk climbs only through anonymous functions: a named one is entered
+/// where it is called, which the summaries follow from there (a call in its
+/// own enclosing function asks this again, in `result_reads`). It stops at a
+/// component (its render enters it), at a callback the compiler places, and at
+/// a primitive's callback argument: each has a role of its own, however the
+/// function around it is entered.
+pub(crate) fn runs_in_function_entered_unseen(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    // Past an await its function reaches on every path, the site runs on a
+    // later task, off every caller's stack (ADR 0323): no entry places it.
+    if crate::execution_role::follows_unconditional_await(file, span)
+        || crate::execution_role::follows_dominating_await(file, span)
+    {
+        return false;
+    }
+    let mut around = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(span) && function.span != span)
+        .collect::<Vec<_>>();
+    around.sort_by_key(|function| function.span.end - function.span.start);
+    for function in around {
+        if lookup.function_may_be_component(file, function)
+            || file
+                .compiler
+                .callback_roles
+                .iter()
+                .any(|callback| callback.span == function.span)
+            || file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span).is_some()
+                })
+        {
+            return false;
+        }
+        if crate::execution_role::entered_by_unseen_code(file, function, lookup) {
+            return true;
+        }
+        if function.name.is_some() || function_binding_name(file, function).is_some() {
+            return false;
+        }
+    }
+    false
 }
 
 pub(crate) fn function_escapes_unfollowed(
@@ -10909,6 +11009,95 @@ fn in_instance_field_initializer(
                 && !element.r#static
                 && element.value.is_some_and(|value| value.contains(span))
         })
+}
+
+/// ADR 0936: a read the producer returned from with no row and no fact that
+/// places its function to name, when no strict-read window can hold it either.
+/// The first fact that holds names the end: the read is at module scope (the
+/// rc.21 runtime installs strict-read contexts only in component and effect
+/// bodies), past an `await` its function reaches (a later task, off every
+/// caller's stack: ADR 0320), or in a function nothing enters
+/// ([`function_nothing_enters`]). With none the site stays unaccounted, an
+/// uncertifiable row.
+fn end_read_no_window(
+    ends: &mut crate::site_accounting::SiteEnds,
+    file: &solid_facts::FileFacts,
+    site: solid_facts::core::Span,
+    at: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) {
+    use crate::proof_log::PremiseKind;
+    if crate::owners::owning_function(&file.ast, at).is_none()
+        && !in_instance_field_initializer(file, at)
+    {
+        ends.end_at(
+            file,
+            site,
+            SiteSilence::NoWindowModuleScope,
+            PremiseKind::ModuleScope,
+            || Some(site),
+        );
+    } else if let Some(awaited) = crate::execution_role::unconditional_await_before(file, at)
+        .or_else(|| crate::execution_role::dominating_await_before(file, at))
+    {
+        ends.end_at(
+            file,
+            site,
+            SiteSilence::NoWindowAfterAwait,
+            PremiseKind::AfterAwait,
+            || Some(awaited),
+        );
+    } else {
+        ends.end_at(
+            file,
+            site,
+            SiteSilence::NoWindowNothingEnters,
+            PremiseKind::NothingEnters,
+            || function_nothing_enters(file, at, lookup),
+        );
+    }
+}
+
+/// ADR 0936: the named function around `at` that nothing enters, so that the
+/// code in it never runs. From the function that owns the site outwards
+/// through anonymous functions (a closure a factory returns, a callback it
+/// registers) to the first named one: that function is no possible component
+/// (no render enters it), no unseen code calls it (a closed program's export,
+/// a private function: [`crate::execution_role::entered_by_unseen_code`]), no
+/// call edge, carrier or scheduler names it, and its binding is referenced
+/// nowhere in the project: a value that flows (returned, stored, passed on) is
+/// entered wherever the value is called, which no local fact proves. A
+/// function the analysis cannot place at all (`placed_nowhere`) is an
+/// obligation, never this. With no named function around it (an anonymous
+/// module-level function) nothing is concluded.
+fn function_nothing_enters(
+    file: &solid_facts::FileFacts,
+    at: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_facts::core::Span> {
+    if placed_nowhere(file, at, lookup) {
+        return None;
+    }
+    let mut function = crate::owners::owning_function(&file.ast, at)?;
+    loop {
+        if function.method_name.is_none()
+            && (function.name.is_some() || function_binding_name(file, function).is_some())
+        {
+            let unreferenced = function_reference_hand_offs(file, function, lookup)
+                .is_some_and(|references| references.is_empty())
+                && foreign_reference_hand_offs(file, function, lookup).is_empty();
+            return (unreferenced
+                && !lookup.function_may_be_component(file, function)
+                && !crate::execution_role::entered_by_unseen_code(file, function, lookup)
+                && function_placement_premises(file, function, lookup).is_empty())
+            .then_some(function.span);
+        }
+        function = file
+            .ast
+            .functions_containing(function.span)
+            .filter(|outer| outer.span != function.span)
+            .min_by_key(|outer| outer.span.end - outer.span.start)?;
+    }
 }
 
 /// ADR 0933, 0936: why [`unreached_write_may_run`] answered no: the site

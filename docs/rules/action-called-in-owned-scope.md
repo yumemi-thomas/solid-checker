@@ -46,7 +46,7 @@ inline and keeps the owner context, so an action invoked inside `untrack(...)`
 or `flush(() => ...)` within a memo, component body or root body still throws
 `ACTION_CALLED_IN_OWNED_SCOPE` at runtime.
 
-A action call that no row, SC9012, compiler discard or named silence ends is uncertifiable, blocker `action-unaccounted` (ADR 0936).
+An action call that no row, discard or named silence ends is uncertifiable: `action-unaccounted` (ADR 0936).
 
 ## Why is this bad?
 

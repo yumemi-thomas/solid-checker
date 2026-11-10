@@ -130,6 +130,17 @@
       "start": 462,
       "end": 559,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/source.ts",
+      "start": 614,
+      "end": 621,
+      "fixes": 0
     }
   ]
 }

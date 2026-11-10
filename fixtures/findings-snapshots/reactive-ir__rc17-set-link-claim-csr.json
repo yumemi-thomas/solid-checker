@@ -5,7 +5,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "strict-read-unaccounted",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc17-set-link-claim-csr/App.tsx",
       "start": 557,

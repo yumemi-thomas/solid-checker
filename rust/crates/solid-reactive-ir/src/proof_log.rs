@@ -400,9 +400,21 @@ pub(crate) enum PremiseKind {
     /// root.
     DestructuredPropValue,
     /// The site is at module scope or in a static initializer: no function or
-    /// instance field owns it, and no owner exists there to reject the access
-    /// (the module-initialization role). The span is the site.
+    /// instance field owns it, and no owner exists there to reject the access;
+    /// the rc.21 runtime installs strict-read contexts only in component and
+    /// effect bodies (the module-initialization role). The span is the site.
     ModuleScope,
+    /// The site follows an `await` of its own async function that every path
+    /// reaches, or that dominates it: it runs on a later task, off every
+    /// caller's stack, in no render window and under no tracking scope (ADR
+    /// 0320, 0323). The span is the `await`.
+    AfterAwait,
+    /// Nothing enters the function that holds the site: no call edge, carrier
+    /// or scheduler names it, no render enters it, no unseen code calls it (a
+    /// closed program's export, a private function: ADR 0203, 0934), and its
+    /// binding is referenced nowhere, so its code never runs. The span is the
+    /// function.
+    NothingEnters,
     /// The role classifier decided the site's role (the compiler's and the
     /// dialect's facts place the code) and that role reports nothing for the
     /// rule: an effect's apply, a leaf scope, a handler. The span is the site.
