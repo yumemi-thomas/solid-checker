@@ -10917,6 +10917,22 @@
      }
     }
    }
+  },
+  "ref-layer-after-await": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 4
+     },
+     "legal": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 4
+     }
+    }
+   }
   }
  },
  "arms": {

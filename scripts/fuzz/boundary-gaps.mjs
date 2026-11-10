@@ -89,7 +89,7 @@ export const ARM_GAPS = [
     ],
   },
   {
-    reason: "Placing a layer inside an async `ref` callback past its await: no program reaches the arm. A read there is reported by `callee_roles.inside-component` as in the creation window, a false positive the Chrome host confirmed; the pair that holds the shapes (the `barm-ref-*` contexts) comes with its fix, and the arm leaves this list when the fix makes it answer.",
+    reason: "Placing a layer inside an async `ref` callback past its await: the arm is never reached. The registered pair (`ref-layer-after-await`, the `barm-ref-*` contexts) puts the read there, and `callee_roles.inside-component` reports it as in the creation window, a false positive the Chrome host confirmed. The arm leaves this list when a fix makes it answer.",
     arms: [
       "execution_role.ref_applied_read_role.unreported",
     ],
