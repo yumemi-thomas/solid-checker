@@ -24,7 +24,7 @@
     "rust/crates/solid-reactive-ir/src/accessor_provenance/projection_helpers.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_dependencies.rs": {
@@ -120,7 +120,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
       }
     },
     "rust/crates/solid-reactive-ir/src/directives.rs": {
@@ -386,7 +386,7 @@
       },
       "name-only-match": {
         "count": 3,
-        "why": "pending-review"
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/completeness.rs": {
@@ -478,7 +478,7 @@
       },
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
       },
       "untagged-silent-role": {
         "count": 26,
@@ -770,7 +770,7 @@
       },
       "name-only-match": {
         "count": 4,
-        "why": "pending-review"
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
       }
     }
   }
