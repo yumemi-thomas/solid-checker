@@ -56,6 +56,8 @@ describe("the typed premises", () => {
   test("the ids of the named ends are read from end_at and end_with calls, across lines", () => {
     const text = 'crate::proof_log::end_at(file, site, "local_access.discover_member.props-static", kind, || None);\nend_with(\n    file,\n    site,\n    "local_access.unreached_write.cannot-run",\n    || vec![],\n);\n';
     assert.deepEqual(endIds(text).map((end) => end.id), ["local_access.discover_member.props-static", "local_access.unreached_write.cannot-run"]);
+    const wrapped = 'dormant_callback_end(\n    file,\n    call,\n    "local_access.discover_call_as.dormant-callback-argument",\n    lookup,\n);\n';
+    assert.deepEqual(endIds(wrapped).map((end) => end.id), ["local_access.discover_call_as.dormant-callback-argument"]);
   });
 });
 

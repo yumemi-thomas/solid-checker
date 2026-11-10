@@ -166,12 +166,12 @@ export function premiseKinds(text) {
   return [...body.slice(0, end).matchAll(/^    ([A-Z][A-Za-z0-9]+),?\s*$/gm)].map((match) => match[1]);
 }
 
-/** The ids of the named ends (`end_at` / `end_with`) in one source text, with the line each stands on. */
+/** The ids of the named ends (`end_at`, `end_with`, and the producers' wrappers of them) in one source text, with the line each stands on. */
 export function endIds(text) {
   const found = [];
   const lines = codeLines(text);
   for (let index = 0; index < lines.length; index += 1) {
-    if (!/\bend_(?:at|with)\s*\(/.test(lines[index])) continue;
+    if (!/\b(?:end_(?:at|with)|dormant_callback_end)\s*\(/.test(lines[index])) continue;
     // the id is the first string literal within the next few lines of the call
     for (let at = index; at < Math.min(lines.length, index + 6); at += 1) {
       const literal = lines[at].match(/"([a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_-]+)"/);
