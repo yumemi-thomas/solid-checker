@@ -309,3 +309,36 @@ export function dialectQuestions(root = DIALECT_SRC) {
   for (const match of body.matchAll(/^    fn ([a-z_0-9]+)\(/gm)) questions.push({ id: match[1], line: base + body.slice(0, match.index).split("\n").length - 1 + 1 });
   return questions;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Deferrals: the comments in which one check hands a case to another
+
+/** The phrases a comment uses to say that another check decides a case. A hit is not yet a seam: boundary-seams.mjs classifies each. */
+export const DEFERRAL_PHRASES = [
+  /is the visible side's/, /which \(\d\) decides/, /\bis the census'?s?\b/, /\bcensus's (question|case|job)\b/, /\bhandled by (the|this|that|a) [a-z `\-\[\]:_]+(walk|pass|scan|census|veto|check)\b/,
+  /\bleft to (the|other|another|a later) /, /\bdefers? to (the|its|another|a) /, /\bis answered by\b/, /\bis decided by (the|its|another|a) /, /\bthe other side\b/, /\bbelongs to (the|its|another) /,
+  /\bis the [a-z-]+ (side|check|pass|walk|scan)'s\b/,
+];
+
+const sourceRoots = () => [join(REPO, "rust/crates"), join(REPO, "rust/dialects")];
+function checkerSources(path) {
+  if (!statSync(path).isDirectory()) return [path];
+  return readdirSync(path).sort().flatMap((name) => {
+    const full = join(path, name);
+    if (statSync(full).isDirectory()) return ["target", "node_modules", "tests"].includes(name) ? [] : checkerSources(full);
+    return name.endsWith(".rs") && name !== "tests.rs" && !name.endsWith("_tests.rs") ? [full] : [];
+  });
+}
+
+/** The comment lines of the checker's own Rust sources (tests left out) that hand a case to another check: `{ file, line, text }`, `file` relative to the repository. */
+export function deferrals() {
+  const found = [];
+  for (const root of sourceRoots()) {
+    for (const path of checkerSources(root)) {
+      withoutTests(source(path)).split("\n").forEach((text, index) => {
+        if (/^\s*\/\/[/!]?/.test(text) && DEFERRAL_PHRASES.some((phrase) => phrase.test(text))) found.push({ file: relative(REPO, path), line: index + 1, text: text.trim() });
+      });
+    }
+  }
+  return found;
+}

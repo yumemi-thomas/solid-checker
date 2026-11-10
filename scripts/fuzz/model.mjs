@@ -192,6 +192,16 @@ export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, bo
 export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached"];
 export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
 export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
+/**
+ * A user component of the same file that wraps `props.children` in a boundary and is rendered around the children: `<WrapN>…</WrapN>` (ADR 0935,
+ * boundary-shapes.mjs). `boundary` is the boundary it wraps them in (WRAP_BOUNDARIES), `form` how (WRAP_FORMS: the JSX element, or the
+ * `create*Boundary` call), `case` where the children are: inside it (`real`), beside it (`outside`), or a foreign object's `.children`
+ * inside it with the real children beside (`shadow`: the name-only match the cover walks make, async_context.rs `children_in_loading`).
+ */
+export const WRAP_BOUNDARIES = ["loading", "errored", "provider"];
+export const WRAP_FORMS = ["jsx", "call"];
+export const WRAP_CASES = ["real", "outside", "shadow"];
+export const wrapEl = (id, boundary, form, kase, children, { inner } = {}) => ({ k: "wrap", id, boundary, form, case: kase, children, ...(inner ? { inner } : {}) });
 /** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`;
  * `onExpr`: the `on` attribute's expression as written (LOADING_ON_ACCESSOR). */
 export const loadingView = (on, children, onExpr = null) => ({ k: "loading", on, children, onExpr });
@@ -439,6 +449,11 @@ export function validate(program, { maxNodes = 400 } = {}) {
           break;
         }
         case "loading": if (item.on !== null) sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
+        case "wrap": {
+          if (!WRAP_BOUNDARIES.includes(item.boundary) || !WRAP_FORMS.includes(item.form) || !WRAP_CASES.includes(item.case)) fail(`${where}: unknown wrapper ${item.boundary}/${item.form}/${item.case}`);
+          for (const c of item.children) checkView(c, scope);
+          break;
+        }
         default: fail(`${where}: unknown view kind ${item.k}`);
       }
     }
