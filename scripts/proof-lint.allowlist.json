@@ -86,19 +86,19 @@
     "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/index.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/memo.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
       }
     },
     "rust/crates/solid-reactive-ir/src/callback_host.rs": {
@@ -144,13 +144,13 @@
     "rust/crates/solid-reactive-ir/src/execution_paths.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "loop control of a `retain`: a candidate no arm joins yet (`None`) is kept undecided for the next round, so the default keeps a candidate open and decides nothing silent"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`within` is an optional filter of which compiler facts may place the span: `None` means the caller asked for no restriction, which is the question `execution_role_where` is asked without it, not a verdict"
       },
       "untagged-silent-role": {
         "count": 4,
@@ -262,7 +262,7 @@
     "rust/crates/solid-reactive-ir/src/execution_role/write_components.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`walk_step`: with no bounded walk open (`None`) there is no bound to exceed, so the step is allowed; the step counter never produces a role or a verdict"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs": {
