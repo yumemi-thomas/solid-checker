@@ -80,7 +80,7 @@
       },
       "name-only-match": {
         "count": 5,
-        "why": "pending-review"
+        "why": "a spelled runtime or standard name tied to an exact fact, or one that only adds hazards: `preload` is `lazy()`'s own method on an object `ReturnedUses` resolves to the exact symbols holding the factory's result (the span adds a use, never removes one); `prototype` picks the standard-root patch, resolved by `file.standard_root` (otherwise `UnownedPrototype`, owned by `PrototypeOwnerAt`); `Symbol.for` is the global `Symbol` (no declaration) and a non-computed member; a bare `Reflect` mention and a `require` call the facts did not record as a load only add the `Unknown` and `UnmodeledRequire` hazards"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {
@@ -514,7 +514,7 @@
       },
       "name-only-match": {
         "count": 11,
-        "why": "pending-review"
+        "why": "a spelled prop key beside an exact fact, never a binding: a JSX attribute name (`when`, `fallback`, `each`, `value`, `ref`) is tested only where the element resolves exactly (`element_primitive`, `jsx_primitive_name`, or the holder's `reference_declaration` is the context declaration) or as a refusal (`!= Some(\"ref\")`, `!= Some(\"value\")`); `children` covers only where `is_props_of` resolves the member's object to the component's props parameter or an exact `const` alias (the foreign-object false clean, ADR 0668), and its second use only answers `Unresolved`"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
@@ -754,7 +754,7 @@
       },
       "name-only-match": {
         "count": 7,
-        "why": "pending-review"
+        "why": "no silence is granted by the spelling: `.apply` only adds a call to `reactive_source_uncaptured`'s candidates (`hands_over_a_source`), whose callee is then resolved exactly (`caller_target`, `undescribed_callee`); `arguments` is the implicit binding (`reference_declaration` none) and a bare mention only keeps the parameter walk running; `keyed` and `each` are prop keys of an element `primitives.jsx` resolved to `For`; `class` on a lowercase-led tag only makes a position type-owned, which yields an uncertifiable blocker or the same silence the unrecognized position gets (`type_owned_position`, ADR 0830)"
       }
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/structure.rs": {
