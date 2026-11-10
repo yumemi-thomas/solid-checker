@@ -154,7 +154,7 @@
       },
       "untagged-silent-role": {
         "count": 4,
-        "why": "pending-review"
+        "why": "four candidate (span, role, rank) tuples of execution_role_where's compiler regions: none is an answer; the chosen candidate is returned through role_arm! as execution_role.execution_role_where.compiler-region"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs": {
@@ -168,7 +168,7 @@
       },
       "untagged-silent-role": {
         "count": 3,
-        "why": "pending-review"
+        "why": "none produces an answer: two are the expected-role arguments of named_helper_runs_during_body and one is a match pattern in excluded_role_holds"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs": {
