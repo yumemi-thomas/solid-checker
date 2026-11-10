@@ -437,6 +437,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
+      "start": 1419,
+      "end": 1424,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/AtModule.tsx",
       "start": 1420,
       "end": 1421,
       "fixes": 0
@@ -1405,6 +1416,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
+      "start": 1480,
+      "end": 1485,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InArrow.tsx",
       "start": 1481,
       "end": 1482,
       "fixes": 0
@@ -1869,6 +1891,17 @@
       "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
       "start": 1464,
       "end": 1465,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InDefault.tsx",
+      "start": 1499,
+      "end": 1504,
       "fixes": 0
     },
     {
@@ -2351,6 +2384,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
+      "start": 1488,
+      "end": 1493,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InInner.tsx",
       "start": 1489,
       "end": 1490,
       "fixes": 0
@@ -2824,6 +2868,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1530,
+      "end": 1535,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 1531,
       "end": 1532,
       "fixes": 0
@@ -3009,7 +3064,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
-      "start": 465,
+      "start": 466,
       "end": 486,
       "fixes": 0
     },
@@ -3031,7 +3086,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
-      "start": 583,
+      "start": 584,
       "end": 604,
       "fixes": 0
     },
@@ -3053,7 +3108,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
-      "start": 701,
+      "start": 702,
       "end": 722,
       "fixes": 0
     },
@@ -3143,6 +3198,17 @@
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
       "start": 1420,
       "end": 1424,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 1602,
+      "end": 1627,
       "fixes": 0
     },
     {
@@ -3250,7 +3316,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
-      "start": 820,
+      "start": 821,
       "end": 841,
       "fixes": 0
     },

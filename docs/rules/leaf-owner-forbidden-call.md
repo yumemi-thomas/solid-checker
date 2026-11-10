@@ -47,6 +47,8 @@ it runs during the helper call, so an operation written in it is reported
 where it is written (ADR 0492). A helper that defers, stores or hands on its
 callback is not followed. A tagged template's tag (``f`x` ``) is followed as
 a call of `f`, resolved through its declaration (ADR 0538).
+`(function* () { … })().next()` runs its first step in place, as an IIFE; U
+where a `yield` may stop it first (ADR 0929).
 
 An action called in that extent runs its generator's first step there, under
 the leaf owner (ADR 0520): a `const`-held action's body is followed as a

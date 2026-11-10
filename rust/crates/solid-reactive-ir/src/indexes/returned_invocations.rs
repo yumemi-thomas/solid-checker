@@ -267,15 +267,25 @@ fn invocation_chain(
 ) -> Result<Option<InvocationChain>, Cycle> {
     let mut reference = (id, callee);
     let mut pending: Option<Slot> = None;
+    // ADR 0931: a callee (or member object) that is itself a call
+    // (`useMade()(…)`, `createReaction(f)(…)`) is taken as a binding's call
+    // initializer would be, with no binding on the way.
+    let mut call_step: Option<(FileId, Span)> = None;
     if let Some(read) = ctx.file(id, 0) {
         let ast = &read.facts().ast;
         let peeled = ast.peel_ts_sugar_span(callee);
-        if let Some(member) = ast.member_at(peeled)
+        if ast.call_at(peeled).is_some() {
+            call_step = Some((id, peeled));
+        } else if let Some(member) = ast.member_at(peeled)
             && ast.computed_members.binary_search(&peeled).is_err()
             && ast.optional_members.binary_search(&peeled).is_err()
             && let Some(property) = read.facts().source_text(member.property)
         {
-            reference = (id, ast.peel_ts_sugar_span(member.object));
+            let object = ast.peel_ts_sugar_span(member.object);
+            if ast.call_at(object).is_some() {
+                call_step = Some((id, object));
+            }
+            reference = (id, object);
             pending = Some(Slot::Key(property.to_owned()));
         }
     }
@@ -286,8 +296,31 @@ fn invocation_chain(
     // A creating call inside one of them ran under that hook's call; through
     // two, the inner hook's call runs under the outer's every caller, which
     // places no one creation.
-    let mut hooks: Vec<((FileId, Span), (FileId, Span))> = Vec::new();
+    let mut hooks: Vec<CrossedHook> = Vec::new();
     loop {
+        if let Some((file, initializer)) = call_step.take() {
+            let slot = pending.take();
+            match call_chain_step(
+                ctx,
+                file,
+                initializer,
+                slot,
+                resolvable,
+                &mut exact,
+                &mut hooks,
+            )? {
+                CallStep::Done(chain) => return Ok(chain),
+                CallStep::Next(value) => {
+                    if let Some(read) = ctx.file(value.0, 0)
+                        && read.facts().ast.call_at(value.1).is_some()
+                    {
+                        call_step = Some(value);
+                    }
+                    reference = value;
+                    continue;
+                }
+            }
+        }
         // Callee result values do not always receive an entity fact of their
         // own (tuple slots are the motivating case). Resolve them from the
         // canonical reference set of each demanded binding declaration, then
@@ -345,55 +378,8 @@ fn invocation_chain(
             solid_facts::ast::BindingShape::Identifier => pending.take(),
         };
         if let Some(initializer) = binding.call_initializer {
-            // A call with no primitive and no call at the span both prove
-            // nothing.
-            let primitives = ctx.memo::<super::census::CallPrimitives>(&file)?;
-            if let Some(primitive) = primitives.get(&initializer) {
-                let slot = match slot {
-                    None => None,
-                    Some(Slot::Index(position)) => Some(u32_of(position)),
-                    Some(Slot::Key(_)) => return Ok(None),
-                };
-                let enclosing = crate::owners::containing_ast_function(&facts.ast, initializer);
-                let factory_at_module_scope = enclosing.is_none();
-                let placement = match enclosing {
-                    Some(function)
-                        if hooks.iter().any(|(_, hook)| *hook == (file, function.span)) =>
-                    {
-                        match hooks.as_slice() {
-                            [(call, _)] => Some(*call),
-                            _ => None,
-                        }
-                    }
-                    _ => Some((file, initializer)),
-                };
-                return Ok(Some(InvocationChain {
-                    primitive: *primitive,
-                    slot,
-                    factory: (file, initializer),
-                    exact,
-                    factory_at_module_scope,
-                    placement,
-                }));
-            }
-            // ADR 0549: a hook's slot, by its only, complete-literal return,
-            // or (no slot) the identifier it returns.
-            let Some(call) = facts.ast.call_at(initializer) else {
-                return Ok(None);
-            };
-            let Some((value, hook)) = hook_slot_value(
-                ctx,
-                file,
-                call.callee,
-                slot.as_ref(),
-                resolvable,
-                &mut exact,
-            )?
-            else {
-                return Ok(None);
-            };
-            hooks.push(((file, call.span), hook));
-            reference = value;
+            call_step = Some((file, initializer));
+            pending = slot;
             continue;
         }
         if let Some(slot) = slot {
@@ -422,6 +408,79 @@ fn invocation_chain(
         };
         reference = (file, initializer.span);
     }
+}
+
+/// A hook the walk crossed: its call, and the function it runs, each with
+/// its file.
+type CrossedHook = ((FileId, Span), (FileId, Span));
+
+/// What one call on [`invocation_chain`]'s walk gives: the answer (or none),
+/// or the value a hook returns, to follow next.
+enum CallStep {
+    Done(Option<InvocationChain>),
+    Next((FileId, Span)),
+}
+
+/// One call on the walk at `initializer` of `file`, with the slot the walk
+/// carries: a primitive's call answers; a hook's call continues at the
+/// value its only return holds in that slot ([`hook_slot_value`]). A call
+/// with no primitive and no hook proves nothing, and so does a hook the walk
+/// already crossed (a hook returning its own call).
+fn call_chain_step(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    file: FileId,
+    initializer: Span,
+    slot: Option<Slot>,
+    resolvable: &mut Resolvable,
+    exact: &mut bool,
+    hooks: &mut Vec<CrossedHook>,
+) -> Result<CallStep, Cycle> {
+    let Some(read) = ctx.file(file, 0) else {
+        return Ok(CallStep::Done(None));
+    };
+    let facts = read.facts();
+    let primitives = ctx.memo::<super::census::CallPrimitives>(&file)?;
+    if let Some(primitive) = primitives.get(&initializer) {
+        let slot = match slot {
+            None => None,
+            Some(Slot::Index(position)) => Some(u32_of(position)),
+            Some(Slot::Key(_)) => return Ok(CallStep::Done(None)),
+        };
+        let enclosing = crate::owners::containing_ast_function(&facts.ast, initializer);
+        let factory_at_module_scope = enclosing.is_none();
+        let placement = match enclosing {
+            Some(function) if hooks.iter().any(|(_, hook)| *hook == (file, function.span)) => {
+                match hooks.as_slice() {
+                    [(call, _)] => Some(*call),
+                    _ => None,
+                }
+            }
+            _ => Some((file, initializer)),
+        };
+        return Ok(CallStep::Done(Some(InvocationChain {
+            primitive: *primitive,
+            slot,
+            factory: (file, initializer),
+            exact: *exact,
+            factory_at_module_scope,
+            placement,
+        })));
+    }
+    // ADR 0549: a hook's slot, by its only, complete-literal return, or (no
+    // slot) the identifier or (ADR 0931) the call it returns.
+    let Some(call) = facts.ast.call_at(initializer) else {
+        return Ok(CallStep::Done(None));
+    };
+    let Some((value, hook)) =
+        hook_slot_value(ctx, file, call.callee, slot.as_ref(), resolvable, exact)?
+    else {
+        return Ok(CallStep::Done(None));
+    };
+    if hooks.iter().any(|(_, crossed)| *crossed == hook) {
+        return Ok(CallStep::Done(None));
+    }
+    hooks.push(((file, call.span), hook));
+    Ok(CallStep::Next(value))
 }
 
 /// ADR 0549: the identifier a closed object literal's property or a tuple
@@ -520,15 +579,12 @@ fn hook_slot_value(
         Some(slot) => literal_slot_value(facts, argument, slot),
         None => {
             let argument = facts.ast.peel_ts_sugar_span(argument);
-            facts
-                .ast
-                .identifiers
-                .iter()
-                .any(|identifier| {
+            (facts.ast.call_at(argument).is_some()
+                || facts.ast.identifiers.iter().any(|identifier| {
                     identifier.span == argument
                         && identifier.role == solid_facts::ast::IdentifierRole::Reference
-                })
-                .then_some(argument)
+                }))
+            .then_some(argument)
         }
     };
     Ok(value.map(|value| ((file, value), (file, function.span))))

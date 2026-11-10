@@ -208,7 +208,7 @@ const handedCovers = (at, finding, code) => handedCodes.includes(code) && withho
 
 export const withheldAtStack = (finding, stack, mount = () => true, code = null) => (stack ?? []).some((frame, depth) =>
   (frame.handRead ? finding.line === frame.line
-    : Number.isInteger(frame.column) && (frame.starts ?? [frame]).some((at) => finding.line === at.line && finding.column === at.column
+    : Number.isInteger(frame.column) && (frame.starts ?? (frame.unmapped ? [] : [frame])).some((at) => finding.line === at.line && finding.column === at.column
       && (!at.handed || handedCovers(at, finding, code)) && !(at.compiled && withholdingRules.includes(finding.rule))))
   && (depth === 0 || !mount(frame)));
 
@@ -231,9 +231,12 @@ export const appStack = (positions, file = "App.tsx") => (positions ?? []).map((
  */
 export const withStarts = (stack, startsOf) => (stack ?? []).map((frame, depth) => {
   if (!Number.isInteger(frame.column)) return frame;
+  // ADR 0930: a frame the host placed only through a compiled spread's `loc` (`unmapped`) has no position of its own: it stands for that
+  // spread, at the top for a claiming or declining finding, and nothing else.
+  if (frame.unmapped) return { ...frame, starts: depth === 0 ? (frame.compiled ?? []).filter((at) => Number.isInteger(at?.line) && Number.isInteger(at?.column)).map((at) => ({ line: at.line, column: at.column, compiled: true })) : [] };
   const own = startsOf ? startsOf(frame, depth) : null;
   // ADR 0921: the top frame at a compiled `insert`/`effect`/`memo` call (chrome-host.mjs records `compiled`) also stands for the start of
-  // the expression that call was handed, the computation Solid's diagnostic is about; for a claiming or declining finding only, never a
+  // the expression that call was handed (ADR 0930: or the spread a compiled `spread` call's `loc` names), the computation Solid's diagnostic is about; for a claiming or declining finding only, never a
   // withholding (`withheldAtStack`), and never deeper, where the frame is a call through it.
   const compiled = depth === 0 ? (frame.compiled ?? []).filter((at) => Number.isInteger(at?.line) && Number.isInteger(at?.column)).map((at) => ({ line: at.line, column: at.column, compiled: true })) : [];
   if (!compiled.length) return own ? { ...frame, starts: own } : frame;

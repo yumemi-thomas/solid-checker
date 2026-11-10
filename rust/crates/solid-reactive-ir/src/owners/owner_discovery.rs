@@ -1160,7 +1160,8 @@ pub(crate) fn find_missing_owners_incremental(
 }
 
 /// ADR 0549: whether the function `call` returns reaches code no returned-
-/// invocation walk names. Followed: a call's callee, the object of a member
+/// invocation walk names. Followed: a call's callee (the creating call's own
+/// too, ADR 0931), the object of a member
 /// that is a call's callee, the initializer of a single-name binding (a copy),
 /// and a value of a closed object literal or a tuple literal that is a
 /// binding's whole initializer (that binding's names are followed in turn).
@@ -1173,6 +1174,15 @@ fn returned_function_escapes(
 ) -> bool {
     let ast = &file.ast;
     let peel = |span: Span| ast.peel_ts_sugar_span(span);
+    // ADR 0931: the call is itself a call's callee (`createReaction(f)(…)`):
+    // that call is the function's one use, and the walk names it.
+    if ast
+        .calls
+        .iter()
+        .any(|outer| peel(outer.callee) == call.span)
+    {
+        return false;
+    }
     let Some(name) = ast
         .bindings_initializer_containing(call.span)
         .find(|binding| {
