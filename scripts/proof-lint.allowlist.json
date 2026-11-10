@@ -14,7 +14,7 @@
       },
       "name-only-match": {
         "count": 9,
-        "why": "pending-review"
+        "why": "`this` is a reserved word (its text is the ThisExpression); `arguments` is a spelling used only to refuse a proof (the true branch returns None/false); `Reflect` and `Proxy` are matched only where `reference_declaration(..)` is none, so no binding shadows the global, or are refused when one exists"
       },
       "text-premise": {
         "count": 1,
