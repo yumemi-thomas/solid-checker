@@ -9420,5 +9420,116 @@
    "lg-strict-read-untracked-gate-throw-signal-wrapper-handoff-function"
   ],
   "rediscovered": "make fuzz-focus CODES=STRICT_READ_UNTRACKED,REACTIVE_WRITE_IN_OWNED_SCOPE,ACTION_CALLED_IN_OWNED_SCOPE,STORE_WRITE_OUTSIDE_SETTER,ON_FLUSH_IN_OWNED_SCOPE FUZZ_GRIDS=mx-recall,lg-recall -- --contexts gate-default,gate-throw (Chrome host): origin/main 938a8764f's release 40 false-positive programs in lg-recall `gate-throw` (STRICT_READ_UNTRACKED, layers handoff-function, chain-5, chain-13; one id per variant x binding stratum here), nothing else to look at; the ADR 0931 release 0 false positive, nothing needs a look"
+ },
+ {
+  "finding": "S1: a read in the updater of an `ownedWrite: true` setter called in a component body was certified clean (the read was `Unreported` as if the write guard threw first; rc.21 skips the guard for `ownedWrite`): rc.21 warns STRICT_READ_UNTRACKED",
+  "found": "proof-soundness research 2026-11-10 (S1, S2; audit row 6), Chrome-confirmed on probes (fix 5)",
+  "fixed": "ADR 0932",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-owned-updater-body-memo-alias-none",
+   "mx-strict-read-untracked-owned-updater-body-memo-destructured-none",
+   "mx-strict-read-untracked-owned-updater-body-memo-direct-none",
+   "mx-strict-read-untracked-owned-updater-body-memo-hook-none",
+   "mx-strict-read-untracked-owned-updater-body-memo-tuple-none",
+   "mx-strict-read-untracked-owned-updater-body-signal-alias-none",
+   "mx-strict-read-untracked-owned-updater-body-signal-destructured-none",
+   "mx-strict-read-untracked-owned-updater-body-signal-direct-none",
+   "mx-strict-read-untracked-owned-updater-body-signal-hook-none",
+   "mx-strict-read-untracked-owned-updater-body-signal-tuple-none"
+  ],
+  "rediscovered": "origin/main 938a8764f: 10 certified false cleans on owned-updater-body; ADR 0932: 0 (10 agree)"
+ },
+ {
+  "finding": "S2: a read in a handler literal (`onScroll`) of an element a `<For>` row creates and dispatches the event to (`el.dispatchEvent`) in the row was certified clean (the handler counted as off the row's stack with no dispatch veto): rc.21 reports STRICT_READ_UNTRACKED inside the row",
+  "found": "proof-soundness research 2026-11-10 (S1, S2; audit row 6), Chrome-confirmed on probes (fix 5)",
+  "fixed": "ADR 0932",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-row-dispatch-memo-alias-none",
+   "mx-strict-read-untracked-evt-row-dispatch-memo-destructured-none",
+   "mx-strict-read-untracked-evt-row-dispatch-memo-direct-none",
+   "mx-strict-read-untracked-evt-row-dispatch-memo-hook-none",
+   "mx-strict-read-untracked-evt-row-dispatch-memo-hook-member-none",
+   "mx-strict-read-untracked-evt-row-dispatch-memo-tuple-none",
+   "mx-strict-read-untracked-evt-row-dispatch-memo-wrapper-none",
+   "mx-strict-read-untracked-evt-row-dispatch-signal-alias-none",
+   "mx-strict-read-untracked-evt-row-dispatch-signal-destructured-none",
+   "mx-strict-read-untracked-evt-row-dispatch-signal-direct-none",
+   "mx-strict-read-untracked-evt-row-dispatch-signal-hook-none",
+   "mx-strict-read-untracked-evt-row-dispatch-signal-hook-member-none",
+   "mx-strict-read-untracked-evt-row-dispatch-signal-tuple-none",
+   "mx-strict-read-untracked-evt-row-dispatch-signal-wrapper-none"
+  ],
+  "rediscovered": "origin/main 938a8764f: 84 false cleans on evt-row-dispatch; ADR 0932: 0 (recall-gap)"
+ },
+ {
+  "finding": "S2: a write in a handler literal (`onScroll`) of an element a `<For>` row creates and dispatches the event to (`el.dispatchEvent`) in the row was certified clean (the handler counted as off the row's stack with no dispatch veto): rc.21 reports REACTIVE_WRITE_IN_OWNED_SCOPE inside the row",
+  "found": "proof-soundness research 2026-11-10 (S1, S2; audit row 6), Chrome-confirmed on probes (fix 5)",
+  "fixed": "ADR 0932",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-refresh-alias-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-refresh-destructured-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-refresh-namespace-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-refresh-wrapper-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-signal-alias-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-signal-destructured-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-signal-hook-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-signal-hook-member-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-signal-tuple-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-signal-wrapper-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-store-alias-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-store-destructured-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-store-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-store-hook-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-store-hook-member-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-store-tuple-none",
+   "mx-reactive-write-in-owned-scope-evt-row-dispatch-store-wrapper-none"
+  ],
+  "rediscovered": "origin/main 938a8764f: 114 false cleans on evt-row-dispatch; ADR 0932: 0 (recall-gap)"
+ },
+ {
+  "finding": "S2: an action call in a handler literal (`onScroll`) of an element a `<For>` row creates and dispatches the event to (`el.dispatchEvent`) in the row was certified clean (the handler counted as off the row's stack with no dispatch veto): rc.21 reports ACTION_CALLED_IN_OWNED_SCOPE inside the row",
+  "found": "proof-soundness research 2026-11-10 (S1, S2; audit row 6), Chrome-confirmed on probes (fix 5)",
+  "fixed": "ADR 0932",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-evt-row-dispatch-x-alias-none",
+   "mx-action-called-in-owned-scope-evt-row-dispatch-x-destructured-none",
+   "mx-action-called-in-owned-scope-evt-row-dispatch-x-direct-none",
+   "mx-action-called-in-owned-scope-evt-row-dispatch-x-hook-none",
+   "mx-action-called-in-owned-scope-evt-row-dispatch-x-hook-member-none",
+   "mx-action-called-in-owned-scope-evt-row-dispatch-x-tuple-none",
+   "mx-action-called-in-owned-scope-evt-row-dispatch-x-wrapper-none"
+  ],
+  "rediscovered": "origin/main 938a8764f: 42 false cleans on evt-row-dispatch; ADR 0932: 0 (recall-gap)"
+ },
+ {
+  "finding": "S2: an `onFlush` call in a handler literal (`onScroll`) of an element a `<For>` row creates and dispatches the event to (`el.dispatchEvent`) in the row was certified clean (the handler counted as off the row's stack with no dispatch veto): rc.21 reports ON_FLUSH_IN_OWNED_SCOPE inside the row",
+  "found": "proof-soundness research 2026-11-10 (S1, S2; audit row 6), Chrome-confirmed on probes (fix 5)",
+  "fixed": "ADR 0932",
+  "grid": "mx-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-evt-row-dispatch-x-alias-none",
+   "mx-on-flush-in-owned-scope-evt-row-dispatch-x-destructured-none",
+   "mx-on-flush-in-owned-scope-evt-row-dispatch-x-direct-none",
+   "mx-on-flush-in-owned-scope-evt-row-dispatch-x-namespace-none",
+   "mx-on-flush-in-owned-scope-evt-row-dispatch-x-wrapper-none"
+  ],
+  "rediscovered": "origin/main 938a8764f: 30 false cleans on evt-row-dispatch; ADR 0932: 0 (recall-gap)"
+ },
+ {
+  "finding": "Silence-audit row 5: a read in a `createRoot` callback inside a tracked computation (`createMemo(() => createRoot(() => a()))`) was silent, though rc.21's `createRoot` is `runWithOwner(createOwner(), …)` and ADR 0443 reports the same read under `runWithOwner` (owner ruling 2026-11-10: report it the same way)",
+  "found": "silence audit row 5 and proof-soundness research S3, settled from rc.21 source",
+  "fixed": "ADR 0932",
+  "outside": "rc.21 emits no diagnostic for this stale read, so no Chrome-judged grid can tell the old build's silence from the new violation; fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx holds each case as the runWithOwner twin in App.tsx and Aliases.tsx"
  }
 ]
