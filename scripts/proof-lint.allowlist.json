@@ -318,7 +318,7 @@
     "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`Object.assign` is a prefilter on the callee's text; both sites then require the call to be in `assign_builtin_calls`, which asks `mutation_builtin` (a Type Facts resolution to the built-in) before the call is treated as the built-in"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
@@ -328,7 +328,7 @@
       },
       "name-only-match": {
         "count": 3,
-        "why": "pending-review"
+        "why": "`markRaw` is a presence veto (any mention makes store values possibly raw, the conservative answer); `createElement` is accepted only on a receiver `global_dom_variable` proves to be `document`; `addEventListener` is matched only as a bare identifier with `reference_declaration(..).is_none()` (the global) that is not a member property"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/hand_outs.rs": {
@@ -360,7 +360,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`.length` is accepted as a primitive only on a receiver whose value origin is proven a built-in (`ValueOrigin::Builtin`) and only where the project never reassigns `length` on built-ins (`member_may_be_reassigned_on_builtin`), so the spelling is combined with a proof of the receiver"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
