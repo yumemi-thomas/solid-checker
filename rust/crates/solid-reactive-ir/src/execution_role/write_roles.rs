@@ -3217,10 +3217,7 @@ pub(crate) fn entry_census_complete_except(
         };
         symbols.push(references);
     }
-    if lookup.hands_out_by_name(path, function.span)
-        || (module_exports(file, function, lookup)
-            && (!lookup.program_closed || lookup.escapes_unnamed(path)))
-    {
+    if entered_by_unseen_code(file, function, lookup) {
         return false;
     }
     let accounted: HashSet<(&str, u32, u32)> = lookup
@@ -5149,6 +5146,22 @@ pub(super) fn plain_call_outside_jsx(
 
 /// Whether the module publishes `function` itself: an export declaration of
 /// it, with no other function between, or Type Facts' export flag on it.
+/// Whether code the program does not hold may enter `function`: a namespace
+/// of its module hands it out by name, or the module exports it from an open
+/// program or one whose namespace escapes with no name
+/// ([`entry_census_complete`]'s first refusal). ADR 0934: the read paths ask
+/// it too, so a helper unseen code calls has no call that claims its reads.
+pub(crate) fn entered_by_unseen_code(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let path = file.path.as_str();
+    lookup.hands_out_by_name(path, function.span)
+        || (module_exports(file, function, lookup)
+            && (!lookup.program_closed || lookup.escapes_unnamed(path)))
+}
+
 pub(crate) fn module_exports(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,

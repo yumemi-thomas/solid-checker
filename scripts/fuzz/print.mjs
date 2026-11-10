@@ -275,7 +275,7 @@ function render(program, instrument) {
       case "decl":
         if (stmt.e.k === "fn" && stmt.e.form === "function") {
           const { head, body } = fnParts(stmt.e, depth, null);
-          return `${stmt.e.async ? "async " : ""}function ${stmt.name}${head} ${body}`;
+          return `${stmt.exported ? "export " : ""}${stmt.e.async ? "async " : ""}function ${stmt.name}${head} ${body}`;
         }
         return counting(stmt.e, () => `${stmt.kw ?? "const"} ${stmt.name} = ${expr(stmt.e, depth)};`);
       case "return": return counting(stmt.e, () => (stmt.extract ? `const ${stmt.extract} = ${expr(stmt.e, depth)}; return ${stmt.extract};` : `return ${expr(stmt.e, depth)};`));

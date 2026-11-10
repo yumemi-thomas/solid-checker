@@ -9056,8 +9056,64 @@ fn placed_nowhere(
     // ADR 0874: a withheld call proves no run, and an impostor may make one.
     crate::execution_role::runs_in_withheld_layer(file, span, lookup)
         || function_escapes_unfollowed(file, span, lookup)
+        || runs_in_function_entered_unseen(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
         || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
+}
+
+/// ADR 0934: whether `span` sits in a function that is no component, or in one
+/// nested in such a function, that code the program does not hold may enter
+/// ([`crate::execution_role::entered_by_unseen_code`]: an export of an open
+/// program, a namespace hand-out). The summaries claim a helper's reads at its
+/// calls; these entries are calls no summary holds, so the reads are placed
+/// nowhere, as the write walk's census already answers (`walk-unknown-11`).
+/// The walk climbs only through anonymous functions: a named one is entered
+/// where it is called, which the summaries follow from there (a call in its
+/// own enclosing function asks this again, in `result_reads`). It stops at a
+/// component (its render enters it), at a callback the compiler places, and at
+/// a primitive's callback argument: each has a role of its own, however the
+/// function around it is entered.
+pub(crate) fn runs_in_function_entered_unseen(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    // Past an await its function reaches on every path, the site runs on a
+    // later task, off every caller's stack (ADR 0323): no entry places it.
+    if crate::execution_role::follows_unconditional_await(file, span)
+        || crate::execution_role::follows_dominating_await(file, span)
+    {
+        return false;
+    }
+    let mut around = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(span) && function.span != span)
+        .collect::<Vec<_>>();
+    around.sort_by_key(|function| function.span.end - function.span.start);
+    for function in around {
+        if lookup.function_may_be_component(file, function)
+            || file
+                .compiler
+                .callback_roles
+                .iter()
+                .any(|callback| callback.span == function.span)
+            || file.ast.arguments_containing(function.span).any(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && lookup.primitive_at_call(file, call.span).is_some()
+            })
+        {
+            return false;
+        }
+        if crate::execution_role::entered_by_unseen_code(file, function, lookup) {
+            return true;
+        }
+        if function.name.is_some() || function_binding_name(file, function).is_some() {
+            return false;
+        }
+    }
+    false
 }
 
 pub(crate) fn function_escapes_unfollowed(

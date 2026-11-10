@@ -238,7 +238,11 @@ fn call_result_reads(
         provenance,
         ..
     } = scope.context;
-    if !enclosing_render_function(file, call.span, lookup) {
+    // ADR 0934: a call outside any component is claimed where its function
+    // is called, unless unseen code enters that function: no call claims it.
+    if !enclosing_render_function(file, call.span, lookup)
+        && !crate::local_access::runs_in_function_entered_unseen(file, call.callee, lookup)
+    {
         return;
     }
     if crate::object_members::call_withheld(file, call.callee, lookup) {
@@ -420,9 +424,17 @@ fn call_result_reads(
         // a hook's accessor returned silence.
         // ADR 0539: so is a call in the cleanup an effect's apply returns,
         // which a rerun may run in the apply's window (its role is unplaced).
+        // ADR 0934: the reads are claimed where the function around the call
+        // is called. A function unseen code enters has calls no summary holds,
+        // and an intrinsic handler literal has none at all: its delivery is
+        // the call, whose role the compiler gives (`execution`, unknown under
+        // the dispatch veto). Either way the reads are this call's.
         if !crate::execution_role::inside_class_member(file, call.callee, lookup)
             && !(execution == ExecutionRole::Unknown
                 && crate::execution_role::inside_rerun_effect_cleanup(file, call.callee, lookup))
+            && !crate::local_access::runs_in_function_entered_unseen(file, call.callee, lookup)
+            && !(execution == ExecutionRole::Unknown
+                && written_in_event_handler_literal(file, call.callee))
         {
             // ADR 0771: a read this call makes through a value it hands over
             // has no row here, and an async source may be pending wherever the
@@ -574,6 +586,19 @@ fn call_result_reads(
             });
         }
     }
+}
+
+/// ADR 0934: whether `span` is written directly in an intrinsic element's
+/// event handler literal (`onScroll={() => go()}`), whose only run is the
+/// event's delivery.
+fn written_in_event_handler_literal(file: &solid_facts::FileFacts, span: Span) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        crate::owners::written_directly_in(&file.ast, function, span)
+            && file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    && file.ast.peel_ts_sugar_span(callback.span) == function.span
+            })
+    })
 }
 
 /// Whether code at `span` runs only where a write is legal and an async read

@@ -975,9 +975,27 @@ const LATER_RUN_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) =
   ].map(([context]) => context);
   return [code, { misuse: at("misuse"), legal: [...at("legal"), ...APPLY_VOID_UNRUN] }];
 }));
+/**
+ * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
+ * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
+ * the site in a function named as that handler (`onScroll={hd}`). The `-timer-` twins dispatch from a timer, on a fresh stack (legal).
+ * `export-namespace-call`: the site in an exported helper the body calls through its own module's namespace by a computed key
+ * (`self[k]()`), a call no summary follows, as an importer's is not (the entry's namespace loop and every fuzz caller are visible, so an
+ * unseen importer itself cannot be generated); `export-namespace-call-handler` makes the call in a click handler (legal).
+ */
+export const BODY_DISPATCH_CONTEXTS = { "evt-body-dispatch-helper": "misuse", "evt-body-dispatch-named": "misuse", "evt-body-timer-dispatch-helper": "legal", "evt-body-timer-dispatch-named": "legal" };
+export const UNSEEN_ENTRY_CONTEXTS = { "export-namespace-call": "misuse", "export-namespace-call-handler": "legal" };
+const BODY_DISPATCH_CODES = ["STRICT_READ_UNTRACKED", "REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
+const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
+  const spec = SPEC[code];
+  const row = BODY_DISPATCH_CODES.includes(code);
+  const placed = (kind) => (row ? Object.entries({ ...BODY_DISPATCH_CONTEXTS, ...UNSEEN_ENTRY_CONTEXTS }).filter(([, side]) => side === kind).map(([context]) => context) : []);
+  return [code, { misuse: placed("misuse"), legal: placed("legal") }];
+}));
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
 export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
-  ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN];
+  ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
+  ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
 /**
  * ADR 0613: the site in an effect apply, with a synchronous `flush()` the program calls after the effect is created: in the body
@@ -1080,13 +1098,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, UNSEEN_ENTRY_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, UNSEEN_ENTRY_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1841,6 +1859,29 @@ function recallContext(context, stmts, kit) {
       const effect = expr(prim("effect", fn([ret(fn(stmts))], { concise: true }), { apply: fn([expr(domExpr(context.includes("-call-") ? "void v()" : "void v"))]) }));
       if (context.endsWith("-row")) return { body: [], view: [flowEl(kit.name("v"), "for", [effect])] };
       return { body: [expr(prim("untrack", fn([effect])))], view: [] };
+    }
+    // ADR 0934 (BODY_DISPATCH_CONTEXTS): a detached element's `onScroll` calls a helper holding the site, or is a function holding it,
+    // and the body dispatches the event, or a timer does.
+    case "evt-body-dispatch-helper": case "evt-body-dispatch-named": case "evt-body-timer-dispatch-helper": case "evt-body-timer-dispatch-named": {
+      const h = kit.name("hd");
+      const el = kit.name("el");
+      const named = context.endsWith("-named");
+      // Detached: nothing can click it (`undriven`); the dispatch is the driver.
+      const made = decl(el, jsxExpr(named ? button(kit.name("b"), [], { tag: "div", attrs: `onScroll={${h}}`, undriven: true })
+        : button(kit.name("b"), [expr(call(ref(h)))], { tag: "div", on: "onScroll", undriven: true })));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [decl(h, fn(stmts)), made, context.includes("-timer-") ? expr(prim("timer", fn([fire]))) : fire], view: [] };
+    }
+    // ADR 0934 (UNSEEN_ENTRY_CONTEXTS): an exported module function, the component's values hoisted beside it, called through the
+    // module's own namespace by a key built at run time.
+    case "export-namespace-call": case "export-namespace-call-handler": {
+      const ex = kit.name("ex");
+      const run = expr(domExpr(`self[${JSON.stringify([ex.slice(0, 1), ex.slice(1)])}.join("") as "${ex}"]()`));
+      return {
+        hoisted: [decl(ex, fn(stmts, { form: "function" }), { exported: true })],
+        body: context === "export-namespace-call" ? [run] : [], view: context === "export-namespace-call" ? [] : [button(kit.name("b"), [run])],
+        files: {}, importLines: ['import * as self from "./App";'],
+      };
     }
     // HANDLER_CONTEXTS: a handler passed by name (a `const`, a `function`, Solid's `[h, 1]` bound form), and one the body also calls.
     case "handler-named-const": case "handler-named-function": case "handler-tuple": case "handler-mixed": {
