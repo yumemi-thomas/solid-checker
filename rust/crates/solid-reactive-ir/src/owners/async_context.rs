@@ -68,9 +68,13 @@ pub(super) fn loading_cover_at(
         if loadings.is_empty() {
             continue;
         }
+        // ADR 0668: `children` of the component's own props, the parameter or
+        // an exact `const` alias of it. A `children` member of any other object
+        // (`other.children`) is a spelling, not what the component renders.
         let children_in_loading = target_file.ast.members.iter().any(|member| {
             target.body.contains(member.span)
                 && target_file.source_text(member.property) == Some("children")
+                && is_props_of(target_file, target, member.object)
                 && loadings
                     .iter()
                     .any(|loading| loading.span.contains(member.span))
@@ -139,6 +143,54 @@ pub(super) fn loading_cover_at(
         }
     }
     LoadingCover::Unresolved
+}
+
+/// ADR 0668: whether `object`, the object of a member read in `component`'s
+/// body, is the component's own props: its first parameter (a plain
+/// identifier, never reassigned) or an exact `const` alias of it
+/// (`const p = props`), each resolved by the binder. A destructured or
+/// defaulted parameter, an object built in the body and any other binding are
+/// not: the caller keeps the answer it gives without a proof.
+fn is_props_of(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    object: Span,
+) -> bool {
+    /// Aliases followed before the answer is no.
+    const ALIAS_DEPTH: usize = 3;
+    let Some(parameter) = component.parameters.first() else {
+        return false;
+    };
+    let [name] = parameter.names.as_slice() else {
+        return false;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+        || crate::indexes::binding_written(file, name.span)
+    {
+        return false;
+    }
+    let ast = &file.ast;
+    let mut declaration = ast.reference_declaration(ast.peel_ts_sugar_span(object));
+    for _ in 0..=ALIAS_DEPTH {
+        let Some(declared) = declaration else {
+            return false;
+        };
+        if declared == name.span {
+            return true;
+        }
+        // One exact alias hop: `const p = props`, `p` never reassigned.
+        let alias = ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.names[0].span == declared
+        });
+        declaration = alias
+            .and_then(|binding| binding.initializer_identifier.as_ref())
+            .and_then(|initializer| ast.reference_declaration(initializer.span));
+    }
+    false
 }
 
 /// ADR 0503: `component` is rendered by a call of a synchronous mount

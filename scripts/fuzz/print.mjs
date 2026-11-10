@@ -719,6 +719,8 @@ function render(program, instrument) {
     if (source === "prop-spread") out.push(`function M${index + 1}(props: ${component.name}Props) {`, `${INDENT}return <${component.name} {...props} />;`, "}", "");
     const created = source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
     if (source === "async-value-member") out.push(`const ui${index + 1} = { ${component.name} };`, "");
+    // A wrapper mount's component (mounts.mjs WRAP_MOUNTS) sits at module scope above its parent.
+    if (parts?.module) out.push(...parts.module);
     out.push(`export function P${index + 1}() {`, ...created, ...(parts?.prelude ?? []).map((line) => `${INDENT}${line}`), `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   // The source's types and its context, above the components that name them.

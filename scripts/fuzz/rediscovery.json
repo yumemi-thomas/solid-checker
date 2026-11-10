@@ -9531,5 +9531,26 @@
   "found": "silence audit row 5 and proof-soundness research S3, settled from rc.21 source",
   "fixed": "ADR 0932",
   "outside": "rc.21 emits no diagnostic for this stale read, so no Chrome-judged grid can tell the old build's silence from the new violation; fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx holds each case as the runWithOwner twin in App.tsx and Aliases.tsx"
+ },
+ {
+  "finding": "The Loading cover walk counted any member spelled `children` inside a wrapper's `<Loading>` as the component's: a wrapper that renders its real `props.children` beside the boundary and `other.children` inside it covered the child it wraps, certified clean where Chrome warns ASYNC_OUTSIDE_LOADING_BOUNDARY (`loading_cover_at`, ADR 0668: only the component's own props' `children` covers)",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), Chrome-confirmed (replay: `unproven-clean`, quiet beside the real wrapper)",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-memo-x-direct-none-m-wrap-foreign"
+  ]
+ },
+ {
+  "finding": "The legal twins of the Loading cover fix: a wrapper that renders its own `props.children` (or `const p = props; p.children`) inside its `<Loading>` stays covered, clean and quiet in Chrome; the fix did not move them",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), the twins of the mx-recall program",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "lg-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-real",
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-alias"
+  ]
  }
 ]

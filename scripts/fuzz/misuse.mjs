@@ -18,7 +18,7 @@ import {
   CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted, setUpdater,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
-import { RECALL_MOUNTS } from "./mounts.mjs";
+import { RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { FLIP_READ_CONTEXTS, FLIP_READ_CONTEXT_ONLY, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, SYNC_COMPUTE_LINES, flipReadContext, openSignal } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
 import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
@@ -32,8 +32,11 @@ export const LAYERS = ["none", "closure", "helper", "iife", "closure+helper", "m
  * (`--mounts`), never drawn: a root program keeps its seed, id and text.
  */
 export const BASE_MOUNTS = ["root", "child", "show", "for"];
-/** Every mount a plan may name: the base ones and the recall ones (mounts.mjs RECALL_MOUNTS, `--recall` grids only). */
-export const MOUNTS = [...BASE_MOUNTS, ...RECALL_MOUNTS];
+/**
+ * Every mount a plan may name: the base ones, the recall ones (mounts.mjs RECALL_MOUNTS, `--recall` grids only) and the wrapper ones
+ * (mounts.mjs WRAP_MOUNTS: a code's `wrapMounts` / `legalWrapMounts` name the cells that take them, `--recall` grids only).
+ */
+export const MOUNTS = [...BASE_MOUNTS, ...RECALL_MOUNTS, ...WRAP_MOUNTS];
 
 /**
  * Where the values the misuse uses come from (the template's `setup` signals; a context's own trigger signal stays local). `local`
@@ -572,7 +575,15 @@ export const SPEC = {
     variants: ["memo", "root", "effect"], contexts: LEAF, bindings: BINDINGS, setup: () => [],
     call: (node) => jsxSite(node.variant) ?? API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: { recallOnly: true, recallContexts: ["jsx", "show", "for"],
+  // ADR 0668: the cover walk reads `children` inside a wrapper component's `<Loading>`. `wrapMounts` render the pending read's component
+  // through a user wrapper that renders its real children outside the boundary (`wrap-foreign`: another object's `children` inside it,
+  // `wrap-outside`: the same with `label`), Chrome warns; `legalWrapMounts` do through one that renders them inside it (`wrap-real`,
+  // `wrap-alias`), Chrome is quiet. The cell takes the direct binding and no layer: the question is the wrapper, not the spelling of the read.
+  // `memo`: a memo reads the async source and the JSX hole is the memo's own `{m1()}`. The other contexts read it in an IIFE the hole calls,
+  // which leaves the read unplaced (SC5001/SC5003 uncertifiable for that reason), so the wrapper's `<Loading>` is then not the question; here
+  // the call chain from the hole is the cover walk's (`loading_cover_at`, ADR 0668).
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { recallOnly: true, recallContexts: ["jsx", "show", "for", "memo"], recallLegal: ["memo"],
+    wrapMounts: { memo: ["wrap-foreign", "wrap-outside"] }, legalWrapMounts: { memo: ["wrap-real", "wrap-alias"] },
     contexts: [], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
