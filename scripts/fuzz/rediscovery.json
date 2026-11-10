@@ -9773,5 +9773,59 @@
    "mx-strict-read-untracked-bseam-isfinite-define-memo-direct-none"
   ],
   "rediscovered": "batch-7 d79da3034 (release): 8 false-clean; ADR 0939: 8 recall-gap (standard-member-impostor at `Number.isFinite`). On batch-7 after ADR 0936 the generator's programs are already uncertifiable (site accounting of the unplaced function); a function also placed in JSX is not (fixture handed-root-patch: certified before, Chrome warns), which the generator's harness does not separate"
+ },
+ {
+  "finding": "`Promise.prototype.then` or the global `setTimeout` wrapped through a helper that writes its parameter under a key no literal names (the wrapper delegates to the original for every other caller and runs the program's function at once) was certified clean (STRICT_READ_UNTRACKED); Chrome (rc.21) reports it in the body's window",
+  "found": "ADR 0939 item 0 (fixer queue): the then/setTimeout variants Phase C screened with the checker alone, as Chrome-judgeable wrap-and-delegate shapes (bseam-then-*, bseam-settimeout-*)",
+  "fixed": "ADR 0939 (claude/intrinsic-patch-seam 24d1c6c07)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-bseam-then-assign-memo-direct-none",
+   "mx-strict-read-untracked-bseam-then-reflect-memo-direct-none",
+   "mx-strict-read-untracked-bseam-then-index-memo-direct-none",
+   "mx-strict-read-untracked-bseam-then-define-memo-direct-none",
+   "mx-strict-read-untracked-bseam-settimeout-assign-memo-direct-none",
+   "mx-strict-read-untracked-bseam-settimeout-reflect-memo-direct-none",
+   "mx-strict-read-untracked-bseam-settimeout-index-memo-direct-none",
+   "mx-strict-read-untracked-bseam-settimeout-define-memo-direct-none"
+  ],
+  "rediscovered": "main 4f925ef14 (debug, ADR 0939 off): 8 false-clean; ADR 0939: 8 recall-gap. Legal twins (`catch`, `setInterval` wrapped): 16 clean -> uncertifiable"
+ },
+ {
+  "finding": "`Promise.prototype.then` or the global `setTimeout` wrapped through a helper that writes its parameter under a key no literal names (the wrapper delegates to the original for every other caller and runs the program's function at once) was certified clean (REACTIVE_WRITE_IN_OWNED_SCOPE); Chrome (rc.21) reports it in the body's window",
+  "found": "ADR 0939 item 0 (fixer queue): the then/setTimeout variants Phase C screened with the checker alone, as Chrome-judgeable wrap-and-delegate shapes (bseam-then-*, bseam-settimeout-*)",
+  "fixed": "ADR 0939 (claude/intrinsic-patch-seam 24d1c6c07)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-bseam-then-assign-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-bseam-then-reflect-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-bseam-then-index-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-bseam-then-define-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-bseam-settimeout-assign-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-bseam-settimeout-reflect-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-bseam-settimeout-index-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-bseam-settimeout-define-refresh-direct-none"
+  ],
+  "rediscovered": "main 4f925ef14 (debug, ADR 0939 off): 8 false-clean; ADR 0939: 8 recall-gap. Legal twins (`catch`, `setInterval` wrapped): 16 clean -> uncertifiable"
+ },
+ {
+  "finding": "`Promise.prototype.then` or the global `setTimeout` wrapped through a helper that writes its parameter under a key no literal names (the wrapper delegates to the original for every other caller and runs the program's function at once) was certified clean (ACTION_CALLED_IN_OWNED_SCOPE); Chrome (rc.21) reports it in the body's window",
+  "found": "ADR 0939 item 0 (fixer queue): the then/setTimeout variants Phase C screened with the checker alone, as Chrome-judgeable wrap-and-delegate shapes (bseam-then-*, bseam-settimeout-*)",
+  "fixed": "ADR 0939 (claude/intrinsic-patch-seam 24d1c6c07)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-bseam-then-assign-x-direct-none",
+   "mx-action-called-in-owned-scope-bseam-then-reflect-x-direct-none",
+   "mx-action-called-in-owned-scope-bseam-then-index-x-direct-none",
+   "mx-action-called-in-owned-scope-bseam-then-define-x-direct-none",
+   "mx-action-called-in-owned-scope-bseam-settimeout-assign-x-direct-none",
+   "mx-action-called-in-owned-scope-bseam-settimeout-reflect-x-direct-none",
+   "mx-action-called-in-owned-scope-bseam-settimeout-index-x-direct-none",
+   "mx-action-called-in-owned-scope-bseam-settimeout-define-x-direct-none"
+  ],
+  "rediscovered": "main 4f925ef14 (debug, ADR 0939 off): 8 false-clean; ADR 0939: 8 recall-gap. Legal twins (`catch`, `setInterval` wrapped): 16 clean -> uncertifiable"
  }
 ]

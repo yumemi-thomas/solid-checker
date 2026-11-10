@@ -26,13 +26,49 @@ const FORMS = {
   define: "Object.defineProperty(target, key, { value: impl, configurable: true, writable: true });",
 };
 
-/** `{ [context]: { form, other } }`. */
+/**
+ * The members (ADR 0939): `isfinite` replaces `Number.isFinite` outright (a value-only row; the runtime never calls it). `then` and
+ * `settimeout` are members Solid and the host call themselves, so their replacement wraps the original and delegates to it for every
+ * function but the program's own, which it runs at once: `Promise.prototype.then` (the twin wraps `catch`) and the global `setTimeout`
+ * (the twin wraps `setInterval`). Each is called in the body with the function holding the site.
+ */
+const MEMBERS = {
+  isfinite: {
+    root: "Number",
+    key: "isFinite",
+    otherKey: "isNaN",
+    prelude: () => [],
+    impl: (f) => `(f: any) => { if (typeof f === "function" && f.name === "${f}") { f(); return true; } return false; }`,
+    call: (f) => `Number.isFinite(${f} as unknown as number)`,
+  },
+  then: {
+    root: "Promise.prototype",
+    key: "then",
+    otherKey: "catch",
+    prelude: (orig, key) => [decl(orig, domExpr(`Promise.prototype.${key} as (...args: any[]) => any`))],
+    impl: (f, orig) => `function (this: any, a: any, b: any) { if (typeof a === "function" && a.name === "${f}") { a(); return this; } return ${orig}.call(this, a, b); }`,
+    call: (f) => `Promise.resolve(0).then(${f})`,
+  },
+  settimeout: {
+    root: "globalThis",
+    key: "setTimeout",
+    otherKey: "setInterval",
+    prelude: (orig, key) => [decl(orig, domExpr(`globalThis.${key}.bind(globalThis)`))],
+    impl: (f, orig) => `(cb: any, ms?: number) => { if (typeof cb === "function" && cb.name === "${f}") { cb(); return 0; } return ${orig}(cb, ms); }`,
+    call: (f) => `setTimeout(${f}, 0)`,
+  },
+};
+
+/** `{ [context]: { member, form, other } }`. */
 export const SEAM_CONTEXTS = {};
-for (const form of Object.keys(FORMS)) {
-  SEAM_CONTEXTS[`bseam-isfinite-${form}`] = { form, other: false };
-  SEAM_CONTEXTS[`bseam-isfinite-${form}-other`] = { form, other: true };
+for (const member of Object.keys(MEMBERS)) {
+  for (const form of Object.keys(FORMS)) {
+    SEAM_CONTEXTS[`bseam-${member}-${form}`] = { member, form, other: false };
+    SEAM_CONTEXTS[`bseam-${member}-${form}-other`] = { member, form, other: true };
+  }
 }
 export const SEAM_CONTEXT_NAMES = Object.keys(SEAM_CONTEXTS);
+export const SEAM_MEMBERS = Object.keys(MEMBERS);
 
 /**
  * The placement of `stmts` for a `bseam-*` context (`{ body, view }`), or undefined for any other. The helper is declared in the body of the component, the
@@ -41,16 +77,18 @@ export const SEAM_CONTEXT_NAMES = Object.keys(SEAM_CONTEXTS);
 export function seamContext(context, stmts, kit) {
   const spec = SEAM_CONTEXTS[context];
   if (!spec) return undefined;
+  const member = MEMBERS[spec.member];
   const helper = kit.name("patch");
   const f = kit.name("sf");
-  const key = spec.other ? "isNaN" : "isFinite";
-  const impl = `(f: any) => { if (typeof f === "function" && f.name === "${f}") { f(); return true; } return false; }`;
+  const key = spec.other ? member.otherKey : member.key;
+  const orig = member.prelude.length ? kit.name("orig") : undefined;
   return {
     body: [
       decl(helper, domExpr(`(target: any, key: string, impl: unknown) => { ${FORMS[spec.form]} }`)),
-      expr(domExpr(`${helper}(Number, "${key}", ${impl})`)),
+      ...member.prelude(orig, key),
+      expr(domExpr(`${helper}(${member.root}, "${key}", ${member.impl(f, orig)})`)),
       decl(f, fn(stmts)),
-      expr(domExpr(`Number.isFinite(${f} as unknown as number)`)),
+      expr(domExpr(member.call(f))),
     ],
     view: [],
   };

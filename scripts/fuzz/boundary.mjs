@@ -85,6 +85,11 @@ export const PAIRS = {
   // ADR 0935 (seam-shapes.mjs): `Number.isFinite` is the declared member (a value-only row), or a helper that takes the intrinsic as a parameter replaced it under a computed key.
   "seam-isfinite": { fact: "`Number.isFinite` ignores a function argument (the declared member), or a helper handed `Number` replaced it with one that runs the function at once", codes: TABLE_CODES,
     contexts: SEAM_FORMS.flatMap((form) => [`bseam-isfinite-${form}`, `bseam-isfinite-${form}-other`]) },
+  // ADR 0939: members the runtime calls itself, wrapped so every other caller gets the original (the twin wraps a sibling).
+  "seam-then": { fact: "`Promise.prototype.then` queues its callback (the declared member), or a helper handed `Promise.prototype` wrapped it to run the program's function at once", codes: TABLE_CODES,
+    contexts: SEAM_FORMS.flatMap((form) => [`bseam-then-${form}`, `bseam-then-${form}-other`]) },
+  "seam-settimeout": { fact: "`setTimeout` runs its callback on a later task (the declared global), or a helper handed `globalThis` wrapped it to run the program's function at once", codes: TABLE_CODES,
+    contexts: SEAM_FORMS.flatMap((form) => [`bseam-settimeout-${form}`, `bseam-settimeout-${form}-other`]) },
   // ADR 0935 (ref-layer-shapes.mjs): a layer that runs in place inside an intrinsic `ref` callback, before an await of the callback (the component's window) or after it.
   "ref-layer-after-await": { fact: "the layer that holds the read runs in the `ref` callback before any await (in the element's creation window) or after one (a later task)", codes: ["STRICT_READ_UNTRACKED"], contexts: ["barm-ref-iife-sync", "barm-ref-iife-await", "barm-ref-each-sync", "barm-ref-each-await"] },
 };
@@ -218,7 +223,7 @@ premise("ref-callback-layer-after-an-await-leaves-the-window", {
 premise("standard-member-is-the-declared-one", {
   claim: "A standard-library member the rows describe is the declared one: `Number.isFinite` never runs a function argument, and no program replaces it through a helper that takes the intrinsic as a parameter and writes it under an unspelled key.",
   source: "runtime_semantics.rs:526 `timing_behavior` (ValueOnly); accessor_provenance/mutation_sites.rs `handed_to_unseen_code` and `visible_iteration_write`; boundary-seams.mjs", adr: "0935",
-  pairs: ["seam-isfinite"],
+  pairs: ["seam-isfinite", "seam-then", "seam-settimeout"],
 });
 
 // ---- boundary wrappers (boundary-shapes.mjs): the cover walks consult a user component's body, by the property's spelling ------------------------------

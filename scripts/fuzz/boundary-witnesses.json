@@ -1,6 +1,6 @@
 {
  "version": 1,
- "checker": "claude/intrinsic-patch-seam 5257a4cf6 (release build, ablated)",
+ "checker": "claude/batch-8 24d1c6c07 (release build, ablated)",
  "pairs": {
   "kept-collection": {
    "codes": {
@@ -863,6 +863,86 @@
    }
   },
   "seam-isfinite": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 8,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 8,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 12,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 12,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "seam-then": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 8,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 8,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 12,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 12,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "seam-settimeout": {
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
