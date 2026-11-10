@@ -17,7 +17,7 @@
 // And two checks of the typed premises themselves (rust/crates/solid-reactive-ir/src/proof_log.rs):
 //
 //   dead-premise-kind     a `PremiseKind` no producer, drop pass or stage names: a claim nothing makes.
-//   duplicate-end-id      two named ends (`end_at` / `end_with`) with one id, or an id that is not `<file stem>.<function>.<end>`.
+//   named ends            the `site_silences!` list (ADR 0936): `endIds` throws on a missing list, a duplicate id, or an id with no producer file.
 //
 // Limits: the scan is line-based over comment-stripped sources. A text chain split across lines or through a binding (`let each =
 // file.source_text(..)?; each.strip_prefix('[')`), a spelling compared through a variable, and a default written as an `if let ... else
@@ -171,20 +171,29 @@ export function premiseKinds(text) {
   return [...body.slice(0, end).matchAll(/^    ([A-Z][A-Za-z0-9]+),?\s*$/gm)].map((match) => match[1]);
 }
 
-/** The ids of the named ends (`end_at`, `end_with`, and the producers' wrappers of them) in one source text, with the line each stands on. */
-export function endIds(text) {
+/** The file the ends are declared in (ADR 0936). */
+export const SITE_ACCOUNTING = `${SOURCE_ROOT}/site_accounting.rs`;
+
+/**
+ * The ids of the named ends: the `site_silences!` list of site_accounting.rs (ADR 0936), one variant per producer return,
+ * `<producer file stem>.<function>.<end>`. `stems` is the set of the producer files' stems. Throws on a missing list, a duplicate id
+ * or an id whose stem names no producer file, so the check cannot pass on nothing. `[{ id, line, variant }]`.
+ */
+export function endIds(text, stems) {
+  const start = text.indexOf("site_silences! {");
+  if (start < 0) throw new Error("proof-lint: no `site_silences!` list in site_accounting.rs");
+  const open = text.indexOf("{", start);
+  const close = text.indexOf("\n}\n", open);
+  if (close < 0) throw new Error("proof-lint: the `site_silences!` list does not close");
   const found = [];
-  const lines = codeLines(text);
-  for (let index = 0; index < lines.length; index += 1) {
-    if (!/\b(?:end_(?:at|with)|dormant_callback_end)\s*\(/.test(lines[index])) continue;
-    // the id is the first string literal within the next few lines of the call
-    for (let at = index; at < Math.min(lines.length, index + 6); at += 1) {
-      const literal = lines[at].match(/"([a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_-]+)"/);
-      if (literal) {
-        found.push({ id: literal[1], line: at + 1 });
-        break;
-      }
-    }
+  const seen = new Set();
+  for (const match of text.slice(open, close).matchAll(/^\s*([A-Z][A-Za-z0-9]*)\s*=>\s*"([a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_-]+)"/gm)) {
+    const [, variant, id] = match;
+    if (seen.has(id)) throw new Error(`proof-lint: the silence id ${id} is listed twice`);
+    seen.add(id);
+    const stem = id.split(".")[0];
+    if (!stems.has(stem)) throw new Error(`proof-lint: ${id} (${variant}): no producer file ${stem}.rs among the scanned sources`);
+    found.push({ id, line: text.slice(0, open + match.index).split("\n").length + 1, variant });
   }
   return found;
 }
@@ -195,24 +204,17 @@ export function premiseProblems(root = ROOT) {
   const log = readFileSync(join(root, PROOF_LOG), "utf8");
   const declared = premiseKinds(log);
   const others = [];
-  const ends = new Map();
+  const stems = new Set();
   for (const directory of SCANNED) {
     const base = join(root, directory);
     if (!existsSync(base)) continue;
     for (const path of sourceFiles(base)) {
-      const file = relative(root, path);
       const text = readFileSync(path, "utf8");
-      if (file !== PROOF_LOG) others.push(text);
-      for (const { id, line } of endIds(text)) {
-        const stem = basename(file, ".rs");
-        if (!id.startsWith(`${stem}.`)) {
-          problems.push({ kind: "duplicate-end-id", key: id, message: `${file}:${line}: an end id is \`<file stem>.<function>.<end>\`, here the stem is \`${stem}\`` });
-        }
-        if (ends.has(id)) problems.push({ kind: "duplicate-end-id", key: id, message: `${file}:${line} repeats the id of ${ends.get(id)}` });
-        else ends.set(id, `${file}:${line}`);
-      }
+      stems.add(basename(path, ".rs"));
+      if (relative(root, path) !== PROOF_LOG) others.push(text);
     }
   }
+  endIds(readFileSync(join(root, SITE_ACCOUNTING), "utf8"), stems);
   // A kind is used where a producer, a pass or a stage names it; the log's own tables (a drop pass's kinds) count.
   const usedInLog = log.replace(/enum PremiseKind\s*\{[\s\S]*?\n\}\n/, "");
   for (const kind of declared) {

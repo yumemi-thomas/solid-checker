@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { describe, test } from "vitest";
 
-import { baselineFor, endIds, hitsOf, PENDING, premiseKinds, problems, seenLists, seenMutators, silentRoleValues } from "./proof-lint.mjs";
+import { ROOT } from "./ir-read-lint.mjs";
+import { baselineFor, endIds, hitsOf, PENDING, premiseKinds, problems, SCANNED, seenLists, seenMutators, silentRoleValues, SITE_ACCOUNTING } from "./proof-lint.mjs";
 
 const kinds = (text, producer = true) => hitsOf(text, producer).map((hit) => hit.kind);
 
@@ -53,11 +56,26 @@ describe("the typed premises", () => {
     assert.deepEqual(premiseKinds(log), ["UserRuleOption", "CallEdgePlaces"]);
   });
 
-  test("the ids of the named ends are read from end_at and end_with calls, across lines", () => {
-    const text = 'crate::proof_log::end_at(file, site, "local_access.discover_member.props-static", kind, || None);\nend_with(\n    file,\n    site,\n    "local_access.unreached_write.cannot-run",\n    || vec![],\n);\n';
-    assert.deepEqual(endIds(text).map((end) => end.id), ["local_access.discover_member.props-static", "local_access.unreached_write.cannot-run"]);
-    const wrapped = 'dormant_callback_end(\n    file,\n    call,\n    "local_access.discover_call_as.dormant-callback-argument",\n    lookup,\n);\n';
-    assert.deepEqual(endIds(wrapped).map((end) => end.id), ["local_access.discover_call_as.dormant-callback-argument"]);
+  const list = "site_silences! {\n    /// doc\n    A => \"local_access.discover_member.props-static\",\n    /// doc\n    B => \"shared_reactivity.unreached_write.cannot-run\",\n}\n";
+  const stems = new Set(["local_access", "shared_reactivity"]);
+
+  test("the ids of the named ends are read from the site_silences! list, with their variants", () => {
+    assert.deepEqual(endIds(list, stems).map((end) => [end.variant, end.id]), [
+      ["A", "local_access.discover_member.props-static"],
+      ["B", "shared_reactivity.unreached_write.cannot-run"],
+    ]);
+  });
+
+  test("a missing list, a duplicate id and an id with no producer file throw", () => {
+    assert.throws(() => endIds("fn main() {}\n", stems), /no `site_silences!` list/);
+    assert.throws(() => endIds(list.replace("B =>", "A2 =>").replace("shared_reactivity.unreached_write.cannot-run", "local_access.discover_member.props-static"), stems), /listed twice/);
+    assert.throws(() => endIds(list, new Set(["local_access"])), /no producer file shared_reactivity/);
+  });
+
+  test("the real list holds at least 30 ends, each with a producer file", () => {
+    const stemsOf = new Set(SCANNED.flatMap((directory) => readdirSync(join(ROOT, directory), { recursive: true })).filter((path) => path.endsWith(".rs")).map((path) => basename(path, ".rs")));
+    const ends = endIds(readFileSync(join(ROOT, SITE_ACCOUNTING), "utf8"), stemsOf);
+    assert.ok(ends.length >= 30, `found ${ends.length} named ends`);
   });
 });
 
