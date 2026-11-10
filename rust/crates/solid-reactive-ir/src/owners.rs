@@ -71,6 +71,7 @@ pub(crate) fn collect_project(
                 ctx.symbol_names,
                 unchanged_paths,
                 &mut cache.owners,
+                &draft.leaf_operations,
             );
         draft.missing_owners.extend(requirements);
         // ADR 0713: open context reads.
@@ -91,6 +92,7 @@ pub(crate) fn collect_project(
                 ctx.symbol_names,
                 unchanged_paths,
                 &mut OwnerState::default(),
+                &draft.leaf_operations,
             );
         draft.missing_owners.extend(requirements);
         // ADR 0713: open context reads.
