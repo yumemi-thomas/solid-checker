@@ -36,7 +36,7 @@
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`value` is the prop key of a provider element whose tag `is_context_reference` resolved to a context exactly; a tag that is not one exact identifier marks the census unkeyed, so no provider census closes"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_memos.rs": {
@@ -178,7 +178,7 @@
       },
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`prototype` only adds a refusal (`class_exposed` vetoes the proof); `value` is the provider's prop key beside `is_context_reference`, checked in both dialect branches (`context_provider_value_role`)"
       },
       "untagged-silent-role": {
         "count": 2,
@@ -302,7 +302,7 @@
     "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`component` only takes the value out of `used_as_render_value`: the reference then stays unaccounted unless the dialect's renderer resolves it (ADR 0138), and a project component's `component` prop is just a prop"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/completion.rs": {
@@ -350,7 +350,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a bare `Reflect` only widens `objects_may_be_assigned_into` (`true` is \"some code may copy keys into an object\"), the answer the member proofs treat as the veto; it never narrows it"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
@@ -376,7 +376,7 @@
       },
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`preload` is `lazy()`'s own method: `direct_uses` takes it on the factory call's own result and the second use only on `named`, the exact symbols holding that result; any other member is no use"
       }
     },
     "rust/crates/solid-reactive-ir/src/installed_members.rs": {
@@ -452,7 +452,7 @@
       },
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "a spelled `addEventListener` registration only produces an uncertain `ReactiveDispatchUnresolved` obligation (`push`) or widens `project_reaches`, the listener-reach premise a veto reads; it is never a proof or a violation"
       }
     },
     "rust/crates/solid-reactive-ir/src/literal_member_slots.rs": {
@@ -520,7 +520,7 @@
     "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`default` is the key the dialect's `lazy` reads from the loader's module (`renders_loaded_default_argument` for the exact primitive at the call); an own `then` is a spelled refusal"
       },
       "untagged-silent-role": {
         "count": 1,
@@ -544,7 +544,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`bind` only follows a transport shape toward the object, whose primitive `referenced_primitive` resolves exactly first; the name describes the transport, never a primitive"
       },
       "text-premise": {
         "count": 1,
@@ -624,7 +624,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`routes` is the option key of the config handed to the exact router `create` call (`locals.calls(.., &locals.create)`), in a closed `this`-free literal"
       }
     },
     "rust/crates/solid-reactive-ir/src/router_params.rs": {
@@ -634,7 +634,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a write of `apply` beside `useAction` only vetoes the proof (the function returns the reason it gives up)"
       }
     },
     "rust/crates/solid-reactive-ir/src/server_rules.rs": {
@@ -644,13 +644,13 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`serializeArgs` is an option key of the exact `configureServerFunctionsClient` call (declaration name and origin module checked); options that are not a closed literal leave the proof `Unresolved`, and a closed one without the key is the `Disabled` proof"
       }
     },
     "rust/crates/solid-reactive-ir/src/source_discovery/discover_file.rs": {
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`children` and `keyed` are prop keys read off an element the caller resolved to a dialect primitive: `children` only collects a candidate expression, and a `keyed` that no proven function decides is the ambiguous `DynamicFlag`, for which the dialect claims no accessor"
       }
     },
     "rust/crates/solid-reactive-ir/src/source_discovery/post_passes.rs": {
@@ -666,7 +666,7 @@
       },
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`keyed` is the prop key of an element whose `jsx_primitive_name` is a known dialect primitive (`known_primitive`); the accessor parameters are the dialect's answer for that primitive and key form"
       }
     },
     "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs": {
@@ -726,7 +726,7 @@
     "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`fallback` is read only off an element with `element_primitive == Errored` (`handled_above`)"
       }
     },
     "rust/crates/solid-reactive-ir/src/symbols.rs": {
@@ -738,7 +738,7 @@
     "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`value` is the prop key of a provider of the exact context key the census resolved; anything else is `self.open()`"
       }
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/mod.rs": {
@@ -760,7 +760,7 @@
     "rust/crates/solid-reactive-ir/src/upstream_compat/structure.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`map` only selects the candidate of `prefer-for`; the preference needs the callee to resolve to a valid standard-library array or tuple `map` declaration, else nothing is reported"
       }
     },
     "rust/crates/solid-reactive-ir/src/value_use.rs": {
