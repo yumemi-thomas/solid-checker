@@ -79,10 +79,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "value-held-in-binding",
+      "blocker": "pending-read-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/open-source-computes/let.tsx",
       "start": 158,
@@ -96,8 +96,41 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/open-source-computes/let.tsx",
+      "start": 158,
+      "end": 159,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/open-source-computes/let.tsx",
       "start": 171,
       "end": 172,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/open-source-computes/let.tsx",
+      "start": 171,
+      "end": 172,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/open-source-computes/let.tsx",
+      "start": 190,
+      "end": 197,
       "fixes": 0
     },
     {

@@ -1060,6 +1060,16 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
                 Some(start),
                 Some(start + 7)
             ),
+            // ADR 0926: the withdrawn slot may be pending, and the SC9012 at
+            // the read no longer stands for SC5003's claim.
+            (
+                "SC5003",
+                "uncertifiable",
+                "pending-read-unresolved",
+                true,
+                Some(start),
+                Some(start + 7)
+            ),
             (
                 "SC9012",
                 "uncertifiable",
@@ -1426,10 +1436,12 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
             row["id"] == "SC9012" && row["analysisContext"] == context
         }
         // ADR 0838: the accessor's source is not proved synchronous, so its
-        // read carries accounting rows of its own; they claim nothing.
-        let (accounted, read): (Vec<_>, Vec<_>) = read
-            .into_iter()
-            .partition(|row| row["analysisContext"] == "async-read-unaccounted");
+        // read carries accounting rows of its own; they claim nothing (ADR
+        // 0926: SC5003's too where an SC9012 holds the read).
+        let (accounted, read): (Vec<_>, Vec<_>) = read.into_iter().partition(|row| {
+            row["analysisContext"] == "async-read-unaccounted"
+                || row["analysisContext"] == "pending-read-unresolved"
+        });
         assert!(
             accounted.iter().all(|row| row["kind"] == "uncertifiable"),
             "{}: {accounted:#?}",

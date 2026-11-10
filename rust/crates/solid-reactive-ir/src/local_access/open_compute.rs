@@ -106,6 +106,42 @@ impl LocalAccessContext<'_, '_> {
         answer
     }
 
+    /// ADR 0926: [`Self::source_compute_open`] for a creating call no binding
+    /// holds (`return createMemo(() => g())`): whether the compute its first
+    /// argument names may read a pending source.
+    pub(crate) fn created_compute_open(
+        &self,
+        file: &FileFacts,
+        call: Span,
+        open: &OpenComputes<'_>,
+    ) -> bool {
+        let Some(argument) = file
+            .ast
+            .call_at(call)
+            .and_then(|call| call.arguments.first())
+            .filter(|argument| !argument.spread)
+        else {
+            return false;
+        };
+        let walk = OpenWalk {
+            targets: open.targets,
+            sources: RefCell::new(HashSet::default()),
+            functions: RefCell::new(HashSet::default()),
+            left: Cell::new(OPEN_WALK_BUDGET),
+        };
+        let value = file.ast.peel_ts_sugar_span(argument.span);
+        let function = match argument.value {
+            ArgumentValueKind::Function => {
+                file.ast.function_at(value).map(|function| (file, function))
+            }
+            ArgumentValueKind::Identifier => {
+                self.lookup.function_called_at(file.path.as_str(), value)
+            }
+            _ => None,
+        };
+        function.is_some_and(|(file, function)| self.function_open(file, function, &walk))
+    }
+
     /// [`handed_value`] with an accessor counted only if it may be pending, a
     /// source [`Self::source_compute_open`] takes included.
     pub(crate) fn value_holds_open_source(

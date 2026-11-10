@@ -23,7 +23,7 @@ uncertifiable: a memo may throw its error, and a value nothing resolves may be p
 plain signal cannot throw. A `catch` that is one `throw` is silent: the compute never returns,
 and rc.21 checks only a pass that returned.
 
-A read inside a `try` that no producer accounts for, a pending store root handed on whole (`Object.keys(store)`), and a read in a getter or method of a file with a swallowing `try` are uncertifiable, blocker `async-read-unaccounted` (ADR 0838).
+A read inside a `try` that no producer accounts for, a pending store root handed on whole (`Object.keys(store)`), and a read in a getter or method of a file with a swallowing `try` are uncertifiable, blocker `async-read-unaccounted` (ADR 0838); one an SC9012 row holds, `pending-read-unresolved` (ADR 0926).
 
 ## How to fix
 

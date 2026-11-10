@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
+      "start": 398,
+      "end": 411,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -21,6 +32,17 @@
       "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
       "start": 398,
       "end": 411,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
+      "start": 405,
+      "end": 410,
       "fixes": 0
     },
     {

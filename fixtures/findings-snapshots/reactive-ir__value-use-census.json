@@ -3080,6 +3080,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 1207,
+      "end": 1208,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3088,6 +3099,17 @@
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
       "start": 1207,
       "end": 1208,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 1247,
+      "end": 1250,
       "fixes": 0
     },
     {
@@ -3230,6 +3252,17 @@
       "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
       "start": 820,
       "end": 841,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 1228,
+      "end": 1229,
       "fixes": 0
     },
     {

@@ -381,6 +381,9 @@ pub(crate) struct Census<'l, 'a> {
     /// every other row: a row another producer, or a use before an escape,
     /// placed at the same start keeps its place.
     escaped_uses: Vec<(Location, &'static str)>,
+    /// ADR 0926: the callees of the calls of the walked value itself a walk
+    /// met with a row standing at them: where the source, if pending, is read.
+    reached: Vec<Location>,
     /// Each file's callback spans, for the role of a site past an escape.
     allowed: HashMap<String, Vec<Span>>,
 }
@@ -411,6 +414,11 @@ pub(crate) struct StartAnswer {
     pub(crate) cut: bool,
     pub(crate) uses: Vec<(Location, &'static str)>,
     pub(crate) escaped_uses: Vec<(Location, &'static str)>,
+    /// ADR 0926: the calls of the value its walks met at a row
+    /// ([`Census::reached`]).
+    pub(crate) reached: Vec<Location>,
+    /// Whether the walk took the source as one that may be pending.
+    pub(crate) async_walk: bool,
 }
 
 impl<'l, 'a> Census<'l, 'a> {
@@ -447,6 +455,7 @@ impl<'l, 'a> Census<'l, 'a> {
             past_withheld: Vec::new(),
             escapes: Vec::new(),
             escaped_uses: Vec::new(),
+            reached: Vec::new(),
             allowed: HashMap::default(),
         }
     }
@@ -460,7 +469,12 @@ impl<'l, 'a> Census<'l, 'a> {
         debug_assert_eq!(self.parameter_hops, 0, "a hop outlived its start");
         debug_assert_eq!(self.return_hops, 0, "a hop outlived its start");
         debug_assert!(self.escapes.is_empty() && self.past_withheld.is_empty());
-        debug_assert!(self.uses.is_empty() && self.escaped_uses.is_empty() && !self.cut);
+        debug_assert!(
+            self.uses.is_empty()
+                && self.escaped_uses.is_empty()
+                && self.reached.is_empty()
+                && !self.cut
+        );
         self.walked.clear();
         self.steps = 0;
         self.hop_starts.clear();
@@ -473,6 +487,8 @@ impl<'l, 'a> Census<'l, 'a> {
             cut: self.take_cut(),
             uses: self.take_uses(),
             escaped_uses: self.take_escaped_uses(),
+            reached: std::mem::take(&mut self.reached),
+            async_walk: self.async_walk,
         }
     }
 
@@ -982,6 +998,10 @@ impl<'l, 'a> Census<'l, 'a> {
                     // Walked into a name no row reads: `const { c: h } = o; h()`.
                     Position::Open(blockers::VALUE_HELD_IN_BINDING)
                 } else {
+                    if mode == Mode::Value && self.steps > 1 {
+                        self.reached
+                            .push(ast.calls[call].callee.location(file.path.as_str()));
+                    }
                     Position::Followed
                 }
             }
@@ -2711,6 +2731,13 @@ impl<'l, 'a> Census<'l, 'a> {
             return Position::Open(blockers::VALUE_FORWARDED);
         }
         self.parameter_hops += 1;
+        // ADR 0926: a call of the parameter reads the value where this call
+        // hands it, so that call's row stands at the read.
+        if handed == Mode::Value {
+            self.reached.push(call.callee.location(file.path.as_str()));
+            self.reached
+                .push(call.arguments[index].span.location(file.path.as_str()));
+        }
         let mut answer = Position::Followed;
         for name in &parameter.names {
             for reference in self.references(callee_file, name.span) {

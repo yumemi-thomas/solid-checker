@@ -370,4 +370,4 @@ A generator's body runs where its iterator is stepped. An owner operation after 
 
 Every owner-requiring call ends in a finding or a named proof that its owner context is settled: an owned-only context, a providing region, code that never runs, or a callback proven to return no cleanup. A call with neither is uncertifiable (`execution-context-unaccounted`, ADR 0886).
 
-An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||= f)(…)`) whose operand names the primitive is SC4001's uncertifiable where the direct call would be: an attribution, never a proof of invocation or owner; a local function of the same name is none. An operation that is already uncertain is still reported where its named layer has an open entry (ADR 0902).
+An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||= f)(…)`) whose operand names the primitive is SC4001's uncertifiable where the direct call would be, after an `await` too (ADR 0926): an attribution, never a proof of invocation or owner; a local function of the same name is none. An operation that is already uncertain is still reported where its named layer has an open entry (ADR 0902).
