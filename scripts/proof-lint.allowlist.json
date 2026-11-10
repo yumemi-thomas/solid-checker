@@ -1,0 +1,789 @@
+{
+  "about": "Baseline of the proof lint (ADR 0933, phase B; scripts/proof-lint.mjs): per file and kind, how many hits of a code shape that decides a silence without a fact stand and why. A hit not counted fails; a count that fell fails until `--update` lowers it. A `why` is a stated fact or `pending-review` (counted, frozen, not yet audited).",
+  "files": {
+    "rust/crates/solid-dialect/src/solid_2/releases.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
+      "default-on-missing": {
+        "count": 22,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 9,
+        "why": "pending-review"
+      },
+      "text-premise": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/projection_helpers.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_dependencies.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_memos.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_values.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/transport_memos.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/argument_values.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/attribution.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/contributions.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/index.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/memo.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/callback_host.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/callback_return.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/cleanup.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/directives.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/effect_api.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/effect_phase.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_paths.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/callee_roles.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/control_flow.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/event_literals.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 8,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/events.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/flow_helpers.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/flow_memos.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/pending_sources.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
+      "untagged-silent-role": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/write_components.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs": {
+      "default-on-missing": {
+        "count": 11,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/hosts.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/callee_world.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/callees.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/completion.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/hand_outs.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/member_values.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/returned_uses.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/installed_members.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/completeness.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/dependency_values.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/graph.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/parameter_use.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/return_escape.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/lib.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/listener_reach.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/literal_member_slots.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/loading_hold.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/local_access.rs": {
+      "default-on-missing": {
+        "count": 17,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 26,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/object_members/assigned.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/object_members/memo.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/async_context.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 11,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/context_census.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "text-premise": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_context.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_graph.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/pending_accounting.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/pipeline.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/project_consumer.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/projection.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/property_gets.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/route_components.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/router_params.rs": {
+      "default-on-missing": {
+        "count": 6,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/server_rules.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/discover_file.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/post_passes.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/post_rows.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_api.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
+      "default-on-missing": {
+        "count": 11,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/native_promise.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/pre_await.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/symbols.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/mod.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
+      "default-on-missing": {
+        "count": 13,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 7,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/structure.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/value_use.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    }
+  }
+}
