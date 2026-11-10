@@ -662,10 +662,10 @@
   "certified": 0,
   "certifiedF2": 0,
   "falsePositive": 0,
-  "stackedClaim": 196,
+  "stackedClaim": 202,
   "stackedPairs": {
    "NO_OWNER_CONTEXT|missing-context-provider": 6,
-   "UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await": 40,
+   "UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await": 46,
    "MISSING_EFFECT_FN|leaf-owner-forbidden-call": 6,
    "PRIMITIVE_IN_FORBIDDEN_SCOPE|missing-owner": 6,
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
@@ -677,7 +677,7 @@
   "unjudgedClaim": 0,
   "haltedClaim": 2,
   "causes": {
-   "R-stacked": 196,
+   "R-stacked": 202,
    "R-unplaced": 8,
    "R-halted": 2
   }
