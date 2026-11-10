@@ -11053,6 +11053,46 @@
      }
     }
    }
+  },
+  "seam-isfinite": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 8,
+      "clean": 8,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 8,
+      "clean": 8,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 12,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 12,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 4,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
   }
  },
  "arms": {

@@ -21,7 +21,7 @@ export const SEAMS = [
     sites: [],
     between: ["the table of value-only standard-library rows (`timing_behavior` ValueOnly, `hand_off_at` Value)", "the census (`handed_to_unseen_code`)"],
     case: "`Number.isFinite` replaced through a helper that writes its parameter under a computed key and never reads the original: the row says the API never runs its argument",
-    gap: "the shapes are the fixer's: contexts `bseam-isfinite-*` and the pair `seam-isfinite` (branch claude/intrinsic-patch-seam, ADR 0939); a false clean Chrome confirmed on a value-only row, `Number.isFinite` replaced through a helper that writes its parameter under a computed key",
+    pairs: ["seam-isfinite"],
   },
   {
     id: "thrown-value-routing",
