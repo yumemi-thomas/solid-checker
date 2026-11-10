@@ -1,0 +1,59 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "summary-read-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-call-read-anchor/App.tsx",
+      "start": 238,
+      "end": 242,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-call-read-anchor/App.tsx",
+      "start": 270,
+      "end": 278,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "summary-read-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-call-read-anchor/App.tsx",
+      "start": 502,
+      "end": 506,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-call-read-anchor/App.tsx",
+      "start": 743,
+      "end": 746,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-call-read-anchor/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

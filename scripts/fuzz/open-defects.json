@@ -97,22 +97,6 @@
    "note": "Smoke at b40d5d6a7 (mg6, Part 14): `createRoot((r) => { onCleanup(() => { createRoot(() => <K1 />); }); return r; })`, K1's body calls the action (or onFlush): Chrome reports the code, the checker has no finding of its rule (not certified). Next free agent"
   },
   {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "store-proto-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-body-store-proto-literal-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "use-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-body-use-default-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
    "idPrefix": "mx-reactive-write-in-owned-scope-",
    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
    "variantPrefix": "refresh",
@@ -171,18 +155,6 @@
    "item": "R-alias-call",
    "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-boundary-timer-errored-ns-default-module-helper. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-cleanup-in-forbidden-scope-",
-   "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
-   "contexts": [
-    "settled",
-    "tracked",
-    "tracked-rerun"
-   ],
-   "outcome": "false-clean",
-   "item": "R-other",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-cleanup-in-forbidden-scope-settled-x-destructured-handoff-reflect-cb-alias. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
    "idPrefix": "mx-flush-in-effect-callback-",
@@ -310,14 +282,6 @@
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-sync-node-received-async-root-memo-ns-default-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
-   "idPrefix": "mx-primitive-in-forbidden-scope-",
-   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
-   "variantPrefix": "root",
-   "outcome": "false-clean",
-   "item": "R-other",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-forbidden-scope-settled-root-namespace-handoff-assign-param-cb-shared. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
    "idPrefix": "mx-no-owner-boundary-",
    "code": "NO_OWNER_BOUNDARY",
    "variantPrefix": "loading",
@@ -370,22 +334,6 @@
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-context-then-named-x-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
-   "idPrefix": "mx-primitive-in-forbidden-scope-",
-   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
-   "variantPrefix": "effect",
-   "outcome": "false-clean",
-   "item": "R-other",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-forbidden-scope-settled-effect-direct-handoff-foreach-cb-alias. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-reactive-write-in-owned-scope-",
-   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-   "variantPrefix": "use-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-reactive-write-in-owned-scope-body-use-write-throw-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
    "idPrefix": "mx-resolve-in-reactive-scope-",
    "code": "RESOLVE_IN_REACTIVE_SCOPE",
    "contexts": [
@@ -417,22 +365,6 @@
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-context-not-found-patch-global-x-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
-   "idPrefix": "mx-primitive-in-forbidden-scope-",
-   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
-   "variantPrefix": "memo",
-   "outcome": "false-clean",
-   "item": "R-other",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-forbidden-scope-settled-memo-namespace-handoff-reflect-cb-bundle. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-store-write-outside-setter-",
-   "code": "STORE_WRITE_OUTSIDE_SETTER",
-   "variantPrefix": "net-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-store-write-outside-setter-body-net-push-held-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
    "idPrefix": "mx-primitive-in-effect-callback-",
    "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
    "variantPrefix": "effect",
@@ -440,30 +372,6 @@
    "item": "R-alias-call",
    "owner": "R1f",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-effect-callback-effect-apply-rerun-effect-ns-default-module-helper. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-missing-effect-fn-",
-   "code": "MISSING_EFFECT_FN",
-   "variantPrefix": "cast-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-missing-effect-fn-body-cast-any-ns-default-iife. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-reactive-write-in-owned-scope-",
-   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-   "variantPrefix": "net-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-reactive-write-in-owned-scope-memo-net-param-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-action-called-in-owned-scope-",
-   "code": "ACTION_CALLED_IN_OWNED_SCOPE",
-   "variantPrefix": "net-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-action-called-in-owned-scope-memo-net-param-action-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
    "idPrefix": "mx-until-in-reactive-scope-",
@@ -541,14 +449,6 @@
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-on-flush-in-owned-scope-body-x-ns-member-closure. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "store-dstr-",
-   "outcome": "false-clean",
-   "item": "R-carrier",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-lst-body-shared-store-dstr-assign-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
    "idPrefix": "mx-dynamic-static-promise-",
    "code": "DYNAMIC_STATIC_PROMISE",
    "contexts": [
@@ -584,82 +484,6 @@
    "outcome": "unplaced",
    "item": "R-unplaced",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-until-in-reactive-scope-effect-compute-x-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-flush-in-tracked-queue-callback-",
-   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
-   "contexts": [
-    "tracked"
-   ],
-   "outcome": "misplaced",
-   "item": "R-misplaced",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-flush-in-tracked-queue-callback-tracked-x-wrapper-handoff-sort-cb-shared. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "guard-passed",
-   "outcome": "misplaced",
-   "item": "R-misplaced",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-body-guard-passed-wrapper-helper. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "net-",
-   "outcome": "misplaced",
-   "item": "R-misplaced",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-body-net-nested-read-alias-helper. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "wd-prop-store-read",
-   "outcome": "misplaced",
-   "item": "R-misplaced",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-iter-same-wd-prop-store-read-direct-iife. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-cleanup-in-forbidden-scope-",
-   "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
-   "contexts": [
-    "tracked"
-   ],
-   "outcome": "misplaced",
-   "item": "R-misplaced",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-cleanup-in-forbidden-scope-tracked-x-wrapper-handoff-call-cb-shared. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "store-link",
-   "outcome": "false-clean",
-   "item": "R-other",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-lst-body-shared-store-link-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "store-escaped",
-   "outcome": "false-clean",
-   "item": "R-other",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-lst-body-shared-store-escaped-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-strict-read-untracked-",
-   "code": "STRICT_READ_UNTRACKED",
-   "variantPrefix": "wd-prop-read",
-   "outcome": "misplaced",
-   "item": "R-misplaced",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-iter-same-wd-prop-read-wrapper-helper. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
-   "idPrefix": "mx-primitive-in-forbidden-scope-",
-   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
-   "variantPrefix": "root",
-   "outcome": "misplaced",
-   "item": "R-misplaced",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-primitive-in-forbidden-scope-settled-root-wrapper-iife-cb-shared. Rows are held by id in open-defects-rows.json; this names the family"
   }
  ],
  "patterns": [
@@ -933,9 +757,7 @@
   "causes": {
    "R-stacked": 194,
    "R-unplaced": 8,
-   "R-other": 4,
-   "R-neighbour-U": 8,
-   "R-misplaced": 14,
+   "R-neighbour-U": 5,
    "census": 93,
    "g2d named hand-off": 34,
    "R-halted": 2
