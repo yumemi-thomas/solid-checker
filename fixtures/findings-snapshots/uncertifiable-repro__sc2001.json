@@ -5,6 +5,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx",
+      "start": 532,
+      "end": 552,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx",
@@ -324,11 +335,44 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-action-optimistic.tsx",
+      "start": 1235,
+      "end": 1246,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
       "start": 667,
       "end": 677,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
+      "start": 667,
+      "end": 679,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
+      "start": 667,
+      "end": 684,
       "fixes": 0
     },
     {
@@ -412,11 +456,33 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-effect-interval-write.tsx",
+      "start": 571,
+      "end": 582,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/clean-effect-interval-write.tsx",
       "start": 589,
       "end": 602,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-effect-interval-write.tsx",
+      "start": 669,
+      "end": 682,
       "fixes": 0
     },
     {
@@ -500,11 +566,44 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
+      "start": 383,
+      "end": 394,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
+      "start": 383,
+      "end": 394,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
       "start": 401,
       "end": 407,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
+      "start": 449,
+      "end": 462,
       "fixes": 0
     },
     {
@@ -1226,6 +1325,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
+      "start": 620,
+      "end": 633,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
@@ -1457,6 +1567,28 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-bound.tsx",
+      "start": 387,
+      "end": 406,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-bound.tsx",
+      "start": 387,
+      "end": 406,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-bound.tsx",
@@ -1537,8 +1669,30 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-called-after-await.tsx",
+      "start": 364,
+      "end": 379,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-called-after-await.tsx",
       "start": 581,
       "end": 606,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-called-after-await.tsx",
+      "start": 649,
+      "end": 677,
       "fixes": 0
     },
     {
@@ -1696,10 +1850,54 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 611,
+      "end": 622,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 611,
+      "end": 629,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 623,
+      "end": 628,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 637,
+      "end": 658,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
       "start": 705,
@@ -1886,6 +2084,50 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 549,
+      "end": 560,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 549,
+      "end": 567,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 561,
+      "end": 566,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 575,
+      "end": 596,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "value-root-in-helper",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
@@ -1919,7 +2161,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-root-in-helper",
+      "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
       "start": 780,
@@ -1957,6 +2199,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
       "start": 960,
       "end": 985,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 1026,
+      "end": 1054,
       "fixes": 0
     },
     {
@@ -2048,6 +2301,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-handler-registry.tsx",
+      "start": 445,
+      "end": 456,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -2106,6 +2370,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-listener-registration.tsx",
+      "start": 549,
+      "end": 575,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-listener-registration.tsx",
@@ -2133,6 +2408,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-listener-registration.tsx",
       "start": 838,
       "end": 842,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-mixed-callers.tsx",
+      "start": 936,
+      "end": 948,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-mixed-callers.tsx",
+      "start": 981,
+      "end": 991,
       "fixes": 0
     },
     {
@@ -2667,6 +2964,28 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
+      "start": 998,
+      "end": 1004,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
+      "start": 1046,
+      "end": 1058,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
@@ -2705,6 +3024,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
       "start": 658,
       "end": 670,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
+      "start": 811,
+      "end": 819,
       "fixes": 0
     },
     {
@@ -2953,6 +3283,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-push-actions.tsx",
+      "start": 630,
+      "end": 642,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-push-actions.tsx",
@@ -3107,6 +3448,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
+      "start": 534,
+      "end": 545,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-socket-handler.ts",
@@ -3129,11 +3481,33 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-tuple-setter.ts",
+      "start": 265,
+      "end": 285,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-tuple-setter.ts",
       "start": 337,
       "end": 345,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-tuple-setter.ts",
+      "start": 363,
+      "end": 383,
       "fixes": 0
     },
     {
@@ -3173,6 +3547,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-view-transition.ts",
+      "start": 440,
+      "end": 461,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-view-transition.ts",
@@ -3184,11 +3569,44 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-view-transition.ts",
+      "start": 629,
+      "end": 657,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-view-transition.ts",
       "start": 691,
       "end": 701,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 448,
+      "end": 469,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 489,
+      "end": 509,
       "fixes": 0
     },
     {
@@ -3211,6 +3629,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
       "start": 547,
       "end": 570,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 608,
+      "end": 634,
       "fixes": 0
     },
     {

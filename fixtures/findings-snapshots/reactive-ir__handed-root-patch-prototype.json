@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-root-patch-prototype/App.tsx",
+      "start": 106,
+      "end": 127,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-use-unmodeled",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-root-patch-prototype/App.tsx",
+      "start": 341,
+      "end": 357,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-root-patch-prototype/App.tsx",
+      "start": 472,
+      "end": 476,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-root-patch-prototype/App.tsx",
+      "start": 480,
+      "end": 491,
+      "fixes": 0
+    }
+  ]
+}

@@ -1,9 +1,6 @@
 # impostor-withheld-no-run
 
-ADR 0874, review R30-R32: a call the census withholds proves no run of its callback. `names` is the program's own object typed as a list, and
-its `forEach` queues the callback, or hands it to `onCleanup`. Each site stays uncertifiable at its own place, never a violation at a caller
-or a step:
-- `HelperRead`: SC1001 in the callback, none at `h()`, the helper's call.
-- `ActionFlush`: `step`'s SC2006 uncertifiable at `flush()`; `provenStep`, on a real array, keeps its violation.
-- `RootWrite`: SC2001 in `createRoot` in the callback.
-R33, `Answered`: `reverse` answers with its receiver, so the exemption ends and `xs.forEach` is uncertifiable. `impostor-host-intact` has the discarded answer, which keeps the exemption.
+ADR 0874, R30-R33: a withheld call proves no run of its callback (`names`: the program's object typed as a list, whose
+`forEach` queues it or hands it to `onCleanup`). Each site is uncertifiable in place: `HelperRead` SC1001 in the callback;
+`ActionFlush` SC2006 at `flush()` (`provenStep`, on a real array, stays a violation); `RootWrite` SC2001. `Answered`: `reverse`
+returns its receiver, so `xs.forEach` is uncertifiable (`impostor-host-intact` has the discarded answer).

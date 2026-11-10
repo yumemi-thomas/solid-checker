@@ -44,6 +44,17 @@
       "start": 154,
       "end": 173,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-assign-source/set.ts",
+      "start": 154,
+      "end": 167,
+      "fixes": 0
     }
   ]
 }

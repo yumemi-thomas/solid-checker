@@ -33,6 +33,28 @@
       "start": 133,
       "end": 134,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-window-method-computed/wire.ts",
+      "start": 12,
+      "end": 32,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-window-method-computed/wire.ts",
+      "start": 111,
+      "end": 125,
+      "fixes": 0
     }
   ]
 }

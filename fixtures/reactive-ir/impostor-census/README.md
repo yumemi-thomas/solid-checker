@@ -1,3 +1,5 @@
 # impostor-census
 
-**Claim (ADR 0840).** The program puts a function at `then` on an object of its own, so a value typed as a promise may be that object, and a call of `then` on it is not proved to be the standard one: a write in its callback is open (`Unproven`, a promise from a signal). A receiver the standard library made keeps the proof: `Promise.resolve()` on the spot, under an assertion, or held by a `const` whose every use is a method call's receiver (`Fresh`, `Wrapped`, `Held`). A held promise handed on (`Escaped`, where `Object.assign` puts the impostor on it) or a `let` rebound (`Rebound`) does not. `forEach`, which no code of the program defines, keeps its proof (`OtherMember`).
+ADR 0840: a function at `then` on the program's object makes a promise-typed `then` unproven: a write in its callback is open
+(`Unproven`). A receiver the library made keeps the proof (`Fresh`, `Wrapped`, `Held`: a `const` used only as a receiver); one
+handed on (`Escaped`, `Object.assign` puts the impostor on it) or rebound (`Rebound`) does not. `forEach` keeps it (`OtherMember`).

@@ -723,6 +723,25 @@ pub(crate) enum Hazard {
     /// [`solid_facts::FileFacts::window_valued_candidates`]): the project
     /// asks its type.
     WindowValuedCandidate,
+    /// ADR 0939: a standard root (a global, `X.prototype`, the global object)
+    /// goes as a value where no seen standard code takes it (value 0).
+    StandardRootHanded,
+    /// ADR 0939: a standard root goes only to standard code that keeps it
+    /// nowhere, spelled on a root or a literal (`Number.isFinite(x)`'s
+    /// receiver, `Object.keys(Number)`, `[a].map(Number)`; value 0): seen while
+    /// no patch may have made that code the program's ([`Self::RootPatch`]).
+    StandardRootReceived,
+    /// ADR 0939: a standard root goes to [`ROOT_ITERATORS`] on a receiver no
+    /// fact proves an array (`xs.map(Number)`; value 0): seen while, besides,
+    /// no impostor, override or definer may stand in for the method.
+    StandardRootIterated,
+    /// ADR 0939: some [`Self::StandardPatch`] other than the marker a write
+    /// under a key no fact names leaves (`PROTOTYPE_KEY`; value 0): standard
+    /// code may be the program's.
+    RootPatch,
+    /// ADR 0939: code may write this member (the hash of [`ANY_MEMBER`] for a
+    /// key no fact names) of an object it did not make here (value 0).
+    OpenMemberWrite(u32),
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
@@ -760,6 +779,10 @@ fn standard_impostor(member: &str) -> Hazard {
 
 fn standard_impostor_write(member: &str) -> Hazard {
     Hazard::StandardImpostorWrite(member_hash("", member))
+}
+
+fn open_member_write(member: &str) -> Hazard {
+    Hazard::OpenMemberWrite(member_hash("", member))
 }
 
 fn push_patch(root: &StandardRoot, member: &str, patches: &mut Vec<Hazard>) {
@@ -1289,6 +1312,9 @@ pub(crate) fn patch_veto(qualified_name: &str) -> Vec<Hazard> {
 /// ADR 0876: whether a write a prototype chain reaches may have replaced the
 /// member of `qualified_name`, with no patch naming that owner.
 pub(crate) fn reached_patch(qualified_name: &str, hazard: &impl Fn(Hazard) -> bool) -> bool {
+    if handed_root_patch(qualified_name, hazard) {
+        return true;
+    }
     let Some((owner, member)) = qualified_name.rsplit_once('.') else {
         return false;
     };
@@ -1302,6 +1328,9 @@ pub(crate) fn reached_patch(qualified_name: &str, hazard: &impl Fn(Hazard) -> bo
 /// ([`patch_veto`]), and ADR 0876: a write to a project's own `prototype`,
 /// once some `prototype` key is written and that may be anyone's.
 pub(crate) fn patch_vetoed(qualified_name: &str, hazard: &impl Fn(Hazard) -> bool) -> bool {
+    if handed_root_patch(qualified_name, hazard) {
+        return true;
+    }
     if !hazard(Hazard::AnyStandardPatch) {
         return false;
     }
@@ -1313,6 +1342,106 @@ pub(crate) fn patch_vetoed(qualified_name: &str, hazard: &impl Fn(Hazard) -> boo
             && hazard(standard_patch(PROTOTYPE_KEY, "prototype"))
             && (hazard(standard_patch(OWN_PROTOTYPE, member))
                 || hazard(standard_patch(OWN_PROTOTYPE, ANY_MEMBER))))
+}
+
+/// The array methods that call a standard root they are handed at argument 0 and
+/// keep it nowhere (`xs.map(Number)`, `xs.filter(Boolean)`): ADR 0939's seen
+/// code, while nothing stands in for them.
+const ROOT_ITERATORS: [&str; 10] = [
+    "every",
+    "filter",
+    "find",
+    "findIndex",
+    "findLast",
+    "findLastIndex",
+    "flatMap",
+    "forEach",
+    "map",
+    "some",
+];
+
+/// ADR 0939: whether a standard root the program hands on may have had the
+/// member of `qualified_name` replaced through it: some object not made where
+/// it is written gets that member, or a key no fact names
+/// ([`Hazard::OpenMemberWrite`]), and a root goes where no seen standard code
+/// keeps it ([`Hazard::StandardRootHanded`]), or to such code that a patch, an
+/// impostor, an override or a definer may stand in for. A helper
+/// `patch(Number, "isFinite", f)` that writes its parameter is one: no
+/// spelling at the write names the root.
+pub(crate) fn handed_root_patch(qualified_name: &str, hazard: &impl Fn(Hazard) -> bool) -> bool {
+    let member = qualified_name
+        .rsplit_once('.')
+        .map_or(qualified_name, |(_, member)| member);
+    let symbol_open = || {
+        [
+            standard_patch("", "Symbol"),
+            standard_patch("", ANY_MEMBER),
+            standard_impostor_write("Symbol"),
+        ]
+        .into_iter()
+        .any(hazard)
+    };
+    let written = hazard(open_member_write(ANY_MEMBER))
+        || hazard(open_member_write(member))
+        || hazard(Hazard::ReflectiveDefinitionSpelling)
+        || (hazard(open_member_write(SYMBOL_SITE)) && symbol_open());
+    let iterated_open = || {
+        hazard(standard_impostor(ANY_MEMBER))
+            || hazard(standard_override("Array", ANY_MEMBER))
+            || ROOT_ITERATORS.iter().any(|name| {
+                hazard(standard_impostor(name)) || hazard(standard_override("Array", name))
+            })
+    };
+    written
+        && (hazard(Hazard::StandardRootHanded)
+            || ((hazard(Hazard::StandardRootReceived) || hazard(Hazard::StandardRootIterated))
+                && hazard(Hazard::RootPatch))
+            || (hazard(Hazard::StandardRootIterated) && iterated_open()))
+}
+
+/// ADR 0939: whether `call` takes the standard root at argument `index` as
+/// [`ROOT_ITERATORS`] do: the standard array method, by a resolution no
+/// assertion alone makes. `Some(true)` when its receiver is an array this file
+/// makes (no impostor can be it).
+fn root_iterated(
+    view: &FileView<'_>,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> Option<bool> {
+    let iterated = index == 0
+        && !call.construct
+        && call
+            .arguments
+            .first()
+            .is_some_and(|argument| !argument.spread)
+        && view
+            .resolved_callee_call(call.callee)
+            .and_then(crate::runtime_semantics::standard_call_name)
+            .is_some_and(|name| {
+                name.rsplit_once('.').is_some_and(|(owner, member)| {
+                    matches!(owner, "Array" | "ReadonlyArray") && ROOT_ITERATORS.contains(&member)
+                }) && !unproven_assertion(view.file, call.callee, name, |span| view.entity_at(span))
+            });
+    let ast = &view.file.ast;
+    iterated.then(|| {
+        ast.member_at(ast.peel_ts_sugar_span(call.callee))
+            .is_some_and(|member| {
+                let receiver = ast.peel_ts_sugar_span(member.object);
+                ast.array_literals.binary_search(&receiver).is_ok()
+                    || (fresh_object(view.file, receiver)
+                        && ast
+                            .reference_declaration(receiver)
+                            .is_some_and(|declaration| {
+                                ast.identifier_binding(declaration)
+                                    .and_then(|binding| binding.initializer)
+                                    .is_some_and(|initializer| {
+                                        ast.array_literals
+                                            .binary_search(&ast.peel_ts_sugar_span(initializer))
+                                            .is_ok()
+                                    })
+                            }))
+            })
+    })
 }
 
 /// The interfaces a window, a document or an element takes a member from.
@@ -1610,7 +1739,7 @@ fn spelled_callee(text: &str, name: &str) -> bool {
 /// gains one. `Object.assign` copies, so it is the impostor census's no site,
 /// but it writes its target.
 fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
-    let (members, writers) = impostor_sites(file);
+    let (members, writers, open) = impostor_sites(file);
     let mut members = members
         .into_iter()
         .map(|(member, _)| member)
@@ -1620,11 +1749,87 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
     members.dedup();
     writers.sort_unstable();
     writers.dedup();
+    let mut open = open_writes(file, open)
+        .into_iter()
+        .map(|(key, _)| key)
+        .collect::<Vec<_>>();
+    open.sort_unstable();
+    open.dedup();
     members
         .into_iter()
         .map(standard_impostor)
         .chain(writers.into_iter().map(standard_impostor_write))
+        .chain(open.iter().map(|key| open_member_write(key)))
         .collect()
+}
+
+/// ADR 0939: the keys written on objects not made where they are written
+/// ([`impostor_sites`]' third answer), by [`Hazard::OpenMemberWrite`]'s key,
+/// and a definer held as a value (`const { assign } = Object`,
+/// `Object["assign"]`), which writes what no spelling shows: any key.
+fn open_writes(file: &FileFacts, open: Vec<(CensusKey, Span)>) -> Vec<(String, Span)> {
+    let mut keys = open
+        .into_iter()
+        .map(|(key, at)| {
+            let key = match key {
+                CensusKey::Named(name) if name != "__proto__" => name,
+                CensusKey::Symbol => SYMBOL_SITE.to_owned(),
+                _ => ANY_MEMBER.to_owned(),
+            };
+            (key, at)
+        })
+        .collect::<Vec<_>>();
+    let definer_held = file.ast.identifiers.iter().find(|identifier| {
+        matches!(
+            file.source_text(identifier.span),
+            Some("Object" | "Reflect")
+        ) && file.ast.reference_declaration(identifier.span).is_none()
+            && !file
+                .ast
+                .type_names
+                .iter()
+                .chain(&file.ast.type_queries)
+                .any(|erased| erased.contains(identifier.span))
+            // Read through a named member (`Object.assign(..)`) is a spelling
+            // the census reads; anything else holds the definer as a value.
+            && !file
+                .ast
+                .member_with_peeled_object(identifier.span)
+                .is_some_and(|member| {
+                    file.ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_err()
+                })
+    });
+    if let Some(held) = definer_held {
+        keys.push((ANY_MEMBER.to_owned(), held.span));
+    }
+    keys
+}
+
+/// ADR 0939: the detail of a call [`handed_root_patch`] withholds: the
+/// program's first write (by path and offset) that may put `member` there.
+pub(crate) fn handed_root_detail(files: &[FileFacts], member: &str) -> Option<String> {
+    let (file, at) = files
+        .iter()
+        .flat_map(|file| {
+            open_writes(file, impostor_sites(file).2)
+                .into_iter()
+                .filter(|(key, _)| key == ANY_MEMBER || key == member)
+                .map(move |(_, at)| (file, at))
+        })
+        .min_by_key(|(file, at)| (file.path.as_str(), at.start))?;
+    let start = usize::try_from(at.start).unwrap_or(0);
+    let line = file.source.as_bytes()[..start.min(file.source.len())]
+        .iter()
+        .filter(|byte| **byte == b'\n')
+        .count();
+    Some(format!(
+        "a standard object goes on as a value, and code may write `{member}` of an object it did not make: {}:{}",
+        file.path,
+        line + 1
+    ))
 }
 
 /// ADR 0875: the program's site that may hold `member` for each census key:
@@ -1677,11 +1882,20 @@ pub(crate) fn impostor_detail(
 
 /// Each census site of the file, by key, and the keys it writes on an object it
 /// did not make.
-fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static str>) {
+#[allow(clippy::type_complexity)]
+fn impostor_sites(
+    file: &FileFacts,
+) -> (
+    Vec<(&'static str, Span)>,
+    Vec<&'static str>,
+    Vec<(CensusKey, Span)>,
+) {
     use solid_facts::ast::ClassElementKind;
     let ast = &file.ast;
     let mut members: Vec<(&'static str, Span)> = Vec::new();
     let mut writers: Vec<&'static str> = Vec::new();
+    // ADR 0939: every key written on an object not made here.
+    let mut open: Vec<(CensusKey, Span)> = Vec::new();
     let census_member = |key: CensusKey| match key {
         CensusKey::Named(name) => IMPOSTOR_MEMBERS
             .iter()
@@ -1705,7 +1919,8 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
     let mut noted = Vec::new();
     let mut write = |key: CensusKey, object: Span| {
         if !fresh_object(file, object) {
-            writers.extend(writer_member(key));
+            writers.extend(writer_member(key.clone()));
+            open.push((key, object));
         }
     };
     for property in &ast.object_properties {
@@ -1894,7 +2109,7 @@ fn impostor_sites(file: &FileFacts) -> (Vec<(&'static str, Span)>, Vec<&'static 
     }) {
         members.push((SYMBOL_REPLACE, read.span));
     }
-    (members, writers)
+    (members, writers, open)
 }
 
 /// Whether the object at `span` is one this file makes on the spot: exactly
@@ -2674,6 +2889,10 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     if !patches.is_empty() {
         entries.push((Hazard::AnyStandardPatch, 0));
     }
+    let marker = standard_patch(PROTOTYPE_KEY, "prototype");
+    if patches.iter().any(|patch| *patch != marker) {
+        entries.push((Hazard::RootPatch, 0));
+    }
     for (index, patch) in patches.into_iter().enumerate() {
         entries.push((patch, ordinal(index)));
     }
@@ -2757,6 +2976,34 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     }
     for call in handed_calls {
         entries.push((Hazard::IntrinsicHandedAtCall, call));
+    }
+    // ADR 0939: where the file hands a standard root on.
+    match crate::interproc::accessor_provenance::standard_root_uses(file) {
+        None => entries.push((Hazard::StandardRootHanded, 0)),
+        Some(uses) => {
+            let (mut handed, mut received, mut iterated) = (false, uses.received, false);
+            for (ordinal, index) in uses.arguments {
+                match file
+                    .ast
+                    .calls
+                    .get(ordinal)
+                    .and_then(|call| root_iterated(view, call, index))
+                {
+                    None => handed = true,
+                    Some(true) => received = true,
+                    Some(false) => iterated = true,
+                }
+            }
+            if handed {
+                entries.push((Hazard::StandardRootHanded, 0));
+            }
+            if received {
+                entries.push((Hazard::StandardRootReceived, 0));
+            }
+            if iterated {
+                entries.push((Hazard::StandardRootIterated, 0));
+            }
+        }
     }
     for index in 0..file.window_valued_candidates().len() {
         entries.push((

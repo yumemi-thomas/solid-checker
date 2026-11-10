@@ -8,6 +8,17 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
+      "start": 89,
+      "end": 103,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/App.tsx",
       "start": 181,
       "end": 191,
       "fixes": 0
@@ -294,6 +305,17 @@
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-receivers/Host.tsx",
+      "start": 210,
+      "end": 218,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Host.tsx",
       "start": 529,
       "end": 554,
       "fixes": 0
@@ -384,6 +406,61 @@
       "path": "fixtures/reactive-ir/impostor-receivers/node_modules/solid-js/package.json",
       "start": 0,
       "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 145,
+      "end": 159,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 215,
+      "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 313,
+      "end": 326,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 478,
+      "end": 492,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 609,
+      "end": 616,
       "fixes": 0
     },
     {
@@ -560,6 +637,17 @@
       "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
       "start": 1141,
       "end": 1142,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-receivers/Values.tsx",
+      "start": 1183,
+      "end": 1189,
       "fixes": 0
     },
     {

@@ -88,6 +88,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -2456,6 +2461,21 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -6167,18 +6187,43 @@
      },
      {
       "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "value-root-in-helper"
+      "context": "standard-member-impostor"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
      }
     ]
    }
@@ -7314,6 +7359,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -7427,6 +7477,16 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -7505,6 +7565,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -7763,6 +7828,16 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -10363,6 +10438,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "handed-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -10432,6 +10517,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -10687,6 +10782,26 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
      }
     ]
    }
@@ -10906,6 +11021,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -10989,6 +11109,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -11080,6 +11205,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -11687,6 +11822,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -13822,6 +13967,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -15414,6 +15564,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -15842,6 +15997,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -15916,6 +16076,16 @@
       "kind": "uncertifiable",
       "rule": "SC5001",
       "context": "async-read-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      }
     ]
    }
@@ -15984,6 +16154,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
@@ -16027,6 +16207,21 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
      }
     ]
    }
