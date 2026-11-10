@@ -494,7 +494,7 @@
     "rust/crates/solid-reactive-ir/src/object_members/memo.rs": {
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`Object.freeze`: the receiver spelled `Object` is refused when `reference_declaration(receiver)` is some, so a shadowing binding is excluded and the global is what remains"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners.rs": {
@@ -710,7 +710,7 @@
     "rust/crates/solid-reactive-ir/src/static_rules/native_promise.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "the identifier is spelled `Promise` and has no declaration in the file (`reference_declaration(..).is_none()`), so it names the global that a local or imported binding would shadow"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules/pre_await.rs": {
@@ -720,7 +720,7 @@
       },
       "name-only-match": {
         "count": 3,
-        "why": "pending-review"
+        "why": "`Promise` as a constructor callee and `undefined` are matched only where `reference_declaration(..)` is none, so no binding shadows the global; `null` is a literal keyword"
       }
     },
     "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
