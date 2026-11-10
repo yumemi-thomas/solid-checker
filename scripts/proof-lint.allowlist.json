@@ -468,7 +468,7 @@
       },
       "name-only-match": {
         "count": 4,
-        "why": "pending-review"
+        "why": "`on` and `children` are the prop names of a boundary the code has already resolved: every element and call reaches them only through `known_primitive(&primitives.jsx[index])` or `primitives.calls[index]` with `boundary_on_may_hold_outside`, so the spelling is the primitive's own prop, not an identification of what the element is"
       }
     },
     "rust/crates/solid-reactive-ir/src/local_access.rs": {
