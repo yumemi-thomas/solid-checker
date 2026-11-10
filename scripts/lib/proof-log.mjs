@@ -157,7 +157,8 @@ export function proofHits(lines) {
     // finding the projection itself removed (ADR 0659's client-runtime rules).
     for (const row of t.row) {
       if (!row.reported) continue;
-      const key = spanKey(row);
+      // A read reported at its origin (ADR 0930) has its finding there; the row says where (`fa`).
+      const key = row.fa ? `${row.fa[0]}:${row.fa[1]}` : spanKey(row);
       if (!findings.has(key)) {
         if (!drops.has(key)) hit("C2", "reported-row-no-finding", row, row.t, { role: row.role, why: row.why });
       } else if (!verdicts.has(key) && !drops.has(key)) {

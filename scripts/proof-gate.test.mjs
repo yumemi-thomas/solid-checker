@@ -75,6 +75,11 @@ describe("C2: a reported row ends in a finding, and a finding in a verdict or a 
     assert.deepEqual(kinds([row(10, { reported: true, role: "UntrackedRendering", why: null })]), ["C2/reported-row-no-finding"]);
   });
 
+  test("a read reported at its origin has its finding where the row says (fa)", () => {
+    assert.deepEqual(kinds([row(10, { reported: true, why: null, fa: [40, 43] }), finding(40), verdict(40)]), []);
+    assert.deepEqual(kinds([row(10, { reported: true, why: null, fa: [40, 43] })]), ["C2/reported-row-no-finding"]);
+  });
+
   test("a drop alone is a finding the projection itself removed", () => {
     assert.deepEqual(kinds([row(10, { reported: true, why: null }), drop(10)]), []);
   });

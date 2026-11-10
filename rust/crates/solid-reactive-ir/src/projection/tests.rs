@@ -544,6 +544,7 @@ fn read_row(execution: ExecutionRole, non_strict: bool) -> crate::ReactiveRead {
         project_consumer_non_strict: non_strict,
         callback_invocation_unproven: false,
         callee_callback_timing: false,
+        reported_at_origin: false,
     }
 }
 

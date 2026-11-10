@@ -811,19 +811,37 @@ pub(crate) fn row(
     reported: bool,
     why: Option<&str>,
 ) {
+    row_found_at(table, location, role, reported, why, None);
+}
+
+/// [`row`] for a row whose finding stands at another place of the same file
+/// (a read reported at its origin, ADR 0930): `found_at` is that place.
+pub(crate) fn row_found_at(
+    table: RowTable,
+    location: &Location,
+    role: Option<ExecutionRole>,
+    reported: bool,
+    why: Option<&str>,
+    found_at: Option<&Location>,
+) {
     if !enabled() {
         return;
+    }
+    let mut fields = object(json!({
+        "k": "row",
+        "t": table.name(),
+        "role": role.map(|role| format!("{role:?}")),
+        "reported": reported,
+        "why": why,
+    }));
+    if let Some(found) = found_at.filter(|found| found.path == location.path) {
+        let (start, end) = location_pair(found);
+        fields.insert("fa".to_owned(), json!([start, end]));
     }
     emit(
         location.path.as_ref(),
         Some(location_pair(location)),
-        object(json!({
-            "k": "row",
-            "t": table.name(),
-            "role": role.map(|role| format!("{role:?}")),
-            "reported": reported,
-            "why": why,
-        })),
+        fields,
     );
 }
 

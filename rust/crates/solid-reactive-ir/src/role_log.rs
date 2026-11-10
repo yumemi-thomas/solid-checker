@@ -114,6 +114,12 @@ impl RoleLogTarget {
 static ON: AtomicBool = AtomicBool::new(false);
 /// The proof log is on: [`ON`] stays set whatever the role log's sink is.
 static PROOF_TRACKS: AtomicBool = AtomicBool::new(false);
+/// An arm is being ablated ([`ABLATE`]): [`ON`] stays set so `arm` is asked.
+static ABLATING: AtomicBool = AtomicBool::new(false);
+/// Audit M6 (`scripts/proof-ablation.mjs`): the tagged arm this names answers
+/// `Unknown` whatever its role, to see whether any fixture's findings depend on
+/// it. Read once from `SOLID_CHECKER_IR_ABLATE_ARM`; only a measurement sets it.
+static ABLATE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
 static SINK: Mutex<Option<Sink>> = Mutex::new(None);
 /// The environment is read once, before the first hook or [`configure`].
 static FROM_ENV: std::sync::Once = std::sync::Once::new();
@@ -152,6 +158,14 @@ fn init_from_env() {
             *lock_sink() = Some(sink);
             ON.store(true, Ordering::Release);
         }
+        let ablate = std::env::var("SOLID_CHECKER_IR_ABLATE_ARM")
+            .ok()
+            .filter(|id| !id.is_empty());
+        if ablate.is_some() {
+            ABLATING.store(true, Ordering::Release);
+            ON.store(true, Ordering::Release);
+        }
+        let _ = ABLATE.set(ablate);
         // The proof log frames its decisions through this flag; reading its
         // environment here turns the flag on before the first decision.
         crate::proof_log::init_from_env();
@@ -162,7 +176,7 @@ fn init_from_env() {
 /// either log is. Called from the proof log's configuration only.
 pub(crate) fn track_for_proof_log(on: bool) {
     PROOF_TRACKS.store(on, Ordering::Release);
-    let framed = on || lock_sink().is_some();
+    let framed = on || lock_sink().is_some() || ABLATING.load(Ordering::Acquire);
     ON.store(framed, Ordering::Release);
 }
 
@@ -180,7 +194,7 @@ pub fn configure(target: Option<&RoleLogTarget>) {
     }
     *sink = target.and_then(open_sink);
     ON.store(
-        sink.is_some() || PROOF_TRACKS.load(Ordering::Acquire),
+        sink.is_some() || PROOF_TRACKS.load(Ordering::Acquire) || ABLATING.load(Ordering::Acquire),
         Ordering::Release,
     );
 }
@@ -275,8 +289,17 @@ pub(crate) fn replay(recorded: &Recorded) {
 pub(crate) fn arm(id: (&'static str, bool), role: ExecutionRole) -> ExecutionRole {
     if enabled() {
         note(id, role);
+        if ablated(id.0) {
+            return ExecutionRole::Unknown;
+        }
     }
     role
+}
+
+/// Whether the arm `id` is the one being ablated (see [`ABLATE`]).
+#[cold]
+fn ablated(id: &str) -> bool {
+    ABLATE.get().and_then(Option::as_deref) == Some(id)
 }
 
 #[cold]

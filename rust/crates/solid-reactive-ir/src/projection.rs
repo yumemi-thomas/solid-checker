@@ -699,12 +699,13 @@ pub fn project_findings(
     if crate::proof_log::enabled() {
         for read in &program.reads {
             let why = read_withheld(read);
-            crate::proof_log::row(
+            crate::proof_log::row_found_at(
                 crate::proof_log::RowTable::Read,
                 &read.location,
                 Some(read.execution),
                 why.is_none(),
                 why.map(ReadSilence::name),
+                read.origin.as_ref().filter(|_| read.reported_at_origin),
             );
         }
         for write in &program.writes {

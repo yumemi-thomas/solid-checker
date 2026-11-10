@@ -510,8 +510,24 @@ pub(crate) fn record(ctx: &AnalysisContext<'_>, program: &Program) {
             .iter()
             .map(|(file, span)| (file.path.as_str(), *span))
             .collect::<HashSet<_>>();
+        // The anchors the binder resolves from: the references, and the symbol's
+        // own declarations (a symbol whose only use sits under a wrapper has no
+        // reference of its own).
+        let mut anchors = references.clone();
+        if let Some(declared) = ctx.facts.typescript.symbol(symbol.as_str()) {
+            for declaration in declared.declarations() {
+                if let Some(file) = lookup.file_by_path(declaration.location.path.as_ref())
+                    && let (Ok(start), Ok(end)) = (
+                        u32::try_from(declaration.location.start_byte),
+                        u32::try_from(declaration.location.end_byte),
+                    )
+                {
+                    anchors.push((file, Span::new(start, end)));
+                }
+            }
+        }
         let mut siblings = Vec::new();
-        for (file, span) in &references {
+        for (file, span) in &anchors {
             let file_tables = tables
                 .entry(file.path.as_str())
                 .or_insert_with(|| FileTables::of(file));
