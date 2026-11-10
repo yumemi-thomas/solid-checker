@@ -465,6 +465,8 @@ bun scripts/repro-budget.mjs
 node scripts/guard/count.mjs
 # A ratchet on raw cross-file reads in the reactive IR (ADR 0383).
 bun scripts/ir-read-lint.mjs
+# A ratchet on the code shapes that decide a silence without a fact (ADR 0933, phase B).
+bun scripts/proof-lint.mjs
 
 step ""
 summarize

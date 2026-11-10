@@ -1669,7 +1669,7 @@ An object method, class member or array slot has no binding to follow, so a poss
 <a id="adr-0668"></a>
 ## ADR 0668 — A `Loading` covers what it holds
 
-`loading_cover_at` took any `Loading` in a component's body as cover for the component's own tag at its caller and for a read beside it: false cleans (Chrome warns). A component covers a site as its child only when reading `children` inside the `Loading`, else `Unresolved`; a `Loading` beside a non-JSX site is `Unresolved`, beside a JSX read it proves nothing. `ASYNC_OUTSIDE_LOADING_BOUNDARY` gets recall cells: 690 of 3,990 misuse programs certify today, each a transported read in tracked JSX, held in `open-defects.json` for the census.
+`loading_cover_at` took any `Loading` in a component's body as cover for the component's own tag at its caller and for a read beside it: false cleans (Chrome warns). A component covers a site as its child only when reading its own props' `children` (the first parameter or an exact `const` alias) in the `Loading`, else `Unresolved`: another object's `children` once certified a wrapper that renders the real ones outside it; a `Loading` beside a non-JSX site is `Unresolved`, beside a JSX read it proves nothing.
 
 <a id="adr-0669"></a>
 ## ADR 0669 — A named promise handler, and a parameter after an await

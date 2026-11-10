@@ -57,8 +57,12 @@ pub(super) fn primitive_slot_role(
             ExecutionRole::TrackedJsx
         ));
     }
-    (execution == Execution::Deferred || dialect.runs_callback_deferred(primitive))
-        .then_some(ExecutionRole::DeferredCallback)
+    (execution == Execution::Deferred || dialect.runs_callback_deferred(primitive)).then(|| {
+        role_arm!(
+            "flow_helpers.primitive_slot_role.deferred",
+            ExecutionRole::DeferredCallback
+        )
+    })
 }
 
 /// Whether a role, or the mix of them [`InvocationFlow::function_role`]

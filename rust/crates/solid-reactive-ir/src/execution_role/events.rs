@@ -72,7 +72,10 @@ pub(super) fn forwarded_event_prop_role(
         })
     };
     if reaches(false) {
-        return Some(ExecutionRole::EventCallback);
+        return Some(role_arm!(
+            "events.forwarded_event_prop_role.reaches-only-events",
+            ExecutionRole::EventCallback
+        ));
     }
     // Delivered only by events, one of them denied: a known delivery with no
     // proof of its stack, never code with no role.
