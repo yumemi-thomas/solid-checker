@@ -138,10 +138,11 @@ published runtime and declaration bytes and record exact versions and integrity.
 Do not infer JSX execution behavior from transformed output. Do not expose
 tsrs or Oxc nodes across fact-domain interfaces.
 
-A veto or a fail-closed change (a new uncertifiable result, a wider or narrower veto formula) says what it moved before it merges (ADR 0955):
+A veto or a fail-closed change (a new uncertifiable result, a wider or narrower veto formula) says what it moved before it merges (ADRs 0955, 0956):
 
 1. `make corpus-delta OLD=<the base build's solid-checker-rust> DELTA_HAZARDS=<hazard ids the change reads>` (or `DELTA_BLOCKERS=<kinds>`, or `DELTA_ARGS=--all` for a change that reads no recorded hazard) runs the old and the new release checkers on the corpus projects whose old results hold those hazards, and on controls that must not move. It prints the uncertifiable and violation deltas per project and per blocker kind; a new violation, a moved control or a project the checker could not answer fails it. Paste the table in the pull request. `--baseline <an old corpus-sweep report>` skips the old runs.
 2. `node scripts/guard/rises.mjs` lists, per existing fixture, the `code blocker` keys whose uncertifiable rows rose against the base; `--append "ADR NNNN" --fact "<the hazards, formula or missing fact>"` names them in `scripts/guard/rises.json`. An unnamed rise is printed and never a failure; the list is append-only; `counts.json` is not rekeyed.
+3. To keep one blocker while reducing a corpus site to a case, `scripts/repro-reduce.mjs --blocker <kind> [--formula <name> --fired <hazard,...>] [--missing <fact>[:<member>]]` holds the typed blocker the checker reports instead of the wording (ADR 0956).
 
 ## The pre-release run and the reproduction set
 
@@ -189,7 +190,8 @@ Solid 2 repositories, then discard them:
 
 One case per cause or shape, never per finding. To write one, reduce a sample
 site with `node scripts/repro-reduce.mjs` (it mirrors the app to scratch and
-keeps the result while TypeScript 7.1 stays as clean as it was), then rewrite
+keeps the result while TypeScript 7.1 stays as clean as it was; `--blocker`
+keeps the typed blocker of the result, not its wording), then rewrite
 the lines as one file of at most 40 lines (two if the cause is cross-file) in
 the project of its rule; a cause that acts on the whole project (the dispatch
 veto, the program boundary) gets its own. It must type-check against the set's
