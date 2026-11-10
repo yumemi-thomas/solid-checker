@@ -1243,6 +1243,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-generator-step/node_modules/**
 !fixtures/reactive-ir/installed-object-accesses/node_modules/
 !fixtures/reactive-ir/installed-object-accesses/node_modules/**
+!fixtures/reactive-ir/installed-member-calls/node_modules/
+!fixtures/reactive-ir/installed-member-calls/node_modules/**
 !fixtures/reactive-ir/classic-script-global-function/node_modules/
 !fixtures/reactive-ir/classic-script-global-function/node_modules/**
 !fixtures/reactive-ir/classic-script-global-let/node_modules/

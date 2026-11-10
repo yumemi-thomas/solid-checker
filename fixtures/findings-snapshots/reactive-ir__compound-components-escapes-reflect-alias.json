@@ -19,8 +19,41 @@
       "blocker": "installed-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/compound-components-escapes/variants/reflect-alias/App.tsx",
+      "start": 288,
+      "end": 292,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "installed-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/variants/reflect-alias/App.tsx",
       "start": 304,
       "end": 310,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "installed-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/variants/reflect-alias/App.tsx",
+      "start": 329,
+      "end": 332,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "installed-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/variants/reflect-alias/App.tsx",
+      "start": 416,
+      "end": 422,
       "fixes": 0
     }
   ]

@@ -279,4 +279,4 @@ cannot replace a named standard member. Mutable and destructured bindings,
 `Symbol.replace`, `Symbol.species`, and reflective definers retain the open
 key. A census that may replace `Symbol` or `Symbol.for` reopens symbol sites;
 this proof does not trust the spelling of a shadowed `Symbol`.
-A store put on an object as its prototype (`({ __proto__: store })`, `t.__proto__ = store`, a handed `"__proto__"` key) makes each Get and write of that object the store's. Besides the install, each access of the object this file writes is uncertifiable (`installed-member`) at the access, or at the call it is handed to (ADR 0643).
+A store as an object's prototype (`{ __proto__: store }`, `t.__proto__ = store`, a handed `"__proto__"` key, `Object.setPrototypeOf`) or an accessor installed on it (`Object.defineProperty`, `Reflect.defineProperty`, aliased) makes each Get and write of it reactive: besides the install, each access this file writes is uncertifiable (`installed-member`), at the access or the call handed it (ADRs 0643, 0925).
