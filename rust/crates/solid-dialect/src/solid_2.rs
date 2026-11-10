@@ -782,6 +782,16 @@ impl Dialect for Solid2 {
     /// signal setter inside throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a
     /// `createRoot` body and a memo compute exactly as the bare write does,
     /// and the same call outside any owner succeeds.
+    ///
+    /// ADR 0941: `latest(fn)` and `isPending(fn)` run `fn()` on the caller's
+    /// stack and change neither `context`, the listener nor the strict-read
+    /// window (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:1654-1665` and
+    /// `:1699-1726`). A write inside either meets the caller's guard as the
+    /// bare write does, and `isPending`'s `catch` comes after the write guard's
+    /// `emitDiagnostic` (`dist/dev-shared.js:768`): probed in Chrome, a signal
+    /// setter in `latest(() => …)` and in `isPending(() => …)` raises
+    /// REACTIVE_WRITE_IN_OWNED_SCOPE in a memo compute and in a component
+    /// body, and neither raises it from a handler.
     fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -789,6 +799,8 @@ impl Dialect for Solid2 {
                 | Primitive::DynamicStatic
                 | Primitive::Flush
                 | Primitive::DispatchAsInteraction
+                | Primitive::Latest
+                | Primitive::IsPending
         )
     }
 
@@ -2276,13 +2288,6 @@ impl Dialect for Solid2 {
         argument == 1 && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
     }
 
-    /// ADR 0857, probed on rc.21 (Chrome, dev build): `resolve` and `until` in
-    /// `flush(fn)`'s callback throw "Cannot call … inside a reactive scope" in
-    /// a tracked JSX expression and in a memo compute, and are silent from a
-    /// handler and in `untrack`: `flush` runs `fn` before it drains, leaving
-    /// the observer as the call had it. `dispatchAsInteraction`'s `fn` sees the
-    /// caller's observer (probed, `callback_executions`). `render`'s code runs
-    /// under the root it creates and was silent in tracked JSX.
     /// ADR 0893 (rc.21 probes, 14 of 14): `resolve`, `until`, a static
     /// `dynamic` source and `useContext` throw with no diagnostic. In
     /// `dev-shared.js` every coded throw has an `emitDiagnostic` first, so it
@@ -2322,10 +2327,30 @@ impl Dialect for Solid2 {
         primitive == Primitive::IsPending && argument == 0
     }
 
+    /// ADR 0857, probed on rc.21 (Chrome, dev build): `resolve` and `until` in
+    /// `flush(fn)`'s callback throw "Cannot call … inside a reactive scope" in
+    /// a tracked JSX expression and in a memo compute, and are silent from a
+    /// handler and in `untrack`: `flush` runs `fn` before it drains, leaving
+    /// the observer as the call had it. `dispatchAsInteraction`'s `fn` sees the
+    /// caller's observer (probed, `callback_executions`). `render`'s code runs
+    /// under the root it creates and was silent in tracked JSX.
+    ///
+    /// ADR 0941: so do `latest(fn)` and `isPending(fn)`. Neither touches the
+    /// listener: `latest` is `markVerdictReader(2)`, a verdict swap, `return
+    /// fn()` and the restore (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:1654-1665`),
+    /// `isPending` the same with a probe flag and a `catch` (`:1699-1726`).
+    /// Probed in a tracked effect: `latest(() => resolve(...))` throws
+    /// RESOLVE_IN_REACTIVE_SCOPE. `isPending` also catches what `fn` throws
+    /// ([`Dialect::callback_swallows_throw`]), so a plain throw such as the
+    /// observer guard's is no report there (`isPending(() => until(...))` was
+    /// quiet): a reader that asks about a throw asks that question first.
     fn inline_callback_keeps_observer(&self, primitive: Primitive, argument: usize) -> bool {
         matches!(
             (primitive, argument),
-            (Primitive::Flush, 0) | (Primitive::DispatchAsInteraction, 1)
+            (
+                Primitive::Flush | Primitive::Latest | Primitive::IsPending,
+                0
+            ) | (Primitive::DispatchAsInteraction, 1)
         )
     }
 

@@ -1359,8 +1359,20 @@ fn resolve_tracked_scope_within(
             // literal inline runs it under the call's own observer.
             return resolve_scope_of_entries(file, at, allowed, context, depth, true, limited);
         };
+        // ADR 0941: a call that takes whatever its callback throws
+        // (`isPending`) takes the observer guard's plain throw too, under any
+        // observer: nothing there is thrown to the caller, so nothing is
+        // reported (rc.21 probe: `isPending(() => until(...))` was quiet).
+        if context
+            .lookup
+            .dialect
+            .callback_swallows_throw(primitive, index)
+        {
+            return None;
+        }
         // ADR 0857: a callback proven to run during the call under the
-        // caller's observer (`flush(fn)`) runs where the call does.
+        // caller's observer (`flush(fn)`, ADR 0941: `latest(fn)`) runs where
+        // the call does.
         if context
             .lookup
             .dialect

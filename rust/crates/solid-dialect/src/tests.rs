@@ -774,3 +774,301 @@ fn the_core_runtime_specifier_form_reaches_subpaths_of_the_same_archives() {
         assert!(!core_runtime_specifier(other), "{other:?}");
     }
 }
+
+/// Every primitive a dialect can answer for: each exported name it resolves, and the two forms `dynamic`
+/// takes from its options (no name maps to them, [`Dialect::call_form`]).
+fn profiled_primitives(dialect: &'static dyn Dialect) -> Vec<Primitive> {
+    let mut primitives = dialect_names(dialect)
+        .into_iter()
+        .filter_map(|name| dialect.primitive(name))
+        .chain([Primitive::DynamicStatic, Primitive::DynamicUnknownForm])
+        .collect::<Vec<_>>();
+    primitives.sort_by_key(|primitive| format!("{primitive:?}"));
+    primitives.dedup();
+    primitives
+}
+
+/// What every callback question answers for one slot of one call shape (ADR 0941), grouped by the fact each
+/// answers: when and where the callback runs, which owner, which observer, the strict-read window, an action
+/// step, the effect phase, and a thrown error. The rules ask these separately, so a slot the table answers
+/// in one group and not in another is a slot some rule walks past.
+#[derive(Clone, Copy, Debug)]
+struct SlotProfile {
+    execution: Option<Execution>,
+    clears_listener: bool,
+    synchronous: bool,
+    owner: Option<CallbackOwner>,
+    owner_write_preserved: bool,
+    created_root: bool,
+    created_computation: bool,
+    keeps_observer: bool,
+    clears_tracking_in_window: bool,
+    inherits_window: bool,
+    action_steps: bool,
+    action_inherits_window: bool,
+    in_effect_phase: bool,
+    reruns_in_effect_phase: bool,
+    swallows_throw: bool,
+}
+
+impl SlotProfile {
+    fn of(dialect: &dyn Dialect, primitive: Primitive, argument: usize, count: usize) -> Self {
+        Self {
+            execution: dialect.callback_execution_at(primitive, argument, count),
+            clears_listener: dialect.runs_callback_deferred(primitive),
+            synchronous: dialect.synchronous_callback_slot(primitive, argument, count),
+            owner: dialect.callback_owner_at(primitive, argument, count),
+            owner_write_preserved: dialect.callback_preserves_owner_write_context(primitive),
+            created_root: dialect.callback_runs_in_created_root(primitive, argument),
+            created_computation: dialect.callback_runs_as_created_computation(primitive, argument),
+            keeps_observer: dialect.inline_callback_keeps_observer(primitive, argument),
+            clears_tracking_in_window: dialect
+                .callback_clears_tracking_in_calling_window(primitive, argument),
+            inherits_window: dialect.callback_inherits_calling_window(primitive, argument),
+            action_steps: dialect.callback_runs_as_action_steps(primitive, argument),
+            action_inherits_window: dialect
+                .action_step_inherits_calling_window(primitive, argument),
+            in_effect_phase: dialect.callback_runs_in_effect_phase(primitive, argument),
+            reruns_in_effect_phase: dialect.callback_reruns_in_effect_phase(primitive, argument),
+            swallows_throw: dialect.callback_swallows_throw(primitive, argument),
+        }
+    }
+
+    /// The callback runs on the caller's stack during the call, under the caller's owner: nothing the
+    /// primitive does moves the code inside it off the stack of its call.
+    fn transparent(&self) -> bool {
+        self.execution == Some(Execution::Inline) && self.owner == Some(CallbackOwner::Inherits)
+    }
+
+    /// The compact form the golden table pins: the execution word, the owner, and each fact that holds.
+    fn spelled(&self) -> String {
+        let facts = [
+            (self.clears_listener, "clears-listener"),
+            (self.owner_write_preserved, "owner-write-preserved"),
+            (self.keeps_observer, "keeps-observer"),
+            (self.clears_tracking_in_window, "clears-tracking-in-window"),
+            (self.inherits_window, "inherits-window"),
+            (self.swallows_throw, "swallows-throw"),
+            (self.created_root, "created-root"),
+        ]
+        .into_iter()
+        .filter_map(|(holds, name)| holds.then_some(name))
+        .collect::<Vec<_>>();
+        format!(
+            "{:?}/{:?} [{}]",
+            self.execution,
+            self.owner,
+            facts.join(" ")
+        )
+    }
+}
+
+/// The implications that tie the callback questions together, each as `(name, holds)` for one profile.
+/// Every one is a statement the questions' own documentation makes, so a table row that breaks one is a row
+/// that contradicts another question's answer for the same slot, whichever of the two is wrong.
+fn slot_implications(profile: &SlotProfile) -> Vec<(&'static str, bool)> {
+    let inline = profile.execution == Some(Execution::Inline);
+    let implies = |premise: bool, conclusion: bool| !premise || conclusion;
+    vec![
+        // Owner. A write meets the guard of the ambient owner, so a callback that runs on the caller's stack
+        // under the caller's owner is judged where the call is; the converse and the root rows follow.
+        (
+            "an inline callback that inherits the owner preserves the owner's write context",
+            implies(profile.transparent(), profile.owner_write_preserved),
+        ),
+        (
+            "a primitive that preserves the owner's write context runs its inline callbacks under the caller's owner",
+            implies(
+                profile.owner_write_preserved && inline,
+                profile.owner == Some(CallbackOwner::Inherits),
+            ),
+        ),
+        (
+            "a callback that runs in a created root has the owner the call creates, not the caller's write context",
+            implies(
+                profile.created_root,
+                profile.owner == Some(CallbackOwner::Creates) && !profile.owner_write_preserved,
+            ),
+        ),
+        (
+            "a callback that runs as a created computation has the owner the call creates",
+            implies(
+                profile.created_computation,
+                profile.owner == Some(CallbackOwner::Creates),
+            ),
+        ),
+        // Observer. An inline callback of a primitive that leaves the listener alone runs under the caller's
+        // observer, so a guard that throws on an active observer throws in it; the converse is the claim itself.
+        (
+            "an inline callback that inherits the owner and leaves the listener alone keeps the caller's observer",
+            implies(
+                profile.transparent() && !profile.clears_listener,
+                profile.keeps_observer,
+            ),
+        ),
+        (
+            "a callback that keeps the caller's observer is inline, under the caller's owner, and no listener is cleared",
+            implies(
+                profile.keeps_observer,
+                profile.transparent() && !profile.clears_listener,
+            ),
+        ),
+        (
+            "a callback that clears tracking in the calling window is inline and clears the listener",
+            implies(
+                profile.clears_tracking_in_window,
+                inline && profile.clears_listener,
+            ),
+        ),
+        // Strict-read window. The window belongs to the call position; a callback keeps it only by running
+        // inline, and these two keep it while clearing the listener.
+        (
+            "a callback that inherits the calling window is inline and clears the listener",
+            implies(profile.inherits_window, inline && profile.clears_listener),
+        ),
+        (
+            "a callback that clears tracking in the calling window inherits that window",
+            implies(profile.clears_tracking_in_window, profile.inherits_window),
+        ),
+        // The derived slot: inline, and clearing the listener.
+        (
+            "a synchronous slot is inline and clears the listener",
+            implies(profile.synchronous, inline && profile.clears_listener),
+        ),
+        // Action steps run from the action's own driver, never at the call.
+        (
+            "a stepped callback does not run inline at the call",
+            implies(
+                profile.action_steps,
+                profile.execution == Some(Execution::Deferred),
+            ),
+        ),
+        (
+            "a stepped callback that inherits the calling window is a stepped callback",
+            implies(profile.action_inherits_window, profile.action_steps),
+        ),
+        // Effect phase. The first run and the later runs are different claims; neither is an inline callback.
+        (
+            "a callback is in the effect phase on every run or on the later ones, not both",
+            !(profile.in_effect_phase && profile.reruns_in_effect_phase),
+        ),
+        (
+            "an effect-phase callback is not run inline at the call",
+            implies(
+                profile.in_effect_phase || profile.reruns_in_effect_phase,
+                !inline,
+            ),
+        ),
+        // Throws. A primitive can only catch what the callback throws on its own stack.
+        (
+            "a callback whose throw the call swallows runs inline",
+            implies(profile.swallows_throw, inline),
+        ),
+    ]
+}
+
+/// ADR 0941: the callback questions agree for every slot of every primitive, in every vocabulary
+/// (`solid-js` rc.21's `latest` and `isPending` were the two that did not: both run `fn()` on the caller's
+/// stack, leaving the owner, the listener and the action-step marker alone, `@solidjs/signals@2.0.0-rc.21`
+/// `dist/dev.js:1654-1665` and `:1699-1726`, but the owner-write and observer questions answered nothing for
+/// them, which is how `latest(() => resolve(...))` in a tracked effect certified clean).
+#[test]
+fn the_callback_questions_agree_for_every_slot_of_every_primitive() {
+    // The vocabularies: the language's own, each read release's triple, and a stride over the other release
+    // facets (663,551 combinations: every one of them takes minutes, a stride covers the mixes).
+    let two = &Solid2 as &'static dyn Dialect;
+    let mut dialects: Vec<&'static dyn Dialect> = vec![
+        two,
+        &Solid2::RC3,
+        &Solid2::RC9,
+        &Solid2::RC13,
+        &Solid2::RC17,
+        &Solid2::RC21,
+    ];
+    dialects.extend(two.variants().iter().copied().step_by(10_007));
+    let mut failures = std::collections::BTreeMap::<String, usize>::new();
+    let mut slots = 0;
+    for dialect in dialects {
+        for primitive in profiled_primitives(dialect) {
+            for argument in 0..3 {
+                for count in argument + 1..=4 {
+                    slots += 1;
+                    let profile = SlotProfile::of(dialect, primitive, argument, count);
+                    for (name, holds) in slot_implications(&profile) {
+                        if !holds {
+                            *failures
+                                .entry(format!("{primitive:?} argument {argument}: {name}"))
+                                .or_default() += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        slots > 10_000,
+        "{slots} slots: the enumeration lost its primitives"
+    );
+    let report = failures
+        .iter()
+        .map(|(failure, shapes)| format!("  {failure} ({shapes} vocabulary and call shapes)"))
+        .collect::<Vec<_>>();
+    assert!(
+        report.is_empty(),
+        "{} disagreement(s):\n{}",
+        report.len(),
+        report.join("\n")
+    );
+}
+
+/// The transparent and the clearing wrappers, pinned slot by slot: a row that moves is a deliberate edit
+/// here. `latest` and `isPending` differ in one fact, the throw `isPending` catches (rc.21 `dev.js:1710`: a
+/// thunk that errors is simply not pending, except a not-ready read from inside an owner).
+#[test]
+fn the_wrappers_that_run_a_callback_inline_are_pinned_slot_by_slot() {
+    let two = &Solid2 as &dyn Dialect;
+    let pinned = [
+        (
+            Primitive::Untrack,
+            0,
+            "Some(Inline)/Some(Inherits) [clears-listener owner-write-preserved]",
+        ),
+        (
+            Primitive::Flush,
+            0,
+            "Some(Inline)/Some(Inherits) [owner-write-preserved keeps-observer]",
+        ),
+        (
+            Primitive::Latest,
+            0,
+            "Some(Inline)/Some(Inherits) [owner-write-preserved keeps-observer]",
+        ),
+        (
+            Primitive::IsPending,
+            0,
+            "Some(Inline)/Some(Inherits) [owner-write-preserved keeps-observer swallows-throw]",
+        ),
+        (
+            Primitive::DispatchAsInteraction,
+            1,
+            "Some(Inline)/Some(Inherits) [owner-write-preserved keeps-observer]",
+        ),
+        (
+            Primitive::RunWithOwner,
+            1,
+            "Some(Inline)/Some(Conditional) [clears-listener clears-tracking-in-window inherits-window]",
+        ),
+        (
+            Primitive::CreateRoot,
+            0,
+            "Some(Inline)/Some(Creates) [clears-listener clears-tracking-in-window inherits-window created-root]",
+        ),
+    ];
+    for (primitive, argument, spelled) in pinned {
+        assert_eq!(
+            SlotProfile::of(two, primitive, argument, argument + 1).spelled(),
+            spelled,
+            "{primitive:?} argument {argument}"
+        );
+    }
+}
