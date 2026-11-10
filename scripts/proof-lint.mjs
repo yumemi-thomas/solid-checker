@@ -224,6 +224,70 @@ export function premiseProblems(root = ROOT) {
   return problems;
 }
 
+/** Builtins that change what they are given. A closed "seen" list that exempts one hides the mutation from the census (ADR 0803). */
+export const MUTATORS = new Set([
+  "assign", "defineProperty", "defineProperties", "setPrototypeOf", "set", "deleteProperty", "freeze", "seal", "preventExtensions",
+  "push", "pop", "shift", "unshift", "splice", "sort", "reverse", "fill", "copyWithin",
+]);
+const QUALIFIED = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** The closed `*SEEN*` lists of one source text, with the qualified names (`ObjectConstructor.keys`) each lists: `[{ name, line, entries: [{ qualified, line }] }]`. */
+export function seenLists(text) {
+  const lines = codeLines(text);
+  const found = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const head = lines[index].match(/\bconst\s+([A-Z0-9_]*SEEN[A-Z0-9_]*)\s*:[^=]*=\s*&?\[/);
+    if (!head) continue;
+    const entries = [];
+    let depth = 0;
+    let started = false;
+    for (let at = index; at < lines.length; at += 1) {
+      const scan = at === index ? lines[at].slice(lines[at].indexOf("[", lines[at].indexOf("="))) : lines[at];
+      for (const literal of scan.matchAll(/"([^"\\]*)"/g)) if (QUALIFIED.test(literal[1])) entries.push({ qualified: literal[1], line: at + 1 });
+      for (const character of scan.replace(/"(?:\\.|[^"\\])*"/g, '""')) {
+        if (character === "[") {
+          depth += 1;
+          started = true;
+        } else if (character === "]") depth -= 1;
+      }
+      if (started && depth <= 0) break;
+    }
+    found.push({ name: head[1], line: index + 1, entries });
+  }
+  return found;
+}
+
+/** The mutating builtins a closed `*SEEN*` list exempts in one source text: `[{ name, qualified, line }]`. */
+export function seenMutators(text) {
+  return seenLists(text).flatMap((list) =>
+    list.entries.filter((entry) => MUTATORS.has(entry.qualified.split(".").pop())).map((entry) => ({ name: list.name, qualified: entry.qualified, line: entry.line })),
+  );
+}
+
+/**
+ * ADR 0803's cross-deferral: the census called a mutating builtin "seen" (it neither calls nor keeps what it is given) and left
+ * its target to the visible-write scan, which read only what is spelled at the mutation. A closed `*SEEN*` list may exempt no
+ * mutator; and the check must find a list at all, or it protects nothing.
+ */
+export function seenMutatorProblems(root = ROOT) {
+  const problems = [];
+  let lists = 0;
+  for (const directory of SCANNED) {
+    const base = join(root, directory);
+    if (!existsSync(base)) continue;
+    for (const path of sourceFiles(base)) {
+      const file = relative(root, path);
+      const text = readFileSync(path, "utf8");
+      lists += seenLists(text).length;
+      for (const { name, qualified, line } of seenMutators(text)) {
+        problems.push({ kind: "seen-mutator", key: `${file}|${name}|${qualified}`, message: `${file}:${line}: ${name} exempts ${qualified}, a builtin that changes what it is given: its target is the census's question` });
+      }
+    }
+  }
+  if (lists === 0) problems.push({ kind: "seen-list-missing", key: "*SEEN*", message: "no closed `*SEEN*` list was found in the scanned sources: the check protects nothing" });
+  return problems;
+}
+
 /** The problems of a baseline against a measurement: `[{ kind, key, message }]`; `pending` is how many hits are still unaudited. */
 export function problems(allowed, measured) {
   const found = [];
@@ -277,7 +341,7 @@ function main(argv) {
     return 0;
   }
   const { found, pending } = problems(previous.files ?? {}, counts);
-  found.push(...premiseProblems());
+  found.push(...premiseProblems(), ...seenMutatorProblems());
   for (const problem of found) console.error(`${problem.kind}: ${problem.key} -- ${problem.message}`);
   if (found.length > 0) {
     console.error(`${found.length} problem(s): a new hit needs a fact in place of the shape, or a stated reason in scripts/proof-lint.allowlist.json`);

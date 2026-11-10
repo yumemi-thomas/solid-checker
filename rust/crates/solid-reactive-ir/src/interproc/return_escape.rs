@@ -420,10 +420,16 @@ pub(super) fn returned_function_spans(
     result
 }
 
+/// The array method (`push`, `unshift`) `call` is, when its receiver is proven
+/// an array: assigned an array literal, or guarded by the standard
+/// `Array.isArray` in an enclosing `if`. The guard is the standard declaration
+/// Type Facts resolves the call to (`ArrayConstructor.isArray`), never the
+/// spelling `Array.isArray`: a project's own `Array` proves nothing.
 pub(super) fn proven_array_method<'a>(
     file: &'a solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<&'a str> {
     let member = file.ast.member_at(call.callee)?;
     let method = file.source_text(member.property)?;
@@ -439,7 +445,11 @@ pub(super) fn proven_array_method<'a>(
         region.consequent.contains(call.span)
             && file.ast.calls.iter().any(|guard| {
                 region.test.contains(guard.span)
-                    && guard.static_callee(&file.source) == Some("Array.isArray")
+                    && lookup
+                        .standard_library_declaration(file, guard, typefacts::CallKind::Call)
+                        .is_some_and(|declaration| {
+                            declaration.qualified_name.as_ref() == "ArrayConstructor.isArray"
+                        })
                     && guard.arguments.first().is_some_and(|argument| {
                         same_runtime_value(file, argument.span, member.object, entities)
                     })

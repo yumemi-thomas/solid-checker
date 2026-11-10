@@ -433,10 +433,6 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
-      },
-      "name-only-match": {
-        "count": 1,
-        "why": "pending-review"
       }
     },
     "rust/crates/solid-reactive-ir/src/lib.rs": {

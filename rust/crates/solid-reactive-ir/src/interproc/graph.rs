@@ -1340,7 +1340,7 @@ fn record_runtime_argument_behavior(
                 .map(|_| RuntimeArgumentBehavior::DeferredCallback)
         })
         .or_else(|| {
-            proven_array_method(file, call, symbols.entities).and_then(|method| {
+            proven_array_method(file, call, symbols.entities, lookup).and_then(|method| {
                 proven_array_method_argument_behavior(method, runtime_argument_callability)
             })
         })
