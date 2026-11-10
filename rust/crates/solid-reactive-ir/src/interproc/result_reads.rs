@@ -489,37 +489,32 @@ fn call_result_reads(
     // proof: ordinary async calls enter immediately, but resume detached.
     // A call in a function written in the JSX, or one a ref application
     // yields, is not a JSX expression's (`jsx_evaluates`).
-    let direct_callee = (ambiguous_candidates.is_none()
-        && !crate::owners::jsx_evaluates(file, call.span))
-    .then(|| match transported {
-        Some(accessor_provenance::Callable::Function { path, span }) => {
-            let file = lookup.file_by_path(path)?;
-            Some((file, file.ast.function_at(*span)?))
-        }
-        _ => lookup.function_for_symbol(symbol),
-    })
-    .flatten()
-    .filter(|(callee_file, callee)| {
-        !call.construct
-            && !callee.generator
-            && (!callee.r#async || call.direct_callee)
-            && (matches!(
-                transported,
-                Some(accessor_provenance::Callable::Function { .. })
-            ) || lookup.function_value_is_current(callee_file, callee))
-    });
+    let resolved_callee = ambiguous_candidates
+        .is_none()
+        .then(|| match transported {
+            Some(accessor_provenance::Callable::Function { path, span }) => {
+                let file = lookup.file_by_path(path)?;
+                Some((file, file.ast.function_at(*span)?))
+            }
+            _ => lookup.function_for_symbol(symbol),
+        })
+        .flatten();
     // ADR 0930: calling a generator runs none of its body (ADR 0851), so its
     // creation call is on no stack a read of the body has; such a row is
     // reported at the read itself (its origin, in this file), where Solid
     // reports it (`ReactiveRead::reported_at_origin`).
-    let generator_callee = ambiguous_candidates.is_none()
-        && match transported {
-            Some(accessor_provenance::Callable::Function { path, span }) => lookup
-                .file_by_path(path)
-                .and_then(|file| file.ast.function_at(*span)),
-            _ => lookup.function_for_symbol(symbol).map(|(_, callee)| callee),
-        }
-        .is_some_and(|callee| callee.generator);
+    let generator_callee = resolved_callee.is_some_and(|(_, callee)| callee.generator);
+    let direct_callee = resolved_callee
+        .filter(|_| !crate::owners::jsx_evaluates(file, call.span))
+        .filter(|(callee_file, callee)| {
+            !call.construct
+                && !callee.generator
+                && (!callee.r#async || call.direct_callee)
+                && (matches!(
+                    transported,
+                    Some(accessor_provenance::Callable::Function { .. })
+                ) || lookup.function_value_is_current(callee_file, callee))
+        });
     let activated_defaults =
         activated_default_reads(scope, dependencies, call, direct_callee, &label);
     let proof = DirectReadProof::new(scope, call, transported, direct_callee, target);
