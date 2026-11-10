@@ -150,8 +150,8 @@ Definite continuations keep their existing proof. Argument-specific take/skip
 proofs are not implemented.
 
 JSX event placement alone does not prove an ownerless invocation. With a
-visible call selecting the standard-library `EventTarget.dispatchEvent` or
-`HTMLElement.click` declaration, handlers may run on their caller's owned stack
+visible call selecting the standard-library `EventTarget.dispatchEvent` (or
+the global `dispatchEvent`, ADR 0937) or `HTMLElement.click` declaration, handlers may run on their caller's owned stack
 (ADR 0356). Event-owner proofs then remain uncertifiable across the program,
 including forwarded callbacks. No target-specific dispatch edge is guessed.
 A dispatch site leaves that veto (ADR 0435) when its receiver is the global

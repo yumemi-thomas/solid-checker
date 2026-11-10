@@ -7314,6 +7314,126 @@
     }
    }
   },
+  "table:addEventListener:sync-b/host-b": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:addEventListener:sync-u-b/sync-u-h": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 2,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:addEventListener:shadow-b/host-b": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
   "table:Window.addEventListener:sync-b/host-b": {
    "codes": {
     "STRICT_READ_UNTRACKED": {
@@ -11099,6 +11219,12 @@
   ],
   "callee_roles.allowed-nested-host-kept": [
    {
+    "pair": "table:addEventListener:sync-u-b/sync-u-h",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "tbl-addeventlistener-sync-u-h",
+    "decisive": true
+   },
+   {
     "pair": "table:CallableFunction.bind:sync-u-b/sync-u-h",
     "code": "STRICT_READ_UNTRACKED",
     "context": "tbl-callablefunction-bind-sync-u-h",
@@ -11162,12 +11288,6 @@
     "pair": "table:Promise.catch:shadow-u/host-u",
     "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
     "context": "tbl-promise-catch-host-u",
-    "decisive": false
-   },
-   {
-    "pair": "table:Promise.finally:shadow-u/host-u",
-    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
-    "context": "tbl-promise-finally-host-u",
     "decisive": false
    }
   ],

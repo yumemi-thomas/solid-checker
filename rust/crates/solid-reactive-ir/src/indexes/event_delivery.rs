@@ -491,6 +491,9 @@ impl SemanticLookup<'_> {
                             DispatchReceiver::NoListener
                         }
                         "EventTarget.dispatchEvent" => self.dispatch_receiver(file, call),
+                        // ADR 0937: lib.dom's global `dispatchEvent`, the
+                        // window's own method called bare.
+                        "dispatchEvent" => DispatchReceiver::Window,
                         _ => DispatchReceiver::Element,
                     };
                     sites.push(DispatchSite {

@@ -101,8 +101,7 @@ row("PerformanceObserver.construct", "fresh", { ctor: "PerformanceObserver", arg
 row("ReportingObserver.construct", "fresh", { ctor: "ReportingObserver", args: ["$f"], keep: "$r", after: ["$r.observe()"], cancel: ["$r.observe()", "$r.disconnect()"] });
 
 // ---- DeferredCallback rows that are not fresh-stack: run by a host a synchronous path can reach (runs_on_invoker_stack) ----------------
-row("addEventListener", "host", { fn: "addEventListener", args: ['"sc-evt"', "$f"], fnIndex: 1, sync: 'dispatchEvent(new Event("sc-evt"))',
-  noRow: "withheld from this slice: the bare-global listener's synchronous-dispatch context is a false clean on main (fix 7); it returns with the wrapper family, after fix 7" });
+row("addEventListener", "host", { fn: "addEventListener", args: ['"sc-evt"', "$f"], fnIndex: 1, sync: 'dispatchEvent(new Event("sc-evt"))' });
 row("Window.addEventListener", "host", { recv: "window", m: "addEventListener", args: ['"sc-evt"', "$f"], fnIndex: 1, sync: 'window.dispatchEvent(new Event("sc-evt"))' });
 row("EventTarget.addEventListener", "host", { recv: "$r", m: "addEventListener", args: ['"sc-evt"', "$f"], fnIndex: 1, recvDecl: "new EventTarget()", sync: '$r.dispatchEvent(new Event("sc-evt"))' });
 row("MediaQueryList.addListener", "host", { recv: "$r", m: "addListener", args: ["$f"], recvDecl: 'window.matchMedia("all")', sync: '$r.dispatchEvent(new Event("change"))' });
