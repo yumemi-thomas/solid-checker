@@ -470,9 +470,15 @@ pub(crate) fn dynamic_read_role(
         && let Some(exclusive) = dynamic_component_entry(file, span, lookup)
     {
         return if exclusive {
-            ExecutionRole::UntrackedUnwindowed
+            role_arm!(
+                "execution_role.dynamic_read_role.exclusive-entry",
+                ExecutionRole::UntrackedUnwindowed
+            )
         } else {
-            ExecutionRole::Unknown
+            role_arm!(
+                "execution_role.dynamic_read_role.shared-entry",
+                ExecutionRole::Unknown
+            )
         };
     }
     role

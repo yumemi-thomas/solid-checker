@@ -816,9 +816,15 @@ pub(crate) fn named_callback_execution_role(
                 || role.tracked
                 || role.deferred
             {
-                ExecutionRole::Unknown
+                role_arm!(
+                    "named_callbacks.named_callback_execution_role.ref-applied-and-named",
+                    ExecutionRole::Unknown
+                )
             } else {
-                ExecutionRole::DirectiveApply
+                role_arm!(
+                    "named_callbacks.named_callback_execution_role.ref-applied",
+                    ExecutionRole::DirectiveApply
+                )
             },
         );
     }
@@ -894,7 +900,10 @@ pub(crate) fn named_callback_write_execution_role(
     let callback = named_callback_containing(file, span, lookup)?;
     let entry = lookup.named_callback_roles(file).get(callback.span);
     Some(if entry.tracked && entry.leaf && !entry.tracked_owned {
-        ExecutionRole::DeferredCallback
+        role_arm!(
+            "named_callbacks.named_callback_write_execution_role.leaf-tracked",
+            ExecutionRole::DeferredCallback
+        )
     } else {
         role
     })

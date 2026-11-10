@@ -2010,9 +2010,15 @@ pub(super) fn forwarded_tracked_compute_role(
     }
     Some(
         if attribute_function_within(file, call.arguments[index].span, span, lookup) {
-            ExecutionRole::Unknown
+            role_arm!(
+                "callee_roles.forwarded_tracked_compute_role.attribute-function",
+                ExecutionRole::Unknown
+            )
         } else {
-            ExecutionRole::TrackedJsx
+            role_arm!(
+                "callee_roles.forwarded_tracked_compute_role.tracked-compute",
+                ExecutionRole::TrackedJsx
+            )
         },
     )
 }
@@ -2520,7 +2526,10 @@ pub(super) fn inheriting_call_role(
             classifying,
         ) == ExecutionRole::TrackedJsx
     {
-        ExecutionRole::TrackedJsx
+        role_arm!(
+            "callee_roles.inheriting_call_role.clears-tracking-in-tracked-compute",
+            ExecutionRole::TrackedJsx
+        )
     } else {
         at_call
     };
