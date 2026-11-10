@@ -1252,7 +1252,11 @@ fn local_dispatch_eval_and_depth_limits_keep_obligations() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(start as u64))
+        // ADR 0934: the Get is also the helper's own SC1001 obligation there.
+        .find(|row| {
+            row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+                && row["id"] == "SC9012"
+        })
         .expect("direct eval must keep the member dispatch uncertifiable");
     assert_eq!(row["id"], "SC9012", "{row:#?}");
     assert_eq!(row["kind"], "uncertifiable", "{row:#?}");
