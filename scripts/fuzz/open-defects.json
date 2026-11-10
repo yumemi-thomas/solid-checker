@@ -433,6 +433,16 @@
    "outcome": "unplaced",
    "item": "R-unplaced",
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-until-in-reactive-scope-effect-compute-x-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
+  },
+  {
+   "idPrefix": "mx-untracked-read-after-await-aw-helper-late-",
+   "code": "UNTRACKED_READ_AFTER_AWAIT",
+   "contexts": [
+    "aw-helper-late"
+   ],
+   "outcome": "stacked-claim",
+   "item": "R-stacked",
+   "note": "ADR 0953, owner ruling: one source read twice after the await, SC1002 claimed at both reads, Solid reports once (pair UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await, kind repeat). 359 of the cell's 706 programs, every one with a Chrome-confirmed twin; the ledger names 36, so another row of the family prints as unlisted in a run that is not at the ledger's seed. Held by id in open-defects-rows.json where listed; this names the family. Goes when the judge scores the repeat claim as agreement"
   }
  ],
  "patterns": [

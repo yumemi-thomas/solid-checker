@@ -209,3 +209,27 @@ describe("open-rows.mjs (R25)", () => {
     expect(ledgerChange({ grids: { g: { a: { cause: "R" } } } }, { grids: { g: { a: { cause: "S" } } } }).moved).toEqual([{ id: "g/a", from: "R", to: "S" }]);
   });
 });
+
+// ADR 0953 (owner ruling): the aw-helper-late x UNTRACKED_READ_AFTER_AWAIT cell has 359 stacked claims and the ledger names 36. One family entry
+// of outcome stacked-claim holds the rest, so a run off the ledger's seed prints them as unlisted instead of failing on each.
+describe("the aw-helper-late stacked-claim family", () => {
+  const list = readOpenDefects();
+  const prefix = "mx-untracked-read-after-await-aw-helper-late-";
+  const row = (id, extra = {}) => ({ id, code: "UNTRACKED_READ_AFTER_AWAIT", context: "aw-helper-late", variant: "-", ...extra });
+  const unlisted = row(`${prefix}x-an-id-no-ledger-holds`);
+  it("makes an unlisted stacked claim of the cell `unlisted` off the ledger's seed, and a failure at it", () => {
+    expect(gridStanding(list, unlisted, "stacked-claim", { grid: "mx-recall" })).toMatchObject({ kind: "unlisted", entry: { item: "R-stacked" } });
+    // the ledger's seed, or a manifest id (focus.mjs readGrid passes strict), still wants the id listed
+    expect(gridStanding(list, unlisted, "stacked-claim", { grid: "mx-recall", strict: true })).toBeNull();
+  });
+  it("holds nothing else: another outcome, another context, another code", () => {
+    for (const problem of ["false-positive", "false-clean", "wrong-rule"]) expect(gridStanding(list, unlisted, problem, { grid: "mx-recall" })).toBeNull();
+    expect(gridStanding(list, row(`${prefix}pick-x-direct-none`, { context: "aw-helper-late-pick" }), "stacked-claim", { grid: "mx-recall" })).toBeNull();
+    expect(gridStanding(list, row(`${prefix}x-an-id-no-ledger-holds`, { code: "STRICT_READ_UNTRACKED" }), "stacked-claim", { grid: "mx-recall" })).toBeNull();
+  });
+  it("keeps a ledgered row held, with the ledger's own cause", () => {
+    const ledgered = Object.keys(list.rows.grids["mx-recall"]).find((id) => id.startsWith(prefix));
+    expect(ledgered).toBeTruthy();
+    expect(gridStanding(list, row(ledgered), "stacked-claim", { grid: "mx-recall", strict: true })).toMatchObject({ kind: "held", entry: { item: "R-stacked" } });
+  });
+});
