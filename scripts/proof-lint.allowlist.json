@@ -70,7 +70,7 @@
       },
       "name-only-match": {
         "count": 4,
-        "why": "pending-review"
+        "why": "`keyed` and `when` are the prop names of an element already resolved to the dialect's `Show` (`known_primitive(..) == Some(Show)`, never a lookalike); `arguments` is a spelling used only to refuse a proof (the true branch returns false)"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/contributions.rs": {
@@ -296,7 +296,7 @@
     "rust/crates/solid-reactive-ir/src/indexes/callees.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
@@ -392,7 +392,7 @@
     "rust/crates/solid-reactive-ir/src/interproc/completeness.rs": {
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/dependency_values.rs": {
@@ -414,7 +414,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
@@ -488,7 +488,7 @@
     "rust/crates/solid-reactive-ir/src/object_members/assigned.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/object_members/memo.rs": {
@@ -676,7 +676,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_api.rs": {
