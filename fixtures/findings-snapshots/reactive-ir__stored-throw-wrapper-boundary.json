@@ -1,0 +1,284 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 419,
+      "end": 429,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 479,
+      "end": 489,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 540,
+      "end": 550,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 602,
+      "end": 612,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 668,
+      "end": 678,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 735,
+      "end": 745,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 794,
+      "end": 804,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 855,
+      "end": 865,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 918,
+      "end": 928,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 981,
+      "end": 991,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 1049,
+      "end": 1059,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 1115,
+      "end": 1125,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 1179,
+      "end": 1189,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 1247,
+      "end": 1257,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 1373,
+      "end": 1384,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 1666,
+      "end": 1677,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 1906,
+      "end": 1917,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 2042,
+      "end": 2053,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 2355,
+      "end": 2366,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 2595,
+      "end": 2606,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "props-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 2708,
+      "end": 2720,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 2782,
+      "end": 2793,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 2889,
+      "end": 2903,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 2944,
+      "end": 2955,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 3106,
+      "end": 3117,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
+      "start": 4106,
+      "end": 4117,
+      "fixes": 0
+    }
+  ]
+}

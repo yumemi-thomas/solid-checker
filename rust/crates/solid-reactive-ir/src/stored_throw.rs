@@ -813,8 +813,32 @@ fn fallback_handles(file: &FileFacts, element: &JsxElementFact) -> bool {
 }
 
 /// ADR 0893: whether a boundary above takes the error at `at`: in this file,
-/// or above every mount of the component holding it.
+/// or above every mount of the component holding it. `true` is also the
+/// answer where that is not decided: only a `false` reports.
 fn handled_above(
+    file: &FileFacts,
+    at: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if handled_here(file, at, lookup, depth) {
+        return true;
+    }
+    // A walk that stops proves nothing above it: open, as a bound is here.
+    let Some(depth) = depth.checked_sub(1) else {
+        return true;
+    };
+    let Some(component) = crate::owners::containing_body_function(&file.ast, at) else {
+        return false;
+    };
+    mounts_handled(file, component, lookup, depth)
+}
+
+/// A boundary written around `at` in this file's code: an `<Errored>` with a
+/// handling fallback or a `createErrorBoundary` holding it, or (ADR 0937) a
+/// component element `at` is a child or prop of whose component may render
+/// that prop inside one.
+fn handled_here(
     file: &FileFacts,
     at: Span,
     lookup: &crate::indexes::SemanticLookup<'_>,
@@ -833,16 +857,235 @@ fn handled_above(
         index == 0
             && lookup.primitive_at_call(file, call.span) == Some(Primitive::CreateErrorBoundary)
     });
-    if lexical || called {
-        return true;
+    lexical
+        || called
+        || file
+            .ast
+            .jsx_containing(at)
+            .any(|element| element_prop_handled(file, element, at, lookup, depth))
+}
+
+/// ADR 0937: `at` is written in a prop of `element` (its children, or an
+/// attribute's value), and the element's component may render that prop
+/// inside a boundary. A dialect control-flow element and a context provider
+/// render it in place; a component no fact resolves, a prop it hands on, and a
+/// read the walk cannot place are not proven outside one.
+fn element_prop_handled(
+    file: &FileFacts,
+    element: &JsxElementFact,
+    at: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if !crate::owners::is_component_element(file, element) {
+        return false;
     }
-    // A walk that stops proves nothing above it: open, as a bound is here.
+    let prop = if element.children.iter().any(|child| child.contains(at)) {
+        "children"
+    } else if let Some(attribute) = element
+        .attributes
+        .iter()
+        .find(|attribute| attribute.span.contains(at))
+    {
+        if attribute.namespace.is_some()
+            || !attribute
+                .expression
+                .is_some_and(|expression| expression.contains(at))
+        {
+            return attribute.namespace.is_some();
+        }
+        match file.source_text(attribute.name) {
+            Some(name) => name,
+            None => return true,
+        }
+    } else {
+        // A spread's value is any prop; the tag itself is no prop.
+        return element
+            .spreads
+            .iter()
+            .any(|spread| spread.span.contains(at));
+    };
+    // `Dynamic`'s `component` is the mount itself, rendered in place; its
+    // other props go to a component no fact names.
+    if lookup
+        .intrinsic_tag_prop(file, element.name.span)
+        .is_some_and(|tag_prop| tag_prop == prop)
+    {
+        return false;
+    }
+    match crate::owners::element_primitive(lookup, file, element) {
+        // `Errored` is the lexical question above.
+        Some(
+            Primitive::Errored
+            | Primitive::For
+            | Primitive::Index
+            | Primitive::Repeat
+            | Primitive::Show
+            | Primitive::Switch
+            | Primitive::Match
+            | Primitive::Loading,
+        ) => return false,
+        Some(_) => return true,
+        None => {}
+    }
+    if lookup.is_context_reference(file.path.as_str(), element.name.span) {
+        return false;
+    }
     let Some(depth) = depth.checked_sub(1) else {
         return true;
     };
-    let Some(component) = crate::owners::containing_body_function(&file.ast, at) else {
-        return false;
+    let Some((wrapper_file, wrapper)) = crate::owners::jsx_target_function(lookup, file, element)
+    else {
+        return true;
     };
+    // A function between the element and `at` runs where the component calls
+    // it, which a read of the prop does not place.
+    let through_function = file
+        .ast
+        .functions_owning(at)
+        .any(|function| element.span.contains(function.span));
+    match prop_reads(wrapper_file, wrapper, prop) {
+        PropReads::Never => false,
+        _ if through_function => true,
+        PropReads::Unknown => true,
+        // The pattern reads the prop when the component is called, outside
+        // every boundary its body writes.
+        PropReads::Destructured => false,
+        // A read in the body's own code runs there, and each read renders the
+        // prop afresh: one outside every boundary reports. A read in a nested
+        // function runs where that function does, which is not placed here.
+        PropReads::At(reads) => reads.iter().all(|read| {
+            !crate::owners::owned_by_body(&wrapper_file.ast, wrapper, *read)
+                || handled_here(wrapper_file, *read, lookup, depth)
+        }),
+    }
+}
+
+/// Where a component reads one prop of its own props.
+enum PropReads {
+    /// Nothing reads it.
+    Never,
+    /// The first parameter is an object pattern.
+    Destructured,
+    /// The props object goes somewhere other than a static member read or an
+    /// exact `const` alias, or the parameter is not a plain binding.
+    Unknown,
+    /// Each static member read of it, through the parameter or an alias.
+    At(Vec<Span>),
+}
+
+/// ADR 0937: the reads of `prop` on `component`'s props, binder-exact: its
+/// first parameter, a plain identifier never reassigned, and `const` aliases
+/// of it (as ADR 0668's `Loading` cover reads them).
+fn prop_reads(file: &FileFacts, component: &FunctionFact, prop: &str) -> PropReads {
+    use solid_facts::ast::BindingShape;
+    /// Aliases followed before the answer is unknown.
+    const ALIAS_DEPTH: usize = 3;
+    let Some(parameter) = component.parameters.first() else {
+        return if component.rest_parameter {
+            PropReads::Unknown
+        } else {
+            PropReads::Never
+        };
+    };
+    if component.rest_parameter && component.parameters.len() == 1 {
+        return PropReads::Unknown;
+    }
+    match parameter.shape {
+        BindingShape::Object if parameter.initializer.is_none() => {
+            return PropReads::Destructured;
+        }
+        BindingShape::Identifier if parameter.initializer.is_none() => {}
+        _ => return PropReads::Unknown,
+    }
+    let [name] = parameter.names.as_slice() else {
+        return PropReads::Unknown;
+    };
+    let ast = &file.ast;
+    let mut binders = vec![name.span];
+    let mut reads = Vec::new();
+    let mut at = 0;
+    while let Some(&binder) = binders.get(at) {
+        at += 1;
+        if at > ALIAS_DEPTH + 1 || crate::indexes::binding_written(file, binder) {
+            return PropReads::Unknown;
+        }
+        for reference in ast.reference_identifiers_to(binder) {
+            if let Some(member) = ast
+                .members
+                .iter()
+                .find(|member| ast.peel_ts_sugar_span(member.object) == reference.span)
+            {
+                let key = if ast.computed_members.binary_search(&member.span).is_ok() {
+                    match ast
+                        .literal_computed_members
+                        .iter()
+                        .find(|literal| literal.span == member.span)
+                    {
+                        Some(literal) => Some(literal.key.as_str()),
+                        None => return PropReads::Unknown,
+                    }
+                } else {
+                    file.source_text(member.property)
+                };
+                match key {
+                    Some(key) if key == prop => reads.push(member.span),
+                    Some(_) => {}
+                    None => return PropReads::Unknown,
+                }
+                continue;
+            }
+            let alias = ast.bindings.iter().find(|binding| {
+                binding.immutable
+                    && binding.shape == BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|initializer| initializer.span == reference.span)
+                    && binding.initializer.is_some_and(|initializer| {
+                        ast.peel_ts_sugar_span(initializer) == reference.span
+                    })
+            });
+            match alias {
+                Some(alias) => binders.push(alias.names[0].span),
+                None => return PropReads::Unknown,
+            }
+        }
+    }
+    if reads.is_empty() {
+        PropReads::Never
+    } else {
+        PropReads::At(reads)
+    }
+}
+
+/// ADR 0937: a function that is no component: written as a dialect
+/// control-flow child, it runs where its element is; otherwise each call the
+/// project makes of it is asked, and a function with none is not decided.
+fn function_run_handled(
+    file: &FileFacts,
+    function: &FunctionFact,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if let Some(element) = crate::owners::control_flow_parent(file, function, lookup) {
+        return handled_above(file, element.span, lookup, depth);
+    }
+    let calls = lookup.function_call_sites(file.path.as_str(), function.span);
+    calls
+        .iter()
+        .all(|(caller, call)| handled_above(caller, *call, lookup, depth))
+}
+
+/// ADR 0893: every mount of `component` (a function holding the site) is
+/// below a boundary that takes its error.
+fn mounts_handled(
+    file: &FileFacts,
+    component: &FunctionFact,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
     // A mount outside the analyzed code is open in an open program, for a
     // component others can reach. ADR 0908: one the module exports itself,
     // by its binding or as a top-level export's own function; a component
@@ -862,7 +1105,7 @@ fn handled_above(
     match lookup.function_component_status(file, component) {
         ComponentStatus::Proven => {}
         ComponentStatus::Uncertain => return true,
-        ComponentStatus::No => return false,
+        ComponentStatus::No => return function_run_handled(file, component, lookup, depth),
     }
     if !crate::owners::direct_render_sites(lookup, file, component).is_empty() {
         return false;
