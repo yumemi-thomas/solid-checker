@@ -2271,6 +2271,42 @@ fn returned_invocations_follow_aliases_slots_and_wrapped_callees() {
     );
 }
 
+/// ADR 0931: a callee that is itself a call is walked as a call initializer:
+/// a hook's only return may be the creating call, and a creating call may be
+/// called at once. A hook returning its own call proves nothing, and ends.
+#[test]
+fn returned_invocations_follow_a_called_callee() {
+    use solid_dialect::Primitive;
+    let project = Project {
+        files: [(
+            "/fixture/immediate/a.ts".to_owned(),
+            "const useArrow = () => make(() => 1);\nuseArrow()(() => 2);\nmake(() => 3)(() => 4);\nconst loop = (): any => loop();\nloop()(() => 5);\n".to_owned(),
+        )]
+        .into_iter()
+        .collect(),
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    };
+    let store = super::memo::build::MemoStore::new(false, true);
+    let ((invocations, _), _) = invocation_build(&project, &store).unwrap();
+    let of = |call: &str| {
+        invocations
+            .iter()
+            .find(|(_, text, ..)| text == call)
+            .map(|(.., primitive, slot)| (*primitive, *slot))
+    };
+    assert_eq!(
+        of("useArrow()(() => 2)"),
+        Some((Primitive::CreateReaction, None))
+    );
+    assert_eq!(
+        of("make(() => 3)(() => 4)"),
+        Some((Primitive::CreateReaction, None))
+    );
+    assert_eq!(of("loop()(() => 5)"), None);
+    assert_eq!(of("useArrow()"), None);
+}
+
 /// With stable symbol ids, an edit of a module no chain reads leaves every
 /// other file's answer unrun; an edit of the factory reruns exactly the files
 /// whose chains read it.

@@ -68,6 +68,7 @@ fn catalog_prose_program() -> Program {
             pending_open: false,
             withdrawn_slot: false,
             summary_attributed: false,
+            reported_at_origin: false,
             transported: false,
             kind: "signal".into(),
             accessor: "sampleAccessor".into(),

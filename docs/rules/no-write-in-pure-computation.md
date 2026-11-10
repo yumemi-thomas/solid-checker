@@ -182,6 +182,9 @@ invocation is proven. It is proven for:
 
 - a literal handed to a project function whose own body calls that parameter
   during the call;
+- a setter or action handed by name to such a function, judged as its call
+  there; an obligation where the function may call it on some paths only or
+  also uses the parameter otherwise (ADR 0929);
 - a standard-library inline callback (`[x].forEach(fn)`);
 - an IIFE;
 - a primitive's or a control-flow component's callback;

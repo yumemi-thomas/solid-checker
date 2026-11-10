@@ -36,8 +36,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/walk-bounds/App.tsx",
       "start": 745,

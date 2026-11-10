@@ -424,17 +424,21 @@ fn call_result_reads(
         // a hook's accessor returned silence.
         // ADR 0539: so is a call in the cleanup an effect's apply returns,
         // which a rerun may run in the apply's window (its role is unplaced).
-        // ADR 0934: the reads are claimed where the function around the call
-        // is called. A function unseen code enters has calls no summary holds,
-        // and an intrinsic handler literal has none at all: its delivery is
-        // the call, whose role the compiler gives (`execution`, unknown under
-        // the dispatch veto). Either way the reads are this call's.
+        // ADR 0931: nor a call whose own role is unplaced in a function no
+        // carrier runs, outside a named helper's body, as the direct-read
+        // path reports a read written there (`local_access` asks
+        // `inside_non_component_function`): a compute's returned function
+        // an apply calls has no caller edge, so a helper it calls was
+        // certified clean.
         if !crate::execution_role::inside_class_member(file, call.callee, lookup)
             && !(execution == ExecutionRole::Unknown
                 && crate::execution_role::inside_rerun_effect_cleanup(file, call.callee, lookup))
-            && !crate::local_access::runs_in_function_entered_unseen(file, call.callee, lookup)
             && !(execution == ExecutionRole::Unknown
-                && written_in_event_handler_literal(file, call.callee))
+                && !inside_non_component_function(file, call.callee, lookup)
+                && !handed.is_some_and(|(_, carrier)| carrier.is_some()))
+            // ADR 0934: nor one in a function unseen code enters, whose calls
+            // no summary holds.
+            && !crate::local_access::runs_in_function_entered_unseen(file, call.callee, lookup)
         {
             // ADR 0771: a read this call makes through a value it hands over
             // has no row here, and an async source may be pending wherever the
@@ -501,25 +505,32 @@ fn call_result_reads(
     // proof: ordinary async calls enter immediately, but resume detached.
     // A call in a function written in the JSX, or one a ref application
     // yields, is not a JSX expression's (`jsx_evaluates`).
-    let direct_callee = (ambiguous_candidates.is_none()
-        && !crate::owners::jsx_evaluates(file, call.span))
-    .then(|| match transported {
-        Some(accessor_provenance::Callable::Function { path, span }) => {
-            let file = lookup.file_by_path(path)?;
-            Some((file, file.ast.function_at(*span)?))
-        }
-        _ => lookup.function_for_symbol(symbol),
-    })
-    .flatten()
-    .filter(|(callee_file, callee)| {
-        !call.construct
-            && !callee.generator
-            && (!callee.r#async || call.direct_callee)
-            && (matches!(
-                transported,
-                Some(accessor_provenance::Callable::Function { .. })
-            ) || lookup.function_value_is_current(callee_file, callee))
-    });
+    let resolved_callee = ambiguous_candidates
+        .is_none()
+        .then(|| match transported {
+            Some(accessor_provenance::Callable::Function { path, span }) => {
+                let file = lookup.file_by_path(path)?;
+                Some((file, file.ast.function_at(*span)?))
+            }
+            _ => lookup.function_for_symbol(symbol),
+        })
+        .flatten();
+    // ADR 0930: calling a generator runs none of its body (ADR 0851), so its
+    // creation call is on no stack a read of the body has; such a row is
+    // reported at the read itself (its origin, in this file), where Solid
+    // reports it (`ReactiveRead::reported_at_origin`).
+    let generator_callee = resolved_callee.is_some_and(|(_, callee)| callee.generator);
+    let direct_callee = resolved_callee
+        .filter(|_| !crate::owners::jsx_evaluates(file, call.span))
+        .filter(|(callee_file, callee)| {
+            !call.construct
+                && !callee.generator
+                && (!callee.r#async || call.direct_callee)
+                && (matches!(
+                    transported,
+                    Some(accessor_provenance::Callable::Function { .. })
+                ) || lookup.function_value_is_current(callee_file, callee))
+        });
     let activated_defaults =
         activated_default_reads(scope, dependencies, call, direct_callee, &label);
     let proof = DirectReadProof::new(scope, call, transported, direct_callee, target);
@@ -548,6 +559,8 @@ fn call_result_reads(
     effective.sort_by_key(|(direct, read)| (read.undecided, !*direct, read.transported));
     for (direct, read) in effective {
         let accessor = read.display.to_string();
+        let reported_at_origin =
+            generator_callee && !direct && read.origin.path.as_ref() == file.path.as_str();
         if seen.insert((
             callee.path.clone(),
             callee.start_byte,
@@ -580,25 +593,13 @@ fn call_result_reads(
                 callee_callback_timing: object_callable
                     || callee_callback_timing(file, timing_at, execution, lookup),
                 summary_attributed: !direct,
+                reported_at_origin,
                 transported: read.transported
                     || transported.is_some()
                     || super::transport_reads::source_origin(provenance, &read.symbol),
             });
         }
     }
-}
-
-/// ADR 0934: whether `span` is written directly in an intrinsic element's
-/// event handler literal (`onScroll={() => go()}`), whose only run is the
-/// event's delivery.
-fn written_in_event_handler_literal(file: &solid_facts::FileFacts, span: Span) -> bool {
-    containing_ast_function(&file.ast, span).is_some_and(|function| {
-        crate::owners::written_directly_in(&file.ast, function, span)
-            && file.compiler.callback_roles.iter().any(|callback| {
-                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                    && file.ast.peel_ts_sugar_span(callback.span) == function.span
-            })
-    })
 }
 
 /// Whether code at `span` runs only where a write is legal and an async read
@@ -2350,6 +2351,7 @@ pub(super) fn dependency_getter_obligations(
                     withdrawn_slot: false,
                     pending_open: false,
                     summary_attributed: false,
+                    reported_at_origin: false,
                     transported: true,
                     kind: "reactive-getter".into(),
                     accessor: file.source_text(span).unwrap_or("returned getter").into(),

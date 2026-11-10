@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { judge } from "./matrix.mjs";
 import { mapPositions } from "./chrome-host.mjs";
 import { appStack, isProgramModule, withStarts, withheldAtStack } from "./codes.mjs";
-import { compiledHanded } from "./served.mjs";
+import { compiledCallParens, compiledHanded, compiledSpread, sourceCallStarts } from "./served.mjs";
 import { classify } from "./classify.mjs";
 import { parseModuleFindings } from "./checker.mjs";
 
@@ -201,5 +201,121 @@ describe("a frame at a compiled insert, effect or memo stands for the expression
     const record = { diagnostics: [{ code: "NO_OWNER_EFFECT", positions: [{ file: "App.tsx", line: 2, column: 1 }] }] };
     expect((await mapPositions(server, trace([0, 15]), "a", record, JSX_APP)).diagnostics[0].positions).toEqual([{ file: "App.tsx", line: 7, column: 9, compiled: [{ line: 7, column: 13 }] }]);
     expect((await mapPositions(server, trace([0]), "a", record, JSX_APP)).diagnostics[0].positions).toEqual([{ file: "App.tsx", line: 7, column: 9 }]);
+  });
+});
+
+// Cause 10 (ADR 0930): mx-no-owner-effect-handler-jsx-spread-direct-none as printed, and the dev compiler's output for its spread (rc.21,
+// 2026-11-10): the call maps to nothing, its operand to 9:18, and V8's next frame (the element's IIFE) to the element's end, 9:29.
+const SPREAD_APP = [
+  'import { createContext, createSignal } from "solid-js";',
+  "",
+  'const jsxRest1 = { class: "x" };',
+  "",
+  "export function C1() {",
+  "  return (",
+  "    <div>",
+  '      <button data-act="b1" onClick={() => {',
+  "        <div {...jsxRest1} />;",
+  "      }}>go</button>",
+  "    </div>",
+  "  );",
+  "}",
+  "",
+].join("\n");
+const SPREAD_SERVED = [
+  'import { spread as _$spread } from "/.vite/deps/@solidjs_web.js?v=1";',
+  'import { insert as _$insert } from "/.vite/deps/@solidjs_web.js?v=1";',
+  '_$spread(_el$3, jsxRest1, false, undefined, "div", "cases/a/App.tsx:9:14");',
+  '_$spread(_el$4, [a, b], false, undefined, "div", "other.tsx:3:18");',
+  "_$spread(_el$5, x, false);",
+  '_$insert(_el$, y, undefined, undefined, "App.tsx:2:2");',
+  'spread(_el$, y, false, undefined, "div", "App.tsx:2:2");',
+].join("\n");
+
+describe("a frame at a compiled spread stands for the spread its loc names (ADR 0930, cause 10)", () => {
+  const at = compiledSpread(SPREAD_SERVED, ["App.tsx", "cases/a/App.tsx"]);
+  it("gives the call's loc, on the callee only, for this module's spread", () => {
+    expect(at(3, 1)).toEqual([{ line: 9, column: 14 }]);
+    expect(at(3, 8)).toEqual([{ line: 9, column: 14 }]);
+    expect(at(3, 10)).toEqual([]);
+  });
+  it("nothing for another module's loc, a spread with no loc, another call, or one not imported from @solidjs/web", () => {
+    for (const line of [4, 5, 6, 7]) expect(at(line, 1)).toEqual([]);
+  });
+  const verdict = (positions, findings) => judge({
+    code: "NO_OWNER_EFFECT", site: { id: "s1", line: 9, aux: [] }, typecheck: { ok: true }, built: { text: SPREAD_APP, files: { "App.tsx": SPREAD_APP } },
+    runtime: { diagnostics: [{ code: "NO_OWNER_EFFECT", message: "m", positions }], errors: [], witnesses: [] }, checker: { ok: true, findings },
+  });
+  const finding = (kind, line, column, rule = "missing-owner") => ({ file: "App.tsx", rule, kind, id: "SC4001", line, column, endLine: line });
+  const spreadFrame = { file: "App.tsx", line: 9, column: 14, compiled: [{ line: 9, column: 14 }], unmapped: true };
+  const iife = { file: "App.tsx", line: 9, column: 29 };
+  it("SC4001 at the spread agrees at the spread's frame (was misplaced); its U is a recall gap (was a false clean)", () => {
+    expect(verdict([iife], [finding("violation", 9, 14)]).outcome).toBe("misplaced");
+    expect(verdict([spreadFrame, iife], [finding("violation", 9, 14)]).outcome).toBe("agree");
+    expect(verdict([iife], [finding("uncertifiable", 9, 14)]).outcome).toBe("false-clean");
+    expect(verdict([spreadFrame, iife], [finding("uncertifiable", 9, 14)])).toMatchObject({ outcome: "recall-gap", detail: { declinedBy: "claiming" } });
+  });
+  it("the frame has no position of its own: no withholding there, no other column, nothing below the top", () => {
+    expect(verdict([spreadFrame, iife], [finding("uncertifiable", 9, 14, "reactive-dispatch-unresolved")]).outcome).toBe("false-clean");
+    expect(verdict([spreadFrame, iife], [finding("uncertifiable", 9, 18)]).outcome).toBe("false-clean");
+    expect(withheldAtStack(finding("violation", 9, 14), withStarts([{ file: "App.tsx", line: 1, column: 1 }, spreadFrame], null), () => false)).toBe(false);
+    expect(withheldAtStack(finding("uncertifiable", 9, 14, "reactive-dispatch-unresolved"), [spreadFrame])).toBe(false);
+  });
+  it("the host keeps a spread call's frame, which the source map drops, at its loc on the clean text", async () => {
+    const served = SPREAD_SERVED.split("\n").slice(0, 3).join("\n");
+    const server = { moduleGraph: { getModuleByUrl: async () => ({ transformResult: { map: { mappings: "x" }, code: served } }) } };
+    const trace = { TraceMap: class {}, originalPositionFor: (_, { line }) => (line === 3 ? { line: null, column: null } : { line: 9, column: 28 }), traceSegment: () => null };
+    const record = { diagnostics: [{ code: "NO_OWNER_EFFECT", positions: [{ file: "App.tsx", line: 3, column: 1 }, { file: "App.tsx", line: 4, column: 1 }] }] };
+    expect((await mapPositions(server, trace, "a", record, SPREAD_APP)).diagnostics[0].positions).toEqual([spreadFrame, iife]);
+    // On the instrumented twin, its loc goes to the clean text as every other position does.
+    const shifted = (await mapPositions(server, trace, "a", record, SPREAD_APP, ({ line, column }) => ({ line, column: column - 2 }))).diagnostics[0].positions;
+    expect(shifted[0]).toEqual({ ...spreadFrame, column: 12, compiled: [{ line: 9, column: 12 }] });
+  });
+});
+
+// Causes 12-13 (ADR 0930): mx-strict-read-untracked-body-guard-passed-direct-helper's line 11 and its compiled line 22 (rc.21, 2026-11-10).
+// V8 puts `children(…)()`'s frame at its second `(` (generated 22:29); the segment before it (22:28) maps to the source `(`, 11:143, one
+// past the callee; the call's start (generated 19:8) maps exactly to 11:104, the checker's row. In direct-none the drift lands on the `)`.
+describe("a frame at the `(` of a call whose callee is no identifier stands for that call's start (ADR 0930, causes 12-13)", () => {
+  const served = ["void children(() => _$createComponent(K, {", "\tr: () => a1()", '}, "K", "App.tsx:2:22"))();', "(() => { return 1; })();", "f(x)(y);", "a.b(1);", "g?.()(2);"].join("\n");
+  const at = compiledCallParens(served);
+  it("gives the start of the call whose argument list opens there, for no identifier callee", () => {
+    expect(at(3, 25)).toEqual([{ line: 1, column: 6 }]);
+    expect(at(3, 24)).toEqual([]);
+    expect(at(4, 22)).toEqual([{ line: 4, column: 1 }]);
+    expect(at(5, 5)).toEqual([{ line: 5, column: 1 }]);
+    expect(at(5, 2)).toEqual([]);
+    expect(at(6, 4)).toEqual([{ line: 6, column: 1 }]);
+  });
+  it("knows a source call by its start, never an identifier callee's or a JSX element's", () => {
+    const has = sourceCallStarts("void children(() => <K r={() => a1()} />)();\nf(1);\nconst e = <div />;");
+    expect(has({ line: 1, column: 6 })).toBe(true);
+    expect(has({ line: 1, column: 15 })).toBe(false);
+    expect(has({ line: 2, column: 1 })).toBe(false);
+    expect(has({ line: 3, column: 11 })).toBe(false);
+  });
+  it("the host records the call's start only with an exact segment there and a source call there", async () => {
+    const source = "  void children(() => <K r={() => a1()} />)();";
+    const server = { moduleGraph: { getModuleByUrl: async () => ({ transformResult: { map: { mappings: "x" }, code: served } }) } };
+    const trace = (segments, start = 8) => ({
+      TraceMap: class {},
+      originalPositionFor: (_, { line, column }) => (line === 1 && column === 5 ? { line: 1, column: start - 1 } : { line: 1, column: 44 }),
+      traceSegment: (_, line, column) => (line === 0 ? [segments.filter((s) => s <= column).at(-1)] : [column]),
+    });
+    const record = { diagnostics: [{ code: "STRICT_READ_UNTRACKED", positions: [{ file: "App.tsx", line: 3, column: 25 }] }] };
+    const mapped = async (t) => (await mapPositions(server, t, "a", record, source)).diagnostics[0].positions;
+    expect(await mapped(trace([5]))).toEqual([{ file: "App.tsx", line: 1, column: 45, compiled: [{ line: 1, column: 8 }] }]);
+    expect(await mapped(trace([4]))).toEqual([{ file: "App.tsx", line: 1, column: 45 }]);
+    expect(await mapped(trace([5], 9))).toEqual([{ file: "App.tsx", line: 1, column: 45 }]);
+  });
+  const APP11 = ["", "", "", "", "", "", "", "", "", "", "    const K = (p: { r?: () => number; on?: boolean }) => { if (p.on) void p.r!(); return null; }; void children(() => <K on r={() => a1()} />)();;", ""].join("\n");
+  const verdict = (positions) => judge({
+    code: "STRICT_READ_UNTRACKED", site: { id: "s1", line: 11, aux: [] }, typecheck: { ok: true }, built: { text: APP11, files: { "App.tsx": APP11 } },
+    runtime: { diagnostics: [{ code: "STRICT_READ_UNTRACKED", message: "m", positions }], errors: [], witnesses: [] },
+    checker: { ok: true, findings: [{ file: "App.tsx", rule: "strict-read-untracked", kind: "violation", id: "SC1001", line: 11, column: 104, endLine: 11 }] },
+  });
+  it("the checker's row at the call's start agrees at that frame (was misplaced one column past the callee)", () => {
+    expect(verdict([{ file: "App.tsx", line: 11, column: 143 }]).outcome).toBe("misplaced");
+    expect(verdict([{ file: "App.tsx", line: 11, column: 143, compiled: [{ line: 11, column: 104 }] }]).outcome).toBe("agree");
   });
 });
