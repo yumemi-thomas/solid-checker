@@ -584,7 +584,7 @@
     "rust/crates/solid-reactive-ir/src/pending_accounting.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "an import binding with no entity, or whose symbol is undeclared, sets `source_module_unresolved`, which marks the row uncertain with a blocker: the default adds a blocker, never a clean"
       }
     },
     "rust/crates/solid-reactive-ir/src/pipeline.rs": {
@@ -640,7 +640,7 @@
     "rust/crates/solid-reactive-ir/src/server_rules.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`None` (TypeScript does not resolve the member) sets `unresolved_member = true`, and the comment at the site says an unresolved member is uncertain, never a violation: the default answers yes to 'unproven'"
       },
       "name-only-match": {
         "count": 1,
@@ -692,7 +692,7 @@
     "rust/crates/solid-reactive-ir/src/static_rules.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "an import binding with no entity, or whose symbol is undeclared, is `unresolved` and yields the unresolved-import defect: the default adds an obligation, never a clean"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
@@ -704,7 +704,7 @@
     "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a wrapper whose text is missing, or that mentions `arguments`, returns `open()` (unproven): the default refuses the proof"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules/native_promise.rs": {
