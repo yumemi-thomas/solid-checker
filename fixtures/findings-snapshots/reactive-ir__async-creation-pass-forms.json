@@ -226,6 +226,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
+      "start": 2196,
+      "end": 2203,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -304,6 +315,17 @@
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
+      "start": 2816,
+      "end": 2824,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
       "start": 2816,
@@ -619,6 +641,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
+      "start": 4467,
+      "end": 4474,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -700,6 +733,17 @@
       "code": "SC5001",
       "kind": "uncertifiable",
       "blocker": "creation-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
+      "start": 5087,
+      "end": 5095,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-creation-pass-forms/App.tsx",
       "start": 5087,

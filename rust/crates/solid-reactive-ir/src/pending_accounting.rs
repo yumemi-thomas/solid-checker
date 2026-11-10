@@ -258,6 +258,19 @@ pub(crate) fn role_decides_path(
     })
 }
 
+/// ADR 0926: where one census start's walks met its source's value at a row,
+/// or left it open (`value_use.rs` [`crate::value_use::StartAnswer`]): a call
+/// of the value, a use the walk ended at, or the start itself.
+pub(crate) struct PendingReach {
+    /// The source, `None` for a creating call no binding holds.
+    pub(crate) symbol: Option<crate::SymbolId>,
+    /// The census walked the source as one that may be pending.
+    pub(crate) async_walk: bool,
+    pub(crate) accessor: std::sync::Arc<str>,
+    pub(crate) declaration: Location,
+    pub(crate) at: Vec<Location>,
+}
+
 /// One read of a pending source.
 struct Site {
     location: Location,
@@ -273,6 +286,7 @@ pub(crate) fn account_pending_reads(
     pending: &dyn Fn(&str) -> bool,
     declared: &(dyn Fn(&str) -> bool + Sync),
     walk_decided: &HashSet<Location>,
+    reach: &[PendingReach],
     draft: &mut ProgramDraft,
 ) {
     // Review R28: the pass runs inline in `collect_project`, which every
@@ -423,6 +437,70 @@ pub(crate) fn account_pending_reads(
             );
         }
     }
+    // (4) ADR 0926: every SC9012 row a pending source's census walk met: the
+    // read through a value no row follows (`useIt()` after
+    // `const { useIt } = { ["useIt"]: a1 }`, a bare JSX child). The row stands
+    // for the read's position; SC5003 and SC5008, whose codes have none, ask
+    // there too.
+    let held_at = draft
+        .static_defects
+        .iter()
+        .filter(|defect| {
+            defect.uncertain
+                && defect.kind.family() == crate::StaticDefectFamily::ReactiveDispatchUnresolved
+        })
+        .map(|defect| defect.location.clone())
+        .collect::<crate::HashSet<_>>();
+    let throughs = sites
+        .iter()
+        .filter_map(|site| site.through.clone())
+        .collect::<crate::HashSet<_>>();
+    for reach in reach.iter().filter(|reach| {
+        reach.async_walk
+            || reach
+                .symbol
+                .as_ref()
+                .is_some_and(|symbol| pending(symbol.as_str()))
+    }) {
+        for at in &reach.at {
+            // The row stands at the use, or at the callee of the call the
+            // use is: the site is the call, as for a direct call.
+            let call = lookup
+                .file_by_path(at.path.as_ref())
+                .zip(span_of(at))
+                .and_then(|(file, span)| {
+                    file.ast
+                        .calls
+                        .iter()
+                        .find(|call| (call.callee == span || call.span == span) && !call.construct)
+                        .map(|call| {
+                            (
+                                call.span.location(file.path.as_str()),
+                                call.callee.location(file.path.as_str()),
+                            )
+                        })
+                });
+            let through = [
+                Some(at.clone()),
+                call.as_ref().map(|(_, callee)| callee.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            .find(|held| held_at.contains(held) && !throughs.contains(held));
+            let Some(through) = through else {
+                continue;
+            };
+            add(
+                Site {
+                    location: call.map_or_else(|| at.clone(), |(call, _)| call),
+                    through: Some(through),
+                    accessor: reach.accessor.clone(),
+                    declaration: reach.declaration.clone(),
+                },
+                &mut sites,
+            );
+        }
+    }
     if sites.is_empty() {
         return;
     }
@@ -446,15 +524,6 @@ pub(crate) fn account_pending_reads(
             cut_at.insert(&row.location);
         }
     }
-    let held_at = draft
-        .static_defects
-        .iter()
-        .filter(|defect| {
-            defect.uncertain
-                && defect.kind.family() == crate::StaticDefectFamily::ReactiveDispatchUnresolved
-        })
-        .map(|defect| &defect.location)
-        .collect::<crate::HashSet<_>>();
     let mut caught_spans = crate::HashMap::<&str, Vec<(u64, u64)>>::default();
     for violation in draft
         .static_violations
@@ -511,14 +580,14 @@ pub(crate) fn account_pending_reads(
             .into_iter()
             .map(|index| &draft.async_reads[index])
             .collect::<Vec<_>>();
+        // An SC9012 row at the read or its reference stands for SC5001,
+        // whose code has the read's position (review R5). ADR 0926: not for
+        // SC5003 or SC5008, whose codes have none: each names its own row.
         let held = held_at.contains(&site.location)
             || site
                 .through
                 .as_ref()
                 .is_some_and(|through| held_at.contains(through));
-        if held {
-            continue;
-        }
         // The site's reasons and the caught claim's (asked above), and the
         // walk's: a set the rules below only search.
         let mut reasons = site_reasons;
@@ -535,6 +604,9 @@ pub(crate) fn account_pending_reads(
             });
         for rule in PendingRule::ALL {
             if rule == PendingRule::Caught && (!caught_claim || caught_row) {
+                continue;
+            }
+            if held && rule == PendingRule::Unsuspendable {
                 continue;
             }
             if reasons
@@ -560,10 +632,15 @@ pub(crate) fn account_pending_reads(
                 crate::role_log::pending(rule.code(), file.path.as_str(), span, "unaccounted");
             }
             if rule == PendingRule::Caught {
-                caught_rows.push(unaccounted_caught(&site));
+                let mut row = unaccounted_caught(&site);
+                if held {
+                    crate::blockers::PENDING_READ_UNRESOLVED.clone_into(&mut row.analysis_context);
+                }
+                caught_rows.push(row);
             } else {
                 let mut row = unaccounted_row(&site, rule);
                 row.source_module_unresolved = source_from_unresolved_import(ctx, &site);
+                row.read_unresolved = held;
                 added.push(row);
             }
         }
@@ -838,6 +915,7 @@ fn unaccounted_row(site: &Site, rule: PendingRule) -> AsyncRead {
         pending_apply: None,
         origin: None,
         unaccounted: true,
+        read_unresolved: false,
         source_module_unresolved: false,
         walk_cut: false,
     }

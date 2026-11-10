@@ -1155,6 +1155,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
 !fixtures/reactive-ir/value-use-census/node_modules/
 !fixtures/reactive-ir/value-use-census/node_modules/**
+!fixtures/reactive-ir/thrown-value-catch/node_modules/
+!fixtures/reactive-ir/thrown-value-catch/node_modules/**
 !fixtures/reactive-ir/value-use-escaped/node_modules/
 !fixtures/reactive-ir/value-use-escaped/node_modules/**
 !fixtures/reactive-ir/generator-stepped/node_modules/
@@ -1215,6 +1217,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-iife-placement/node_modules/**
 !fixtures/reactive-ir/pending-read-accounted/node_modules/
 !fixtures/reactive-ir/pending-read-accounted/node_modules/**
+!fixtures/reactive-ir/pending-read-unresolved/node_modules/
+!fixtures/reactive-ir/pending-read-unresolved/node_modules/**
 !fixtures/reactive-ir/declared-served-closure/node_modules/
 !fixtures/reactive-ir/declared-served-closure/node_modules/**
 !fixtures/reactive-ir/flow-prop-read/node_modules/
@@ -1241,6 +1245,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-generator-step/node_modules/**
 !fixtures/reactive-ir/installed-object-accesses/node_modules/
 !fixtures/reactive-ir/installed-object-accesses/node_modules/**
+!fixtures/reactive-ir/installed-member-calls/node_modules/
+!fixtures/reactive-ir/installed-member-calls/node_modules/**
 !fixtures/reactive-ir/classic-script-global-function/node_modules/
 !fixtures/reactive-ir/classic-script-global-function/node_modules/**
 !fixtures/reactive-ir/classic-script-global-let/node_modules/

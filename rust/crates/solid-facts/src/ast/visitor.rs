@@ -1907,6 +1907,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_throw_statement(&mut self, statement: &oxc_ast::ast::ThrowStatement<'a>) {
         self.throw_statements.push(span(statement.span));
+        self.throws.push(ThrowFact {
+            span: span(statement.span),
+            argument: span(statement.argument.span()),
+        });
         walk::walk_throw_statement(self, statement);
         self.mark_function_exit();
     }
@@ -2074,9 +2078,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_try_statement(&mut self, statement: &oxc_ast::ast::TryStatement<'a>) {
         if let Some(handler) = &statement.handler {
+            let parameter = handler
+                .param
+                .as_ref()
+                .and_then(|parameter| match &parameter.pattern {
+                    BindingPattern::BindingIdentifier(local) => Some(span(local.span)),
+                    _ => None,
+                });
             self.try_catches.push(TryCatchFact {
                 block: span(statement.block.span),
                 handler: span(handler.span),
+                parameter,
+                binds: handler.param.is_some(),
             });
         }
         let head = statement.block.body.first().and_then(|first| match first {

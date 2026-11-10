@@ -278,12 +278,16 @@ pub(super) fn emit_file(
         // `onSettled` call that takes it runs after the await when its callee
         // does, and with no owner the callback's returned cleanup throws
         // SETTLED_CLEANUP_UNOWNED (rc.17) as anywhere unowned.
+        // ADR 0926: an aliased `onSettled.call(this, cb)`'s span is its callee
+        // (ADR 0902), and that call is the one that runs.
         let settled_call = (candidate.operation == "settled-cleanup")
             .then(|| {
                 file.ast.calls.iter().find(|call| {
-                    call.arguments
-                        .first()
-                        .is_some_and(|argument| argument.span == candidate.operation_span)
+                    call.callee == candidate.operation_span
+                        || call
+                            .arguments
+                            .first()
+                            .is_some_and(|argument| argument.span == candidate.operation_span)
                 })
             })
             .flatten();

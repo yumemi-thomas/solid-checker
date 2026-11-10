@@ -114,6 +114,19 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 3326,
+      "end": 3367,
+      "fixes": 0,
+      "message": "async accessor \"this value\" is rendered without a Loading boundary above it; while it is pending nothing renders, and the mount is deferred until all uncaught async settles (Solid dev warning ASYNC_OUTSIDE_LOADING_BOUNDARY)",
+      "hint": "This is safe but shows nothing while loading. Wrap the reading subtree in <Loading fallback={...}> for visible fallback UI, or leave it as is if an empty container during load is intended. For a revalidation indicator, use isPending(() => ...) under the same boundary."
+    },
+    {
       "rule": "sync-computation-received-async",
       "code": "SC7002",
       "kind": "violation",

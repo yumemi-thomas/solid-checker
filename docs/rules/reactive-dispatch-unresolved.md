@@ -212,7 +212,8 @@ Every reference of a proven source is followed, or it is this rule's uncertifiab
 | `value-forwarded` | a second hop |
 | `value-root-in-helper` | a store or props root a helper received |
 | `value-pending-in-jsx` | a source that may be pending, a bare child of an element (ADR 0812) |
-| `value-use-unclassified` | anything else, the default: `throw`, a computed key, a walk's limit |
+| `value-thrown` | a `throw`; its own function's `catch` parameter's untracked uses too (ADR 0923) |
+| `value-use-unclassified` | anything else, the default: a computed key, a walk's limit |
 
 A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. The row stands at the reference and, too, at each use the walk ends at, in any file: an IIFE's result, a `let` and a class field are walked on to their uses (ADR 0831). Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
 
@@ -278,4 +279,4 @@ cannot replace a named standard member. Mutable and destructured bindings,
 `Symbol.replace`, `Symbol.species`, and reflective definers retain the open
 key. A census that may replace `Symbol` or `Symbol.for` reopens symbol sites;
 this proof does not trust the spelling of a shadowed `Symbol`.
-A store put on an object as its prototype (`({ __proto__: store })`, `t.__proto__ = store`, a handed `"__proto__"` key) makes each Get and write of that object the store's. Besides the install, each access of the object this file writes is uncertifiable (`installed-member`) at the access, or at the call it is handed to (ADR 0643).
+A store as an object's prototype (`{ __proto__: store }`, `t.__proto__ = store`, a handed `"__proto__"` key, `Object.setPrototypeOf`) or an accessor installed on it (`Object.defineProperty`, `Reflect.defineProperty`, aliased) makes each Get and write of it reactive: besides the install, each access this file writes is uncertifiable (`installed-member`), at the access or the call handed it (ADRs 0643, 0925).
