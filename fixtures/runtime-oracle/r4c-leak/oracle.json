@@ -1,10 +1,3 @@
 {
-  "note": "reviewer r4c: value-flow roles must not leak into owner, async and write rules",
-  "open": [
-    {
-      "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
-      "site": "App.tsx:43",
-      "reason": "Attribution, not a missing finding: the runtime names the JSX read of the memo, the checker's SC5003 uncertifiable sits at the async read on line 41. The oracle has no frame linking the two."
-    }
-  ]
+  "note": "reviewer r4c: value-flow roles must not leak into owner, async and write rules. The memo read at App.tsx:43 (the memo's compute calls a callback handed through a helper) is SC5003 uncertifiable, `async-provenance-unproven` (ADR 0665): that covers the runtime's ASYNC_OUTSIDE_LOADING_BOUNDARY there, so no site is open (ADR 0952)."
 }

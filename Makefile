@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint proof-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
+.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint proof-lint ir-edit-fuzz ir-edit-fuzz-corpus corpus-delta fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -283,6 +283,19 @@ ir-edit-fuzz-corpus: build-checker-release
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
 	  --project "$(IR_FUZZ_PROJECT)" --steps $(IR_FUZZ_STEPS) --seed $(IR_FUZZ_SEED)
+
+# ADR 0955: the corpus delta of a veto or a fail-closed change, scoped by the hazards table (scripts/corpus-delta.mjs): the old build
+# (OLD=<its solid-checker-rust>, built from the base in its own worktree) and this tree's release build on the projects whose old results hold
+# a hazard (DELTA_HAZARDS=OpenMemberWrite,StandardRootHanded) or a blocker kind (DELTA_BLOCKERS=standard-member-impostor), plus 3 controls that
+# must not move; DELTA_ARGS=--all for a change that reads no recorded hazard, --baseline <old sweep report> to skip the old runs. Paste the
+# table in the pull request. The corpus is the manifest's (scripts/corpus/rc21-manifest.json, --apps-root).
+DELTA_HAZARDS ?=
+DELTA_BLOCKERS ?=
+DELTA_ARGS ?=
+corpus-delta: build-checker-release
+	test -n "$(OLD)" || { echo "set OLD=<the old build's solid-checker-rust>"; exit 2; }
+	node scripts/corpus-delta.mjs --old "$(OLD)" --new "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" \
+	  $(if $(DELTA_HAZARDS),--hazard "$(DELTA_HAZARDS)") $(if $(DELTA_BLOCKERS),--blocker "$(DELTA_BLOCKERS)") $(DELTA_ARGS)
 
 # Compatibility target. Product ownership moved to ownership-gate after every
 # retained upstream case was migrated into the product-owned manifest.
