@@ -448,7 +448,7 @@
     "rust/crates/solid-reactive-ir/src/listener_reach.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "pending-review"
+        "why": "a registered listener that is not a function literal and resolves to no function (`None`) is assumed to reach project code, which makes the registration a defect (the module's veto): the default adds an obligation, never a clean"
       },
       "name-only-match": {
         "count": 2,
