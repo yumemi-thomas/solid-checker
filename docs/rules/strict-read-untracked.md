@@ -301,6 +301,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   followed, or that is also called where nothing proves the run, leaves its
   body's reads obligations (ADR 0547).
 
+A read that no row, discard or named silence ends is uncertifiable: `strict-read-unaccounted` (ADR 0936).
+
 ## Why is this bad?
 
 Solid's reactivity is dependency tracking: a read only subscribes when it happens

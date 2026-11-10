@@ -14,6 +14,7 @@
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 read-backing-unproven": 371,
+  "SC1001 strict-read-unaccounted": 3,
   "SC1001 summary-read-unplaced": 93,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,

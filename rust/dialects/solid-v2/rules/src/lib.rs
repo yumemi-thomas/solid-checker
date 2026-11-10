@@ -692,6 +692,20 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::OnFlushInOwnedScope => {
             "the onFlush() call runs under a children-capable owner, a component body or a computation"
         }
+        // ADR 0936: the rule's own uncertifiable row for a site of the universe
+        // that no row, discard or named silence ends.
+        Rule::StrictReadUntracked => {
+            "the read has no row and no recorded proof that places it, so whether it runs untracked is not decided"
+        }
+        Rule::NoWriteInPureComputation => {
+            "the write has no row and no recorded proof that places it, so whether it runs in an owned scope is not decided"
+        }
+        Rule::ActionCalledInOwnedScope => {
+            "the action call has no row and no recorded proof that places it, so whether it runs in an owned scope is not decided"
+        }
+        Rule::NoStoreMutationOutsideSetter => {
+            "the store write has no row and no recorded proof that rules it out, so whether it writes through the read proxy is not decided"
+        }
         Rule::OptimisticWriteBeforeLoad => {
             "the setter runs in the pass that creates its async source, or where nothing proves the source has answered"
         }
@@ -719,16 +733,12 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         }
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
-        Rule::StrictReadUntracked
-        | Rule::ReactiveReadAfterAwait
+        Rule::ReactiveReadAfterAwait
         | Rule::UncalledAccessor
         | Rule::ExpectedFunctionGotExpression
-        | Rule::NoStoreMutationOutsideSetter
         | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
-        | Rule::NoWriteInPureComputation
-        | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
         | Rule::PendingAsyncUnsuspendableRead

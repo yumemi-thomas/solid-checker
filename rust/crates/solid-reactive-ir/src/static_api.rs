@@ -29,6 +29,9 @@ pub(crate) struct StaticDirectiveFileResult {
     /// ADR 0883: JSX SC6002 places on an apply's stack, and whether its proof
     /// answers for every run: `pipeline` reads that for the SC4001 row.
     pub(super) jsx_phase_sites: Vec<(Location, bool)>,
+    /// ADR 0936: the silences the file's checks named for the sites they gave
+    /// no row (an `onFlush` call the write role allows), reused with the chunk.
+    pub(super) ends: crate::site_accounting::SiteEnds,
 }
 
 /// Runs the project-level static API stage and merges its independent file
@@ -62,6 +65,7 @@ pub(crate) fn check_project(
         draft
             .jsx_phase_sites
             .extend(result.jsx_phase_sites.iter().cloned());
+        draft.site_ends.extend(&result.ends);
     }
 }
 
@@ -186,6 +190,7 @@ impl StaticApiContext<'_> {
             writes: Vec::new(),
             write_action_obligations: Vec::new(),
             jsx_phase_sites: Vec::new(),
+            ends: crate::site_accounting::SiteEnds::default(),
         };
         crate::installed_members::check_file(file, &mut result.defects);
         crate::listener_reach::check_file(file, self.lookup, &mut result.defects);
@@ -807,6 +812,17 @@ impl StaticApiContext<'_> {
                         crate::execution_role::RootBodyGuard::Rejects,
                     ),
                 );
+                if !(role.reports_disallowed_write() || role.reports_unplaced()) {
+                    // ADR 0936: the write role is a fact about the site, and no
+                    // owner that rejects the call is there.
+                    result.ends.end_at(
+                        file,
+                        call.callee,
+                        crate::site_accounting::SiteSilence::OnFlushRoleAllows,
+                        crate::proof_log::PremiseKind::RoleDoesNotReport,
+                        || Some(call.callee),
+                    );
+                }
                 if role.reports_disallowed_write() || role.reports_unplaced() {
                     result.violations.push(StaticViolation {
                         id: "SC3002".into(),

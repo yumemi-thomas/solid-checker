@@ -19,7 +19,7 @@ pub(crate) struct NamedCallbackRoles {
     /// for ([`super::write_roles`]); a position that only names the function
     /// (an unproven callback slot, a result-access one) is not.
     pub(super) positions: HashMap<Span, Vec<Span>>,
-    /// ADR 0933 (read by the proof log only): the argument spans that name each
+    /// ADR 0933, 0936 (read by the named ends only): the argument spans that name each
     /// function at a position that tracks its reads (a memo's compute, an
     /// effect's tracked compute), the facts behind `tracked` and
     /// `effect_compute`. Nothing in an answer reads it.
@@ -737,7 +737,7 @@ pub(crate) fn named_at_tracked_position(
     })
 }
 
-/// ADR 0933 (log only): the argument positions that name the innermost
+/// ADR 0933, 0936: the argument positions that name the innermost
 /// function around `span` at a position that tracks its reads, the facts
 /// [`named_at_tracked_position`] answers from.
 pub(crate) fn naming_positions(

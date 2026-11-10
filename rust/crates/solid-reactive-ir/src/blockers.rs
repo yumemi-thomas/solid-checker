@@ -76,6 +76,20 @@ pub(crate) const OWNER_UNPROVEN: &str = "owner-unproven";
 /// ADR 0886: no row and no named proof ended the site's execution context.
 pub(crate) const EXECUTION_CONTEXT_UNACCOUNTED: &str = "execution-context-unaccounted";
 pub(crate) const ASYNC_OPTIONS_OPAQUE: &str = "async-options-opaque";
+/// ADR 0936: a site of the universe (`proof_universe.rs`) that no row, census
+/// obligation, compiler discard or named silence ends, one blocker per family
+/// as `async-read-unaccounted` and `execution-context-unaccounted` are for
+/// theirs. A strict read (a call of an accessor, a Get of a store or props root).
+pub(crate) const STRICT_READ_UNACCOUNTED: &str = "strict-read-unaccounted";
+/// ADR 0936: a call of a setter.
+pub(crate) const WRITE_UNACCOUNTED: &str = "write-unaccounted";
+/// ADR 0936: a call of an action.
+pub(crate) const ACTION_UNACCOUNTED: &str = "action-unaccounted";
+/// ADR 0936: an assignment, `delete` or in-place array method through a store
+/// or props root.
+pub(crate) const STORE_WRITE_UNACCOUNTED: &str = "store-write-unaccounted";
+/// ADR 0936: a call of `onFlush`.
+pub(crate) const ON_FLUSH_UNACCOUNTED: &str = "on-flush-unaccounted";
 /// ADR 0838: a pending rule's claim at a read no producer accounted for: no
 /// row of that rule, no SC9012 at the read, no recorded reason.
 pub(crate) const ASYNC_READ_UNACCOUNTED: &str = "async-read-unaccounted";

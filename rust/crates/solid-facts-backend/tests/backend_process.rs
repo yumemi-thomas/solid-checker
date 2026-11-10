@@ -62,6 +62,8 @@ mod router_params_process;
 mod rule_quality_process;
 #[path = "sessions_process.rs"]
 mod sessions_process;
+#[path = "site_accounting_process.rs"]
+mod site_accounting_process;
 #[path = "site_reach_reads_process.rs"]
 mod site_reach_reads_process;
 #[path = "transport_process.rs"]

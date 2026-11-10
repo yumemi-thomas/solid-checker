@@ -335,6 +335,17 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/local-object-context-value.tsx",
+      "start": 629,
+      "end": 641,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/local-object-context-value.tsx",

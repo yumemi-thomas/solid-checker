@@ -921,10 +921,12 @@ fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiag
     if context.prefer_for_enabled || context.prefer_show_enabled {
         structure::check_file(file, context, &mut violations);
     }
-    shared_reactivity::check_file(file, context, &mut defects);
+    let mut ends = crate::site_accounting::SiteEnds::default();
+    shared_reactivity::check_file(file, context, &mut defects, &mut ends);
     FileDiagnostics {
         violations,
         defects,
+        ends,
     }
 }
 
@@ -932,6 +934,9 @@ fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiag
 pub(crate) struct FileDiagnostics {
     violations: Vec<StaticViolation>,
     defects: Vec<crate::StaticDefect>,
+    /// ADR 0936: the silences the file's rules named for the sites they gave
+    /// no row, reused with the chunk.
+    ends: crate::site_accounting::SiteEnds,
 }
 
 impl UpstreamCompatContext<'_> {
@@ -1007,6 +1012,7 @@ pub(crate) fn check_project(
         draft
             .static_defects
             .extend(diagnostics.defects.iter().cloned());
+        draft.site_ends.extend(&diagnostics.ends);
     }
 }
 

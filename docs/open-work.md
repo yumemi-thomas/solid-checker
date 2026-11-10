@@ -22,6 +22,8 @@ Census, owed proof (U today): a mutator call or `delete` through a hook holder's
 
 Not checked (PLAN.md, kept here when it goes): SC7007 at runtime (no host compiles `"use server"`); SC7006's `export let` edit on a server; every `continue` in `cleanup.rs` read line by line; `effect_phase.rs` `None` arms beyond the method path.
 
+Closed accounting (ADR 0936): SC1001, SC2001, SC2002, SC2003, SC3002. Next: SC2004-SC2006, SC2008, SC2009, whose silent ends are preconditions (client build, release marker, position): their calls as a universe, each precondition a `SiteSilence`. Outside the universe: a props binding destructured in a parameter list, `Object.assign(store.a, x)` and other standard-library writes, `.call`/`.apply`. Left `strict-read-unaccounted`: a returned closure's reactive parameter default (`render-time-reads`).
+
 Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `typed_sources` views (8) and `context_origin` rest on the census (ADR 0692).
 
 A memo over a parameter or a callback prop that every caller fills with a settled value is uncertifiable (ADR 0802): `source_compute_open` does not follow the arguments yet. A setter or a closure in a hook's tuple keeps ADR 0282's full veto (ADR 0801), so it stays SC9012 in most programs where an accessor slot is exact. So does a memo whose compute calls a `.map` callback's parameter over a closed literal (`objects.map(item => item.read())`): the handed net does not follow it.

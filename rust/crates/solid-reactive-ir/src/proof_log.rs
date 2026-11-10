@@ -5,7 +5,9 @@
 //! A site's verdict is made in four places, and each writes its own record
 //! kind here, keyed by the file and the byte span of the site:
 //!
-//! - the producers: a row with a role, or an end with no row (`silent`);
+//! - the producers: a row with a role, or an end with no row (`silent`; ADR
+//!   0936: the producer records the end in its result and
+//!   [`crate::site_accounting`] writes it, so the log and the runtime agree);
 //! - the projection of rows to findings (`row`, with its typed reason, and
 //!   `finding`), and the passes inside it that drop or demote one;
 //! - the backend passes over the findings (`drop`, `reclass`, `verdict`);
@@ -398,9 +400,33 @@ pub(crate) enum PremiseKind {
     /// root.
     DestructuredPropValue,
     /// The site is at module scope or in a static initializer: no function or
-    /// instance field owns it, and no owner exists there to reject the access
-    /// (the module-initialization role). The span is the site.
+    /// instance field owns it, and no owner exists there to reject the access;
+    /// the rc.21 runtime installs strict-read contexts only in component and
+    /// effect bodies (the module-initialization role). The span is the site.
     ModuleScope,
+    /// The site follows an `await` of its own async function that every path
+    /// reaches, or that dominates it: it runs on a later task, off every
+    /// caller's stack, in no render window and under no tracking scope (ADR
+    /// 0320, 0323). The span is the `await`.
+    AfterAwait,
+    /// Nothing enters the function that holds the site: no call edge, carrier
+    /// or scheduler names it, no render enters it, no unseen code calls it (a
+    /// closed program's export, a private function: ADR 0203, 0934), and its
+    /// binding is referenced nowhere, so its code never runs. The span is the
+    /// function.
+    NothingEnters,
+    /// The role classifier decided the site's role (the compiler's and the
+    /// dialect's facts place the code) and that role reports nothing for the
+    /// rule: an effect's apply, a leaf scope, a handler. The span is the site.
+    RoleDoesNotReport,
+    /// A container a caller handed in holds a plain value on this route: a
+    /// literal, a function or a `new` object, or a props declaration every
+    /// call site of which passes one (ADR 0919). The span is that value.
+    PlainValueOnEveryRoute,
+    /// The function is handed whole to a position the compiler and the dialect
+    /// place exactly and whose role reports nothing (an event handler slot, a
+    /// tracked JSX expression): its reads run there. The span is the reference.
+    HandedToSilentSlot,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the
@@ -926,8 +952,8 @@ pub(crate) fn site(record: &SiteRecord<'_>) {
 
 /// A silent end a rule's account names: `proof` is the typed proof's name
 /// (an enum variant, `ContextProof::OwnedContext`), `premises` the typed facts
-/// it rests on. The accounting passes of ADRs 0886 and 0838 and the producers'
-/// named early ends write it.
+/// it rests on. The accounting passes of ADRs 0886 and 0838 and
+/// [`crate::site_accounting`] (the producers' named ends, ADR 0936) write it.
 pub(crate) fn silent(rule: &str, location: &Location, proof: &str, premises: &[Premise]) {
     if !enabled() {
         return;
@@ -942,45 +968,6 @@ pub(crate) fn silent(rule: &str, location: &Location, proof: &str, premises: &[P
             "premises": premises_value(premises),
         })),
     );
-}
-
-/// A producer's named early end (ADR 0933): the site ends here with no row, on
-/// one premise of `kind` about the code at `at()`: the place the fact lives (a
-/// carrier call, a props parameter, a function), not the site. `id` is
-/// `<file stem>.<function>.<end>`, literal and unique, so a lint can list the
-/// ends from the source. `at` runs only with the log on. An end whose fact has
-/// no span is a label, not a fact: nothing is written and the site stays
-/// unaccounted for.
-pub(crate) fn end_at(
-    file: &solid_facts::FileFacts,
-    site: Span,
-    id: &'static str,
-    kind: PremiseKind,
-    at: impl FnOnce() -> Option<Span>,
-) {
-    if enabled() {
-        end_with(file, site, id, || vec![Premise::at(kind, at())]);
-    }
-}
-
-/// [`end_at`] with every premise the end rests on (the edges and carriers that
-/// place a function): the premises that name no code are dropped, and with none
-/// left nothing is written.
-pub(crate) fn end_with(
-    file: &solid_facts::FileFacts,
-    site: Span,
-    id: &'static str,
-    premises: impl FnOnce() -> Vec<Premise>,
-) {
-    if !enabled() {
-        return;
-    }
-    let mut premises = premises();
-    premises.retain(|premise| premise.at.is_some());
-    if premises.is_empty() {
-        return;
-    }
-    silent("end", &site.location(file.path.shared()), id, &premises);
 }
 
 /// The span a location names, when it fits.
