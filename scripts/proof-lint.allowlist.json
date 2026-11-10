@@ -48,7 +48,7 @@
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_values.rs": {
       "default-on-missing": {
         "count": 3,
-        "why": "pending-review"
+        "why": "`uses_of` has no row for a binding nothing references (the receiver census adds a row at a binding's first exact reference), so no row means nothing of it escaped; the three reads are the closure test of an object or array holder"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/transport_memos.rs": {
@@ -66,7 +66,7 @@
     "rust/crates/solid-reactive-ir/src/attribution.rs": {
       "default-on-missing": {
         "count": 3,
-        "why": "pending-review"
+        "why": "an unknown package directory may hold an analyzed workspace source, so the exposure answer is yes (the hazard side); a binding whose initializer is not the call is refused (false); a call that omits argument `index` leaves the parameter's default, proved builtin just above, or undefined: the call's own argument list, not a missing fact"
       },
       "name-only-match": {
         "count": 4,
@@ -76,7 +76,7 @@
     "rust/crates/solid-reactive-ir/src/base/contributions.rs": {
       "default-on-missing": {
         "count": 4,
-        "why": "pending-review"
+        "why": "the member census: a class field with no initializer holds undefined (a later assignment is a writer of the census itself); a `Proxy` handler that is no exact literal may trap `get` (the hazard side); `Promise.resolve()` and the `replace` dispatch test read the call's own argument list (no first argument, no pattern to dispatch through), and a call not found is false"
       },
       "name-only-match": {
         "count": 5,
@@ -138,7 +138,7 @@
     "rust/crates/solid-reactive-ir/src/effect_phase.rs": {
       "default-on-missing": {
         "count": 4,
-        "why": "pending-review"
+        "why": "an optional region exclusion (`from` None excludes nothing); best-candidate bookkeeping (`found` takes the first or the shallower helper chain); and the member filter that keeps only members resolving exactly to this literal, where a literal with no such member is unplaced (`unplaced_layer`, an obligation), never silent"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_paths.rs": {
@@ -174,7 +174,7 @@
     "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs": {
       "default-on-missing": {
         "count": 3,
-        "why": "pending-review"
+        "why": "`default_parameter` is None when the literal is no parameter default, so the omission test does not apply; a callee source that cannot be read or mentions `arguments` is refused (false); `unwrap_or(true) && proven` is the identity of an AND-fold over the guarded completions"
       },
       "name-only-match": {
         "count": 2,
@@ -188,7 +188,7 @@
     "rust/crates/solid-reactive-ir/src/execution_role/callee_roles.rs": {
       "default-on-missing": {
         "count": 3,
-        "why": "pending-review"
+        "why": "position syntax, not a missing fact: module level has no enclosing function to exclude, a parameterless arrow has no parameter to constrain, and the climb's final call is in the callback's body or, when the callback is itself the in-place layer, at module level"
       },
       "untagged-silent-role": {
         "count": 3,
@@ -250,7 +250,7 @@
     "rust/crates/solid-reactive-ir/src/execution_role/pending_sources.rs": {
       "default-on-missing": {
         "count": 3,
-        "why": "pending-review"
+        "why": "the first two refuse (false) when the read or the holder is not in the component's own function; `named` is None for an anonymous hook, which has no name binding to be written"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
@@ -728,7 +728,7 @@
     "rust/crates/solid-reactive-ir/src/symbols.rs": {
       "default-on-missing": {
         "count": 4,
-        "why": "pending-review"
+        "why": "`undeclared_in` answers undeclared for an unknown symbol (the hazard side); the other three are incremental symbol-table reuse (`alias_graph_is_local`, `retained_roots_kept`, retained root semantics): a symbol on one side only is the appearing or disappearing id the comments name, rejected by `structurally_changed_symbols` and the clauses after it, and a reuse must still equal the one-shot result (`make ir-edit-fuzz`, ADR 0383)"
       }
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs": {
@@ -762,7 +762,7 @@
     "rust/crates/solid-reactive-ir/src/value_use.rs": {
       "default-on-missing": {
         "count": 4,
-        "why": "pending-review"
+        "why": "`carried` yields `Position::Open(VALUE_IN_CARRIER)` (the hazard side); a destructuring key no literal names may hold any slot (`None => true` widens the tracked names); the two `then_some` by size pick the innermost enclosing element or object, a selection and not a verdict"
       },
       "name-only-match": {
         "count": 4,
