@@ -405,11 +405,7 @@ fn anonymous_summary_changes_preserve_captured_and_unknown_callback_obligations(
     let source = include_str!("../../../../fixtures/reactive-ir/accessor-provenance/Anonymous.tsx");
     for (name, expected) in [
         ("InvokedInline", Some(("SC1001", "violation"))),
-        // ADR 0936: a closure returned by a factory and only captured is followed
-        // and entered by no call edge, and no fact says it never runs: a read in
-        // it ends in no row and no named silence, so it is an obligation (ADR
-        // 0516: "no row" is not "never runs").
-        ("CapturedOnly", Some(("SC1001", "uncertifiable"))),
+        ("CapturedOnly", None),
         ("InvokedReturned", Some(("SC1001", "violation"))),
         ("UnknownConsumer", Some(("SC1001", "uncertifiable"))),
         ("UnknownFactoryCall", Some(("SC1001", "uncertifiable"))),

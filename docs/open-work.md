@@ -22,7 +22,7 @@ Census, owed proof (U today): a mutator call or `delete` through a hook holder's
 
 Not checked (PLAN.md, kept here when it goes): SC7007 at runtime (no host compiles `"use server"`); SC7006's `export let` edit on a server; every `continue` in `cleanup.rs` read line by line; `effect_phase.rs` `None` arms beyond the method path.
 
-Closed accounting (ADR 0936): SC1001, SC2001, SC2002, SC2003, SC3002. Next: SC2004-SC2006, SC2008, SC2009, whose silent ends are preconditions (client build, release marker, position): their calls as a universe, each precondition a `SiteSilence`. Outside the universe: a props binding destructured in a parameter list, `Object.assign(store.a, x)` and other standard-library writes, `.call`/`.apply`. A helper's prop read with a use nothing follows (ADR 0222), and a closure a factory returns that is only captured, are `strict-read-unaccounted`.
+Closed accounting (ADR 0936): SC1001, SC2001, SC2002, SC2003, SC3002. Next: SC2004-SC2006, SC2008, SC2009, whose silent ends are preconditions (client build, release marker, position): their calls as a universe, each precondition a `SiteSilence`. Outside the universe: a props binding destructured in a parameter list, `Object.assign(store.a, x)` and other standard-library writes, `.call`/`.apply`. A helper's prop read with a use nothing follows (ADR 0222) is `strict-read-unaccounted`.
 
 Bounds that may answer clean at their limit (`scripts/flip/notes/bounds-audit.md`): `typed_sources` views (8) and `context_origin` rest on the census (ADR 0692).
 

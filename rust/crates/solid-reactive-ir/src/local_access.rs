@@ -9879,6 +9879,25 @@ pub(crate) fn placement_premises(
         return Vec::new();
     };
     let mut premises = function_placement_premises(file, function, lookup);
+    // ADR 0936: an anonymous function (a closure a factory returns) is entered
+    // only through the named function around it: that function's call edges
+    // are the facts, as `placed_nowhere` already rules out an escape they do
+    // not follow. The innermost named function that is no component decides.
+    if premises.is_empty() {
+        let mut outers = file
+            .ast
+            .functions_containing(function.span)
+            .filter(|outer| {
+                outer.span != function.span
+                    && function_binding_name(file, outer).is_some()
+                    && !lookup.function_may_be_component(file, outer)
+            })
+            .collect::<Vec<_>>();
+        outers.sort_by_key(|outer| outer.span.end - outer.span.start);
+        if let Some(outer) = outers.first() {
+            premises = function_placement_premises(file, outer, lookup);
+        }
+    }
     premises.extend(unreached_premise(file, span, function.span, lookup));
     premises
 }
