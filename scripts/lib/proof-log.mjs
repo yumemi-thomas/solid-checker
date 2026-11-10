@@ -265,6 +265,20 @@ export function hitKey(fixture, relativeFile, hit) {
 /** A hit no gap entry may accept: a false-clean candidate, and a named end that is a label rather than a fact. */
 export const neverAccepted = (check, kind) => check === "C2" || kind === "label-only-end";
 
+/**
+ * The candidate entries a run still has a hit for (`kept`) and those it has none for (`removed`). The branch that fixes a site
+ * removes its entry in the same commit; this does it from a run, and only ever removes.
+ */
+export function pruneCandidates(candidates, hitsByKey) {
+  const kept = {};
+  const removed = [];
+  for (const [key, entry] of Object.entries(candidates)) {
+    if (hitsByKey.has(key)) kept[key] = entry;
+    else removed.push(key);
+  }
+  return { kept, removed };
+}
+
 /** Reasons that state no fact. A gap's `why` must say what makes the silence sound or why the site is outside the claim. */
 export const EMPTY_REASONS = /^(|unreviewed|todo|tbd|known|harmless|ok|fine|n\/a|none|noise|expected|legacy)\.?$/i;
 

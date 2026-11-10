@@ -6,7 +6,7 @@ import { describe, test } from "vitest";
 
 import { ROOT } from "./proof-gate.mjs";
 import { fixtureProjects } from "./lib/fixture-projects.mjs";
-import { EMPTY_REASONS, gapProblems, hitKey, proofHits, proofLogLines, proofStats, resolvedLine } from "./lib/proof-log.mjs";
+import { EMPTY_REASONS, gapProblems, hitKey, proofHits, proofLogLines, proofStats, pruneCandidates, resolvedLine } from "./lib/proof-log.mjs";
 
 const F = "/p/App.tsx";
 const at = (s, e = s + 3) => ({ f: F, s, e });
@@ -181,6 +181,17 @@ describe("the gap file", () => {
     const candidates = { [key("C3", "no-decision")]: { owner: "fix 6" } };
     assert.deepEqual(gapProblems(hits, {}, candidates).map((p) => p.kind), ["candidate"]);
     assert.deepEqual(gapProblems(new Map(), {}, candidates).map((p) => p.kind), ["stale"]);
+  });
+
+  test("pruning removes the candidate entries no hit matches and nothing else", () => {
+    const hits = byKey(hit("C2", "reporting-decision-no-row"));
+    const candidates = {
+      [key("C2", "reporting-decision-no-row")]: { owner: "fix 6" },
+      [key("C2", "other")]: { owner: "#197" },
+    };
+    const { kept, removed } = pruneCandidates(candidates, hits);
+    assert.deepEqual(Object.keys(kept), [key("C2", "reporting-decision-no-row")]);
+    assert.deepEqual(removed, [key("C2", "other")]);
   });
 
   test("a reason that states no fact is invalid", () => {
