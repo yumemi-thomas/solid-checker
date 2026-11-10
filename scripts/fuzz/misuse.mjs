@@ -439,6 +439,30 @@ const jsxLine = (variant) => (variant === "jsx-component" ? "function JsxComp1()
 const jsxBindings = (variant, bindings) => (variant?.startsWith("jsx-") ? ["direct"] : bindings);
 const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }"), render: api("render", '() => null, document.createElement("div")', { module: "@solidjs/web" }) };
 
+/**
+ * ADR 0803: the iteration patch a project helper applies to `Array.prototype` (REACTIVE_WRITE_IN_OWNED_SCOPE `iter-swap`). A pair of
+ * functions (a signal's tuple) iterates its second element first and every other array as before, so Solid and the page still run.
+ * The helper mutates its parameter through a computed key, a write the visible-write scan cannot read at the mutation: it is a veto only
+ * where an array intrinsic is handed on (`iteration_intrinsic_handed`), as the call below does.
+ */
+const ITER_SWAP_LINES = [
+  [
+    "function patchIteration(target: object, key: PropertyKey) {",
+    "  Object.assign(target, {",
+    "    [key]: function* (this: unknown[]) {",
+    '      if (this.length === 2 && typeof this[0] === "function" && typeof this[1] === "function") {',
+    "        yield this[1];",
+    "        yield this[0];",
+    "      } else {",
+    "        for (let i = 0; i < this.length; i += 1) yield this[i];",
+    "      }",
+    "    },",
+    "  });",
+    "}",
+  ].join("\n"),
+  "patchIteration(Array.prototype, Symbol.iterator);",
+];
+
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
@@ -446,14 +470,16 @@ export const SPEC = {
     recallLegal: [...EVENT_LEGAL, ...RENDER_LEGAL, ...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
-    call: (node, [sig]) => (INSTALLED_SETS[node.variant] ? member(sig.setter, INSTALLED_SETS[node.variant]) : node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
+    // `iter-swap` (ADR 0803, recall): the site reads the signal's first slot, a legal read in a memo; the patch makes it the setter.
+    moduleLines: (variant) => (variant === "iter-swap" ? ITER_SWAP_LINES : []),
+    call: (node, [sig]) => (node.variant === "iter-swap" ? local(sig.name) : INSTALLED_SETS[node.variant] ? member(sig.setter, INSTALLED_SETS[node.variant]) : node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
     // refresh is an API; the other two are local functions, which have no namespace form.
-    bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : INSTALLED_SETS[variant] ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : variant === "iter-swap" ? ["direct"] : INSTALLED_SETS[variant] ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     // API_VARIANTS (recall; measured on rc.17's fast runtime, 2026-11-03): a writable memo's setter (`createSignal(() => 0)`) reports in
     // every owned context and is legal in a handler and an apply; an optimistic setter (`createOptimistic(0)`) and a signal created
     // `{ ownedWrite: true }` report nothing anywhere, so both are legal in the owned contexts too (`legalVariantContexts`).
-    recallVariants: ["writable-memo", ...Object.keys(INSTALLED_SETS)], recallLegalVariants: ["writable-memo", "optimistic", "owned-write"],
-    variantContexts: { "writable-memo": [...OWNED_PURE, "handler", "effect-apply"], optimistic: [...OWNED_PURE, "handler"], "owned-write": [...OWNED_PURE, "handler"] },
+    recallVariants: ["writable-memo", ...Object.keys(INSTALLED_SETS), "iter-swap"], recallLegalVariants: ["writable-memo", "optimistic", "owned-write"],
+    variantContexts: { "writable-memo": [...OWNED_PURE, "handler", "effect-apply"], optimistic: [...OWNED_PURE, "handler"], "owned-write": [...OWNED_PURE, "handler"], "iter-swap": ["memo"] },
     legalVariantContexts: { optimistic: OWNED_PURE, "owned-write": OWNED_PURE },
   },
   STORE_WRITE_OUTSIDE_SETTER: { legal: ["handler", "timer", "then"], recallContexts: [...OWNER_LIFETIME, "effect-cleanup-rerun", ...ASYNC_CONTROL],
@@ -1243,6 +1269,8 @@ export function describeUse(node, signals) {
   const sigs = (node.sigs ?? []).map((name) => signals.get(name));
   const target = spec.call(node, sigs);
   const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: typeof spec.contextLine === "function" ? spec.contextLine(node.variant) : spec.contextLine };
+  // A variant's own module-scope lines (the iteration patch of `iter-swap`), above the components that run after them.
+  out.moduleLines.push(...(spec.moduleLines?.(node.variant) ?? []));
   const importsOf = (module) => (module === "@solidjs/web" ? out.web : out.solid);
   if (target.kind === "api") {
     const { module, name, args } = target;

@@ -9687,5 +9687,16 @@
    "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-real",
    "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-alias"
   ]
+ },
+ {
+  "finding": "A project helper handed `Array.prototype` that mutated its parameter under a key or source no literal names (`Object.assign(p, {[k]: f})`, `Object.assign(p, s)`, `Reflect.set(p, k, f)`) escaped both halves of ADR 0803: the visible-write scan read only a spelled intrinsic or a `Symbol.iterator` text, and the census left a mutating builtin to the scan. A patch that makes a signal's tuple yield its setter first turned a legal read in a memo into a write, certified clean where Chrome throws REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "found": "proof-log phase B lint (text-premise, accessor_provenance/mutation_sites.rs), probed and Chrome-confirmed (unproven-clean: REACTIVE_WRITE_IN_OWNED_SCOPE, REACTIVITY_HALTED)",
+  "fixed": "ADR 0803 (iteration_intrinsic_handed)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-memo-iter-swap-direct-none",
+   "mx-reactive-write-in-owned-scope-memo-iter-swap-direct-module-helper"
+  ]
  }
 ]
