@@ -10,7 +10,7 @@
     "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
       "default-on-missing": {
         "count": 22,
-        "why": "pending-review"
+        "why": "every hit sits in a hazard predicate of the visible-write scan or the handed-value census (`iteration_key`, `invocation_key`, `visible_iteration_write`, `received_by_seen_code`, `handed_on`, `string_code_slot`, `gateway_assignment`, `tuple_slot_iteration_may_be_mutated`, `invocation_property_write`), where `true` withdraws the primitive's array-pattern slots or counts a hand-out: a missing key, argument, shape, entity or text answers hazard (uncertifiable), never clean. Two are not a missing fact: the timer callee's `member.is_none_or(..)` is the bare-call case (a computed key is `Some(None)` and answers no), and `absent_window_member` is ADR 0803's premise (a reserved `__` member no declaration resolves, which nothing analyzed installs)"
       },
       "name-only-match": {
         "count": 9,
@@ -30,7 +30,7 @@
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_dependencies.rs": {
       "default-on-missing": {
         "count": 5,
-        "why": "pending-review"
+        "why": "the getter questions (`open_site_may_hold`, `descriptor_may_define`) answer 'may' on a missing key, text or shape, so the dependency getter is not ruled out; `binding_is_closed` reads the receiver census, which adds a row at a binding's first exact reference, so a binding with no row is referenced nowhere and nothing of it escaped"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
@@ -42,7 +42,7 @@
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_memos.rs": {
       "default-on-missing": {
         "count": 5,
-        "why": "pending-review"
+        "why": "hazard questions: `member_vetoed` (an unknown owner file is vetoed), `tuple_iteration` and `tuple_slot_iteration` (a visible mutation of the iteration protocol: an unavailable derived value answers yes), `unkeyed_provider` and `any_providers` (an unavailable provider flag answers yes); each yes withholds a proof and none grants one"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_values.rs": {
@@ -238,7 +238,7 @@
     "rust/crates/solid-reactive-ir/src/execution_role/flow_memos.rs": {
       "default-on-missing": {
         "count": 5,
-        "why": "pending-review"
+        "why": "`call_withheld` and the assigned-member census (`member_name_assigned`, `builtin_prototype_written`, `constructor_prototypes_written`, `constructor_prototype_written`) answer 'withheld' or 'written' when the census or the targets are unavailable (a cycle fails closed): the vetoed side"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs": {
@@ -626,7 +626,7 @@
     "rust/crates/solid-reactive-ir/src/router_params.rs": {
       "default-on-missing": {
         "count": 6,
-        "why": "pending-review"
+        "why": "`unaudited` (a version unknown or not audited as URL strings), the `useAction` namespace test, `reaches` and the no-symbol import all answer the unproven side on a missing fact; the row guard tolerates an absent second record of the version (`resolver_package_version`), leaving the manifest version the check consults in force, and an audited release still needs its byte digest to match (`bytes_differ`)"
       },
       "name-only-match": {
         "count": 1,
@@ -746,7 +746,7 @@
     "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
       "default-on-missing": {
         "count": 13,
-        "why": "pending-review"
+        "why": "bookkeeping (`reached` and the kept store take the first or the better candidate); `self.open = true` and the `return None` refusals of the store-literal proofs (a pattern or export text not read, a primitive not discovered as `createStore`) are the unproven side; the array-slot test reads the pattern's own syntax (a shorter pattern or a hole binds nothing); a source that is not a known accessor adds a candidate sink write flagged `may_not_write` unless proven to write, so it adds a candidate and silences none; the `!x` guard skip is the retained upstream heuristic (a maybe-undefined, unknown or absent domain reads as a guard) and suppresses only an `uncertain: true` UncalledAccessor row"
       },
       "name-only-match": {
         "count": 7,
