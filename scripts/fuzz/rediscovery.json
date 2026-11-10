@@ -8990,6 +8990,24 @@
   "finding": "ADR 0931 review: a helper whose parameter default may throw (`(read, _gate = stop()) => read()`) was taken to call `read` on every completion, so `gatedInline(() => count())` in a body was an SC1001 violation (also through a `function` forward, ADR 0285); `stop()` throws first, no read runs",
   "found": "fixture project-callback-uses `GatedInline` (pinned uncertifiable) moved to a violation once ADR 0931 followed `const` forwards; the direct call was already one",
   "fixed": "ADR 0931 (no parameter-completion proof for a function with a non-literal default)",
-  "outside": "the grids write no parameter default in a helper (only the random generator's `defaultCall`, whose default calls the parameter itself); fixture forwarded-const-callback `GatedDefault`/`LiteralDefault` and project-callback-uses `GatedInline` hold it. Owed: a helper form with a throwing default in the legal grids"
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-gate-throw-memo-alias-handoff-function",
+   "lg-strict-read-untracked-gate-throw-memo-destructured-handoff-function",
+   "lg-strict-read-untracked-gate-throw-memo-direct-handoff-function",
+   "lg-strict-read-untracked-gate-throw-memo-hook-handoff-function",
+   "lg-strict-read-untracked-gate-throw-memo-hook-member-handoff-function",
+   "lg-strict-read-untracked-gate-throw-memo-tuple-handoff-function",
+   "lg-strict-read-untracked-gate-throw-memo-wrapper-handoff-function",
+   "lg-strict-read-untracked-gate-throw-signal-alias-handoff-function",
+   "lg-strict-read-untracked-gate-throw-signal-destructured-handoff-function",
+   "lg-strict-read-untracked-gate-throw-signal-direct-handoff-function",
+   "lg-strict-read-untracked-gate-throw-signal-hook-handoff-function",
+   "lg-strict-read-untracked-gate-throw-signal-hook-member-handoff-function",
+   "lg-strict-read-untracked-gate-throw-signal-tuple-handoff-function",
+   "lg-strict-read-untracked-gate-throw-signal-wrapper-handoff-function"
+  ],
+  "rediscovered": "make fuzz-focus CODES=STRICT_READ_UNTRACKED,REACTIVE_WRITE_IN_OWNED_SCOPE,ACTION_CALLED_IN_OWNED_SCOPE,STORE_WRITE_OUTSIDE_SETTER,ON_FLUSH_IN_OWNED_SCOPE FUZZ_GRIDS=mx-recall,lg-recall -- --contexts gate-default,gate-throw (Chrome host): origin/main 938a8764f's release 40 false-positive programs in lg-recall `gate-throw` (STRICT_READ_UNTRACKED, layers handoff-function, chain-5, chain-13; one id per variant x binding stratum here), nothing else to look at; the ADR 0931 release 0 false positive, nothing needs a look"
  }
 ]

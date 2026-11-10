@@ -107,6 +107,11 @@ export const HANDOFF_FORMS = ["handoff-foreach", "handoff-map", "handoff-from", 
 export const DEPTH_FORMS = ["depth-15", "depth-16", "depth-17"];
 /** ADR 0695: the site in a function reached through N named helpers (`chain-N`), or in a callback N helpers hand on (`forward-N`): the bounds a walk over callers stops at. */
 export const CHAIN_FORMS = ["chain-5", "chain-13", "forward-2", "forward-13"];
+/**
+ * ADR 0931: the site in a callback handed to a helper whose parameter list has a default (`(g, _gate = d) => { g(); }`), called in a
+ * `try`. `gate-default` (a primitive default) runs the site; `gate-throw` (a default that throws, `stopGate()`) never enters the body.
+ */
+export const GATE_FORMS = ["gate-default", "gate-throw"];
 /** A carrier that runs its callback zero times, or for a length nothing states (ADRs 0563, 0566, 0580): a program's site there runs nothing. */
 export const ZERO_RUN_FORMS = ["handoff-foreach-empty", "handoff-foreach-var"];
 /** ADR 0820: the site in a generator's body, the iterator stepped from an async function. `gen-prefix` and `gen-drain` are legal: the site runs on the first stack. */
@@ -120,7 +125,7 @@ export const GENERATOR_FORMS = ["gen-await", "gen-yield", "gen-iife", "gen-wrap"
 export const GENERATOR_STEP_FORMS = ["gstep"];
 /** ADR 0866: the site under `if (getOwner())` in an async function, with a suspension in the guarded block. `guard-early` and `guard-probe-loop` are legal: the site runs on the probed stack, or the probe runs again. */
 export const GUARD_FORMS = ["guard-await", "guard-for-await", "guard-loop", "guard-early", "guard-probe-loop"];
-export const CTL_FORMS = [...GUARD_FORMS, "guard-yield", ...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", "aw-else", "aw-else-flip", "dead-random", "run-kept", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS, ...GENERATOR_FORMS, ...GENERATOR_STEP_FORMS];
+export const CTL_FORMS = [...GUARD_FORMS, "guard-yield", ...ZERO_RUN_FORMS, "for", "while", "do", "switch", "try-catch", "try-finally", "label", "generator", "loop-await", "for-await", "finally-await", "aw-else", "aw-else-flip", "dead-random", "run-kept", ...HANDOFF_FORMS, ...DEPTH_FORMS, ...CHAIN_FORMS, ...GATE_FORMS, ...GENERATOR_FORMS, ...GENERATOR_STEP_FORMS];
 export const CTL_ASYNC_FORMS = new Set([...GUARD_FORMS, "loop-await", "for-await", "finally-await", ...GENERATOR_FORMS]);
 export const ctl = (form, body) => ({ k: "ctl", form, body });
 
@@ -465,7 +470,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
             if (!CTL_FORMS.includes(stmt.form)) fail(`${where}: unknown control form ${stmt.form}`);
             if (CTL_ASYNC_FORMS.has(stmt.form) && !scope.async) fail(`${where}: ${stmt.form} outside an async function`);
             // A generator's body is its own function: no await, and its own return.
-            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || stmt.form === "guard-yield" || GENERATOR_FORMS.includes(stmt.form) || GENERATOR_STEP_FORMS.includes(stmt.form) || HANDOFF_FORMS.includes(stmt.form) || DEPTH_FORMS.includes(stmt.form) || CHAIN_FORMS.includes(stmt.form) ? false : scope.async }), "free");
+            checkBlock(stmt.body, scopeOf(scope, { async: stmt.form === "generator" || stmt.form === "guard-yield" || GENERATOR_FORMS.includes(stmt.form) || GENERATOR_STEP_FORMS.includes(stmt.form) || HANDOFF_FORMS.includes(stmt.form) || DEPTH_FORMS.includes(stmt.form) || CHAIN_FORMS.includes(stmt.form) || GATE_FORMS.includes(stmt.form) ? false : scope.async }), "free");
             break;
           default: fail(`${where}: unknown statement ${stmt.k}`);
         }
