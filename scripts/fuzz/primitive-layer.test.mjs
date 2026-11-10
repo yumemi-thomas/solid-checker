@@ -193,6 +193,31 @@ describe("the package source (SC4002, ADR 0940)", () => {
     expect(built.files["node_modules/fz-ctx/index.d.ts"]).toContain("export declare function usePkgContext(): number;");
     expect(JSON.parse(built.files["oracle.json"]).packages).toEqual(["fz-ctx"]);
   });
+  // ADR 0949: three more entries into the dependency's source that no call names.
+  it("has a component, a handed and a holder form: a tag renders the package's component, its hook goes to an effect by reference, a class method runs, the direct binding only", () => {
+    for (const source of ["package-component", "package-handed", "package-holder"]) {
+      expect(SOURCES).toContain(source);
+      expect(sourcesOf("CONTEXT_NOT_FOUND", null, "direct", "body")).toContain(source);
+      expect(sourcesOf("CONTEXT_NOT_FOUND", null, "alias", "body")).not.toContain(source);
+      expect(sourcesOf("CONTEXT_NOT_FOUND", "default-undefined", "direct", "body")).not.toContain(source);
+      expect(parentSource(source)).toBe(false);
+    }
+    const component = buildCase(program("CONTEXT_NOT_FOUND", "memo", { source: "package-component", binding: "direct" }), { id: "c1c" });
+    expect(component.files["App.tsx"]).toContain('import { PkgPanel } from "fz-ctx";');
+    expect(component.files["App.tsx"]).toContain("<PkgPanel />");
+    expect(component.files["App.tsx"]).not.toContain("useContext(");
+    expect(component.files["node_modules/fz-ctx/index.js"]).toContain("export function PkgPanel(props) {");
+    expect(component.files["node_modules/fz-ctx/index.d.ts"]).toContain("export declare function PkgPanel(props: { children?: JSX.Element }): JSX.Element;");
+    expect(JSON.parse(component.files["oracle.json"]).packages).toEqual(["fz-ctx"]);
+    const handed = buildCase(program("CONTEXT_NOT_FOUND", "body", { source: "package-handed", binding: "direct" }), { id: "c1d" });
+    expect(handed.files["App.tsx"]).toContain('import { usePkgContext } from "fz-ctx";');
+    expect(handed.files["App.tsx"]).toContain("createEffect(usePkgContext, () => {})");
+    expect(handed.files["App.tsx"]).not.toContain("usePkgContext()");
+    const holder = buildCase(program("CONTEXT_NOT_FOUND", "root", { source: "package-holder", binding: "direct" }), { id: "c1e" });
+    expect(holder.files["App.tsx"]).toContain('import { PkgReader } from "fz-ctx";');
+    expect(holder.files["App.tsx"]).toContain("new PkgReader().read()");
+    expect(holder.files["node_modules/fz-ctx/index.js"]).toContain("export class PkgReader {");
+  });
   it("is not drawn by a combination, and leaves a local program as it was", () => {
     const local = buildCase(program("CONTEXT_NOT_FOUND", "memo"), { id: "local" });
     expect(local.files["App.tsx"]).toContain("const Ctx = createContext<number>();");

@@ -1142,6 +1142,7 @@ pub(crate) fn find_missing_owners_incremental(
     );
     if !facts.dependency_source_roots.is_empty() {
         let (nodes, contexts, outgoing) = graph.dense_view(&order);
+        let mut walked = HashSet::default();
         attribute_dependency_requirements(
             &mut requirements,
             facts,
@@ -1149,6 +1150,24 @@ pub(crate) fn find_missing_owners_incremental(
             &nodes,
             &contexts,
             &outgoing,
+            &mut walked,
+        );
+        // ADR 0949: the project sites that enter package code and no call names.
+        let package_reads = order
+            .iter()
+            .filter_map(|pid| emissions.get(pid))
+            .flat_map(|emission| emission.package_reads.iter().cloned())
+            .collect::<Vec<_>>();
+        attribute_package_entries(
+            &mut requirements,
+            facts,
+            lookup,
+            &nodes,
+            &contexts,
+            &outgoing,
+            &walked,
+            &provider_free,
+            &package_reads,
         );
     }
     let requirement_emission = requirements_started.elapsed();

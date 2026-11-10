@@ -261,6 +261,7 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         default_unproven: false,
         owned_run_throws: false,
         through_dependency: None,
+        through_dependency_entry: crate::DependencyEntry::Call,
         report: true,
     };
 

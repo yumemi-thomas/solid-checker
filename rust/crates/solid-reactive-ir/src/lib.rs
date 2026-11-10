@@ -1425,7 +1425,36 @@ pub struct OwnerRequirement {
     /// project's call that runs it there, under the call's owner context.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub through_dependency: Option<Location>,
+    /// ADR 0949: what the project site of a requirement that stands
+    /// [`Self::through_dependency`] is. The call that enters the package
+    /// function is the default (ADR 0290).
+    #[serde(default, skip_serializing_if = "DependencyEntry::is_call")]
+    pub through_dependency_entry: DependencyEntry,
     pub report: bool,
+}
+
+/// ADR 0949: how project code enters package code, at the site an owner
+/// requirement of the package stands (`OwnerRequirement::through_dependency`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DependencyEntry {
+    /// A call written in the project that enters the package function (ADR 0290).
+    #[default]
+    Call,
+    /// A JSX element whose tag renders the package function as a component:
+    /// no call names the entry, and the component runs under a root of its own.
+    Render,
+    /// A reference to a symbol the package declares that is no call and no
+    /// render (a function handed to a primitive or a prop, a class, a getter's
+    /// holder, a namespace): whatever runs the value is not followed.
+    Reference,
+}
+
+impl DependencyEntry {
+    #[must_use]
+    pub(crate) const fn is_call(&self) -> bool {
+        matches!(self, Self::Call)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

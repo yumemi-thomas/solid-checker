@@ -1,0 +1,38 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
+      "start": 239,
+      "end": 252,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
+      "start": 285,
+      "end": 300,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
+      "start": 371,
+      "end": 383,
+      "fixes": 0
+    }
+  ]
+}

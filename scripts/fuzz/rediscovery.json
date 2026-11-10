@@ -10082,5 +10082,56 @@
    "mx-context-not-found-for-x-direct-none-s-package-hook"
   ],
   "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): all 42 programs of the `package-hook` source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, the file certified clean); ADR 0943's build (checker 725d8bee0e3e…): the same 42 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the call (0 false-clean, 0 false-positive, 0 wrong-rule). Chrome and the real oracle agree on all (0 behaviour differences)."
+ },
+ {
+  "finding": "a package component the program renders with a JSX tag (`<PkgPanel />`) reads a context the dependency exports with no default (`export const PkgContext = createContext();`) in the package source, with no provider above; no call names the entry: the component runs under a root of its own, its owner context is a seed, not an edge, and ADR 0290 attributed a package requirement only at a project call: the program was certified clean while Chrome reports CONTEXT_NOT_FOUND. Found with the entry matrix of ADR 0949.",
+  "found": "ADR 0949 (the Mac agent mac-b10, 2026-11-11): the coordinator's probe c1 widened to the entries of a package function no call names (a 31-program matrix through the runtime oracle: 18 certified clean and throwing ContextNotFoundError in Chrome rc.21 development), as the `package-component` source of CONTEXT_NOT_FOUND (SC4002), a recall source of mx-recall; each of its 42 programs through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0949 (a package function is entered where no call names it: the render, the reference, the holder: each is an SC4002 obligation, `provider-not-proven-above`, at the project site that enters it; never a violation)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-component",
+   "mx-context-not-found-memo-x-direct-none-s-package-component",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-component",
+   "mx-context-not-found-root-x-direct-none-s-package-component",
+   "mx-context-not-found-jsx-x-direct-none-s-package-component",
+   "mx-context-not-found-show-x-direct-none-s-package-component",
+   "mx-context-not-found-for-x-direct-none-s-package-component"
+  ],
+  "rediscovered": "29b3f9312 (release; checker sha256 48b28302…, producer 76fe73f958ae…): all 42 programs of the `package-component` source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, no finding covers it, the file certified clean; `focus.mjs --codes CONTEXT_NOT_FOUND --grids mx-recall` exits 1); ADR 0949's build (checker 115b6db1f9a2…, same producer): the same 42 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the project site (0 false-clean, 0 false-positive, 0 wrong-rule; the grid of 3,705 programs: 2,646 agree, 1,059 recall-gap; exit 0). Chrome and the real oracle agree on all (77 compared, 0 behaviour differences)."
+ },
+ {
+  "finding": "a package hook the program hands to an effect by reference (`createEffect(usePkgContext, () => {})`) reads a context the dependency exports with no default (`export const PkgContext = createContext();`) in the package source, with no provider above; no call names the hook: the effect runs it, and ADR 0290 attributed a package requirement only at a project call: the program was certified clean while Chrome reports CONTEXT_NOT_FOUND. Found with the entry matrix of ADR 0949.",
+  "found": "ADR 0949 (the Mac agent mac-b10, 2026-11-11): the coordinator's probe c1 widened to the entries of a package function no call names (a 31-program matrix through the runtime oracle: 18 certified clean and throwing ContextNotFoundError in Chrome rc.21 development), as the `package-handed` source of CONTEXT_NOT_FOUND (SC4002), a recall source of mx-recall; each of its 42 programs through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0949 (a package function is entered where no call names it: the render, the reference, the holder: each is an SC4002 obligation, `provider-not-proven-above`, at the project site that enters it; never a violation)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-handed",
+   "mx-context-not-found-memo-x-direct-none-s-package-handed",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-handed",
+   "mx-context-not-found-root-x-direct-none-s-package-handed",
+   "mx-context-not-found-jsx-x-direct-none-s-package-handed",
+   "mx-context-not-found-show-x-direct-none-s-package-handed",
+   "mx-context-not-found-for-x-direct-none-s-package-handed"
+  ],
+  "rediscovered": "29b3f9312 (release; checker sha256 48b28302…, producer 76fe73f958ae…): all 42 programs of the `package-handed` source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, no finding covers it, the file certified clean; `focus.mjs --codes CONTEXT_NOT_FOUND --grids mx-recall` exits 1); ADR 0949's build (checker 115b6db1f9a2…, same producer): the same 42 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the project site (0 false-clean, 0 false-positive, 0 wrong-rule; the grid of 3,705 programs: 2,646 agree, 1,059 recall-gap; exit 0). Chrome and the real oracle agree on all (77 compared, 0 behaviour differences)."
+ },
+ {
+  "finding": "a package class whose method reads the context (`new PkgReader().read()`) reads a context the dependency exports with no default (`export const PkgContext = createContext();`) in the package source, with no provider above; a method is entered by member dispatch no reference to its own name names, and ADR 0290 attributed a package requirement only at a project call: the program was certified clean while Chrome reports CONTEXT_NOT_FOUND. Found with the entry matrix of ADR 0949.",
+  "found": "ADR 0949 (the Mac agent mac-b10, 2026-11-11): the coordinator's probe c1 widened to the entries of a package function no call names (a 31-program matrix through the runtime oracle: 18 certified clean and throwing ContextNotFoundError in Chrome rc.21 development), as the `package-holder` source of CONTEXT_NOT_FOUND (SC4002), a recall source of mx-recall; each of its 42 programs through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0949 (a package function is entered where no call names it: the render, the reference, the holder: each is an SC4002 obligation, `provider-not-proven-above`, at the project site that enters it; never a violation)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-holder",
+   "mx-context-not-found-memo-x-direct-none-s-package-holder",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-holder",
+   "mx-context-not-found-root-x-direct-none-s-package-holder",
+   "mx-context-not-found-jsx-x-direct-none-s-package-holder",
+   "mx-context-not-found-show-x-direct-none-s-package-holder",
+   "mx-context-not-found-for-x-direct-none-s-package-holder"
+  ],
+  "rediscovered": "29b3f9312 (release; checker sha256 48b28302…, producer 76fe73f958ae…): all 42 programs of the `package-holder` source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, no finding covers it, the file certified clean; `focus.mjs --codes CONTEXT_NOT_FOUND --grids mx-recall` exits 1); ADR 0949's build (checker 115b6db1f9a2…, same producer): the same 42 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the project site (0 false-clean, 0 false-positive, 0 wrong-rule; the grid of 3,705 programs: 2,646 agree, 1,059 recall-gap; exit 0). Chrome and the real oracle agree on all (77 compared, 0 behaviour differences)."
  }
 ]

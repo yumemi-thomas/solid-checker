@@ -9814,6 +9814,31 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
      }
     ]
    }

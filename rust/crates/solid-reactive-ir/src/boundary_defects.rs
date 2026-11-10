@@ -40,6 +40,37 @@ pub(super) fn discover_boundary_defects(
             }
             push_unavailable_import(&mut defects, file, import, entities, dialect);
         }
+        // ADR 0949: a package loaded through a literal `import()` or `require()`
+        // has no import binding to attribute through, and a package whose source
+        // is unavailable (a dynamic load stays off source, ADR 0300) left that
+        // load silent: `lazy(() => import("pkg"))` rendered code nothing analyzed.
+        for load in &file.ast.module_loads {
+            let Some(module) = load.specifier.as_deref() else {
+                continue;
+            };
+            if solid_dialect::core_runtime_reference("", module)
+                || !inputs.boundary.requires_legacy(file.path.as_str(), module)
+            {
+                continue;
+            }
+            let at = location(file.path.shared(), load.span);
+            // The exports the load can reach, as its consumer names them: all of
+            // the module's when it escapes unnamed.
+            let exports: Vec<&str> = match &load.consumer {
+                Some(solid_facts::ast::ModuleLoadConsumer::Members { names }) => {
+                    names.iter().map(|name| name.as_str()).collect()
+                }
+                Some(solid_facts::ast::ModuleLoadConsumer::Lazy { export, .. }) => {
+                    vec![export.as_str()]
+                }
+                None => vec!["*"],
+            };
+            for export in exports {
+                if !native_vocabulary_outranks_package_boundary(dialect, module, export) {
+                    push_unavailable_export(&mut defects, module, export, at.clone());
+                }
+            }
+        }
     }
     defects
 }

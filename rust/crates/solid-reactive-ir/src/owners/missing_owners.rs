@@ -73,6 +73,11 @@ pub(super) fn call_edge_symbol<'e>(
 /// edge; it is found by scanning and attributed as an obligation. A bit
 /// seeded inside the package (its own event handlers or module scope) has no
 /// project call and is not attributed.
+///
+/// ADR 0949: `walked` gets every package function the walk of a
+/// `context-provider` requirement visited, so the entries pass
+/// (`attribute_package_entries`) leaves the project calls into those functions
+/// to this walk's arguments and its owner bits.
 pub(crate) fn attribute_dependency_requirements(
     requirements: &mut Vec<OwnerRequirement>,
     facts: &ProjectFacts,
@@ -80,6 +85,7 @@ pub(crate) fn attribute_dependency_requirements(
     nodes: &[OwnerNode],
     contexts: &[u8],
     outgoing: &[Vec<(usize, OwnerEdgeKind)>],
+    walked: &mut HashSet<usize>,
 ) {
     if facts.dependency_source_roots.is_empty() {
         return;
@@ -216,6 +222,9 @@ pub(crate) fn attribute_dependency_requirements(
                 nodes[owner].body,
                 &sites,
             ) == Some(true);
+        if requirement.operation == OwnerRequirementOperation::ContextProvider {
+            walked.insert(owner);
+        }
         best.insert(
             owner,
             (
@@ -340,6 +349,9 @@ pub(crate) fn attribute_dependency_requirements(
                         .get(&caller)
                         .is_none_or(|previous| !(previous.1 && previous.2) && entry.1 && entry.2);
                     if improves {
+                        if requirement.operation == OwnerRequirementOperation::ContextProvider {
+                            walked.insert(caller);
+                        }
                         best.insert(caller, entry);
                         queue.push_back(caller);
                     }

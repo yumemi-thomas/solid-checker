@@ -39,6 +39,95 @@ pub(crate) struct Emission {
     /// ADR 0886: each silent site and the closed proof that ended it, for
     /// the check-once pass (`unaccounted_owner_sites`).
     pub(super) accounted: Vec<(Span, ContextProof)>,
+    /// ADR 0949: the reads in package source of a context with no default
+    /// that nothing proves provided, whatever context their function holds.
+    pub(super) package_reads: Vec<PackageRead>,
+}
+
+/// ADR 0949: a read of a context with no default in package source (ADR 0943)
+/// that nothing in its own file proves provided above it. Its owner context is
+/// no part of it: a package function that no call edge reaches (a component a
+/// JSX tag renders, a function a project hands to a prop) holds none, and a
+/// project site can still run it under an owner.
+#[derive(Clone, Debug)]
+pub(crate) struct PackageRead {
+    pub(super) location: Location,
+    /// The innermost function around the read.
+    pub(super) function: Span,
+}
+
+/// The read `candidate` is, when it is one of [`PackageRead`]. The census
+/// verdicts it reads are the ones `emit_file` records beside the rows
+/// ([`Emission::provider`]), so a moved verdict reruns the emission.
+fn package_open_read(
+    inputs: &EmissionInputs<'_, '_, '_>,
+    file: &solid_facts::FileFacts,
+    candidate: &OwnerRequirementCandidate,
+    starts: &HashSet<u64>,
+    provider: &mut Vec<(Location, Option<ContextVerdict>)>,
+) -> Option<PackageRead> {
+    // A read on every path past an `await` runs with no owner (SC4001's
+    // `NoOwnerError`), so it throws no `ContextNotFoundError`.
+    if candidate.operation != "context-read"
+        || inputs
+            .facts
+            .dependency_source_root(file.path.as_str())
+            .is_none()
+        || starts.contains(&u64::from(candidate.operation_span.start))
+    {
+        return None;
+    }
+    let lookup = inputs.lookup;
+    let argument = candidate.context_argument?;
+    let key = context_key_at(lookup, file, argument);
+    let verdict = key.as_ref().and_then(|key| {
+        let verdict = inputs.provider_free.get(key).copied();
+        provider.push((key.clone(), verdict));
+        verdict
+    });
+    // As `emit_file`'s `open_key`: a context is closed only where the census
+    // knows its binding and its verdict; a key it does not know (an alias, a
+    // parameter, an unresolved import) is open too.
+    let known = key.is_some()
+        && matches!(
+            verdict,
+            Some(ContextVerdict::Free(_) | ContextVerdict::Silent(_))
+        );
+    let open = !known;
+    let function = containing_ast_function(&file.ast, candidate.operation_span)?;
+    // A read in a `try` whose `catch` clause cannot throw (no `throw`, no call,
+    // no tagged template in it): `ContextNotFoundError` is swallowed where it is
+    // thrown (a router's `isMounted()` probe), so nothing runs it into an error.
+    let ast = &file.ast;
+    if ast.try_catches.iter().any(|caught| {
+        caught.block.contains(candidate.operation_span)
+            && !ast
+                .throws
+                .iter()
+                .any(|throw| caught.handler.contains(throw.span))
+            && !ast
+                .calls
+                .iter()
+                .any(|call| caught.handler.contains(call.span))
+            && !ast
+                .tagged_template_tags
+                .iter()
+                .any(|tag| caught.handler.contains(*tag))
+    }) {
+        return None;
+    }
+    // As `emit_file`: a constant binding, and a provider above every render
+    // of the reading function in this file.
+    let provided = key.as_ref().is_some_and(|key| {
+        lookup
+            .binding_at_reference(file.path.as_str(), file.ast.peel_ts_sugar_span(argument))
+            .is_some_and(|(_, binding, _)| binding.immutable)
+            && provided_above(lookup, file, function, key)
+    });
+    (open && !provided).then(|| PackageRead {
+        location: location(file.path.shared(), candidate.operation_span),
+        function: function.span,
+    })
 }
 
 /// ADR 0886: why an owner-requiring site is silent. Each names a reviewed
@@ -159,6 +248,11 @@ pub(super) fn emit_file(
             })
     };
     for candidate in &entry.fragment.requirements {
+        if let Some(read) =
+            package_open_read(inputs, file, candidate, &starts, &mut emission.provider)
+        {
+            emission.package_reads.push(read);
+        }
         let owner = candidate
             .owner
             .and_then(|span| graph.node_context(pid, span));

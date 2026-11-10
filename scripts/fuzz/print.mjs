@@ -76,7 +76,7 @@ export function usedPackageHelpers(program) {
 export function programPackages(program) {
   const files = packageFiles(usedPackageHelpers(program));
   // ADR 0940: a `use` of the context a dependency exports (misuse.mjs SOURCE_AXES `package`).
-  const context = [...walk(program)].some(({ node }) => node.k === "use" && (node.ctx || node.hook));
+  const context = [...walk(program)].some(({ node }) => node.k === "use" && (node.ctx || node.hook || node.component || node.handed || node.holder));
   return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}) };
 }
 
