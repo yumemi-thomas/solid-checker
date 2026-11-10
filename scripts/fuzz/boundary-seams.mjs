@@ -80,6 +80,13 @@ export const SEAMS = [
     gap: "no pair yet: the case is a read the proof cannot place and the scan can, and no generator context isolates the proof's refusal from the scan's answer",
   },
   {
+    id: "slot-observer-guard",
+    sites: [{ file: "rust/crates/solid-reactive-ir/src/cleanup.rs", match: /left to the stored-throw pass/ }],
+    between: ["the leaf-owner walk through a primitive's callback slot (`cleanup.rs` `through_slots`, SC3001)", "the stored-throw pass (`stored_throw.rs`: the observer guard's SC2004/SC2005 obligation)"],
+    case: "`latest(() => resolve(..))` or `isPending(() => until(..))` in a leaf owner's callback: the slot keeps the observer, so `resolve` and `until` meet the observer guard before they create anything and the leaf walk leaves them to the stored-throw pass; under `untrack` the observer is cleared and the leaf walk's own creation is the finding",
+    fixtures: ["reactive-ir/rc21-latest-ispending-observer-guard", "reactive-ir/slot-run-leaf-owner"],
+  },
+  {
     id: "result-access-and-unknown-callback",
     sites: [{ file: "rust/crates/solid-reactive-ir/src/static_rules.rs", match: /Two shapes are left to other passes and say so/ }],
     between: ["the result-access check (`RESULT_ACCESS_*`)", "the unknown-callback obligation"],

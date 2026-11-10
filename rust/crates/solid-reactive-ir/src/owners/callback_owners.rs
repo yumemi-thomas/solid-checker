@@ -158,7 +158,7 @@ pub(crate) fn run_with_owner_callback_owner(
 /// owner, never `null`, and a `const` keeps it. The owner may have been
 /// disposed by the time a later callback hands it to `runWithOwner`; that is
 /// not the null owner this question is about.
-pub(super) fn component_owner_binding(
+pub(crate) fn component_owner_binding(
     file: &solid_facts::FileFacts,
     value: Span,
     lookup: &SemanticLookup<'_>,

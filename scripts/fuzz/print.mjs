@@ -16,7 +16,7 @@ import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
 import { AUX, MODULE, describeUse, parentSource, sourcedName, sourcedRead } from "./misuse.mjs";
 import { LATER_MOUNTS, mountParts } from "./mounts.mjs";
-import { accessOf, packageFiles } from "./package.mjs";
+import { CONTEXT_PACKAGE, accessOf, contextPackageFiles, packageFiles } from "./package.mjs";
 
 const MARK_OPEN = "\u0001";
 const MARK_CLOSE = "\u0002";
@@ -75,7 +75,9 @@ export function usedPackageHelpers(program) {
 /** The files of the program's generated package(s): `{ "fz-lib": { "index.js": ..., ... } }` (empty when it imports none). */
 export function programPackages(program) {
   const files = packageFiles(usedPackageHelpers(program));
-  return files ? { "fz-lib": files } : {};
+  // ADR 0940: a `use` of the context a dependency exports (misuse.mjs SOURCE_AXES `package`).
+  const context = [...walk(program)].some(({ node }) => node.k === "use" && (node.ctx || node.hook));
+  return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}) };
 }
 
 /**
@@ -526,6 +528,9 @@ function render(program, instrument) {
         if (e.errorArm) return `createReaction({ effect: () => {}, error: ${f} })`;
         return `createReaction(${f})`;
       case "untrack": used.add("untrack"); return `untrack(${f})`;
+      // ADR 0940: the primitive layers of the `pl-*` contexts (primitive-layer-shapes.mjs).
+      case "latest": used.add("latest"); return `latest(${f})`;
+      case "isPending": used.add("isPending"); return `isPending(${f})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
       case "owner": {
         used.add("runWithOwner");
@@ -934,7 +939,7 @@ function sourcedSignals(component, signals) {
 
 function sourceParameter(component, signals) {
   const { source } = component;
-  if (!source || source.includes("context") || source.startsWith("module")) return "";
+  if (!source || source.includes("context") || source.startsWith("module") || source.startsWith("package")) return "";
   if (source === "prop-destructured") return `{ ${sourceKeys(component, signals).map(([key]) => key).join(", ")} }: ${component.name}Props`;
   return `props: ${component.name}Props`;
 }
@@ -966,7 +971,7 @@ function sourceDeclarations(component, signals, used) {
     used.add("createRoot"); used.add("createRenderEffect");
     return ["const shared = useVals();", "createRoot(() => {", ...pending.map((name) => `${INDENT}createRenderEffect(() => shared.${name}(), () => {});`), "});", "await new Promise((done) => setTimeout(done, 50));"];
   }
-  if (!source || source.startsWith("module")) return [];
+  if (!source || source.startsWith("module") || source.startsWith("package")) return [];
   const fields = sourceKeys(component, signals).map(([key, type]) => `${key}: ${type}`);
   if (source === "prop-omit") fields.push("extra: number");
   if (!source.includes("context")) return [`type ${component.name}Props = { ${fields.join("; ")} };`];
@@ -999,7 +1004,7 @@ function helperImportLine(helper) {
 
 function sourceTypeNames(component, signals) {
   const { source } = component;
-  if (!source || source.startsWith("module")) return [];
+  if (!source || source.startsWith("module") || source.startsWith("package")) return [];
   return [...new Set(sourceKeys(component, signals).flatMap(([, type]) => type.match(/\b(Accessor|Setter|StoreSetter|SourceAccessor)\b/g) ?? []))];
 }
 

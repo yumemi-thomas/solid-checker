@@ -1011,6 +1011,7 @@ pub(crate) fn find_missing_owners_incremental(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     unchanged_paths: &HashSet<String>,
     state: &mut OwnerState,
+    leaf_operations: &[crate::LeafOwnerOperation],
 ) -> (
     Vec<OwnerRequirement>,
     SettledGateDecisions,
@@ -1131,7 +1132,14 @@ pub(crate) fn find_missing_owners_incremental(
     }
     // ADR 0886: check once, over a universe built from the calls, not from
     // the candidates emission chose to see (reviewer D34).
-    unaccounted_owner_sites(&files, &order, emissions, &mut requirements, lookup);
+    unaccounted_owner_sites(
+        &files,
+        &order,
+        emissions,
+        &mut requirements,
+        lookup,
+        leaf_operations,
+    );
     if !facts.dependency_source_roots.is_empty() {
         let (nodes, contexts, outgoing) = graph.dense_view(&order);
         attribute_dependency_requirements(
@@ -1284,6 +1292,8 @@ enum SiteEnd {
     Row,
     /// The file's emission recorded this proof.
     Proof(super::owner_emission::ContextProof),
+    /// ADR 0942: the site is another rule's claim, and that rule has a row at it (the span is where).
+    Delegated(crate::site_accounting::Delegate, Span),
     /// The compiler deleted the call.
     Discarded,
     /// An owner probe guards the call.
@@ -1301,6 +1311,18 @@ fn log_site_end(file: &solid_facts::FileFacts, site: Span, ending: SiteEnd) {
     let proof = match ending {
         SiteEnd::Row => return,
         SiteEnd::Proof(proof) => format!("ContextProof::{proof:?}"),
+        SiteEnd::Delegated(delegate, row) => {
+            crate::proof_log::silent(
+                "SC4001",
+                &site.location(file.path.shared()),
+                delegate.id(),
+                &[crate::proof_log::Premise::at(
+                    crate::proof_log::PremiseKind::OwningFindingAtSite,
+                    Some(row),
+                )],
+            );
+            return;
+        }
         SiteEnd::Discarded => "Discarded".to_owned(),
         SiteEnd::OwnerProbe => "OwnerProbe".to_owned(),
         SiteEnd::RegistersNothing => "EffectRegistersNothing".to_owned(),
@@ -1322,6 +1344,7 @@ fn unaccounted_owner_sites(
     emissions: &HashMap<super::owner_state::PathId, super::owner_emission::Emission>,
     requirements: &mut Vec<OwnerRequirement>,
     lookup: &SemanticLookup<'_>,
+    leaf_operations: &[crate::LeafOwnerOperation],
 ) {
     let rows = requirements
         .iter()
@@ -1369,7 +1392,25 @@ fn unaccounted_owner_sites(
                 } else if let Some((_, proof)) =
                     accounted.and_then(|proofs| proofs.iter().find(|(span, _)| *span == site))
                 {
-                    Some(SiteEnd::Proof(*proof))
+                    // ADR 0942: a leaf owner's refusal is SC3001's claim; the hand-off
+                    // ends the site only where SC3001 has a row inside this call, else
+                    // the site is unaccounted for (an uncertifiable row below).
+                    if *proof == super::owner_emission::ContextProof::LeafOwned {
+                        crate::site_accounting::delegate_row(
+                            crate::site_accounting::Delegate::LeafOwnerForbiddenCall,
+                            leaf_operations,
+                            path,
+                            call.span,
+                        )
+                        .map(|row| {
+                            SiteEnd::Delegated(
+                                crate::site_accounting::Delegate::LeafOwnerForbiddenCall,
+                                row,
+                            )
+                        })
+                    } else {
+                        Some(SiteEnd::Proof(*proof))
+                    }
                 } else if crate::execution_role::discarded_region_contains(file, site) {
                     Some(SiteEnd::Discarded)
                 } else if guarded_by_owner_probe(file, site, lookup) {

@@ -61,7 +61,7 @@ report.
 | position of the call | reports |
 | --- | --- |
 | directly in `createEffect`'s apply | **yes** |
-| in a function only effects call (not exported, every reference a call from a proven layer), an immediately invoked function, an `untrack`/`createRoot`/`runWithOwner` callback, or an inline array-method callback written there | **yes** |
+| in a function only effects call (not exported, every reference a call from a proven layer), an immediately invoked function, an `untrack`/`latest`/`isPending`/`flush(fn)`/`createRoot`/`runWithOwner` callback (ADR 0944: `isPending` catches a throw, and this is a warning), or an inline array-method callback written there | **yes** |
 | `createEffect`'s compute function | no (marker not raised) |
 | a `setTimeout`/microtask/`.then` callback created in the apply, an event handler, a helper that also has such a caller | no (the effect phase is over; `flush()` drains) |
 | `createRenderEffect`'s apply | first run: no, it is synchronous at creation with no flush running (`flush()` drains); later runs: yes |

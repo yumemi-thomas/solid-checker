@@ -749,12 +749,28 @@
       },
       "findings": [
         {
+          "id": "SC4002",
+          "rule": "missing-context-provider",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 239,
+          "endByte": 252
+        },
+        {
           "id": "SC9012",
           "rule": "reactive-dispatch-unresolved",
           "kind": "uncertifiable",
           "path": "<root>/App.tsx",
           "startByte": 285,
           "endByte": 300
+        },
+        {
+          "id": "SC4002",
+          "rule": "missing-context-provider",
+          "kind": "uncertifiable",
+          "path": "<root>/node_modules/dep-wrap/index.jsx",
+          "startByte": 135,
+          "endByte": 148
         },
         {
           "id": "SC1001",
@@ -768,7 +784,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 8,
+        "proofObligations": 12,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },

@@ -1764,6 +1764,71 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 0944: the argument of the call that supplies, as data, the owner the callback at `argument` runs
+    /// under (`runWithOwner(owner, fn)`: argument 0 for the callback at 1). `None` for a callback whose owner
+    /// is not data. Only the owner question's `Conditional` rows have one.
+    fn callback_owner_argument(&self, primitive: Primitive, argument: usize) -> Option<usize> {
+        let _ = (primitive, argument);
+        None
+    }
+
+    /// ADR 0944: whether a call of this primitive runs no user code and no effect, whatever it is handed: it
+    /// only reads the ambient owner (`getOwner()`). A walk that asks whether code may have run before a site
+    /// (a nested effect run lowers `inEffectCallback`, which the guard on creating with no owner reads) does
+    /// not count such a call.
+    fn runs_no_user_code(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// ADR 0944: how the callback at `argument` of a call with `argument_count` arguments runs, as the one answer
+    /// every rule walk matches ([`SlotRun`]). Derived from the questions above and answered by nothing of its
+    /// own: the execution word picks the variant, and an in-place callback's owner, observer and thrown error
+    /// come from the owner, observer and swallow questions. `the_slot_run_is_derived_from_the_callback_questions`
+    /// holds that, and the callback-question test (ADR 0941) holds the questions to each other.
+    ///
+    /// An inline slot whose owner this vocabulary has no word for here (a first-run owner, a leaf) is
+    /// [`SlotRun::Unknown`], never a guess.
+    fn slot_run(&self, primitive: Primitive, argument: usize, argument_count: usize) -> SlotRun {
+        match self.callback_execution_at(primitive, argument, argument_count) {
+            Some(Execution::Inline) => {
+                let owner = match self.callback_owner_at(primitive, argument, argument_count) {
+                    Some(CallbackOwner::Inherits) => SlotOwner::Inherits,
+                    Some(CallbackOwner::Creates) => SlotOwner::Creates,
+                    Some(CallbackOwner::None) => SlotOwner::Detached,
+                    Some(CallbackOwner::Conditional) => {
+                        match self.callback_owner_argument(primitive, argument) {
+                            Some(argument) => SlotOwner::Supplied { argument },
+                            None => return SlotRun::Unknown,
+                        }
+                    }
+                    Some(CallbackOwner::InheritsFirstRun | CallbackOwner::Leaf) | None => {
+                        return SlotRun::Unknown;
+                    }
+                };
+                let observer = if self.inline_callback_keeps_observer(primitive, argument) {
+                    SlotObserver::Keeps
+                } else if self.runs_callback_deferred(primitive) {
+                    SlotObserver::Clears
+                } else {
+                    SlotObserver::Unstated
+                };
+                SlotRun::InPlace(InPlaceRun {
+                    owner,
+                    observer,
+                    throws: if self.callback_swallows_throw(primitive, argument) {
+                        SlotThrows::Swallows
+                    } else {
+                        SlotThrows::Escapes
+                    },
+                })
+            }
+            Some(Execution::Tracked) => SlotRun::Computation,
+            Some(Execution::Deferred) => SlotRun::Deferred,
+            None => SlotRun::Unknown,
+        }
+    }
+
     /// Whether the callback at `argument` clears tracking but keeps the strict
     /// -read window of the call that runs it (ADR 0443, `runWithOwner`). In a
     /// tracked computation such a call has no window, so the callback's read

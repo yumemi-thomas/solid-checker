@@ -69,6 +69,18 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn array_slots_withdrawn(&self) -> bool {
         !self.intrinsics_view().visible_iteration || self.tuple_slot_iteration_may_be_mutated()
     }
+
+    /// ADR 0947: each disjunct of [`Self::array_slots_withdrawn`] that holds, by the id a row names it.
+    pub(crate) fn array_slots_withdrawn_causes(&self) -> Vec<&'static str> {
+        let mut causes = Vec::new();
+        if !self.intrinsics_view().visible_iteration {
+            causes.push("VisibleIterationWrite");
+        }
+        if self.tuple_slot_iteration_may_be_mutated() {
+            causes.push("TupleSlotIterationMayBeMutated");
+        }
+        causes
+    }
 }
 
 impl SemanticLookup<'_> {

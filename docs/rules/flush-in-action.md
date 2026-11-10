@@ -48,7 +48,9 @@ bundles:
 | `await flush(fn)` (the call is the awaited operand) | **throws** | runs |
 | `flush(await x)` (the await runs first) | runs | runs |
 | a helper function the body calls synchronously | **throws** | runs |
-| an `untrack(() => flush())` callback in the body | **throws** | runs |
+| an `untrack`, `latest`, `createRoot` or `runWithOwner` callback in the body that calls `flush()` (ADR 0944) | **throws** | runs |
+| an `isPending(() => flush())` callback (it catches the throw, no diagnostic precedes it) | runs | runs |
+| `flush(() => flush())` | **throws** at the outer call; the inner never runs | runs |
 | the inner body of a nested action the outer body invokes | **throws** | runs |
 | a parameter initializer, `function* (x = flush())` | runs (before the first step) | runs |
 | `setTimeout` / `.then` callbacks created in the body | runs | runs |
@@ -121,7 +123,10 @@ the result, read after the action resolves (`await save(); …`).
   step is claimed (ADR 0478): an IIFE, an inline standard-library callback
   (`[x].forEach`), and a helper (in any module) that calls its callback in its
   own body, nested or not; the layers' outermost call is the position the step
-  proof reads. Not claimed: an `untrack` callback, a named closure called in
+  proof reads. A callback of a primitive that runs in place and lets a throw out
+  (`untrack`, `latest`, `createRoot`, `runWithOwner`) is a layer too (ADR 0944);
+  `isPending` catches the throw and `flush(fn)` throws before it runs its
+  callback, so neither is crossed. Not claimed: a named closure called in
   place, a call after an await in its layer, a layer in a parameter list, and
   any other function written in the body, although the probes show the
   synchronous ones throw. Uncertifiable (ADRs 0537, 0538): a named function

@@ -9827,5 +9827,260 @@
    "mx-action-called-in-owned-scope-bseam-settimeout-define-x-direct-none"
   ],
   "rediscovered": "main 4f925ef14 (debug, ADR 0939 off): 8 false-clean; ADR 0939: 8 recall-gap. Legal twins (`catch`, `setInterval` wrapped): 16 clean -> uncertifiable"
+ },
+ {
+  "finding": "`onCleanup` inside a leaf owner (`createTrackedEffect`, an owner-backed `onSettled`) through the callback of `untrack`, `latest`, `isPending` or `runWithOwner(owner, …)` was certified clean (SC3001): those layers keep the leaf as the owner, Chrome (rc.21) reports CLEANUP_IN_FORBIDDEN_SCOPE. Named by the coordinator's probes: a2 (untrack + onCleanup), b1 (latest + onCleanup), b3 (onSettled, untrack, onCleanup).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-cleanup-in-forbidden-scope-pl-untrack-tracked-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-latest-tracked-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-ispending-tracked-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-owner-tracked-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-untrack-settled-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-latest-settled-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-ispending-settled-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-owner-settled-x-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 8 of this entry's programs are false-clean (Chrome reports CLEANUP_IN_FORBIDDEN_SCOPE at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "A primitive (`createMemo`, `createRoot`, `createEffect`; `resolve` and `until`, which make a computation of their own) inside a leaf owner through the callback of `untrack`, `latest`, `isPending`, `flush(fn)` or `runWithOwner(owner, …)` was certified clean (SC3001); Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE. Named by the coordinator's probes: a1 (untrack + createMemo), f3 (untrack + resolve), b2 (isPending + createMemo).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-pl-untrack-tracked-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-tracked-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-tracked-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-tracked-resolve-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-tracked-until-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-tracked-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-tracked-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-tracked-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-tracked-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-tracked-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-tracked-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-tracked-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-tracked-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-tracked-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-tracked-resolve-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-tracked-until-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-settled-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-settled-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-settled-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-settled-resolve-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-settled-until-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-settled-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-settled-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-settled-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-settled-resolve-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-settled-until-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-settled-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-settled-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-settled-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-settled-resolve-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-settled-until-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-settled-memo-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-settled-root-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-settled-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-settled-resolve-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-owner-settled-until-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 36 of this entry's programs are false-clean (Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "`flush()` inside a leaf owner through the callback of `untrack`, `latest` or `runWithOwner(owner | null, …)` was certified clean (SC3001); Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK.",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-pl-untrack-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-pl-latest-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-pl-owner-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-pl-owner-null-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-pl-untrack-settled-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-pl-latest-settled-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-pl-owner-settled-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-pl-owner-null-settled-x-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 8 of this entry's programs are false-clean (Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "A memo, root or effect created in an effect's apply through the callback of `latest`, `isPending`, `runWithOwner(owner | null, …)` or `flush(fn)` was certified clean (SC6002); Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK (`untrack` is reported). Named by the coordinator's probes: b5 (latest + createMemo in an apply).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-pl-latest-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-pl-latest-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-pl-latest-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-pl-ispending-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-pl-ispending-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-pl-ispending-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-pl-owner-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-pl-owner-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-pl-owner-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-pl-owner-null-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-pl-owner-null-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-pl-owner-null-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-pl-flush-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-pl-flush-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-pl-flush-effect-apply-effect-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 15 of this entry's programs are false-clean (Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "`resolve(…)` in a tracked effect through the callback of `latest`, which runs it with an observer, was certified clean (SC2004); Chrome reports RESOLVE_IN_REACTIVE_SCOPE (`untrack` and `isPending` legal). Named by the coordinator's probes: f1 (latest(() => resolve(…))).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-resolve-in-reactive-scope-pl-latest-tracked-x-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 1 of this entry's programs are false-clean (Chrome reports RESOLVE_IN_REACTIVE_SCOPE at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "`until(…)` in a tracked effect through the callback of `latest` was certified clean (SC2005); Chrome reports UNTIL_IN_REACTIVE_SCOPE.",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "UNTIL_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-until-in-reactive-scope-pl-latest-tracked-x-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 1 of this entry's programs are false-clean (Chrome reports UNTIL_IN_REACTIVE_SCOPE at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "`flush()` in an action step through the callback of `untrack`, `latest`, `runWithOwner(owner | null, …)` or `createRoot` was certified clean (SC2006); Chrome reports FLUSH_IN_ACTION (`isPending` catches the throw: legal). Named by the coordinator's probes: g1 (untrack(() => flush())), g2 (latest(() => flush())).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-pl-untrack-action-x-direct-none",
+   "mx-flush-in-action-pl-latest-action-x-direct-none",
+   "mx-flush-in-action-pl-owner-action-x-direct-none",
+   "mx-flush-in-action-pl-owner-null-action-x-direct-none",
+   "mx-flush-in-action-pl-root-action-x-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 5 of this entry's programs are false-clean (Chrome reports FLUSH_IN_ACTION at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "`flush()` in an effect's apply through the callback of `latest` or `isPending` was certified clean (SC2008); Chrome reports FLUSH_IN_EFFECT_CALLBACK.",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-pl-latest-effect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-pl-ispending-effect-apply-x-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 2 of this entry's programs are false-clean (Chrome reports FLUSH_IN_EFFECT_CALLBACK at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "A read (a signal, a store member) after an `await` in an async memo, through the callback of `latest`, `isPending` or `flush(fn)`, was certified clean (SC1002); Chrome reports UNTRACKED_READ_AFTER_AWAIT. Named by the coordinator's probes: j-latest, l-store (latest(() => s.a)), j-isPending.",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the primitive-layer axis, `pl-<layer>-<host>` contexts of mx-recall, each program through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0944 (one slot classifier, `Dialect::slot_run`, matched by the rule walks)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-pl-latest-memo-async-x-direct-none",
+   "mx-untracked-read-after-await-pl-latest-memo-async-store-link-direct-none",
+   "mx-untracked-read-after-await-pl-ispending-memo-async-x-direct-none",
+   "mx-untracked-read-after-await-pl-ispending-memo-async-store-link-direct-none",
+   "mx-untracked-read-after-await-pl-flush-memo-async-x-direct-none",
+   "mx-untracked-read-after-await-pl-flush-memo-async-store-link-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 6 of this entry's programs are false-clean (Chrome reports UNTRACKED_READ_AFTER_AWAIT at the site, no finding covers it, the file certified clean). Fixed by ADR 0944: the same focus run (the 42 pl-* contexts of mx-recall and lg-recall, the real oracle on every program, 0 behaviour differences) on a debug build of this tree, which fails nowhere: mx-recall 120 programs agree 118, recall-gap 2, false-clean 0 (3b9688ae3: false-clean 82; ADR 0941's build: 80); lg-recall 271 clean 269, uncertifiable 2. The release build is measured again at the batch-9 check."
+ },
+ {
+  "finding": "`useContext(PkgContext)` of a context a dependency exports (`export const PkgContext = createContext();`, no default) with no provider above was certified clean (SC4002 decided every dependency context silent); Chrome reports CONTEXT_NOT_FOUND. Named by the coordinator's probes: c1 (a dependency's `createContext()`, no provider).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the `package` source of CONTEXT_NOT_FOUND (SC4002), a recall source of mx-recall; the coordinator's probe c1; each of its 210 programs through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "open at 3b9688ae3: expected to fail until G7 (ADR 0943)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-export",
+   "mx-context-not-found-memo-x-direct-none-s-package-export",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-export",
+   "mx-context-not-found-root-x-direct-none-s-package-export",
+   "mx-context-not-found-jsx-x-direct-none-s-package-export",
+   "mx-context-not-found-show-x-direct-none-s-package-export",
+   "mx-context-not-found-for-x-direct-none-s-package-export"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): 7 of this entry's programs are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, no finding covers it, the file certified clean); the entry lists the plain shape of each context, and all 210 programs of the source (every binding and layer) are. Expected to stay failing until the fix named in `fixed` lands."
+ },
+ {
+  "finding": "`onCleanup` inside a leaf owner through the callback of `untrack`, `latest` or `isPending` was certified clean: SC4001 ended the site as `LeafOwned` (\"SC3001's claim\") and SC3001 has no row there, its walk not following the layer. Chrome reports CLEANUP_IN_FORBIDDEN_SCOPE.",
+  "found": "ADR 0940: the primitive-layer axis (pl-* contexts of mx-recall), read for what SC4001's hand-off to SC3001 did",
+  "fixed": "ADR 0942 (a hand-off ends a site only where the target rule has a row) and ADR 0944 (SC3001 follows the layer: the judged outcome is agree)",
+  "grid": "mx-recall",
+  "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-cleanup-in-forbidden-scope-pl-untrack-tracked-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-latest-tracked-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-ispending-tracked-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-untrack-settled-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-latest-settled-x-direct-none",
+   "mx-cleanup-in-forbidden-scope-pl-ispending-settled-x-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (checker sha256 70878812f9ca…): 6 certified false-clean (no finding in the file); ADR 0942's build (checker 1b7f6205c3f8…): the same 6 programs false-clean and not certified, SC4001 uncertifiable `execution-context-unaccounted` at the site. Chrome and the real oracle agree on all (0 behaviour differences)."
+ },
+ {
+  "finding": "`createEffect` inside a leaf owner through the callback of `untrack`, `latest` or `isPending` was certified clean (the effect variant of PRIMITIVE_IN_FORBIDDEN_SCOPE): SC4001 ended the site as `LeafOwned` and SC3001 has no row there. Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE.",
+  "found": "ADR 0940: the primitive-layer axis (pl-* contexts of mx-recall), read for what SC4001's hand-off to SC3001 did",
+  "fixed": "ADR 0942 (a hand-off ends a site only where the target rule has a row) and ADR 0944 (SC3001 follows the layer: the judged outcome is agree)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-pl-untrack-tracked-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-tracked-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-tracked-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-untrack-settled-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-latest-settled-effect-direct-none",
+   "mx-primitive-in-forbidden-scope-pl-ispending-settled-effect-direct-none"
+  ],
+  "rediscovered": "3b9688ae3 (checker sha256 70878812f9ca…): 6 certified false-clean (no finding in the file); ADR 0942's build (checker 1b7f6205c3f8…): the same 6 programs false-clean and not certified, SC4001 uncertifiable `execution-context-unaccounted` at the site. Chrome and the real oracle agree on all (0 behaviour differences)."
+ },
+ {
+  "finding": "`useContext(PkgContext)` of a context a dependency exports (`export const PkgContext = createContext();`, no default) with no provider above was certified clean (SC4002 decided every dependency context silent); Chrome reports CONTEXT_NOT_FOUND. Named by the coordinator's probes: c1 (a dependency's `createContext()`, no provider).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the `package` source of CONTEXT_NOT_FOUND (SC4002), a recall source of mx-recall; the coordinator's probe c1; each of its 210 programs through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0943 (a dependency's createContext with no default is open: each read under an owner is an obligation, `provider-not-proven-above`, unless a provider is proven above every render of its function; only a default the syntax proves stays silent, as a named premise)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-export",
+   "mx-context-not-found-memo-x-direct-none-s-package-export",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-export",
+   "mx-context-not-found-root-x-direct-none-s-package-export",
+   "mx-context-not-found-jsx-x-direct-none-s-package-export",
+   "mx-context-not-found-show-x-direct-none-s-package-export",
+   "mx-context-not-found-for-x-direct-none-s-package-export"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…): all 210 programs of the package source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, the file certified clean); ADR 0943's build (checker 725d8bee0e3e…): the same 210 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the read (0 false-clean, 0 false-positive, 0 wrong-rule; `focus.mjs --codes CONTEXT_NOT_FOUND --grids mx-recall` over these ids exits 0, \"nothing needs a look\"). Chrome and the real oracle agree on all (0 behaviour differences)."
+ },
+ {
+  "finding": "A package hook that reads its own context (`usePkgContext()` in the program, `return useContext(PkgContext)` in the dependency's source, `PkgContext = createContext()` with no default) called under an owner with no provider above was certified clean: the census made every dependency context silent, and a finding in package source is not reported (ADR 0284) unless an owner requirement attributes it to the project's call. Chrome reports CONTEXT_NOT_FOUND.",
+  "found": "ADR 0943 (W agent w-b9, 2026-11-10): reading the guard for c1 (`file_candidates`' `if dependency || proven.is_none()`) and the `context-read-package` fixture's `BodyHook` (kobalte's `useDialogContext`, silent); the `package-hook` form of the package source",
+  "fixed": "ADR 0943 (the dependency's context is open, and its read in package source is attributed to the project call that runs it under an owner as an obligation, `provider-not-proven-above`)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-hook",
+   "mx-context-not-found-memo-x-direct-none-s-package-hook",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-hook",
+   "mx-context-not-found-root-x-direct-none-s-package-hook",
+   "mx-context-not-found-jsx-x-direct-none-s-package-hook",
+   "mx-context-not-found-show-x-direct-none-s-package-hook",
+   "mx-context-not-found-for-x-direct-none-s-package-hook"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): all 42 programs of the `package-hook` source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, the file certified clean); ADR 0943's build (checker 725d8bee0e3e…): the same 42 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the call (0 false-clean, 0 false-positive, 0 wrong-rule). Chrome and the real oracle agree on all (0 behaviour differences)."
  }
 ]

@@ -1,0 +1,3 @@
+# Primitive callbacks on an effect's apply
+
+ADR 0944. An effect's apply runs with no owner (`inEffectCallback`, `context === null`), and a callback of `untrack`, `latest`, `isPending`, `flush(fn)` or `runWithOwner(null | getOwner(), fn)` keeps that on the apply's stack: a memo created in it is PRIMITIVE_IN_EFFECT_CALLBACK (SC6002) and a `flush()` in it is FLUSH_IN_EFFECT_CALLBACK (SC2008), also under `isPending` (a diagnostic, not a throw). Chrome, `@solidjs/signals@2.0.0-rc.21`. Silent: an owner captured in the component body, a compute (it has an owner). Uncertifiable: a call written before the site. Stubs as in `effect-phase-layers`, plus rc.21's `latest` and `isPending`.

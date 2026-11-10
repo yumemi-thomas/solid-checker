@@ -22,6 +22,8 @@ mod jsx_census;
 pub(crate) use jsx_census::*;
 mod write_roles;
 pub(crate) use write_roles::*;
+mod slot_layers;
+pub(crate) use slot_layers::*;
 mod write_components;
 pub use write_components::{WALK_STEP_BOUND, bound_walks, follow_every_path};
 pub(crate) use write_components::{every_path, every_path_asked, walk_bound};

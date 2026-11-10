@@ -91,8 +91,8 @@ export const scheduled = action(function* () {
   void Promise.resolve().then(() => flush());
 });
 
-// Negative (not claimed): the probes show this throws -- `untrack` runs its
-// callback inline -- but the proof is lexical and stops at the nested function.
+// Positive since ADR 0944: `untrack` runs its callback inline, on the step's stack, so
+// the walk crosses it as it crosses an IIFE.
 export const inUntrack = action(function* () {
   untrack(() => flush());
 });

@@ -41,6 +41,7 @@
 mod argument_values;
 mod attribution;
 mod base;
+pub mod blocked_by;
 mod blockers;
 mod boundary_defects;
 mod cache;
@@ -798,6 +799,11 @@ pub struct LeafOwnerOperation {
     /// not confirm the callee is that primitive (ADR 0711): a named blocker.
     #[serde(default, skip_serializing_if = "is_false")]
     pub identity_unproven: bool,
+    /// ADR 0942: where the operation is written, when the finding anchors elsewhere (at the helper call it is reached through): another
+    /// rule's hand-off to this one (SC4001's `LeafOwned`) finds its row by the call it ends. Empty for an operation reported at its own
+    /// call, whose `location` is the site.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<Location>,
     /// ADR 0893: the throw reaches no proven report.
     #[serde(default, skip_serializing_if = "is_false")]
     pub computation_error_unobserved: bool,
@@ -811,6 +817,15 @@ impl LeafOwnerOperation {
     pub fn observer_guarded(&self) -> bool {
         matches!(self.kind, LeafOwnerOperationKind::ObserverGuarded(_))
             && self.owner == "createTrackedEffect"
+    }
+
+    /// ADR 0944: the call fails with a plain `throw` here, no diagnostic before it: `flush()` in a tracked
+    /// queue callback, and a call that meets the observer guard. A call that takes whatever its callback throws
+    /// (`isPending`) reports nothing for such a failure; one emitted before the throw (a cleanup or a creation
+    /// refused by the leaf owner) is still reported.
+    #[must_use]
+    pub fn fails_with_plain_throw(&self) -> bool {
+        matches!(self.kind, LeafOwnerOperationKind::Flush) || self.observer_guarded()
     }
 }
 
@@ -1659,6 +1674,12 @@ pub struct Program {
     /// [`site_may_precede_initialization`]), sorted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub early_mention_sites: Vec<Location>,
+    /// ADR 0947: the typed blocker of each uncertifiable row a veto formula holds, sorted by location, and the hazards their
+    /// `fired` ids name, each with the sites the census records. Internal JSON only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocked_by: Vec<blocked_by::BlockedRow>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hazards: Vec<blocked_by::HazardSites>,
 }
 
 /// The site of a reportable row that no execution of the program reaches

@@ -396,6 +396,10 @@ premise("kind-plain-value-on-every-route", { claim: "A container a caller handed
 premise("kind-role-does-not-report", { claim: "The role classifier decided the site's role (the compiler's and the dialect's facts place the code) and that role reports nothing for the rule: an effect's apply, a leaf scope, a handler; the producer returned without a row (ADR 0936).",
   kinds: ["RoleDoesNotReport"], ends: ["local_access.discover_call_as.setter-callback-role-silent", "local_access.discover_member.role-does-not-report"], fixtures: fixtures("owned-write-updater-read", "prop-head-get"), quality: "fixture",
   outside: "the role is the classifier's own answer: every tagged arm that can answer silent has its pair or its stated gap in this registry (arms, ARM_GAPS), so a wrong role is that arm's boundary; these ends only record that a producer returned for a role the classifier decided" });
+// ---- ADR 0943: the context census's silence names its fact ---------------------------------------------------------------------------------
+premise("kind-context-default-proven", { claim: "The context was created with a default the syntax proves is not `undefined` (a literal, `null`, a function, object or array literal, or a `const` initialized with one), so a read never throws for want of a provider (ADRs 0575, 0943).",
+  kinds: ["ContextDefaultProven"], fixtures: fixtures("context-default-undefined", "context-package-no-default"), quality: "fixture",
+  note: "`DefaultReads` is silent in context-default-undefined beside the reads of default-less contexts that report. A package's context with no default is an obligation in context-package-no-default (it was silent before ADR 0943), so only a proven default is silent there too." });
 
 /** What the family covers of the dispatch lists, by row name (cleanup.rs:1498, runtime_semantics.rs:925): the pair that holds the member's twins. */
 export const DISPATCH_PAIRS = {

@@ -1,0 +1,65 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 212,
+      "end": 219,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 440,
+      "end": 447,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 609,
+      "end": 614,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 763,
+      "end": 770,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 1023,
+      "end": 1028,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 1168,
+      "end": 1175,
+      "fixes": 0
+    }
+  ]
+}

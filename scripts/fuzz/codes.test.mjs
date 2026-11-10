@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCodeAt, decliningRules, withheldAtStack, isDefectCode, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules, codeOfLogged, stripErrorClass, codeOfUncaught } from "./codes.mjs";
+import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCodeAt, decliningRules, withheldAtStack, isDefectCode, placelessCodes, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules, codeOfLogged, stripErrorClass, codeOfUncaught } from "./codes.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
 /** The source text of a top-level `const name = [...]` or `{...}` literal in the oracle. */
@@ -56,6 +56,13 @@ describe("tables copied from scripts/runtime-oracle.mjs", () => {
 
   it("withholdingRules matches the oracle's", () => {
     expect(oracle).toContain(`const withholdingRules = ${JSON.stringify(withholdingRules)};`);
+  });
+  // ADR 0946: the oracle judges these placeless codes by file, as the matrix does; each must be one in codes.mjs.
+  it("the oracle's file-judged codes are placeless codes", () => {
+    // eslint-disable-next-line no-new-func
+    const judged = new Function(`return (${literal("fileJudgedCodes")});`)();
+    expect(judged.length).toBeGreaterThan(0);
+    for (const code of judged) expect(placelessCodes, code).toContain(code);
   });
 });
 

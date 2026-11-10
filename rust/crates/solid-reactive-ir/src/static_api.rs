@@ -3,7 +3,7 @@
 use crate::{HashMap, HashSet};
 use std::cell::Cell;
 
-use solid_dialect::Primitive;
+use solid_dialect::{Primitive, SlotObserver, SlotOwner, SlotRun, SlotThrows};
 use solid_facts::FileFacts;
 use solid_facts::ast::ArgumentValueKind;
 use solid_facts::core::Span;
@@ -881,6 +881,11 @@ impl StaticApiContext<'_> {
                                 origin.apply.contains(other.span)
                                     && other.span.end <= call.span.start
                                     && !other.span.contains(call.span)
+                                    && crate::execution_role::call_may_run_code(
+                                        file,
+                                        other,
+                                        self.lookup,
+                                    )
                             }) || file.ast.tagged_template_tags.iter().any(|tag| {
                                 origin.apply.contains(*tag) && tag.end <= call.span.start
                             })));
@@ -1244,6 +1249,7 @@ impl StaticApiContext<'_> {
                         origin.apply.contains(other.span)
                             && other.span.end <= site.span.start
                             && !other.span.contains(site.span)
+                            && crate::execution_role::call_may_run_code(file, other, self.lookup)
                     }));
             // No client root in sight: which build runs the apply is open.
             let uncertain = earlier_call
@@ -1359,18 +1365,37 @@ fn resolve_tracked_scope_within(
             // literal inline runs it under the call's own observer.
             return resolve_scope_of_entries(file, at, allowed, context, depth, true, limited);
         };
-        // ADR 0857: a callback proven to run during the call under the
-        // caller's observer (`flush(fn)`) runs where the call does.
-        if context
+        match context
             .lookup
             .dialect
-            .inline_callback_keeps_observer(primitive, index)
+            .slot_run(primitive, index, container.arguments.len())
         {
-            let Some(depth) = depth.checked_sub(1) else {
-                limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
-                return None;
-            };
-            return resolve_tracked_scope_within(file, container, allowed, context, depth, limited);
+            SlotRun::InPlace(run) => match (run.throws, run.observer) {
+                // ADR 0941: a call that takes whatever its callback throws
+                // (`isPending`) takes the observer guard's plain throw too, under any
+                // observer: nothing there is thrown to the caller, so nothing is
+                // reported (rc.21 probe: `isPending(() => until(...))` was quiet).
+                (SlotThrows::Swallows, _) => return None,
+                // ADR 0857: a callback proven to run during the call under the
+                // caller's observer (`flush(fn)`, ADR 0941: `latest(fn)`) runs where
+                // the call does.
+                (SlotThrows::Escapes, SlotObserver::Keeps) => {
+                    let Some(depth) = depth.checked_sub(1) else {
+                        limited.set(Some(crate::blockers::SEARCH_DEPTH_LIMIT));
+                        return None;
+                    };
+                    return resolve_tracked_scope_within(
+                        file, container, allowed, context, depth, limited,
+                    );
+                }
+                // An observer the call clears (`untrack`, `runWithOwner`) or one the dialect does not state
+                // (`render`'s root): no active observer is proven.
+                (SlotThrows::Escapes, SlotObserver::Clears | SlotObserver::Unstated) => {
+                    return None;
+                }
+            },
+            SlotRun::Computation => {}
+            SlotRun::Deferred | SlotRun::Unknown => return None,
         }
         let tracked = crate::owners::callback_execution_at_call(
             file,
@@ -2334,14 +2359,20 @@ fn owner_set_around(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -
         let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
             return false;
         };
-        if primitive != Primitive::Untrack {
-            return lookup.dialect.synchronous_callback_slot(
-                primitive,
-                index,
-                call.arguments.len(),
-            );
+        // ADR 0944: asked of the dialect, not of the primitive's name. A callback that adds no owner
+        // (`untrack`, `latest`, `isPending`, `flush(fn)`) is as owned as the call: ask around the call.
+        match lookup
+            .dialect
+            .slot_run(primitive, index, call.arguments.len())
+        {
+            SlotRun::InPlace(run) => match run.owner {
+                SlotOwner::Inherits => at = call.span,
+                SlotOwner::Supplied { .. } | SlotOwner::Creates | SlotOwner::Detached => {
+                    return true;
+                }
+            },
+            SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => return false,
         }
-        at = call.span;
     }
     false
 }
@@ -2359,7 +2390,22 @@ fn action_step_body_at(
     // omitted, and a site after an await in its layer runs on a later task:
     // neither is claimed. One in-place run proves the throw, so a helper that
     // also hands its callback on still counts.
-    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
+    // ADR 0944: a callback of a primitive that runs in place runs on the stack of its call, inside the step
+    // (`untrack(() => flush())`: the action's depth is the runtime's, not the callback's). One that catches
+    // what it throws (`isPending`) leaves a plain throw no report, and one whose own call throws first in a step
+    // (`flush(fn)`) never runs the callback: neither is crossed.
+    let at = match crate::execution_role::climb_through_slots(file, site, context.lookup, |slot| {
+        match slot.run {
+            SlotRun::InPlace(run) => match run.throws {
+                SlotThrows::Escapes => !context
+                    .lookup
+                    .dialect
+                    .throws_inside_action_step(slot.primitive),
+                SlotThrows::Swallows => false,
+            },
+            SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => false,
+        }
+    }) {
         Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
         Some(_) => return None,
         None => site,

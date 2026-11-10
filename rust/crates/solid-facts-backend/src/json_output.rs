@@ -247,9 +247,10 @@ impl Serialize for Report<'_> {
             feedback_facts,
             status,
             findings,
+            hazards,
             metrics,
         } = self.snapshot;
-        let mut report = serializer.serialize_struct("Snapshot", 5)?;
+        let mut report = serializer.serialize_struct("Snapshot", 6)?;
         if !premises.is_empty() {
             report.serialize_field("premises", premises)?;
         }
@@ -266,6 +267,9 @@ impl Serialize for Report<'_> {
                 open: self.open,
             },
         )?;
+        if !hazards.is_empty() {
+            report.serialize_field("hazards", hazards)?;
+        }
         report.serialize_field("metrics", metrics)?;
         report.end()
     }

@@ -362,6 +362,63 @@ impl SiteEnds {
     }
 }
 
+/// ADR 0942: a rule that leaves a site to another rule's claim ("SC3001's claim") ends it only where that rule has a row at the site. A hand-off
+/// to a rule with no row there proves nothing: Solid may report the code, and no rule says so. The site then ends as any other that no
+/// producer accounted for, an uncertifiable row of the handing rule's own code, never silence. One variant per hand-off.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Delegate {
+    /// SC3001 (`leaf-owner-forbidden-call`): a site that runs under a leaf owner is the leaf owner's refusal, not an unowned run
+    /// (SC4001's `ContextProof::LeafOwned`, ADR 0347's amendment).
+    LeafOwnerForbiddenCall,
+}
+
+impl Delegate {
+    /// The id the proof log writes for the hand-off.
+    pub(crate) const fn id(self) -> &'static str {
+        match self {
+            Self::LeafOwnerForbiddenCall => {
+                "owner_emission.leaf-owned.delegated-to-leaf-owner-forbidden-call"
+            }
+        }
+    }
+}
+
+/// The span of the row `to` holds at the call `call` of `path`, if it holds one: for SC3001, a leaf operation (a proven violation or an
+/// obligation) located inside the call. A leaf scope whose callback could not be resolved (`UnresolvedCallback`) stands at the leaf call,
+/// not at any site inside the callback, so it never answers for one.
+pub(crate) fn delegate_row(
+    to: Delegate,
+    leaf_operations: &[crate::LeafOwnerOperation],
+    path: &str,
+    call: Span,
+) -> Option<Span> {
+    match to {
+        Delegate::LeafOwnerForbiddenCall => leaf_operations.iter().find_map(|operation| {
+            if matches!(
+                operation.kind,
+                crate::LeafOwnerOperationKind::UnresolvedCallback
+            ) {
+                return None;
+            }
+            // An operation reached through a helper stands at the helper call, with its own sites kept beside; one reported at its own
+            // call has none, and is its own site.
+            let sites = if operation.sites.is_empty() {
+                std::slice::from_ref(&operation.location)
+            } else {
+                operation.sites.as_slice()
+            };
+            sites.iter().find_map(|site| {
+                if site.path.as_ref() != path {
+                    return None;
+                }
+                let start = u32::try_from(site.start_byte).ok()?;
+                let end = u32::try_from(site.end_byte).ok()?;
+                (call.start <= start && end <= call.end).then(|| Span::new(start, end))
+            })
+        }),
+    }
+}
+
 /// The uncertifiable row of `site`: the rule's own code, the family's blocker.
 fn unaccounted_row(file: &FileFacts, site: &Site) -> StaticViolation {
     let (id, rule, blocker, noun) = match site.table {
@@ -563,6 +620,139 @@ mod tests {
         assert!(named.contains(&("/p/App.tsx", 2, 9)));
         assert!(!named.contains(&("/p/App.tsx", 2, 8)));
         assert!(!named.contains(&("/p/Other.tsx", 2, 9)));
+    }
+
+    fn leaf(
+        kind: crate::LeafOwnerOperationKind,
+        path: &str,
+        start: u64,
+        end: u64,
+    ) -> crate::LeafOwnerOperation {
+        crate::LeafOwnerOperation {
+            kind,
+            owner: "createTrackedEffect".into(),
+            location: Location {
+                path: path.into(),
+                start_byte: start,
+                end_byte: end,
+            },
+            fix: None,
+            call_site_gate: None,
+            uncertain: false,
+            possible: false,
+            via: None,
+            identity_unproven: false,
+            sites: Vec::new(),
+            computation_error_unobserved: false,
+        }
+    }
+
+    #[test]
+    fn a_hand_off_to_a_leaf_owner_needs_its_row_inside_the_call() {
+        let call = Span::new(40, 60);
+        let at = |operation| {
+            delegate_row(
+                Delegate::LeafOwnerForbiddenCall,
+                &[operation],
+                "/p/App.tsx",
+                call,
+            )
+        };
+        // A row at the call's callee, or at the whole call, is the leaf owner's claim.
+        assert_eq!(
+            at(leaf(
+                crate::LeafOwnerOperationKind::Cleanup,
+                "/p/App.tsx",
+                40,
+                49
+            )),
+            Some(Span::new(40, 49))
+        );
+        assert_eq!(
+            at(leaf(
+                crate::LeafOwnerOperationKind::Cleanup,
+                "/p/App.tsx",
+                40,
+                60
+            )),
+            Some(Span::new(40, 60))
+        );
+        // An obligation (an uncertain row) is a row too: the rule has said something there.
+        let mut uncertain = leaf(
+            crate::LeafOwnerOperationKind::Primitive("createEffect".into()),
+            "/p/App.tsx",
+            40,
+            60,
+        );
+        uncertain.uncertain = true;
+        assert!(at(uncertain).is_some());
+        // Not at the call: another call, a larger one holding it (the memo whose compute holds the site), another file.
+        assert_eq!(
+            at(leaf(
+                crate::LeafOwnerOperationKind::Cleanup,
+                "/p/App.tsx",
+                61,
+                70
+            )),
+            None
+        );
+        assert_eq!(
+            at(leaf(
+                crate::LeafOwnerOperationKind::Primitive("createMemo".into()),
+                "/p/App.tsx",
+                10,
+                90
+            )),
+            None
+        );
+        assert_eq!(
+            at(leaf(
+                crate::LeafOwnerOperationKind::Cleanup,
+                "/p/Other.tsx",
+                40,
+                60
+            )),
+            None
+        );
+        // An operation reached through a helper stands at the helper call, elsewhere: its own site is the row's place.
+        let mut through_helper = leaf(
+            crate::LeafOwnerOperationKind::Cleanup,
+            "/p/App.tsx",
+            100,
+            110,
+        );
+        assert_eq!(at(through_helper.clone()), None);
+        through_helper.via = Some("helper".into());
+        through_helper.sites = vec![Location {
+            path: "/p/App.tsx".into(),
+            start_byte: 42,
+            end_byte: 58,
+        }];
+        assert_eq!(at(through_helper), Some(Span::new(42, 58)));
+        // A leaf scope whose callback is unresolved stands at the leaf call and answers for no site inside it.
+        assert_eq!(
+            at(leaf(
+                crate::LeafOwnerOperationKind::UnresolvedCallback,
+                "/p/App.tsx",
+                40,
+                60
+            )),
+            None
+        );
+        assert_eq!(
+            delegate_row(Delegate::LeafOwnerForbiddenCall, &[], "/p/App.tsx", call),
+            None
+        );
+    }
+
+    #[test]
+    fn a_hand_off_has_an_id_in_the_form_of_the_proof_log() {
+        let delegate = Delegate::LeafOwnerForbiddenCall;
+        let parts = delegate.id().split('.').collect::<Vec<_>>();
+        assert!(
+            parts.len() >= 2 && parts.iter().all(|part| !part.is_empty()),
+            "{delegate:?}"
+        );
     }
 
     #[test]

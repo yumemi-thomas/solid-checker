@@ -27,7 +27,9 @@ export const VERSION = 1;
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
 export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb", "microCb", "thenCb"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
-export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction", "resolve", "until"];
+export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction", "resolve", "until",
+  // ADR 0940 (primitive-layer-shapes.mjs): `latest(fn)` and `isPending(fn)` run `fn` in place, as `untrack` does, and hand its value back.
+  "latest", "isPending"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
@@ -642,7 +644,9 @@ export function validate(program, { maxNodes = 400 } = {}) {
           else fnTypeChecked(e.apply, scope, RETURNS.applyFn, [["v", compute.ret]]);
           return T.void;
         }
-        case "untrack": case "root": return fnTypeChecked(e.fn, scope, "free").ret;
+        case "untrack": case "root": case "latest": return fnTypeChecked(e.fn, scope, "free").ret;
+        // `isPending(fn)` hands back a boolean, never `fn`'s value.
+        case "isPending": fnTypeChecked(e.fn, scope, "free"); return T.unknown;
         case "owner":
           if (e.ownerArg === "owner" && !lookup(scope, "owner")) fail(`${where}: owner is not captured`);
           if (e.ownerArg === "bound" && lookup(scope, "boundOwner")?.t !== "owner") fail(`${where}: boundOwner is not declared`);

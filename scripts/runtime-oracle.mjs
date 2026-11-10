@@ -316,6 +316,14 @@ const withholdingRules = ["reactive-dispatch-unresolved"];
 // Rules whose uncertifiable finding at a site declines the code without claiming it (scripts/fuzz/codes.mjs `declining`):
 // SC4001's obligation on a `useContext` read leaves SC4002's provider question unasked.
 const decliningRules = {"CONTEXT_NOT_FOUND":["missing-owner"]};
+// Placeless codes (scripts/fuzz/codes.mjs `placelessCodes`) the oracle judges by file (ADR 0946): rc.21 reports CAUGHT_REACTIVE_READ at the line
+// the compute is created on, not at the read inside its `try` where the checker's finding stands, so no authored line of the diagnostic belongs to
+// the finding. A finding of a rule that claims the code, or an uncertifiable one of a rule that declines it, anywhere in the diagnostic's file covers
+// it; never by line, and a withholding covers none. codes.test.mjs checks that each is a placeless code there. The others stay judged by line: widening
+// the judge moves other cases' verdicts (the `open` entries of r4c-leak and r9-b3-childrenasync name ASYNC_OUTSIDE_LOADING_BOUNDARY).
+const fileJudgedCodes = [
+  "CAUGHT_REACTIVE_READ",
+];
 const settle = { action: "wait-for-text", selector: "#ready", text: "settled" };
 // Reads the page's behavioural report back: its checkpoint text is the JSON list runCase parses.
 const probeStep = { action: "wait-for-selector", selector: "#oracle-behaviour" };
@@ -765,11 +773,15 @@ async function runCase(id, slot) {
       const positions = [row.site, ...(row.stack ?? [])]
         .map((frame) => ({ file: caseFile(frame.location.path), line: frame.line, column: frame.column }))
         .filter((position) => position.file);
-      const covering = findings.filter((finding) => positions.some((position) => finding.file === position.file
-        && finding.line <= position.line && position.line <= finding.endLine)
-        && (rules?.includes(finding.rule) || withholdingRules.includes(finding.rule)
-          || (finding.kind === "uncertifiable" && (decliningRules[row.code] ?? []).includes(finding.rule))));
-      framed.push({ rules: rules ?? [], positions });
+      const declines = (finding) => finding.kind === "uncertifiable" && (decliningRules[row.code] ?? []).includes(finding.rule);
+      // ADR 0946: a code judged by file is covered anywhere in its file; any other code at the diagnostic's site or an application frame below it.
+      const placeless = fileJudgedCodes.includes(row.code);
+      const covering = placeless
+        ? findings.filter((finding) => finding.file === file && (rules?.includes(finding.rule) || declines(finding)))
+        : findings.filter((finding) => positions.some((position) => finding.file === position.file
+          && finding.line <= position.line && position.line <= finding.endLine)
+          && (rules?.includes(finding.rule) || withholdingRules.includes(finding.rule) || declines(finding)));
+      framed.push({ rules: rules ?? [], positions, wholeFile: placeless ? file : null });
       return {
         code: row.code, file, line, column: row.site.column, operation: row.operation?.in ?? null,
         siteKind: row.siteKind ?? null, message: row.message?.slice(0, 160),
@@ -786,8 +798,9 @@ async function runCase(id, slot) {
   const uncovered = findings.filter((finding) => finding.kind === "violation"
     && !["prefer-show", "prefer-for"].includes(finding.rule)
     && !diagnostics.some((row) => row.file === finding.file && finding.line <= row.line && row.line <= finding.endLine)
-    && !framed.some(({ rules, positions }) => rules.includes(finding.rule)
-      && positions.some((position) => position.file === finding.file && finding.line <= position.line && position.line <= finding.endLine)));
+    && !framed.some(({ rules, positions, wholeFile }) => rules.includes(finding.rule)
+      && (wholeFile === finding.file
+        || positions.some((position) => position.file === finding.file && finding.line <= position.line && position.line <= finding.endLine))));
   const failure = report.failure?.message ?? report.execution?.failure?.message ?? null;
   const typingErrors = report.typingErrorCount ?? null;
   // A known open site is listed in oracle.json with its reason; it is not a

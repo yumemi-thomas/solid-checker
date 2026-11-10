@@ -8,9 +8,9 @@ Temporal dead zone (ADR 0339). A reference proves execution only where it follow
 
 Stubs: published rc.13 typings (`SC9014`: no `@solidjs/signals` install).
 
-`SwitchScope.tsx`, `ModuleSwitch.tsx` (a declarator in a `switch` case is withheld, from `in_switch_case`), `Wrapped.tsx` (mentions from the compiler's reference index: `go!()`, `(go as F)()`, `(go satisfies F)()`), `barrel-b/c/d` (an importer on an import cycle is not ordered after the declaring module). `arrow-bound-helper-module-loads` pins loads the graph must order.
+`SwitchScope.tsx`, `ModuleSwitch.tsx` (a declarator in a `switch` case is withheld, from `in_switch_case`), `Wrapped.tsx` (mentions from the compiler's reference index: `go!()`, `(go as F)()`, `(go satisfies F)()`), `barrel-b/c/d` (an importer on an import cycle is not ordered after the declaring module).
 
-a direct `eval` withholds every mention of a file's bindings and leaves every function-valued binding unproven (variant `eval`, below). `arrow-bound-helper-module-loads` adds a JS bridge with no declaration file, loads written after their use (`early-main.ts` against `early-control.ts`), and wrapped `require` callees.
+a direct `eval` withholds every mention of a file's bindings and leaves every function-valued binding unproven (variant `eval`, below).
 
 ADR 0339 as an allowlist: only a hoisted declaration whose binding is never written, a `const` or `let` (by source position), and an import ordered by module evaluation are credited; everything else is withheld. `EvalReassignedComponent.tsx` withholds a component or exported root whose binding may be written (a direct `eval` in the file included; `ExportedComponentControl.tsx` is the positive). `ArrowDefault.tsx`: a default parameter initializer that is more than a literal runs before the body and may throw, so mentions of the function are withheld (facts schema 70, `parameters_inert`; `Control` with a literal default is the positive). `VarSkipped.tsx`: a `var` is initialized only if its initializer ran (loop, branch, caught throw): never credited.
 

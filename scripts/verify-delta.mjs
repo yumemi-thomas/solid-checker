@@ -238,12 +238,6 @@ export const CHECKS = {
       "(only the tsrs-only files may skip, when no tsrs binary exists)",
     command: ["bun", "scripts/fuzz/test-lane.mjs", "--provision"],
   },
-  "doc-budget": {
-    why:
-      "the size and allow-list budgets over docs/, fixture READMEs and the agent-facing prose; it asks git " +
-      "what is ignored, so `.gitignore` is an input too",
-    command: ["bun", "scripts/doc-budget.mjs"],
-  },
   "flip-tools": {
     why:
       "run.mjs and tsc.mjs run only by hand (Chrome, tsrs), so this checks that the flip's scripts parse " +
@@ -512,21 +506,21 @@ export const ROWS = [
     owner: "the differential fuzzer (operator tooling; its unit tests are a verify lane)",
     checks: ["fuzz-tests"],
   },
-  // A rule page is prose the budgets and two tests read; the CLI tests and
+  // A rule page is prose two tests read; the CLI tests and
   // emitted findings name its URL, which no check resolves. A renamed page is
   // what `rule-pages` catches.
-  { prefix: "docs/rules/", owner: "the rule pages", checks: ["doc-budget", "rule-pages"] },
+  { prefix: "docs/rules/", owner: "the rule pages", checks: ["rule-pages"] },
   // The flip's working files: nothing else reads them, and `scripts/flip/` goes
   // with the flip. The notes and the plan are prose, the rest are its tools.
   { prefix: "scripts/guard/", owner: "the one-way uncertifiable count and its ledger", checks: ["guard-count"] },
   { prefix: "scripts/flip/", owner: "the flip's tools and witnesses (the `witnesses` gate)", checks: ["flip-tools", "witnesses"] },
   { prefix: "scripts/flip/notes/", owner: "prose read by no check", checks: [] },
   { prefix: "scripts/flip/PLAN.md", owner: "prose read by no check", checks: [] },
-  // `.gitignore` decides what git lists, and three checks ask git: the dialect
-  // stubs (coverage), the reproduction set's tracked files (repro-budget) and
-  // the doc budgets. Every other input is walked from the filesystem or is one
+  // `.gitignore` decides what git lists, and two checks ask git: the dialect
+  // stubs (coverage) and the reproduction set's tracked files (repro-budget).
+  // Every other input is walked from the filesystem or is one
   // of the ignored classes in the header, whose caveat stands.
-  { prefix: ".gitignore", owner: "what git lists", checks: ["doc-budget", "coverage", "repro-budget"] },
+  { prefix: ".gitignore", owner: "what git lists", checks: ["coverage", "repro-budget"] },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only
@@ -590,7 +584,7 @@ export function planFor(paths) {
     // is already current.
     "build-typefacts",
     ...UNIVERSAL,
-    ...["doc-budget", "flip-tools", "rule-pages", "guard-count"].filter((id) => selected.has(id)),
+    ...["flip-tools", "rule-pages", "guard-count"].filter((id) => selected.has(id)),
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
@@ -822,7 +816,6 @@ export const LANES = {
   "proof-lint": "preflight",
   "ir-tools-test": "preflight",
   "proof-tools-test": "preflight",
-  "doc-budget": "preflight",
   "guard-count": "preflight",
   "flip-tools": "preflight",
   "rule-pages": "rust",

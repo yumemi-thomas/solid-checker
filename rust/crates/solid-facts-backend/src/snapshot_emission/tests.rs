@@ -14,6 +14,7 @@ fn snapshot(status: &str) -> Snapshot {
         feedback_facts: Vec::new(),
         status: status.into(),
         findings: Vec::new(),
+        hazards: Vec::new(),
         metrics: Metrics {
             files_analyzed: 1,
             functions_analyzed: 2,
@@ -209,6 +210,7 @@ fn default_format_renders_oxc_source_frames() {
         message: "destructuring component props reads them outside tracking".into(),
         hint: "Keep the props object intact and read props.<name> inside JSX.".into(),
         analysis_context: String::new(),
+        blocked_by: None,
         subject_kind: "component-props".into(),
         coverage_family: String::new(),
         coverage_subject: String::new(),

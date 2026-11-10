@@ -27,6 +27,19 @@
       "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner. The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
     },
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 501,
+      "end": 519,
+      "fixes": 0,
+      "message": "useContext reads a context created with no default, and no provider for it exists in the analyzed program; Solid throws ContextNotFoundError here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context; but the context is a package's, which may provide it itself, and no provider is proven above this call, so this is not proven",
+      "hint": "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree. The read is in the package: render a provider for the package's context above this call."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",

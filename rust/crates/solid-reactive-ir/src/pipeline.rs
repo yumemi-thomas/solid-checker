@@ -274,6 +274,8 @@ impl ProgramDraft {
             event_dispatch_sites: self.event_dispatch_sites,
             unreached_sites: Vec::new(),
             early_mention_sites: Vec::new(),
+            blocked_by: Vec::new(),
+            hazards: Vec::new(),
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -911,6 +913,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     program.early_mention_sites =
         crate::indexes::early_mention_report_sites(&program, semantic_lookup);
+    // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
+    (program.blocked_by, program.hazards) =
+        crate::blocked_by::typed_blockers(&program, semantic_lookup);
     if defer_memo_end {
         semantic_lookup.defer_end_memos();
     } else if let Some(report) = semantic_lookup.end_memos() {

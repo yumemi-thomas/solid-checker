@@ -117,6 +117,73 @@ pub enum CallbackOwner {
     Leaf,
 }
 
+/// How the callback at one argument of one call runs: the one answer the rule walks match, with no wildcard
+/// ([`crate::Dialect::slot_run`], ADR 0944).
+///
+/// The callback questions (when it runs, which owner, which observer, a thrown error) were answered by six groups
+/// of separate methods that each rule asked for itself, so a rule that asked the wrong group walked past a slot
+/// the runtime runs in place: `untrack(() => onCleanup(..))` in `createTrackedEffect` is still the leaf owner's
+/// child. This is derived from those questions and from nothing else, so it cannot disagree with them; a walk that
+/// matches it names every case, and a case it does not use says so in its arm.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotRun {
+    /// Runs on the caller's stack, once, before the call returns. The call's own guards come first: a primitive
+    /// that throws before it runs its callback (`createRoot` under a leaf owner, `flush(fn)` in an action step)
+    /// runs nothing, and the walk asks that of the call, not of the slot.
+    InPlace(InPlaceRun),
+    /// The call makes the callback a computation of its own (a memo's compute, a tracked effect's callback): it
+    /// tracks, has the owner the call creates, and is not part of the caller's extent.
+    Computation,
+    /// Not on the caller's stack: a queue, an event, a disposal, a later read.
+    Deferred,
+    /// The dialect states no execution, or an owner this vocabulary has no word for, for this slot.
+    Unknown,
+}
+
+/// What a callback that [runs in place](SlotRun::InPlace) does to the code inside it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InPlaceRun {
+    pub owner: SlotOwner,
+    pub observer: SlotObserver,
+    pub throws: SlotThrows,
+}
+
+/// The owner a callback that runs in place has.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotOwner {
+    /// The caller's own (`untrack`, `latest`, `isPending`, `flush(fn)`): the callback adds no scope.
+    Inherits,
+    /// Whatever the call's argument at this index evaluates to (`runWithOwner(owner, fn)`): data, so the walk
+    /// resolves it at the call or leaves it unproven.
+    Supplied { argument: usize },
+    /// An owner the call creates (`createRoot`, `render`).
+    Creates,
+    /// No owner, whatever the caller's.
+    Detached,
+}
+
+/// What a callback that runs in place does to the active observer (the tracking listener).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotObserver {
+    /// The caller's observer stays active inside (`latest`, `isPending`, `flush(fn)`): a call that throws on an
+    /// active observer throws in it.
+    Keeps,
+    /// Tracking is off inside (`untrack`, `runWithOwner`, `createRoot`).
+    Clears,
+    /// Neither is stated for this slot: nothing is claimed either way.
+    Unstated,
+}
+
+/// What a callback that runs in place does to an error it throws.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotThrows {
+    /// The call lets it through to its own caller.
+    Escapes,
+    /// The call takes whatever the callback throws (`isPending`): a throw with no diagnostic before it is no
+    /// report; a diagnostic emitted before the throw, or one that is not thrown, still is.
+    Swallows,
+}
+
 /// How a control-flow component's `keyed` prop was written.
 ///
 /// It decides which of the children callback's parameters are accessors, which

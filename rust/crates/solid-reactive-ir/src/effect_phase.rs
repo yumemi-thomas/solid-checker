@@ -40,11 +40,15 @@
 
 use crate::{HashMap, HashSet};
 
+use solid_dialect::{InPlaceRun, SlotObserver, SlotOwner, SlotRun};
 use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, FunctionFact};
 use solid_facts::core::Span;
 
-use crate::execution_role::{inside_instance_field, project_callee_at_parameter};
+use crate::execution_role::{
+    SuppliedOwner, call_may_run_code, inside_instance_field, project_callee_at_parameter,
+    supplied_owner,
+};
 use crate::indexes::SemanticLookup;
 use crate::owners::{containing_ast_function, function_binding_name, written_directly_in};
 
@@ -363,7 +367,11 @@ impl<'l, 'a> Walk<'l, 'a> {
                 .iter()
                 .any(|template| template.span == span && template.tag == tag)
         };
-        self.earlier |= file.ast.calls.iter().any(|other| before(other.span))
+        self.earlier |= file
+            .ast
+            .calls
+            .iter()
+            .any(|other| before(other.span) && call_may_run_code(file, other, self.lookup))
             || file
                 .ast
                 .tagged_template_tags
@@ -518,13 +526,17 @@ impl<'l, 'a> Walk<'l, 'a> {
                         undecided: None,
                     });
             }
-            if self.owner_preserving && primitive != solid_dialect::Primitive::Untrack {
-                return None;
-            }
-            return if dialect.synchronous_callback_slot(primitive, index, call.arguments.len()) {
-                self.layer(file, call.span, helper_calls)
-            } else {
-                None
+            // ADR 0944: asked of the dialect, not of the primitive's name. A callback that runs in place
+            // runs on the apply's stack; whether the layer is crossed is the walk's own question of what
+            // that callback runs under.
+            return match dialect.slot_run(primitive, index, call.arguments.len()) {
+                SlotRun::InPlace(run) if self.crosses(file, call, run) => {
+                    self.layer(file, call.span, helper_calls)
+                }
+                SlotRun::InPlace(_)
+                | SlotRun::Computation
+                | SlotRun::Deferred
+                | SlotRun::Unknown => None,
             };
         }
         // A standard-library call the audited rows model as invoking the
@@ -548,6 +560,40 @@ impl<'l, 'a> Walk<'l, 'a> {
         )
         .then(|| self.layer(file, call.span, helper_calls))
         .flatten()
+    }
+
+    /// ADR 0944: whether the walk climbs out of a callback that runs in place, to the call that runs it.
+    fn crosses(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        run: InPlaceRun,
+    ) -> bool {
+        if !self.owner_preserving {
+            // A flush on the effect phase's stack (SC2008): the callback is on that stack whatever it runs
+            // under. A slot whose observer the dialect does not state (`render`'s root, `repeat`'s mapper)
+            // runs under state of its own and is not crossed.
+            return match run.observer {
+                SlotObserver::Keeps | SlotObserver::Clears => true,
+                SlotObserver::Unstated => false,
+            };
+        }
+        // Creating with no owner (SC6002): the callback must run with `context === null`, which the effect
+        // phase has and a callback that adds no owner keeps. An owner supplied as data is `null` (kept), the
+        // owner `getOwner()` returns on this very stack (the effect phase's own: kept), `undefined` (the guard
+        // tests `=== null`: no throw) or a value not followed (nothing is claimed of it).
+        match run.owner {
+            SlotOwner::Inherits => true,
+            SlotOwner::Supplied { argument } => {
+                match supplied_owner(file, call, argument, self.lookup) {
+                    SuppliedOwner::Null | SuppliedOwner::Ambient => true,
+                    SuppliedOwner::Undefined
+                    | SuppliedOwner::Elsewhere
+                    | SuppliedOwner::Unproven => false,
+                }
+            }
+            SlotOwner::Creates | SlotOwner::Detached => false,
+        }
     }
 
     /// Whether the effect call's `createEffect` is the one the flush call's

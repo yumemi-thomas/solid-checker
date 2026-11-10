@@ -256,6 +256,26 @@ export function packageFiles(helpers) {
   return files;
 }
 
+/**
+ * ADR 0940: the context package of the SC4002 `package` source (misuse.mjs SOURCE_AXES). A dependency exports a context made with no default value
+ * (`export const PkgContext = createContext();`); the program reads it with `useContext(PkgContext)` and no provider above, so Solid throws
+ * CONTEXT_NOT_FOUND. The checker has to read the dependency's source to know there is no default, as it does for the helper packages above.
+ */
+export const CONTEXT_PACKAGE = { name: "fz-ctx", exportName: "PkgContext", hookName: "usePkgContext" };
+export function contextPackageFiles() {
+  const text = (lines) => `${lines.join("\n")}\n`;
+  return {
+    "package.json": `${JSON.stringify({
+      name: CONTEXT_PACKAGE.name, version: "1.0.0", type: "module",
+      peerDependencies: { "solid-js": "^2.0.0-rc.21" },
+      exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
+    }, null, 2)}\n`,
+    // ADR 0943: the package's own hook reads the context (`package-hook`): the read is in the dependency's source, reached at the program's call.
+    "index.js": text(['import { createContext, useContext } from "solid-js";', "", `export const ${CONTEXT_PACKAGE.exportName} = createContext();`, "", `export function ${CONTEXT_PACKAGE.hookName}() {`, `  return useContext(${CONTEXT_PACKAGE.exportName});`, "}"]),
+    "index.d.ts": text(['import type { Context } from "solid-js";', "", `export declare const ${CONTEXT_PACKAGE.exportName}: Context<number>;`, `export declare function ${CONTEXT_PACKAGE.hookName}(): number;`]),
+  };
+}
+
 /** The distinct package helpers a program references, in declaration order (a helper nothing calls has no export). */
 export function usedPackageHelpers(program, referencedNames) {
   return (program.helpers ?? []).filter((helper) => helper.pkg && referencedNames.has(helper.name));

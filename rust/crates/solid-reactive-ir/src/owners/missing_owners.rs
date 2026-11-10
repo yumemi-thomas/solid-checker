@@ -136,7 +136,12 @@ pub(crate) fn attribute_dependency_requirements(
             && (requirement.after_await
                 || requirement.after_yield
                 || contexts[owner] & OWNER_CONTEXT_PROVEN_UNOWNED != 0);
-        let mask = if proven {
+        // ADR 0943: a provider obligation is about the read's owned runs (a run
+        // with no owner throws NoOwnerError first, SC4001's), so the calls it
+        // reaches are those that run it under an owner.
+        let mask = if requirement.operation == OwnerRequirementOperation::ContextProvider {
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED
+        } else if proven {
             OWNER_CONTEXT_PROVEN_UNOWNED
         } else {
             OWNER_CONTEXT_UNOWNED
@@ -371,8 +376,12 @@ pub(crate) fn attribute_dependency_requirements(
         }
         // A project call at module scope has no owner and no function node,
         // so no edge records it. It is attributed as an obligation: whether a
-        // module-scope statement runs is not proven here.
-        for &node in best.keys() {
+        // module-scope statement runs is not proven here. ADR 0943: not for a
+        // provider obligation, whose runs are owned ones.
+        for &node in best
+            .keys()
+            .filter(|_| requirement.operation != OwnerRequirementOperation::ContextProvider)
+        {
             let (sites, _, _) = &best[&node];
             let Some(node_file) = lookup.file_by_path(&nodes[node].path) else {
                 continue;

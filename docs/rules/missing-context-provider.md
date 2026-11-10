@@ -100,9 +100,22 @@ intrinsic element, a hook, a component nested inside, or a wrapper whose one
 `return` is `<Ctx value>{props.children}</Ctx>`, with every reference to each
 such function a call or render site (not exported in an open program). A
 sibling subtree, a second render outside, a conditional provider and a render
-prop callback (`<For>{() => <K />}</For>`) are not proven. Package contexts (a kobalte dialog hook outside
-its `<Dialog>`, a router hook outside its router) are provided by package code,
-which is not this program, so they are not decided here either. Both are in
+prop callback (`<For>{() => <K />}</For>`) are not proven.
+
+A context a dependency creates with no default (`export const Ctx =
+createContext()` in dependency source) is open too (ADR 0943), whoever reads
+it: the package's own code may provide it (a router, a dialog), and that code is
+not this program's to census. A project's read of the export
+(`useContext(PkgContext)`), or a project call that runs a package hook reading
+it (a kobalte dialog hook outside its `<Dialog>`, a router hook outside its
+router), under an owner is an uncertifiable obligation, blocker
+`provider-not-proven-above`, never a violation, unless every render of the
+function that holds the read sits under `<Ctx value>` in that file. A read in
+the package's source is reported at the project call that runs it (ADR 0290);
+a provider the project renders above that call is not followed into the
+package, so the call is an obligation. Only a default the syntax proves
+(`createContext(null)`, a literal) is silent, as for a project's context; the
+proof log names it (`ContextDefaultProven`). All of this is in
 `docs/open-work.md`.
 
 ## A stored throw needs a read that reports it

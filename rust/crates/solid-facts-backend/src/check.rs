@@ -397,6 +397,7 @@ pub fn fail_closed(
         hint: "Repair the input (reinstall the dependencies, fix the symlink or its permissions, or the manifest) and check again. A path with nothing there reads as absent, as Node resolves it; a dangling link, an unreadable directory or a manifest that does not parse does not (ADR 0915)."
             .into(),
         analysis_context: HOST_INPUT_UNREADABLE.into(),
+        blocked_by: solid_reactive_ir::blocked_by::BlockedBy::of_context(HOST_INPUT_UNREADABLE),
         subject_kind: "file".into(),
         coverage_family: String::new(),
         coverage_subject: String::new(),
