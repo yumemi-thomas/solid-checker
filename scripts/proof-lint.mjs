@@ -19,6 +19,11 @@
 //   dead-premise-kind     a `PremiseKind` no producer, drop pass or stage names: a claim nothing makes.
 //   duplicate-end-id      two named ends (`end_at` / `end_with`) with one id, or an id that is not `<file stem>.<function>.<end>`.
 //
+// Limits: the scan is line-based over comment-stripped sources. A text chain split across lines or through a binding (`let each =
+// file.source_text(..)?; each.strip_prefix('[')`), a spelling compared through a variable, and a default written as an `if let ... else
+// { true }` are not seen; and a pattern it flags may be a false positive (a role argument, a match pattern). The baseline therefore counts
+// shapes, and a stated reason covers every hit of its file and kind: it is stated only after each of them was read.
+//
 // scripts/proof-lint.allowlist.json is a baseline, as scripts/ir-read-lint.allowlist.json is: per file and kind, how many hits stand
 // and why. A hit the baseline does not count fails; a count that fell fails until `--update` lowers it (the file only shrinks). An
 // entry's `why` is a stated reason (the fact that makes the shape sound, at least 20 characters) or `pending-review`: counted,
