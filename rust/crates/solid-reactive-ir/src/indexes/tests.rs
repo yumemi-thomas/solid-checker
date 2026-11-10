@@ -1121,6 +1121,41 @@ fn the_any_file_vetoes_follow_what_the_project_writes() {
     assert!(iterator.4 && !iterator.5);
 }
 
+/// ADR 0931: a `const` arrow is initialized at every run of a forwarder
+/// written after its declarator, unless a hoisted declaration lies between
+/// or the declarator sits in a `switch` clause.
+#[test]
+fn const_targets_initialized_before_their_forwarders() {
+    let source = "const run = (cb) => { cb(); };\n\
+        const fwd = (cb) => { run(cb); };\n\
+        const early = (cb) => { late(cb); };\n\
+        const late = (cb) => { cb(); };\n\
+        function hoisted(cb) { run(cb); }\n\
+        switch (1) { case 1: const inCase = (cb) => { cb(); }; const user = (cb) => { inCase(cb); }; }\n";
+    let facts = project(source);
+    let file = &facts.files[0];
+    let function = |text: &str| {
+        let span = span_of(source, text, 0);
+        file.ast.function_at(span).expect("a function")
+    };
+    let run = function("(cb) => { cb(); }");
+    let late = file
+        .ast
+        .function_at(span_of(source, "(cb) => { cb(); }", 1))
+        .expect("late");
+    let in_case = file
+        .ast
+        .function_at(span_of(source, "(cb) => { cb(); }", 2))
+        .expect("inCase");
+    let initialized = |callee, forwarder: &str| {
+        super::completion::const_initialized_before(file, callee, span_of(source, forwarder, 0))
+    };
+    assert!(initialized(run, "(cb) => { run(cb); }"));
+    assert!(!initialized(late, "(cb) => { late(cb); }"));
+    assert!(!initialized(run, "function hoisted(cb) { run(cb); }"));
+    assert!(!initialized(in_case, "(cb) => { inCase(cb); }"));
+}
+
 #[test]
 fn parameter_completion_calls_are_a_memo_view() {
     let source = "function run(cb) { cb(); }\nfunction maybe(cb) { if (flag) cb(); }\n";

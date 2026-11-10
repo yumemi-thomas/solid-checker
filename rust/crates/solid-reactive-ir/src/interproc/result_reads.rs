@@ -420,9 +420,18 @@ fn call_result_reads(
         // a hook's accessor returned silence.
         // ADR 0539: so is a call in the cleanup an effect's apply returns,
         // which a rerun may run in the apply's window (its role is unplaced).
+        // ADR 0931: nor a call whose own role is unplaced in a function no
+        // carrier runs, outside a named helper's body, as the direct-read
+        // path reports a read written there (`local_access` asks
+        // `inside_non_component_function`): a compute's returned function
+        // an apply calls has no caller edge, so a helper it calls was
+        // certified clean.
         if !crate::execution_role::inside_class_member(file, call.callee, lookup)
             && !(execution == ExecutionRole::Unknown
                 && crate::execution_role::inside_rerun_effect_cleanup(file, call.callee, lookup))
+            && !(execution == ExecutionRole::Unknown
+                && !inside_non_component_function(file, call.callee, lookup)
+                && !handed.is_some_and(|(_, carrier)| carrier.is_some()))
         {
             // ADR 0771: a read this call makes through a value it hands over
             // has no row here, and an async source may be pending wherever the

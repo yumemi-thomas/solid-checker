@@ -487,14 +487,6 @@
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-strict-read-untracked-lst-body-shared-memo-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
   },
   {
-   "idPrefix": "mx-no-owner-effect-",
-   "code": "NO_OWNER_EFFECT",
-   "variantPrefix": "reaction-track-hook",
-   "outcome": "false-clean",
-   "item": "R-neighbour-U",
-   "note": "ADR 0815 smoke, seed 21400934: e.g. mx-no-owner-effect-handler-reaction-track-hook-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
-  },
-  {
    "idPrefix": "mx-on-flush-in-owned-scope-",
    "code": "ON_FLUSH_IN_OWNED_SCOPE",
    "contexts": [
@@ -875,7 +867,7 @@
    "R-stacked": 194,
    "R-unplaced": 8,
    "R-other": 7,
-   "R-neighbour-U": 9,
+   "R-neighbour-U": 4,
    "R-misplaced": 14,
    "R-carrier": 57,
    "R-halted": 2

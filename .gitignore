@@ -1265,3 +1265,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/stored-throw-class-member-wrapper/node_modules/**
 !fixtures/reactive-ir/leaf-scope-by-value-callback/node_modules/
 !fixtures/reactive-ir/leaf-scope-by-value-callback/node_modules/**
+!fixtures/reactive-ir/forwarded-const-callback/node_modules/
+!fixtures/reactive-ir/forwarded-const-callback/node_modules/**

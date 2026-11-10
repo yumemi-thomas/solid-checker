@@ -1,0 +1,134 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 630,
+      "end": 631,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 719,
+      "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 1037,
+      "end": 1043,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 1552,
+      "end": 1559,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 1646,
+      "end": 1647,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-call-argument-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 1928,
+      "end": 1929,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 1953,
+      "end": 1960,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 2278,
+      "end": 2287,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 2600,
+      "end": 2609,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 3063,
+      "end": 3070,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 3215,
+      "end": 3222,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

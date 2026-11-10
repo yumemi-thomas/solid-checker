@@ -8943,5 +8943,53 @@
   ],
   "rediscovered": "make fuzz-patterns: false clean on 588e7ffc4; FIXED on the ADR 0926 tree (SC5003 uncertifiable, pending-read-unresolved)",
   "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); mx-recall jsx and show with the let, literal-member and wrapper bindings generate the family (the ASYNC_OUTSIDE_LOADING_BOUNDARY entry above)"
+ },
+ {
+  "finding": "ADR 0931 (X3): a createReaction tracker a hook returns, called at once (`useMade()(() => 1)`) in a handler, timer, then, microtask, async step or null owner, kept only ADR 0549's creation obligation; rc.21 warns NO_OWNER_EFFECT at the track() call",
+  "found": "W's false-clean causes at e5f1b9b1d (X3, 24 mx-recall)",
+  "fixed": "ADR 0931",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-handler-reaction-track-hook-direct-none",
+   "mx-no-owner-effect-micro-reaction-track-hook-direct-none",
+   "mx-no-owner-effect-then-reaction-track-hook-direct-none",
+   "mx-no-owner-effect-timer-reaction-track-hook-direct-none"
+  ],
+  "rediscovered": "matrix.mjs --grid --recall --ids <the 174 reaction-track-hook and ref-factory-body forward-N programs> --confirm-with-chrome, one runtime cache: 3ac5d91f9's release 24 false-clean, 12 recall-gap; the ADR 0931 release 36 agree"
+ },
+ {
+  "finding": "ADR 0931 (X4): a read in a callback handed parameter to parameter through `const` arrows (`forward-N`) inside a named function the body runs (`ref={dir1()}`) was certified clean: ADR 0285's forward fixpoint took only `function` targets",
+  "found": "W's false-clean causes at e5f1b9b1d (X4, 24 mx-recall; open-work ADR 0920)",
+  "fixed": "ADR 0931",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-ref-factory-body-memo-alias-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-memo-destructured-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-memo-direct-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-memo-hook-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-memo-tuple-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-memo-wrapper-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-signal-alias-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-signal-destructured-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-signal-direct-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-signal-hook-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-signal-tuple-forward-2",
+   "mx-strict-read-untracked-ref-factory-body-signal-wrapper-forward-2"
+  ],
+  "rediscovered": "the same run: 3ac5d91f9's release 24 false-clean; the ADR 0931 release 24 agree"
+ },
+ {
+  "finding": "ADR 0931: a helper a compute's returned function calls, run by the apply (`createEffect(() => () => { wrapUse(); }, (v) => { v(); })`), was certified clean: the returned function has no caller edge and the call path kept no row",
+  "found": "fix 3c's silence audit (probe w6i, Chrome rc.21 STRICT_READ_UNTRACKED)",
+  "fixed": "ADR 0931 (U at the helper's call)",
+  "outside": "main's generator does not build it; fix 3c's `apply-void-call-untrack` context (ADR 0927, `APPLY_VOID_*`) does, `wrapper` binding; fixture forwarded-const-callback `ComputeReturnedCall` holds it until that lands"
+ },
+ {
+  "finding": "ADR 0931 review: a helper whose parameter default may throw (`(read, _gate = stop()) => read()`) was taken to call `read` on every completion, so `gatedInline(() => count())` in a body was an SC1001 violation (also through a `function` forward, ADR 0285); `stop()` throws first, no read runs",
+  "found": "fixture project-callback-uses `GatedInline` (pinned uncertifiable) moved to a violation once ADR 0931 followed `const` forwards; the direct call was already one",
+  "fixed": "ADR 0931 (no parameter-completion proof for a function with a non-literal default)",
+  "outside": "the grids write no parameter default in a helper (only the random generator's `defaultCall`, whose default calls the parameter itself); fixture forwarded-const-callback `GatedDefault`/`LiteralDefault` and project-callback-uses `GatedInline` hold it. Owed: a helper form with a throwing default in the legal grids"
  }
 ]

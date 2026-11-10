@@ -788,8 +788,102 @@ pub(crate) fn helper_argument_run(
     }
     Some(HelperArgumentRun {
         every_completion,
-        uses: parameter_uses(callee_file, callee, index)?,
+        uses: forwarded_parameter_uses(callee_file, callee, index, lookup, 0)?,
     })
+}
+
+/// ADR 0931: how deep [`forwarded_parameter_uses`] follows a parameter handed
+/// on, as ADR 0285's forwards compose to a fixpoint.
+const FORWARDED_USES_DEPTH: usize = 16;
+
+/// [`parameter_uses`], with a use that hands the parameter whole, as a plain
+/// argument, to a direct call in the function's own body counted as called
+/// when that call's exact project callee only calls the parameter it lands in
+/// (recursively, ADR 0931): `const hc1 = (g) => { hc0(g); }` over
+/// `const hc0 = (g) => { g(); }` runs `g` on `hc1`'s stack only. Past
+/// [`FORWARDED_USES_DEPTH`], or for any other hand-off, the use is elsewhere.
+fn forwarded_parameter_uses(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> Option<ParameterUses> {
+    let uses = parameter_uses(file, function, index)?;
+    if uses == ParameterUses::OnlyCalled || depth >= FORWARDED_USES_DEPTH {
+        return Some(uses);
+    }
+    if function.r#async || function.generator {
+        return Some(uses);
+    }
+    let Some(name) = function
+        .parameters
+        .get(index)
+        .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Identifier)
+        .and_then(|parameter| parameter.names.first())
+    else {
+        return Some(uses);
+    };
+    let ast = &file.ast;
+    let references = ast.references_to(name.span);
+    let mut accounted = 0;
+    for reference in references
+        .iter()
+        .filter(|reference| **reference != name.span)
+    {
+        let called = ast
+            .calls
+            .iter()
+            .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == *reference);
+        let forwarded = || {
+            ast.calls.iter().any(|call| {
+                !call.construct
+                    && crate::owners::owned_by_body(ast, function, call.span)
+                    && call
+                        .arguments
+                        .iter()
+                        .enumerate()
+                        .any(|(position, argument)| {
+                            !argument.spread
+                                && ast.peel_ts_sugar_span(argument.span) == *reference
+                                && lookup.primitive_at_call(file, call.span).is_none()
+                                && project_callee_at_parameter(file, call, position, lookup)
+                                    .filter(|(_, callee, exact)| {
+                                        *exact && !callee.r#async && !callee.generator
+                                    })
+                                    .and_then(|(callee_file, callee, _)| {
+                                        forwarded_parameter_uses(
+                                            callee_file,
+                                            callee,
+                                            position,
+                                            lookup,
+                                            depth + 1,
+                                        )
+                                    })
+                                    == Some(ParameterUses::OnlyCalled)
+                        })
+            })
+        };
+        if !(called && crate::owners::owned_by_body(ast, function, *reference)) && !forwarded() {
+            return Some(uses);
+        }
+        accounted += 1;
+    }
+    let source = file
+        .source
+        .get(function.span.start as usize..function.span.end as usize)?;
+    let parameter = file
+        .source
+        .get(name.span.start as usize..name.span.end as usize)?;
+    // The declaration is one occurrence; a use the binder does not list (a
+    // shorthand property) keeps the use elsewhere, as in `parameter_uses`.
+    Some(
+        if identifier_occurrences(source, parameter) == accounted + 1 {
+            ParameterUses::OnlyCalled
+        } else {
+            uses
+        },
+    )
 }
 
 /// ADR 0495: the first call the exact project function `call` runs makes, in
