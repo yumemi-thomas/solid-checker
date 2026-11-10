@@ -19,6 +19,11 @@ pub(crate) struct NamedCallbackRoles {
     /// for ([`super::write_roles`]); a position that only names the function
     /// (an unproven callback slot, a result-access one) is not.
     pub(super) positions: HashMap<Span, Vec<Span>>,
+    /// ADR 0933 (read by the proof log only): the argument spans that name each
+    /// function at a position that tracks its reads (a memo's compute, an
+    /// effect's tracked compute), the facts behind `tracked` and
+    /// `effect_compute`. Nothing in an answer reads it.
+    pub(super) tracking: HashMap<Span, Vec<Span>>,
     /// ADR 0517: the functions a callback position that runs in its call's
     /// own window (`createRoot(init)`, `runWithOwner(o, run)`) names by its
     /// binding, with that call and argument index when it is the function's
@@ -127,6 +132,15 @@ impl NamedCallbackRoles {
     /// The positions whose role this function's entry describes.
     pub(super) fn positions(&self, function: Span) -> &[Span] {
         self.positions.get(&function).map_or(&[], Vec::as_slice)
+    }
+
+    fn track_at(&mut self, function: Span, position: Span) {
+        self.tracking.entry(function).or_default().push(position);
+    }
+
+    /// ADR 0933: the positions that track this function's reads.
+    pub(super) fn tracking_positions(&self, function: Span) -> &[Span] {
+        self.tracking.get(&function).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -395,6 +409,9 @@ pub(crate) fn named_callback_roles(
                     if tracked || deferred {
                         roles.admit_at(function, argument.span);
                     }
+                    if tracked {
+                        roles.track_at(function, argument.span);
+                    }
                 }
                 continue;
             }
@@ -476,16 +493,21 @@ pub(crate) fn named_callback_roles(
                 && callback_owner_at_call(file, call, primitive, argument_index, lookup)
                     == Some(solid_dialect::CallbackOwner::Leaf);
             for candidate in index.identity_at(file, entities, argument.span) {
-                let entry = roles.entry(index.functions[*candidate]);
+                let function = index.functions[*candidate];
+                let entry = roles.entry(function);
                 entry.tracked |= proven && tracked;
                 entry.leaf |= proven && leaf;
                 entry.tracked_owned |= proven && tracked && !leaf;
-                entry.effect_compute |= proven
+                let effect_compute = proven
                     && is_effect(primitive)
                     && dialect
                         .callback_semantics_at(primitive, argument_index, count)
                         .tracks_reads;
+                entry.effect_compute |= effect_compute;
                 entry.deferred |= proven && deferred;
+                if (proven && tracked) || effect_compute {
+                    roles.track_at(function, argument.span);
+                }
             }
         }
     }
@@ -713,6 +735,24 @@ pub(crate) fn named_at_tracked_position(
         let role = lookup.named_callback_roles(file).get(function.span);
         role.tracked || role.effect_compute
     })
+}
+
+/// ADR 0933 (log only): the argument positions that name the innermost
+/// function around `span` at a position that tracks its reads, the facts
+/// [`named_at_tracked_position`] answers from.
+pub(crate) fn naming_positions(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    containing_ast_function(&file.ast, span)
+        .map(|function| {
+            lookup
+                .named_callback_roles(file)
+                .tracking_positions(function.span)
+                .to_vec()
+        })
+        .unwrap_or_default()
 }
 
 /// Whether `span` is in a function nested in a named callback (not in the

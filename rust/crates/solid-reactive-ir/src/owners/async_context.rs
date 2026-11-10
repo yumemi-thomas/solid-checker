@@ -1853,23 +1853,32 @@ pub(crate) fn inside_known_value_function_argument(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    known_value_function_argument_call(file, span, lookup).is_some()
+}
+
+/// The call whose function argument [`inside_known_value_function_argument`]
+/// found around `span`: the primitive that never invokes it. ADR 0933 names it
+/// as the fact behind the silence.
+pub(crate) fn known_value_function_argument_call(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
     // Both proofs are dialect answers that Solid 2.0 leaves at their negative
     // default, so under 2.0 this question is provably always "no" and the
     // containment query below need not run at all.
     if !lookup.models_stored_function_arguments() && !lookup.models_returned_callbacks() {
-        return false;
+        return None;
     }
     // Only the calls whose arguments actually contain `span` can answer. The
     // former whole-file scan asked every call in the file, once per call being
     // classified, which is quadratic in a file's call count.
     file.ast
         .arguments_containing(span)
-        .any(|(call, argument_index)| {
-            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
-                return false;
-            };
+        .find_map(|(call, argument_index)| {
+            let primitive = lookup.primitive_at_call(file, call.span)?;
             let argument = &call.arguments[argument_index];
-            matches!(
+            (matches!(
                 argument.value,
                 solid_facts::ast::ArgumentValueKind::Function
                     | solid_facts::ast::ArgumentValueKind::AsyncFunction
@@ -1889,6 +1898,7 @@ pub(crate) fn inside_known_value_function_argument(
                             lookup,
                         )
                         .is_none())
-            })
+            }))
+            .then_some(call.span)
         })
 }

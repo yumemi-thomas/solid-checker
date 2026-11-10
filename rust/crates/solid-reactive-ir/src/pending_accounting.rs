@@ -609,10 +609,11 @@ pub(crate) fn account_pending_reads(
             if held && rule == PendingRule::Unsuspendable {
                 continue;
             }
-            if reasons
+            if let Some(reason) = reasons
                 .iter()
-                .any(|reason| reason.rules_out().contains(&rule))
+                .find(|reason| reason.rules_out().contains(&rule))
             {
+                log_ruled_out(rule, &site, *reason);
                 continue;
             }
             let decided = rows.iter().any(|row| {
@@ -647,6 +648,19 @@ pub(crate) fn account_pending_reads(
     }
     draft.async_reads.extend(added);
     draft.static_violations.extend(caught_rows);
+}
+
+/// ADR 0933: the pending rule `rule` is ruled out at `site` by the typed
+/// `reason`, a silence the proof log names.
+fn log_ruled_out(rule: PendingRule, site: &Site, reason: PendingSafe) {
+    if crate::proof_log::enabled() {
+        crate::proof_log::silent(
+            rule.code(),
+            &site.location,
+            &format!("PendingSafe::{reason:?}"),
+            &[],
+        );
+    }
 }
 
 /// ADR 0891: the site's source is created by a primitive whose first argument
