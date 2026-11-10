@@ -194,6 +194,8 @@ pub struct AstSpanIndex {
     references_by_declaration: OnceLock<HashMap<Span, Vec<Span>>>,
     /// Call indexes by their callee's peeled span ([`AstFacts::peel_ts_sugar_span`]).
     calls_by_peeled_callee: OnceLock<HashMap<Span, Vec<u32>>>,
+    /// Member indexes by their object's peeled span.
+    members_by_peeled_object: OnceLock<HashMap<Span, Vec<u32>>>,
     /// Return indexes by their argument's peeled span.
     returns_by_peeled_argument: OnceLock<HashMap<Span, Vec<u32>>>,
     /// Binding indexes by their initializer's peeled span.
@@ -325,6 +327,7 @@ impl AstSpanIndex {
             )),
             references_by_declaration: OnceLock::new(),
             calls_by_peeled_callee: OnceLock::new(),
+            members_by_peeled_object: OnceLock::new(),
             returns_by_peeled_argument: OnceLock::new(),
             bindings_by_peeled_initializer: OnceLock::new(),
             identifier_bindings: OnceLock::new(),
@@ -661,6 +664,19 @@ impl AstFacts {
         })
         .iter()
         .map(|index| &self.calls[*index as usize])
+    }
+
+    /// The member accesses whose object, peeled of value-preserving wrappers,
+    /// is exactly `span`, in `members` order: what
+    /// `members.iter().filter(|m| peel_ts_sugar_span(m.object) == span)` yields.
+    pub fn members_with_peeled_object(&self, span: Span) -> impl Iterator<Item = &MemberFact> + '_ {
+        peeled_lookup(&self.span_index().members_by_peeled_object, span, || {
+            self.members
+                .iter()
+                .map(|member| Some(self.peel_ts_sugar_span(member.object)))
+        })
+        .iter()
+        .map(|index| &self.members[*index as usize])
     }
 
     /// The first [`BindingShape::Identifier`] binding that declares the name at

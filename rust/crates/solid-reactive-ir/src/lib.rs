@@ -86,6 +86,7 @@ mod proof_universe;
 mod reachability;
 mod reactive_analysis;
 mod role_log;
+mod site_accounting;
 pub use execution_role::{WALK_STEP_BOUND, bound_walks, follow_every_path};
 pub use proof_log::{
     DropPass, ProofLogTarget, ProofStage, configure as configure_proof_log, flush_proof_log,

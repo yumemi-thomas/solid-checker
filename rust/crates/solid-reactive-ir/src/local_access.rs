@@ -31,6 +31,7 @@ use crate::execution_role::{
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
+use crate::site_accounting::SiteSilence;
 use solid_facts::ProjectFacts;
 use typefacts::{Declaration, Location};
 
@@ -2204,11 +2205,9 @@ impl LocalAccessContext<'_, '_> {
             // ADR 0933: every reference of the helper is a call accounted at its
             // own site (a row there, or a proven non-strict position): the
             // definition site ends here on those calls.
-            crate::proof_log::end_with(
-                file,
-                site,
-                "local_access.project_helper_prop_read.calls-accounted",
-                || {
+            result
+                .ends
+                .end_with(file, site, SiteSilence::HelperCallsAccounted, || {
                     let mut premises = file
                         .ast
                         .identifiers
@@ -2236,8 +2235,7 @@ impl LocalAccessContext<'_, '_> {
                         premises = placement_premises(file, site, self.lookup);
                     }
                     premises
-                },
-            );
+                });
         }
     }
 
@@ -2960,10 +2958,10 @@ impl LocalAccessContext<'_, '_> {
             return;
         }
         if crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup) {
-            crate::proof_log::end_with(
+            result.ends.end_with(
                 file,
                 call.span,
-                "local_access.unreached_read.named-at-tracked-position",
+                SiteSilence::UnreachedReadTrackedPosition,
                 || tracked_position_premises(file, call.callee, self.lookup),
             );
             return;
@@ -2991,10 +2989,10 @@ impl LocalAccessContext<'_, '_> {
         // ADR 0933: a read the program places elsewhere ends here with no row,
         // on the facts that place its function.
         if (result.reads.len(), result.async_reads.len()) == rows_before {
-            crate::proof_log::end_with(
+            result.ends.end_with(
                 file,
                 call.span,
-                "local_access.unreached_read.placed-elsewhere",
+                SiteSilence::UnreachedReadPlacedElsewhere,
                 || placement_premises(file, call.callee, self.lookup),
             );
         }
@@ -3255,10 +3253,10 @@ impl LocalAccessContext<'_, '_> {
             return;
         }
         if !unreached_write_may_run(file, call.span, self.lookup) {
-            crate::proof_log::end_with(
+            result.ends.end_with(
                 file,
                 call.span,
-                "local_access.unreached_write.cannot-run",
+                SiteSilence::UnreachedWriteCannotRun,
                 || cannot_run_premises(file, call.span, self.lookup),
             );
             return;
@@ -3288,9 +3286,10 @@ impl LocalAccessContext<'_, '_> {
         };
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
             dormant_callback_end(
+                result,
                 file,
                 call,
-                "local_access.discover_call_as.dormant-callback-argument",
+                SiteSilence::CallDormantCallbackArgument,
                 self.lookup,
             );
             return;
@@ -3557,14 +3556,11 @@ impl LocalAccessContext<'_, '_> {
         // rule reports: the read ends here with no row, on the facts that place
         // the function (its carrier, its call edges, its schedulers).
         if let Some((_, carrier)) = handed
-            && crate::proof_log::enabled()
             && (result.reads.len(), result.async_reads.len()) == rows_before
         {
-            crate::proof_log::end_with(
-                file,
-                call.span,
-                "local_access.discover_call_as.handed-silent",
-                || {
+            result
+                .ends
+                .end_with(file, call.span, SiteSilence::CallHandedSilent, || {
                     let mut premises = placement_premises(file, call.span, self.lookup);
                     if let Some(carrier) = carrier {
                         premises.insert(
@@ -3576,20 +3572,18 @@ impl LocalAccessContext<'_, '_> {
                         );
                     }
                     premises
-                },
-            );
+                });
         }
         // ADR 0933: a named function at a tracked position (an effect's compute):
         // the read tracks there, by the compiler's and the dialect's facts.
         if handed.is_none()
-            && crate::proof_log::enabled()
             && (result.reads.len(), result.async_reads.len()) == rows_before
             && crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
         {
-            crate::proof_log::end_with(
+            result.ends.end_with(
                 file,
                 call.span,
-                "local_access.discover_call_as.named-at-tracked-position",
+                SiteSilence::CallNamedAtTrackedPosition,
                 || tracked_position_premises(file, call.callee, self.lookup),
             );
         }
@@ -4255,10 +4249,10 @@ impl LocalAccessContext<'_, '_> {
             {
                 write_execution =
                     if primitive == Some(solid_dialect::Primitive::CreateOptimisticStore) {
-                        crate::proof_log::end_at(
+                        result.ends.end_at(
                             file,
                             call.span,
-                            "local_access.push_setter_write.optimistic-store-unguarded",
+                            SiteSilence::SetterOptimisticStoreUnguarded,
                             crate::proof_log::PremiseKind::OptimisticSetterUnguarded,
                             || crate::proof_log::span_of(declaration),
                         );
@@ -4277,10 +4271,10 @@ impl LocalAccessContext<'_, '_> {
                 && primitive != Some(solid_dialect::Primitive::CreateSignal)
             {
                 write_execution = if primitive == Some(solid_dialect::Primitive::CreateOptimistic) {
-                    crate::proof_log::end_at(
+                    result.ends.end_at(
                         file,
                         call.span,
-                        "local_access.push_setter_write.optimistic-signal-unguarded",
+                        SiteSilence::SetterOptimisticSignalUnguarded,
                         crate::proof_log::PremiseKind::OptimisticSetterUnguarded,
                         || crate::proof_log::span_of(declaration),
                     );
@@ -5358,9 +5352,10 @@ impl LocalAccessContext<'_, '_> {
             }
             if inside_known_value_function_argument(file, call.callee, self.lookup) {
                 dormant_callback_end(
+                    &mut result,
                     file,
                     call,
-                    "local_access.async_sites.dormant-callback-argument",
+                    SiteSilence::AsyncSitesDormantCallbackArgument,
                     self.lookup,
                 );
                 continue;
@@ -7310,19 +7305,19 @@ impl LocalAccessContext<'_, '_> {
             {
                 if crate::execution_role::named_at_tracked_position(file, member.span, self.lookup)
                 {
-                    crate::proof_log::end_with(
+                    result.ends.end_with(
                         file,
                         member.span,
-                        "local_access.discover_member.named-at-tracked-position",
+                        SiteSilence::MemberNamedAtTrackedPosition,
                         || tracked_position_premises(file, member.span, self.lookup),
                     );
                     return;
                 }
                 if !(unplaced || placed_nowhere(file, member.span, self.lookup)) {
-                    crate::proof_log::end_with(
+                    result.ends.end_with(
                         file,
                         member.span,
-                        "local_access.discover_member.placed-elsewhere",
+                        SiteSilence::MemberPlacedElsewhere,
                         || placement_premises(file, member.span, self.lookup),
                     );
                     return;
@@ -7368,10 +7363,10 @@ impl LocalAccessContext<'_, '_> {
             file.source_text(member.property)
         };
         if property.is_some_and(|key| self.view_hides_key(file, member.object, key, 0)) {
-            crate::proof_log::end_at(
+            result.ends.end_at(
                 file,
                 member.span,
-                "local_access.discover_member.view-hides-key",
+                SiteSilence::MemberViewHidesKey,
                 crate::proof_log::PremiseKind::ViewHidesKey,
                 || Some(member.object),
             );
@@ -7390,10 +7385,10 @@ impl LocalAccessContext<'_, '_> {
                 .next()
                 .is_some()
         {
-            crate::proof_log::end_at(
+            result.ends.end_at(
                 file,
                 member.span,
-                "local_access.discover_member.ref-prop-call",
+                SiteSilence::MemberRefPropCall,
                 crate::proof_log::PremiseKind::RefPropCall,
                 || {
                     file.ast
@@ -7415,10 +7410,10 @@ impl LocalAccessContext<'_, '_> {
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
             match self.merge_view_get(file, member.object, property) {
                 MergeGet::Plain => {
-                    crate::proof_log::end_at(
+                    result.ends.end_at(
                         file,
                         member.span,
-                        "local_access.discover_member.merge-view-plain",
+                        SiteSilence::MemberMergeViewPlain,
                         crate::proof_log::PremiseKind::MergeViewServesPlain,
                         || Some(member.object),
                     );
@@ -7460,10 +7455,10 @@ impl LocalAccessContext<'_, '_> {
             };
             match backing {
                 PropUse::Static => {
-                    crate::proof_log::end_at(
+                    result.ends.end_at(
                         file,
                         member.span,
-                        "local_access.discover_member.props-static",
+                        SiteSilence::MemberPropsStatic,
                         crate::proof_log::PremiseKind::PropsCallersStatic,
                         || crate::proof_log::span_of(prop_declaration),
                     );
@@ -7539,10 +7534,10 @@ impl LocalAccessContext<'_, '_> {
             match store_get_decision(file, member.span, declaration, self.lookup) {
                 StoreHeadGet::Warns => {}
                 StoreHeadGet::Exempt => {
-                    crate::proof_log::end_at(
+                    result.ends.end_at(
                         file,
                         member.span,
-                        "local_access.discover_member.store-then-exempt",
+                        SiteSilence::MemberStoreThenExempt,
                         crate::proof_log::PremiseKind::StoreThenGetExempt,
                         || Some(member.property),
                     );
@@ -8650,6 +8645,7 @@ pub(crate) fn append_local_access_result(
     target
         .static_violations
         .extend(source.static_violations.iter().cloned());
+    target.ends.extend(&source.ends);
 }
 
 /// ADR 0516: whether a result reports nothing: no row a rule reports
@@ -8691,6 +8687,7 @@ pub(crate) fn append_local_access_result_owned(
         .dispatch_obligations
         .extend(source.dispatch_obligations);
     target.static_violations.extend(source.static_violations);
+    target.ends.append(source.ends);
 }
 
 /// ADR 0294: the obligation at a read whose only reactive evidence is a type.
@@ -10813,15 +10810,16 @@ fn cannot_run_premises(
 /// ADR 0933: a call inside a function argument that a known primitive never
 /// invokes ends with no row, on that primitive call. `id` names the producer.
 fn dormant_callback_end(
+    result: &mut LocalAccessResult,
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
-    id: &'static str,
+    silence: crate::site_accounting::SiteSilence,
     lookup: &SemanticLookup<'_>,
 ) {
-    crate::proof_log::end_at(
+    result.ends.end_at(
         file,
         call.span,
-        id,
+        silence,
         crate::proof_log::PremiseKind::DormantCallbackArgument,
         || known_value_function_argument_call(file, call.callee, lookup),
     );

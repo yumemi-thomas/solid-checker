@@ -395,6 +395,10 @@ pub(crate) enum PremiseKind {
     /// instance field owns it, and no owner exists there to reject the access
     /// (the module-initialization role). The span is the site.
     ModuleScope,
+    /// The role classifier decided the site's role (the compiler's and the
+    /// dialect's facts place the code) and that role reports nothing for the
+    /// rule: an effect's apply, a leaf scope, a handler. The span is the site.
+    RoleDoesNotReport,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the
@@ -936,45 +940,6 @@ pub(crate) fn silent(rule: &str, location: &Location, proof: &str, premises: &[P
             "premises": premises_value(premises),
         })),
     );
-}
-
-/// A producer's named early end (ADR 0933): the site ends here with no row, on
-/// one premise of `kind` about the code at `at()`: the place the fact lives (a
-/// carrier call, a props parameter, a function), not the site. `id` is
-/// `<file stem>.<function>.<end>`, literal and unique, so a lint can list the
-/// ends from the source. `at` runs only with the log on. An end whose fact has
-/// no span is a label, not a fact: nothing is written and the site stays
-/// unaccounted for.
-pub(crate) fn end_at(
-    file: &solid_facts::FileFacts,
-    site: Span,
-    id: &'static str,
-    kind: PremiseKind,
-    at: impl FnOnce() -> Option<Span>,
-) {
-    if enabled() {
-        end_with(file, site, id, || vec![Premise::at(kind, at())]);
-    }
-}
-
-/// [`end_at`] with every premise the end rests on (the edges and carriers that
-/// place a function): the premises that name no code are dropped, and with none
-/// left nothing is written.
-pub(crate) fn end_with(
-    file: &solid_facts::FileFacts,
-    site: Span,
-    id: &'static str,
-    premises: impl FnOnce() -> Vec<Premise>,
-) {
-    if !enabled() {
-        return;
-    }
-    let mut premises = premises();
-    premises.retain(|premise| premise.at.is_some());
-    if premises.is_empty() {
-        return;
-    }
-    silent("end", &site.location(file.path.shared()), id, &premises);
 }
 
 /// The span a location names, when it fits.

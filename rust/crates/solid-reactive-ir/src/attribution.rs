@@ -47,6 +47,7 @@ pub(crate) fn discharge_closed_program_export_dispatch(
     aliases: &HashMap<SymbolId, SymbolId>,
     symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
     defects: &mut Vec<StaticDefect>,
+    ends: &mut crate::site_accounting::SiteEnds,
 ) {
     let exported_dispatch = |defect: &StaticDefect| {
         defect.analysis_context == crate::EXPORTED_PARAMETER_MEMBER_DISPATCH
@@ -79,42 +80,57 @@ pub(crate) fn discharge_closed_program_export_dispatch(
     let stage = crate::proof_log::RowStage::begin("static_defects", defects.as_slice(), |row| {
         &row.location
     });
+    let mut discharged = Vec::new();
     defects.retain(|defect| {
-        let Some(file) = graph.file(defect.location.path.as_ref()) else {
-            return true;
-        };
-        let span = Span::new(
-            u32::try_from(defect.location.start_byte).unwrap_or(u32::MAX),
-            u32::try_from(defect.location.end_byte).unwrap_or(u32::MAX),
-        );
-        if exported_dispatch(defect) {
-            return !graph.entered_only_through_call_expressions(file.path.as_str(), span);
+        let kept = (|| {
+            let Some(file) = graph.file(defect.location.path.as_ref()) else {
+                return true;
+            };
+            let span = Span::new(
+                u32::try_from(defect.location.start_byte).unwrap_or(u32::MAX),
+                u32::try_from(defect.location.end_byte).unwrap_or(u32::MAX),
+            );
+            if exported_dispatch(defect) {
+                return !graph.entered_only_through_call_expressions(file.path.as_str(), span);
+            }
+            // ADR 0320: an argument that holds a primitive on every run carries
+            // no project member (`unmodeled`); a fresh literal whose handed-on
+            // member does carries none at that member.
+            if unmodeled(defect) {
+                return !graph.value_is_primitive(file, span, PASS_THROUGH_DEPTH, None);
+            }
+            if passed_parameter(defect)
+                && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    member: Some(member),
+                    ..
+                } = &defect.kind
+            {
+                return !graph.value_holds_builtin(file, span, member, PASS_THROUGH_DEPTH)
+                    && !graph.literal_member_is_primitive(file, span, member);
+            }
+            if diverging(defect)
+                && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    member: Some(member),
+                    ..
+                } = &defect.kind
+            {
+                return !graph.literal_member_is_primitive(file, span, member);
+            }
+            true
+        })();
+        if !kept {
+            discharged.push(defect.location.clone());
         }
-        // ADR 0320: an argument that holds a primitive on every run carries
-        // no project member (`unmodeled`); a fresh literal whose handed-on
-        // member does carries none at that member.
-        if unmodeled(defect) {
-            return !graph.value_is_primitive(file, span, PASS_THROUGH_DEPTH, None);
-        }
-        if passed_parameter(defect)
-            && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
-                member: Some(member),
-                ..
-            } = &defect.kind
-        {
-            return !graph.value_holds_builtin(file, span, member, PASS_THROUGH_DEPTH)
-                && !graph.literal_member_is_primitive(file, span, member);
-        }
-        if diverging(defect)
-            && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
-                member: Some(member),
-                ..
-            } = &defect.kind
-        {
-            return !graph.literal_member_is_primitive(file, span, member);
-        }
-        true
+        kept
     });
+    // ADR 0936: a site whose obligation the closed program discharged ends here.
+    for location in &discharged {
+        ends.removed(
+            location,
+            crate::site_accounting::SiteSilence::ClosedProgramExportDischarge,
+            crate::proof_log::PremiseKind::ClosedProgramCallers,
+        );
+    }
     if let Some(stage) = stage {
         stage.end(
             "ClosedProgramExportDischarge",

@@ -193,6 +193,7 @@ pub(crate) fn collect_project<'facts>(
         write_action_obligations,
         dispatch_obligations,
         static_violations,
+        ends,
     } = local_access.result;
     // ADR 0835: `discover` keeps these per file; any left here are kept the
     // same way, never dropped.
@@ -217,6 +218,7 @@ pub(crate) fn collect_project<'facts>(
         .map(|action| (*action).clone())
         .collect();
     draft.static_violations.extend(static_violations);
+    draft.site_ends.append(ends);
     draft.async_reads = async_reads
         .into_iter()
         .map(|read| (*read).clone())
@@ -301,6 +303,7 @@ pub(crate) fn collect_project<'facts>(
     draft
         .async_reads
         .extend(transported.async_reads.iter().map(|read| (**read).clone()));
+    draft.site_ends.extend(&transported.ends);
     if !transported.writes.is_empty() || !transported.action_invocations.is_empty() {
         let replaced = transported
             .writes

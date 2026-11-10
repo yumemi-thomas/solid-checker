@@ -693,12 +693,27 @@ pub(crate) fn gate_diagnostics(
         };
         at_span(file, Span::new(start, end), lookup)
     };
-    // ADR 0933: a row an apply proven absent removes leaves a typed silence.
+    // ADR 0933: a row an apply proven absent removes leaves a typed silence,
+    // ADR 0936 recorded in the draft for the sites the universe lists.
     macro_rules! absent {
         ($table:ident, $name:expr, $closure:expr) => {{
             let stage =
                 crate::proof_log::RowStage::begin($name, &draft.$table, |row| &row.location);
-            draft.$table.retain_mut($closure);
+            retain_recording(
+                &mut draft.$table,
+                |row| &row.location,
+                &mut draft.site_ends,
+                matches!(
+                    $name,
+                    "reads"
+                        | "writes"
+                        | "action_invocations"
+                        | "async_reads"
+                        | "static_defects"
+                        | "static_violations"
+                ),
+                $closure,
+            );
             if let Some(stage) = stage {
                 stage.end(
                     "ApplyExecution::Absent",
@@ -814,6 +829,28 @@ pub(crate) fn gate_diagnostics(
             |row| &row.location,
         );
     }
+}
+
+/// `rows.retain_mut(keep)`, naming the rows `keep` removes as sites an apply
+/// proven absent ends with no row (ADR 0936), when `record`.
+fn retain_recording<T>(
+    rows: &mut Vec<T>,
+    location: impl Fn(&T) -> &crate::Location,
+    ends: &mut crate::site_accounting::SiteEnds,
+    record: bool,
+    mut keep: impl FnMut(&mut T) -> bool,
+) {
+    rows.retain_mut(|row| {
+        let kept = keep(row);
+        if !kept && record {
+            ends.removed(
+                location(row),
+                crate::site_accounting::SiteSilence::ApplyNeverRuns,
+                crate::proof_log::PremiseKind::ApplyNeverRuns,
+            );
+        }
+        kept
+    });
 }
 
 #[cfg(test)]

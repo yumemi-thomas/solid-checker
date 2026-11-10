@@ -51,6 +51,9 @@ pub(crate) struct ProgramDraft {
     pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
     pub(crate) event_dispatch_sites: Vec<crate::EventDispatchSite>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    /// ADR 0936: the silences the producers named for sites they gave no row,
+    /// filed beside the rows of the same results.
+    pub(crate) site_ends: crate::site_accounting::SiteEnds,
     /// ADR 0883: JSX SC6002 places on an apply's stack, and whether its proof
     /// answers for every run of the site.
     pub(crate) jsx_phase_sites: Vec<(Location, bool)>,
@@ -877,7 +880,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         aliases,
         &typescript_indexes.symbols_by_root,
         &mut draft.static_defects,
+        &mut draft.site_ends,
     );
+    let site_ends = std::mem::take(&mut draft.site_ends);
     let mut program = draft.into_program(factory_instances);
     program.execution_paths = crate::execution_paths::execution_paths(
         facts,
@@ -890,6 +895,10 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let holds =
         crate::loading_hold::loading_on_outside_hold_obligations(facts, &program, semantic_lookup);
     program.static_violations.extend(holds);
+    // ADR 0936: every site of the universe ends in a row, a census obligation,
+    // the compiler's discard or a silence its producer named, or gets an
+    // uncertifiable row; before the reach queries over the rows below.
+    crate::site_accounting::account(&analysis, &mut program, &site_ends);
     // ADR 0458: after every producer and gate, over the rows that may be
     // reported, while the lookup's memos are still open.
     program.unreached_sites = crate::execution_role::unreached_report_sites(
@@ -902,9 +911,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     program.early_mention_sites =
         crate::indexes::early_mention_report_sites(&program, semantic_lookup);
-    // ADR 0933: with the proof log on, the site universe and how the final
-    // program ends each site, while the lookup's memos are still open.
-    crate::proof_universe::record(&analysis, &program);
     if defer_memo_end {
         semantic_lookup.defer_end_memos();
     } else if let Some(report) = semantic_lookup.end_memos() {

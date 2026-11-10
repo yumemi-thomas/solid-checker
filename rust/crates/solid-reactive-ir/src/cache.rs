@@ -609,6 +609,9 @@ pub(crate) struct LocalAccessResult {
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
     pub(crate) dispatch_obligations: Vec<StaticDefect>,
     pub(crate) static_violations: Vec<crate::StaticViolation>,
+    /// ADR 0936: the silences the file's discovery named for the sites it gave
+    /// no row, kept with the rows (a reused file keeps its own).
+    pub(crate) ends: crate::site_accounting::SiteEnds,
 }
 
 pub(crate) struct LocalAccessBuild {
