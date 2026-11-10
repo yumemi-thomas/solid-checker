@@ -262,6 +262,17 @@ pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static
         COMPUTATION_ERROR_UNOBSERVED
     } else if requirement.context_unaccounted {
         EXECUTION_CONTEXT_UNACCOUNTED
+    } else if requirement.provider_open
+        && requirement.through_dependency.is_some()
+        && matches!(
+            requirement.operation,
+            crate::OwnerRequirementOperation::ContextProvider
+        )
+    {
+        // ADR 0943: a package's context read by the package's own code, reached at
+        // this call: no provider is proven above it (the project reads of the
+        // same context are `StaticViolation`s with this blocker).
+        PROVIDER_NOT_PROVEN_ABOVE
     } else if requirement.unplaced_callback {
         FUNCTION_RUN_UNPLACED
     } else if requirement.owner_varies_by_caller {

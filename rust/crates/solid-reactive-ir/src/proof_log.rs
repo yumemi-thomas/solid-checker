@@ -427,6 +427,12 @@ pub(crate) enum PremiseKind {
     /// place exactly and whose role reports nothing (an event handler slot, a
     /// tracked JSX expression): its reads run there. The span is the reference.
     HandedToSilentSlot,
+    /// The context was created with a default the syntax proves is not
+    /// `undefined` (a literal, `null`, a function, object or array literal, or
+    /// a `const` initialized with one: ADR 0575), so a read never throws for
+    /// want of a provider (ADR 0943). The span is the binding the context is
+    /// made at, in the file that holds it.
+    ContextDefaultProven,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the

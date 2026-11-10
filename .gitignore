@@ -1307,3 +1307,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/**
+!fixtures/reactive-ir/context-package-no-default/node_modules/
+!fixtures/reactive-ir/context-package-no-default/node_modules/**

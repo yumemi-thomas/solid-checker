@@ -77,11 +77,11 @@ export const SOURCE_AXES = {
   files: ["module-barrel", "module-default-hook", "prop-value-cast"],
   // ADR 0940 (SC4002, CONTEXT_NOT_FOUND only: no other template has a context to bring): the context is an export of a dependency package, made with no default
   // (`fz-ctx`, package.mjs `contextPackageFiles`), read with no provider above. The checker reads the dependency's source to know it has no default.
-  package: ["package-export"],
+  package: ["package-export", "package-hook"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** Sources the grids enumerate and a random draw never takes (as `gridVariants`): random programs and combinations keep theirs. */
-export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct", "package-export"];
+export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct", "package-export", "package-hook"];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module") && !source.startsWith("package");
 /** A source whose values `helpers.ts` creates at its own scope (print.mjs `moduleFiles`), before App.tsx runs a statement of its own. */
@@ -100,7 +100,8 @@ export function sourcesOf(code, variant, binding, context, { draw = false } = {}
   const excluded = (spec.sourcesNotIn?.[context] ?? []).filter((source) => !(draw && spec.drawHeld?.[context]?.includes(source)));
   const sigs = spec.setup(variant, (prefix) => `${prefix}1`);
   // A template with no values has no source to bring, but the context a dependency exports (`packageContext`: CONTEXT_NOT_FOUND's plain variant).
-  if (!sigs.length) return spec.packageContext && !variant && !excluded.includes("package-export") ? ["local", "package-export"] : ["local"];
+  // `package-hook` (ADR 0943): the dependency's own hook reads that context, called as `usePkgContext()`: a call, so the `direct` binding only.
+  if (!sigs.length) return spec.packageContext && !variant ? ["local", ...["package-export", "package-hook"].filter((source) => !excluded.includes(source) && (source !== "package-hook" || binding === "direct"))] : ["local"];
   const isAsync = sigs.some((sig) => sig.kind === "async");
   const target = spec.call({ code, variant }, sigs);
   const bareRead = target.kind === "local" && !target.args && sigs.some((sig) => sig.name === target.name && [undefined, "memo", "async"].includes(sig.kind));
@@ -108,7 +109,7 @@ export function sourcesOf(code, variant, binding, context, { draw = false } = {}
   const only = spec.variantSources?.[variant];
   return SOURCES.filter((source) => {
     // The context a dependency exports is a source of a template with no values only (above): no value is brought from a package.
-    if (source === "package-export") return false;
+    if (source === "package-export" || source === "package-hook") return false;
     if (only) return only.includes(source);
     // Its async memos settle before the mount, which takes an async template's code away (the `settled` variant is that case).
     if (source === "module-hook-shared" && isAsync) return false;
@@ -601,13 +602,14 @@ export const SPEC = {
   },
   NO_OWNER_CONTEXT: { legal: ["body", "memo", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], contextLine: "const Ctx = createContext(7);", call: () => api("useContext", "Ctx") },
   // `sourcesNotIn`: the flip contexts that provide the module's own `Ctx` (flip-write.mjs `flw-ctx-*`) have no use for a dependency's.
-  CONTEXT_NOT_FOUND: { packageContext: true, sourcesNotIn: { "flw-ctx-sibling": ["package-export"], "flw-ctx-two-renders": ["package-export"] }, recallVariants: ["default-undefined"], variantContexts: { "default-undefined": ["body", "memo", "render-compute", "root", "jsx", "show", "for"] },
+  CONTEXT_NOT_FOUND: { packageContext: true, sourcesNotIn: { "flw-ctx-sibling": ["package-export", "package-hook"], "flw-ctx-two-renders": ["package-export", "package-hook"] }, recallVariants: ["default-undefined"], variantContexts: { "default-undefined": ["body", "memo", "render-compute", "root", "jsx", "show", "for"] },
     contexts: ["body", "memo", "render-compute", "root", "jsx", "show", "for"], bindings: BINDINGS, setup: () => [],
     // `default-undefined` (recall): `createContext<number | undefined>(undefined)` is default-less too (CHEATSHEET.md; rc.17
     // `getContext`, packages/signals/src/core/context.ts:38-52: an `undefined` value falls to the default, `undefined` again throws).
     contextLine: (variant) => (variant === "default-undefined" ? "const Ctx = createContext<number | undefined>(undefined);" : "const Ctx = createContext<number>();"),
-    // `ctx` (the `package` source): the context is the dependency's export, imported by name, not the module's own `Ctx`.
-    call: (node) => api("useContext", node.ctx ?? "Ctx"),
+    // `ctx` (the `package` source): the context is the dependency's export, imported by name, not the module's own `Ctx`. `hook` (ADR 0943): the dependency's
+    // own hook reads it, so the program calls `usePkgContext()` and the read is in the package's source.
+    call: (node) => (node.hook ? local(node.hook) : api("useContext", node.ctx ?? "Ctx")),
   },
   // ADR 0867: `any-callee` is a call with no resolved fact: it runs, and Chrome reports it.
   SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], recallVariants: ["any-callee"], variantContexts: { "any-callee": UNOWNED }, bindingsFor: (variant) => (variant === "any-callee" ? ["direct"] : BINDINGS),
@@ -1304,7 +1306,7 @@ export function describeUse(node, signals) {
   const spec = SPEC[node.code];
   const sigs = (node.sigs ?? []).map((name) => signals.get(name));
   const target = spec.call(node, sigs);
-  const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: node.ctx ? undefined : typeof spec.contextLine === "function" ? spec.contextLine(node.variant) : spec.contextLine, ...(node.ctx ? { importLines: [`import { ${node.ctx} } from "${CONTEXT_PACKAGE.name}";`] } : {}) };
+  const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: node.ctx || node.hook ? undefined : typeof spec.contextLine === "function" ? spec.contextLine(node.variant) : spec.contextLine, ...(node.ctx || node.hook ? { importLines: [`import { ${node.ctx ?? node.hook} } from "${CONTEXT_PACKAGE.name}";`] } : {}) };
   // A variant's own module-scope lines (the iteration patch of `iter-swap`), above the components that run after them.
   out.moduleLines.push(...(spec.moduleLines?.(node.variant) ?? []));
   const importsOf = (module) => (module === "@solidjs/web" ? out.web : out.solid);
@@ -2202,7 +2204,7 @@ function buildOne(kit, plan = {}) {
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
   const layer = plan.layer ?? rng.weighted([[5, "none"], [3, "closure"], [2, "helper"], [1, "iife"], [1, "closure+helper"]]);
   const sigs = spec.setup(variant, kit.name);
-  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : {}) });
+  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : plan.source === "package-hook" ? { hook: CONTEXT_PACKAGE.hookName } : {}) });
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);

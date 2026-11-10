@@ -407,6 +407,25 @@ pub(super) fn emit_file(
             emission.provider.push((key.clone(), verdict));
             verdict
         });
+        // ADR 0943: a read of a context the census leaves silent names the fact
+        // it rests on: the default its binding was made with.
+        if let Some(ContextVerdict::Silent(kind)) = verdict
+            && let Some(Some(key)) = &context_key
+        {
+            let at = crate::proof_log::span_of(key);
+            let premise = match at {
+                Some(at) if key.path.as_ref() != path => {
+                    crate::proof_log::Premise::in_file(kind, at, key.path.clone())
+                }
+                at => crate::proof_log::Premise::at(kind, at),
+            };
+            crate::proof_log::silent(
+                "SC4002",
+                &location(file.path.shared(), candidate.operation_span),
+                "ContextVerdict::Silent",
+                &[premise],
+            );
+        }
         let provider_verdict = match verdict {
             Some(ContextVerdict::Free(proven)) => Some(proven),
             _ => None,
@@ -470,6 +489,40 @@ pub(super) fn emit_file(
                     fixes: vec![],
                     uncertain: true,
                 });
+            }
+            // ADR 0943: a read in a package analyzed as source is not the
+            // project's to report (ADR 0284); it is reported at the project's
+            // call that runs it (ADR 0290), as the same obligation, through the
+            // requirement attribution: the package's context has no default
+            // and nothing proves a provider above the call. A project's own
+            // read needs none: its static violation above stands.
+            if inputs.facts.dependency_source_root(path).is_some() {
+                push_owner_requirement(
+                    &mut emission.requirements,
+                    &mut seen,
+                    "context-provider",
+                    file,
+                    candidate.operation_span,
+                    OwnerRequirementStatus {
+                        flight_error_unobserved: false,
+                        uncertain: true,
+                        runtime_uncertain: false,
+                        caller_uncertain: false,
+                        unplaced_callback: false,
+                        conditional_owner: false,
+                        owner_varies_by_caller: false,
+                        later_run_unowned: false,
+                        component_uncertain: false,
+                        provider_open: true,
+                        default_unproven: false,
+                        owned_run_throws: false,
+                        after_await: false,
+                        after_yield: false,
+                        context_unaccounted: false,
+                        report: true,
+                    },
+                    lookup,
+                );
             }
         }
         // ADR 0575: a default the syntax does not prove is not `undefined`.

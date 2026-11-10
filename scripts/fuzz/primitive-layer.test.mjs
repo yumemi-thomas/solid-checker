@@ -175,6 +175,24 @@ describe("the package source (SC4002, ADR 0940)", () => {
     expect(built.files["node_modules/fz-ctx/index.d.ts"]).toContain("export declare const PkgContext: Context<number>;");
     expect(JSON.parse(built.files["oracle.json"]).packages).toEqual(["fz-ctx"]);
   });
+  // ADR 0943: the dependency's own hook reads the context, so the read is in the package's source and the program only calls the hook.
+  it("has a hook form: the dependency's hook is called with no provider above, the read is in the package, the direct binding only", () => {
+    expect(SOURCES).toContain("package-hook");
+    expect(sourcesOf("CONTEXT_NOT_FOUND", null, "direct", "body")).toContain("package-hook");
+    expect(sourcesOf("CONTEXT_NOT_FOUND", null, "alias", "body")).not.toContain("package-hook");
+    expect(sourcesOf("CONTEXT_NOT_FOUND", "default-undefined", "direct", "body")).not.toContain("package-hook");
+    expect(sourcesOf("CONTEXT_NOT_FOUND", null, "direct", "body")).toContain("package-export");
+    expect(parentSource("package-hook")).toBe(false);
+    const built = buildCase(program("CONTEXT_NOT_FOUND", "memo", { source: "package-hook", binding: "direct" }), { id: "c1h" });
+    expect(built.files["App.tsx"]).toContain('import { usePkgContext } from "fz-ctx";');
+    expect(built.files["App.tsx"]).toContain("usePkgContext()");
+    expect(built.files["App.tsx"]).not.toContain("useContext(");
+    expect(built.files["App.tsx"]).not.toContain("createContext");
+    expect(built.files["node_modules/fz-ctx/index.js"]).toContain("export function usePkgContext() {");
+    expect(built.files["node_modules/fz-ctx/index.js"]).toContain("return useContext(PkgContext);");
+    expect(built.files["node_modules/fz-ctx/index.d.ts"]).toContain("export declare function usePkgContext(): number;");
+    expect(JSON.parse(built.files["oracle.json"]).packages).toEqual(["fz-ctx"]);
+  });
   it("is not drawn by a combination, and leaves a local program as it was", () => {
     const local = buildCase(program("CONTEXT_NOT_FOUND", "memo"), { id: "local" });
     expect(local.files["App.tsx"]).toContain("const Ctx = createContext<number>();");

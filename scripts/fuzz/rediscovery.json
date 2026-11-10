@@ -10048,5 +10048,39 @@
    "mx-primitive-in-forbidden-scope-pl-ispending-settled-effect-direct-none"
   ],
   "rediscovered": "3b9688ae3 (checker sha256 70878812f9ca…): 6 certified false-clean (no finding in the file); ADR 0942's build (checker 1b7f6205c3f8…): the same 6 programs false-clean and not certified, SC4001 uncertifiable `execution-context-unaccounted` at the site. Chrome and the real oracle agree on all (0 behaviour differences)."
+ },
+ {
+  "finding": "`useContext(PkgContext)` of a context a dependency exports (`export const PkgContext = createContext();`, no default) with no provider above was certified clean (SC4002 decided every dependency context silent); Chrome reports CONTEXT_NOT_FOUND. Named by the coordinator's probes: c1 (a dependency's `createContext()`, no provider).",
+  "found": "ADR 0940 (W agent w-b9, 2026-11-10): the `package` source of CONTEXT_NOT_FOUND (SC4002), a recall source of mx-recall; the coordinator's probe c1; each of its 210 programs through the Chrome host and the real oracle (0 behaviour differences)",
+  "fixed": "ADR 0943 (a dependency's createContext with no default is open: each read under an owner is an obligation, `provider-not-proven-above`, unless a provider is proven above every render of its function; only a default the syntax proves stays silent, as a named premise)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-export",
+   "mx-context-not-found-memo-x-direct-none-s-package-export",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-export",
+   "mx-context-not-found-root-x-direct-none-s-package-export",
+   "mx-context-not-found-jsx-x-direct-none-s-package-export",
+   "mx-context-not-found-show-x-direct-none-s-package-export",
+   "mx-context-not-found-for-x-direct-none-s-package-export"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…): all 210 programs of the package source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, the file certified clean); ADR 0943's build (checker 725d8bee0e3e…): the same 210 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the read (0 false-clean, 0 false-positive, 0 wrong-rule; `focus.mjs --codes CONTEXT_NOT_FOUND --grids mx-recall` over these ids exits 0, \"nothing needs a look\"). Chrome and the real oracle agree on all (0 behaviour differences)."
+ },
+ {
+  "finding": "A package hook that reads its own context (`usePkgContext()` in the program, `return useContext(PkgContext)` in the dependency's source, `PkgContext = createContext()` with no default) called under an owner with no provider above was certified clean: the census made every dependency context silent, and a finding in package source is not reported (ADR 0284) unless an owner requirement attributes it to the project's call. Chrome reports CONTEXT_NOT_FOUND.",
+  "found": "ADR 0943 (W agent w-b9, 2026-11-10): reading the guard for c1 (`file_candidates`' `if dependency || proven.is_none()`) and the `context-read-package` fixture's `BodyHook` (kobalte's `useDialogContext`, silent); the `package-hook` form of the package source",
+  "fixed": "ADR 0943 (the dependency's context is open, and its read in package source is attributed to the project call that runs it under an owner as an obligation, `provider-not-proven-above`)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-none-s-package-hook",
+   "mx-context-not-found-memo-x-direct-none-s-package-hook",
+   "mx-context-not-found-render-compute-x-direct-none-s-package-hook",
+   "mx-context-not-found-root-x-direct-none-s-package-hook",
+   "mx-context-not-found-jsx-x-direct-none-s-package-hook",
+   "mx-context-not-found-show-x-direct-none-s-package-hook",
+   "mx-context-not-found-for-x-direct-none-s-package-hook"
+  ],
+  "rediscovered": "3b9688ae3 (release; checker sha256 70878812f9ca…, producer 998ad2d92a37…): all 42 programs of the `package-hook` source are false-clean (Chrome reports CONTEXT_NOT_FOUND at the site, the file certified clean); ADR 0943's build (checker 725d8bee0e3e…): the same 42 programs are recall-gap, SC4002 uncertifiable `provider-not-proven-above` at the call (0 false-clean, 0 false-positive, 0 wrong-rule). Chrome and the real oracle agree on all (0 behaviour differences)."
  }
 ]
