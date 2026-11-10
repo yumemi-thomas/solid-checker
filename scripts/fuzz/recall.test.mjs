@@ -178,6 +178,33 @@ describe("the Loading wrapper mounts (ASYNC_OUTSIDE_LOADING_BOUNDARY, `memo`)", 
   });
 });
 
+// ADR 0803: an iteration patch a project helper applies to `Array.prototype`, so a signal's tuple yields its setter first and a legal read in
+// a memo is a write.
+describe("the iteration patch variant (REACTIVE_WRITE_IN_OWNED_SCOPE `iter-swap`, `memo`)", () => {
+  const code = "REACTIVE_WRITE_IN_OWNED_SCOPE";
+  const app = (layer = "none", variant = "iter-swap") => text(code, "memo", { variant, layer })["App.tsx"];
+  it("is a recall variant of the memo cell only: the direct binding, every layer", () => {
+    expect(recallVariantsOf(code)).toContain("iter-swap");
+    const shapes = recallShapes(code, "memo", FULL).filter((shape) => shape.variant === "iter-swap");
+    expect(new Set(shapes.map((shape) => shape.binding))).toEqual(new Set(["direct"]));
+    expect(shapes).toHaveLength(6);
+    for (const context of recallContextsOf(code).filter((context) => context !== "memo")) {
+      expect(recallShapes(code, context, FULL).filter((shape) => shape.variant === "iter-swap"), context).toEqual([]);
+    }
+  });
+  it("patches Array.prototype through a helper's parameter before any component runs, and reads the first slot in the memo", () => {
+    const source = app();
+    expect(source).toMatch(/function patchIteration\(target: object, key: PropertyKey\) \{\n  Object\.assign\(target, \{\n    \[key\]: function\* /);
+    expect(source).toContain("patchIteration(Array.prototype, Symbol.iterator);");
+    expect(source.indexOf("patchIteration(Array.prototype")).toBeLessThan(source.indexOf("export function C1"));
+    expect(source).toMatch(/const \[w1, setW1\] = createSignal\(0\);\n  const m1 = createMemo\(\(\) => \{\n    w1\(\);/);
+  });
+  it("is in no other variant's program", () => {
+    expect(app("none", "signal")).not.toContain("patchIteration");
+    expect(app("none", "writable-memo")).not.toContain("patchIteration");
+  });
+});
+
 describe("shapes rc.17 cannot observe or tsc rejects", () => {
   it("no dynamic() mount for a body's strict-read or pending read, which dynamic() leaves unlabelled", () => {
     for (const code of ["STRICT_READ_UNTRACKED", "PENDING_ASYNC_UNTRACKED_READ"]) {

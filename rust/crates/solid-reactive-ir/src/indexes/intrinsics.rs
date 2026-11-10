@@ -88,6 +88,9 @@ impl SemanticLookup<'_> {
 }
 
 pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
+    // ADR 0803: where an array intrinsic is handed on as a value, every file's
+    // mutations of a target not proven separate may reach it.
+    let handed = crate::interproc::accessor_provenance::iteration_intrinsic_handed(lookup);
     // Each file clears premises of its own; a premise holds where no file
     // clears it, so the files are read on the workers and the answers met.
     let per_file = crate::pipeline::parallel_balanced_results(lookup.file_slots(), |file| {
@@ -96,7 +99,7 @@ pub(super) fn tripwires(lookup: &SemanticLookup<'_>) -> Intrinsics {
             array_iteration: true,
             visible_iteration: true,
         };
-        if crate::interproc::accessor_provenance::visible_iteration_write(file, lookup) {
+        if crate::interproc::accessor_provenance::visible_iteration_write(file, lookup, handed) {
             found.visible_iteration = false;
         }
         for target in file
