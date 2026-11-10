@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "vitest";
 
-import { baselineFor, endIds, hitsOf, PENDING, premiseKinds, problems, silentRoleValues } from "./proof-lint.mjs";
+import { baselineFor, endIds, hitsOf, PENDING, premiseKinds, problems, seenLists, seenMutators, silentRoleValues } from "./proof-lint.mjs";
 
 const kinds = (text, producer = true) => hitsOf(text, producer).map((hit) => hit.kind);
 
@@ -85,5 +85,22 @@ describe("the baseline", () => {
     const previous = { "a.rs": { "name-only-match": { count: 5, why: stated } } };
     const next = baselineFor({ "a.rs": { "name-only-match": 2, "default-on-missing": 1 } }, previous);
     assert.deepEqual(next["a.rs"], { "default-on-missing": { count: 1, why: PENDING }, "name-only-match": { count: 2, why: stated } });
+  });
+});
+
+describe("a closed seen list exempts no mutating builtin (ADR 0803)", () => {
+  const list = 'const SEEN_STANDARD: &[(&str, bool, &str)] = &[\n    ("ObjectConstructor.keys", false, "returns the own keys"),\n    ("ObjectConstructor.assign", false, "returns its target"),\n];\n';
+
+  test("the qualified names of a *SEEN* list are read, whatever the reasons say", () => {
+    assert.deepEqual(seenLists(list).map((entry) => [entry.name, entry.entries.map((one) => one.qualified)]), [["SEEN_STANDARD", ["ObjectConstructor.keys", "ObjectConstructor.assign"]]]);
+  });
+
+  test("a mutating builtin in a list is flagged, a reading one is not", () => {
+    assert.deepEqual(seenMutators(list).map((entry) => entry.qualified), ["ObjectConstructor.assign"]);
+    assert.deepEqual(seenMutators(list.replace('"ObjectConstructor.assign"', '"ObjectConstructor.is"')), []);
+  });
+
+  test("another constant, a number and a list not named for being seen are no list", () => {
+    assert.deepEqual(seenLists('const SEEN_DEPTH: usize = 3;\nconst LISTENER_ADDERS: [&str; 1] = ["Window.addEventListener"];\n'), []);
   });
 });
