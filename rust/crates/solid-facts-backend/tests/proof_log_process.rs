@@ -195,3 +195,51 @@ fn a_named_end_rests_on_premises_that_name_code() {
     }
     fs::remove_dir_all(directory).ok();
 }
+
+#[test]
+fn a_setter_names_its_guard_only_where_ownedwrite_is_proven_off() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-guard");
+    let log = directory.join("guard.jsonl");
+    check(&typefacts, "owned-write-updater-read", Some(&log));
+    let source = fs::read_to_string(fixture("owned-write-updater-read").join("App.tsx")).unwrap();
+    // The updater call `setA(() => b())` written in the function `name`.
+    let setter_call = |name: &str| {
+        let function = source.find(&format!("export function {name}()")).unwrap();
+        let start = function + source[function..].find("setA(() =>").unwrap();
+        let end = start + source[start..].find(");").unwrap() + 1;
+        (start as u64, end as u64)
+    };
+    let named = lines(&log)
+        .iter()
+        .filter(|line| {
+            line["k"] == "silent"
+                && line["rule"] == "end"
+                && line["proof"] == "local_access.discover_call_as.setter-guard-throws-first"
+        })
+        .flat_map(|line| {
+            let premises = line["premises"].as_array().unwrap().clone();
+            assert!(
+                premises
+                    .iter()
+                    .all(|premise| premise["kind"] == "SetterGuardThrowsFirst"),
+                "the guard end rests on another fact: {line}"
+            );
+            premises
+                .iter()
+                .map(|premise| {
+                    let at = premise["at"].as_array().unwrap();
+                    (at[0].as_u64().unwrap(), at[1].as_u64().unwrap())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<BTreeSet<_>>();
+    // A plain setter and `ownedWrite: false` throw first (the write is SC2001's);
+    // `ownedWrite: true` runs the updater and an options value the syntax does
+    // not show leaves it unproven: neither names an end.
+    assert_eq!(
+        named,
+        BTreeSet::from([setter_call("Plain"), setter_call("OwnedOff")])
+    );
+    fs::remove_dir_all(directory).ok();
+}

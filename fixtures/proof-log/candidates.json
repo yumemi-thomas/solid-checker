@@ -3,7 +3,7 @@
   "candidates": {
     "reactive-ir/accessor-provenance|fixtures/reactive-ir/accessor-provenance/Anonymous.tsx|409-415|C2/reporting-decision-no-row": {
       "owner": "proof-log phase B (tag the producing return)",
-      "why": "a read in a returned function nothing calls: no call edge, carrier or scheduler places it; name the exhaustive-climb exit",
+      "why": "a read in a returned function nothing calls: the climb ends with no run to name (no call edge, carrier or scheduler); name the exhaustive-climb exit",
       "at": "fixtures/reactive-ir/accessor-provenance/Anonymous.tsx:14:37"
     },
     "reactive-ir/callback-props-reads|fixtures/reactive-ir/callback-props-reads/Silent.tsx|2147-2154|C2/reporting-decision-no-row": {
@@ -25,26 +25,6 @@
       "owner": "fix 6 (claude/proof-log-holes)",
       "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
       "at": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-valid.tsx:33:10"
-    },
-    "reactive-ir/fp-exec-stored-literals|fixtures/reactive-ir/fp-exec-stored-literals/App.tsx|3231-3234|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name the helper reads the summaries place at exact call edges)",
-      "why": "a read in a helper arrow the summaries place at its exact call edges (the call's own role decides); discover_call_as ends it with no named premise",
-      "at": "fixtures/reactive-ir/fp-exec-stored-literals/App.tsx:108:33"
-    },
-    "reactive-ir/fp-summary-nested-helper|fixtures/reactive-ir/fp-summary-nested-helper/App.tsx|1149-1154|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name the helper reads the summaries place at exact call edges)",
-      "why": "a read in a helper arrow the summaries place at its exact call edges (the call's own role decides); discover_call_as ends it with no named premise",
-      "at": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx:36:24"
-    },
-    "reactive-ir/fp-summary-tracked-jsx|fixtures/reactive-ir/fp-summary-tracked-jsx/App.tsx|1452-1460|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name the helper reads the summaries place at exact call edges)",
-      "why": "a read in a helper arrow the summaries place at its exact call edges (the call's own role decides); discover_call_as ends it with no named premise",
-      "at": "fixtures/reactive-ir/fp-summary-tracked-jsx/App.tsx:29:34"
-    },
-    "reactive-ir/handed-residuals|fixtures/reactive-ir/handed-residuals/App.tsx|8197-8201|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name the helper reads the summaries place at exact call edges)",
-      "why": "a read in a helper arrow the summaries place at its exact call edges (the call's own role decides); discover_call_as ends it with no named premise",
-      "at": "fixtures/reactive-ir/handed-residuals/App.tsx:356:5"
     },
     "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|10020-10030|C2/reporting-decision-no-row": {
       "owner": "fix 6 (claude/proof-log-holes)",
@@ -131,11 +111,6 @@
       "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
       "at": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx:133:35"
     },
-    "reactive-ir/open-source-computes|fixtures/reactive-ir/open-source-computes/settled-helper.tsx|122-127|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/open-source-computes/settled-helper.tsx:4:19"
-    },
     "reactive-ir/own-setter-wrapper-identity|fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx|1267-1329|C3/no-decision": {
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent write row whose role no tagged arm answered (no-decision)",
@@ -155,16 +130,6 @@
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent write row whose role no tagged arm answered (no-decision)",
       "at": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx:21:33"
-    },
-    "reactive-ir/owned-write-updater-read|fixtures/reactive-ir/owned-write-updater-read/App.tsx|1005-1008|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name #197's exit: ownedWrite proven off, the guard throws first)",
-      "why": "S1: an updater read in a plain setter's callback; setter_callback_role answers Unreported (ownedWrite off, the write guard throws first) and no row or named end says so",
-      "at": "fixtures/reactive-ir/owned-write-updater-read/App.tsx:32:14"
-    },
-    "reactive-ir/owned-write-updater-read|fixtures/reactive-ir/owned-write-updater-read/App.tsx|800-803|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name #197's exit: ownedWrite proven off, the guard throws first)",
-      "why": "S1: an updater read in a plain setter's callback; setter_callback_role answers Unreported (ownedWrite off, the write guard throws first) and no row or named end says so",
-      "at": "fixtures/reactive-ir/owned-write-updater-read/App.tsx:25:14"
     },
     "reactive-ir/owner-region-no-edge|fixtures/reactive-ir/owner-region-no-edge/App.tsx|5502-5510|C3/untagged": {
       "owner": "proof-log phase B (tag the producing return)",
@@ -205,11 +170,6 @@
       "owner": "fix 6 (claude/proof-log-holes)",
       "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
       "at": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx:88:19"
-    },
-    "reactive-ir/read-handed-through-summary|fixtures/reactive-ir/read-handed-through-summary/App.tsx|2240-2244|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name the helper reads the summaries place at exact call edges)",
-      "why": "a read in a helper arrow the summaries place at its exact call edges (the call's own role decides); discover_call_as ends it with no named premise",
-      "at": "fixtures/reactive-ir/read-handed-through-summary/App.tsx:103:5"
     },
     "reactive-ir/render-time-reads|fixtures/reactive-ir/render-time-reads/App.tsx|780-787|C2/reporting-decision-no-row": {
       "owner": "fix 6 (claude/proof-log-holes)",
@@ -280,11 +240,6 @@
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent action row whose role no tagged arm answered (untagged)",
       "at": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx:118:154"
-    },
-    "reactive-ir/write-past-possible-await|fixtures/reactive-ir/write-past-possible-await/App.tsx|581-587|C2/reporting-decision-no-row": {
-      "owner": "proof-log phase A follow-up (name the helper reads the summaries place at exact call edges)",
-      "why": "a read in a helper arrow the summaries place at its exact call edges (the call's own role decides); discover_call_as ends it with no named premise",
-      "at": "fixtures/reactive-ir/write-past-possible-await/App.tsx:17:22"
     },
     "uncertifiable-repro/sc1001|fixtures/uncertifiable-repro/sc1001/src/local-object-context-value.tsx|629-641|C2/reporting-decision-no-row": {
       "owner": "fix 6 (claude/proof-log-holes)",

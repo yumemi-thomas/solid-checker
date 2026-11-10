@@ -142,6 +142,34 @@ describe("a producer's named end rests on a premise that names code", () => {
     const gaps = { [key]: { check: "C3", why: "the producer returns here and the carrier call places the function" } };
     assert.deepEqual(gapProblems(new Map([[key, hit]]), gaps).map((problem) => problem.kind), ["invalid"]);
   });
+
+  describe("a setter whose write guard throws first (ADR 0932)", () => {
+    const guard = (s, extra = {}) => end(s, [{ kind: "SetterGuardThrowsFirst", at: [40, 52] }], { proof: "local_access.discover_call_as.setter-guard-throws-first", ...extra });
+    const violation = (extra = {}) => verdict(40, { e: 52, code: "SC2001", kind: "violation", ...extra });
+
+    test("the setter call's SC2001 violation in the final list confirms the premise", () => {
+      assert.deepEqual(kinds([site(10), decision(10), guard(10), violation()]), []);
+    });
+
+    test("no violation at the span, one of another rule, or only an uncertifiable one leaves the premise unconfirmed", () => {
+      assert.deepEqual(kinds([site(10), decision(10), guard(10)]), ["C3/premise-unconfirmed"]);
+      assert.deepEqual(kinds([site(10), decision(10), guard(10), violation({ code: "SC1001" })]), ["C3/premise-unconfirmed"]);
+      assert.deepEqual(kinds([site(10), decision(10), guard(10), violation({ kind: "uncertifiable" })]), ["C3/premise-unconfirmed"]);
+      assert.deepEqual(kinds([site(10), decision(10), guard(10), violation({ s: 41 })]), ["C3/premise-unconfirmed"]);
+    });
+
+    test("a premise in another file cannot be confirmed by this file's verdicts", () => {
+      const elsewhere = end(10, [{ kind: "SetterGuardThrowsFirst", at: [40, 52], in: "/p/B.tsx" }]);
+      assert.deepEqual(kinds([site(10), decision(10), elsewhere, violation()]), ["C3/premise-unconfirmed"]);
+    });
+
+    test("an unconfirmed premise is never an accepted gap", () => {
+      const hit = proofHits([site(10), decision(10), guard(10)])[0];
+      const key = hitKey("fx", "App.tsx", hit);
+      const gaps = { [key]: { check: "C3", why: "the guard throws first" } };
+      assert.deepEqual(gapProblems(new Map([[key, hit]]), gaps).map((problem) => problem.kind), ["invalid"]);
+    });
+  });
 });
 
 describe("the gap file", () => {
