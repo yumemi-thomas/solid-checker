@@ -15,10 +15,11 @@ import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
 import { legalCells } from "./legal.mjs";
 import { cellList, judge, recallShapes, siteOf } from "./matrix.mjs";
-import { API_CONTEXTS, API_VARIANTS, BASE_ONLY_CONTEXTS, CBP_CONTEXTS, DEAD_CONTEXTS, SPEC, recallVariantsOf } from "./misuse.mjs";
+import { API_CONTEXTS, API_VARIANTS, APPLY_VOID_UNRUN, BASE_ONLY_CONTEXTS, CBP_CONTEXTS, DEAD_CONTEXTS, SPEC, recallVariantsOf } from "./misuse.mjs";
 import { recallLegalShapes } from "./legal.mjs";
 
-const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer", ...DEAD_CONTEXTS];
+// ADR 0927: an apply that only names the compute's returned function never runs it.
+const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer", ...DEAD_CONTEXTS, ...APPLY_VOID_UNRUN];
 /** The contexts of the later-fire, named-handler, never-run and attached-callback-prop cells: one program a (code, context). */
 const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context)), ...CBP_CONTEXTS.filter((context) => context.startsWith("cbp-attached"))]);
 

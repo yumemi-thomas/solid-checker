@@ -9225,9 +9225,10 @@ pub(crate) enum HandOff {
     /// A standard-library call the table proves does not invoke the argument
     /// (`removeEventListener(type, f)`).
     Value,
-    /// The whole argument of a standard-library call that may keep or defer
-    /// it (`addEventListener`, `Set.add`): unfollowed too, but run by the
-    /// host later, never by project code (ADR 0535).
+    /// The whole argument of a standard-library call that defers it to the
+    /// host (`addEventListener`): unfollowed too, but run by the host later,
+    /// never by project code (ADR 0535). A collection's insertion (`Set.add`,
+    /// `Array.push`, `Map.set`) is [`HandOff::Unfollowed`] (ADR 0927).
     Retained,
     /// Handed to a call nothing here follows: the whole argument of a project
     /// call or of an unresolved one, a part of a
@@ -9447,9 +9448,10 @@ pub(crate) fn hand_off_at(
             Some(RuntimeArgumentBehavior::InlineCallback) => HandOff::Inline(call.span),
             Some(RuntimeArgumentBehavior::FreshStackCallback) => HandOff::FreshStack,
             Some(RuntimeArgumentBehavior::ValueOnly) => HandOff::Value,
-            Some(
-                RuntimeArgumentBehavior::DeferredCallback | RuntimeArgumentBehavior::RetainedValue,
-            ) => HandOff::Retained,
+            Some(RuntimeArgumentBehavior::DeferredCallback) => HandOff::Retained,
+            // ADR 0927: a collection keeps the value for project code, which
+            // may call it anywhere (`kept.forEach((g) => g())` in a body).
+            Some(RuntimeArgumentBehavior::RetainedValue) => HandOff::Unfollowed,
             // Every DOM redeclaration of `addEventListener` registers its
             // listener the same way (`runs_on_invoker_stack`).
             None if crate::runtime_semantics::runs_on_invoker_stack(

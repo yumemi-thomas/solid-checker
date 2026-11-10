@@ -69,9 +69,8 @@ owner, and its JSX children are render computations. A write in a function the
 row's code runs in place (an IIFE in a JSX child, a helper calling its callback,
 `untrack`, a named closure the row calls) is placed where that code runs, so it
 is a violation (ADR 0460). An event handler, a timer or an effect apply in a row
-keeps its own legal role; a handler only while nothing in the program
-dispatches synchronously (`el.dispatchEvent` in the row runs it there), else
-the write is uncertifiable (ADR 0932).
+keeps its own legal role; a handler only with no synchronous dispatch, else
+uncertifiable (ADR 0932).
 
 A `createRoot` body is not a write region either. It runs during the call
 with the new root as the ambient owner, and a root is a children-capable

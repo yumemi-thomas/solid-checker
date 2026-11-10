@@ -76,6 +76,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   returned, with no strict-read window open, so a read there is not reported
   (probed on rc.3 and rc.9). The scheduler is matched by its standard-library
   declaration, not its name.
+- **A function kept in a collection is uncertifiable** (`Set.add`, `push`,
+  `Map.set`: project code may call it anywhere), and a `For` row or `Show` child
+  created in a closed `untrack` reads in its own window (ADR 0927).
 - **A host-retained callback is uncertifiable.** An `addEventListener`
   listener (on any DOM interface), a `Function.prototype.bind` bound argument, a
   `PromiseLike.then` callback and a Geolocation callback written in a component
@@ -139,12 +142,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   the callback writes, a call after an await the compute reaches (that is
   [reactive-read-after-await](reactive-read-after-await.md)'s, also through an
   immediately invoked function), and a call `tsc` rejects. `createRoot` is
-  `runWithOwner(createOwner(), …)` at rc.21 and is reported the same way (owner
-  ruling, ADR 0932; `fixtures/reactive-ir/run-with-owner-in-computation`).
+  `runWithOwner(createOwner(), …)` and reports the same (ADR 0932).
 - **A setter's updater runs on the setter's stack** unless the guard throws
-  first: with `ownedWrite: true` a body read there is reported, with options
-  the syntax does not show it is uncertifiable (ADR 0932). A handler in a flow
-  row whose program dispatches synchronously is uncertifiable, not deferred.
+  first; `ownedWrite: true` skips it (ADR 0932).
 - **A read an await may precede is uncertifiable.** Past an unconditional
   `await` the window is closed and the read is silent. Past a conditional
   (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a

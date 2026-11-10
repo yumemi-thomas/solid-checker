@@ -24,21 +24,10 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "invocation-context-unproven",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/pending-source-first-run/variants/module-body-settled/source.ts",
-      "start": 167,
-      "end": 175,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "call-attributed-read",
+      "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/pending-source-first-run/variants/module-body-settled/source.ts",
       "start": 167,
