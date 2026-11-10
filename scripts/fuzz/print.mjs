@@ -30,7 +30,7 @@ const SPAN_CLOSE_END = "\u0006";
 const AUX_OPEN = "\u0007";
 const AUX_CLOSE = "\u0008";
 /** Node kinds the line table records: statements, view items, and every expression that is a call or a function. */
-const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "mounted", "propEl", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for",
+const LINE_KINDS = new Set(["expr", "decl", "return", "await", "probe", "button", "hbutton", "child", "mounted", "propEl", "attr", "ref", "flow", "handler-expr", "cbprop", "show", "for", "wrap",
   "read", "write", "own", "use", "fn", "call", "set", "getOwner", "iife", "iter", "prim"]);
 
 /** A node's label in the line table and in the coarse dedupe key: its kind and, where it matters, what it is. */
@@ -616,12 +616,46 @@ function render(program, instrument) {
         return [`${ind(depth)}<For each={[1]}>`, `${ind(depth + 1)}{() => (`, `${ind(depth + 2)}<li>`,
           ...item.children.flatMap((c) => viewText(c, depth + 3)), `${ind(depth + 2)}</li>`, `${ind(depth + 1)})}`, `${ind(depth)}</For>`];
       }
+      case "wrap": {
+        // A user component of this file wrapping `props.children` in a boundary (model.mjs `wrapEl`), written after the components.
+        const n = item.id.replace(/^\D+/, "");
+        kids.push(...wrapComponent(item, n));
+        // `inner`: a component of the same body rendered as the wrapper's child, the way a parent mounts a child (the walks follow the call site).
+        return [`${ind(depth)}<Wrap${n}>`, ...(item.inner ? [`${ind(depth + 1)}<${item.inner} />`] : item.children.flatMap((c) => viewText(c, depth + 1))), `${ind(depth)}</Wrap${n}>`];
+      }
       case "loading": {
         used.add("Loading");
         return [`${ind(depth)}<Loading fallback={0}${item.onExpr ? ` on={${item.onExpr}}` : item.on === null ? "" : ` on={${item.on}()}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
       }
       default: throw new Error(`cannot print view ${item.k}`);
     }
+  }
+
+  /**
+   * The component a `wrap` item renders (model.mjs `wrapEl`): `WrapN` hands `props.children` to the boundary (`real`), renders it beside the boundary
+   * that holds a literal (`outside`), or holds a foreign object's `.children` in the boundary and renders the real ones beside it (`shadow`).
+   * JSX forms are the dialect's elements, `Ctx` the module's default-less context (misuse.mjs CONTEXT_NOT_FOUND `contextLine`); call forms are
+   * `createLoadingBoundary` / `createErrorBoundary`, whose accessor the component reads in its JSX.
+   */
+  function wrapComponent(item, n) {
+    const handling = "(e: unknown) => <p>{String(e)}</p>";
+    const jsx = {
+      loading: (content) => (used.add("Loading"), `<Loading fallback={0}>${content}</Loading>`),
+      errored: (content) => (used.add("Errored"), `<Errored fallback={${handling}}>${content}</Errored>`),
+      provider: (content) => `<Ctx value={1}>${content}</Ctx>`,
+    };
+    const call = {
+      loading: (expression) => (used.add("createLoadingBoundary"), `{createLoadingBoundary(() => ${expression}, () => <p>f</p>)()}`),
+      errored: (expression) => (used.add("createErrorBoundary"), `{createErrorBoundary(() => ${expression}, (e) => <p>{String(e())}</p>)()}`),
+    };
+    const around = (inner, literal) => (item.form === "jsx" ? jsx[item.boundary](inner === "children" ? "{props.children}" : inner === "other" ? "{other.children}" : literal)
+      : call[item.boundary](inner === "children" ? "props.children" : inner === "other" ? "other.children" : "<p>x</p>"));
+    const lines = [`function Wrap${n}(props: { children?: any }) {`];
+    if (item.case === "real") lines.push(`${INDENT}return <>${around("children", "")}</>;`);
+    else if (item.case === "outside") lines.push(`${INDENT}return <>${around("literal", "<p>x</p>")}{props.children}</>;`);
+    else lines.push(`${INDENT}const other = { children: <i /> };`, `${INDENT}return <>${around("other", "")}{props.children}</>;`);
+    lines.push("}", "");
+    return lines;
   }
 
   /**
@@ -719,6 +753,8 @@ function render(program, instrument) {
     if (source === "prop-spread") out.push(`function M${index + 1}(props: ${component.name}Props) {`, `${INDENT}return <${component.name} {...props} />;`, "}", "");
     const created = source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
     if (source === "async-value-member") out.push(`const ui${index + 1} = { ${component.name} };`, "");
+    // A wrapper mount's component (mounts.mjs WRAP_MOUNTS) sits at module scope above its parent.
+    if (parts?.module) out.push(...parts.module);
     out.push(`export function P${index + 1}() {`, ...created, ...(parts?.prelude ?? []).map((line) => `${INDENT}${line}`), `${INDENT}return (`, `${INDENT}${INDENT}<div>`, ...mounted.map((line) => `${INDENT}${INDENT}${INDENT}${line}`), `${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
   }
   // The source's types and its context, above the components that name them.

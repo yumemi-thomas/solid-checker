@@ -1,11 +1,12 @@
-//! ADR 0933: the proof log's site universe. Every place a reactive value is
-//! read, written or acted on is a site, found from facts alone (the references
+//! ADR 0933, 0936: the site universe. Every place a reactive value is read,
+//! written or acted on is a site, found from facts alone (the references
 //! TypeScript resolved to each source symbol, and the syntax around them),
 //! never from a producer's row, role or walk: a site no producer reached is a
-//! site here all the same. Each site is written with how it ends in the final
-//! program (a row, a census obligation, a compiler discard, or nothing), and
-//! `scripts/proof-gate.mjs` fails a site that ends in nothing unless a proof
-//! was recorded for it.
+//! site here all the same. [`crate::site_accounting`] ends each site in the
+//! final program (a row, a census obligation, a compiler discard, a typed
+//! silence its producer named) or gives it an uncertifiable row; with the proof
+//! log on it also writes the site with its ending, and
+//! `scripts/proof-gate.mjs` fails a site that ends in nothing.
 //!
 //! The sites, per source symbol and each reference outside dependency source:
 //!
@@ -15,7 +16,9 @@
 //!   is a write path (a read);
 //! - a member chain on a root that ends in an assignment, update, destructuring
 //!   or iteration target (a store write), in a `delete` operand, or in the
-//!   receiver of an in-place array method (`push`, `splice`, ...).
+//!   receiver of an in-place array method (`push`, `splice`, ...);
+//! - every call of `onFlush` (SC3002), found from the calls' resolved
+//!   primitives, not from a source.
 //!
 //! A reference used as a value (passed, returned, stored) is a use the
 //! value-use census (ADR 0692) follows or answers with an SC9012; it is not a
@@ -31,7 +34,9 @@ use typefacts::Location;
 
 use crate::pipeline::AnalysisContext;
 use crate::proof_log::{self, SiteRecord};
-use crate::{HashMap, HashSet, Program, ReactiveSourceKind};
+use crate::{
+    ExecutionRole, HashMap, HashSet, Program, ReactiveSourceKind, StaticDefect, StaticViolation,
+};
 
 /// The in-place `Array.prototype` methods: the language's own list, not a
 /// table of the checker's.
@@ -76,10 +81,11 @@ impl Kind {
     }
 }
 
-/// The syntax of one file the universe asks about, indexed once.
+/// The syntax of one file the universe asks about that no cached index of the
+/// file's facts answers. The members by object, the calls by callee and the
+/// references of a declaration are the facts' own lazily built indexes
+/// (`AstFacts`), kept as long as the file's facts are.
 struct FileTables {
-    /// Indexes into `members` by the peeled span of the member's object.
-    members_by_object: HashMap<Span, Vec<usize>>,
     /// Peeled assignment, update, destructuring and iteration targets.
     written: HashSet<Span>,
     /// Peeled operands of `delete`.
@@ -87,46 +93,36 @@ struct FileTables {
     /// Indexes into `calls` by each reference that is an operand of a call's
     /// composite callee (`(slot = r)()`, `(flag ? f : g)()`).
     composite_calls: HashMap<Span, Vec<usize>>,
-    /// The identifiers the binder resolves to each declaration: a reference
-    /// under a TypeScript wrapper (`(setStore as typeof setStore)`) carries no
-    /// entity of its own, but its declaration is the symbol's.
-    references_by_declaration: HashMap<Span, Vec<Span>>,
 }
 
 impl FileTables {
     fn of(file: &FileFacts) -> Self {
         let ast = &file.ast;
-        let mut members_by_object: HashMap<Span, Vec<usize>> = HashMap::default();
-        for (index, member) in ast.members.iter().enumerate() {
-            members_by_object
-                .entry(ast.peel_ts_sugar_span(member.object))
-                .or_default()
-                .push(index);
-        }
         let mut composite_calls: HashMap<Span, Vec<usize>> = HashMap::default();
         for (index, call) in ast.calls.iter().enumerate() {
             if call.construct {
+                continue;
+            }
+            // A callee that is an identifier, a member or a call is no
+            // composite (the walk's own first test, answered by indexed
+            // lookups, so the walk runs only for the few callees that are
+            // parenthesized conditionals, sequences or assignments).
+            let root = ast.peel_ts_sugar_span(call.callee);
+            if ast.member_at(root).is_some()
+                || ast.call_at(root).is_some()
+                || ast
+                    .identifiers
+                    .binary_search_by_key(&root, |identifier| identifier.span)
+                    .is_ok()
+            {
                 continue;
             }
             for operand in ast.composite_callee_references(call.callee) {
                 composite_calls.entry(operand).or_default().push(index);
             }
         }
-        let mut references_by_declaration: HashMap<Span, Vec<Span>> = HashMap::default();
-        for identifier in &ast.identifiers {
-            if identifier.role == solid_facts::ast::IdentifierRole::Reference
-                && let Some(declaration) = ast.reference_declaration(identifier.span)
-            {
-                references_by_declaration
-                    .entry(declaration)
-                    .or_default()
-                    .push(identifier.span);
-            }
-        }
         Self {
-            members_by_object,
             composite_calls,
-            references_by_declaration,
             written: ast
                 .write_targets
                 .iter()
@@ -181,12 +177,7 @@ fn chain_end(file: &FileFacts, tables: &FileTables, first: &MemberFact) -> Chain
                 callee: call.callee,
             };
         }
-        let next = tables
-            .members_by_object
-            .get(&peeled)
-            .and_then(|indexes| indexes.first())
-            .map(|index| &ast.members[*index]);
-        match next {
+        match ast.members_with_peeled_object(peeled).next() {
             Some(next) => link = next,
             None => return ChainEnd::Read(links),
         }
@@ -196,13 +187,16 @@ fn chain_end(file: &FileFacts, tables: &FileTables, first: &MemberFact) -> Chain
 
 /// One site: where it is, what kind it is, and the other spans a row that
 /// answers for it may sit at.
-struct Site {
-    table: &'static str,
-    /// What the source is: `accessor`, `store`, `props`, `setter` or `action`.
-    source: &'static str,
-    via: &'static str,
-    at: Span,
-    alternates: Vec<Span>,
+pub(crate) struct Site {
+    /// `read`, `write`, `action`, `store-write` or `on-flush`.
+    pub(crate) table: &'static str,
+    /// What the source is: `accessor`, `store`, `props`, `setter`, `action` or
+    /// `primitive`.
+    pub(crate) source: &'static str,
+    /// The syntactic form: `call`, `member`, `assignment`, `delete`, `mutator`.
+    pub(crate) via: &'static str,
+    pub(crate) at: Span,
+    pub(crate) alternates: Vec<Span>,
 }
 
 /// The sites that start at `reference`, a reference of a source of `kind`.
@@ -241,13 +235,7 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
         return sites;
     }
     let source = if kind.store { "store" } else { "props" };
-    for index in tables
-        .members_by_object
-        .get(&reference)
-        .into_iter()
-        .flatten()
-    {
-        let first = &ast.members[*index];
+    for first in ast.members_with_peeled_object(reference) {
         sites.push(match chain_end(file, tables, first) {
             ChainEnd::Read(links) => {
                 // A row for the read sits at any link of the chain, or at a
@@ -298,42 +286,120 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
     sites
 }
 
-/// How the final program ends the sites at a span: each row, census
-/// obligation, defect and violation, by file and byte span.
-struct Endings<'p> {
-    at: EndingsAt<'p>,
+/// How a site ends in the program: the class of the row, obligation or
+/// finding that stands at it, in this order of precedence, or the compiler's
+/// discard of the code.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum EndClass {
+    /// A row of a table (a read, an async read, a write or an action).
+    Row,
+    /// An SC9012 obligation: a census row.
+    Census,
+    /// A defect of any other kind.
+    Defect,
+    /// A static violation.
+    Violation,
+    /// The compiler deleted the code.
+    Discarded,
+}
+
+impl EndClass {
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Row => "row",
+            Self::Census => "census",
+            Self::Defect => "defect",
+            Self::Violation => "violation",
+            Self::Discarded => "discarded",
+        }
+    }
+}
+
+/// What the row that ends a site is, for the log only (its text is built when
+/// the log is on).
+#[derive(Clone, Copy)]
+pub(crate) enum Detail<'p> {
+    Read(ExecutionRole),
+    OriginOfRead(ExecutionRole),
+    AsyncRead(ExecutionRole),
+    OriginOfAsyncRead(ExecutionRole),
+    Write(ExecutionRole),
+    Action(ExecutionRole),
+    Defect(&'p StaticDefect),
+    Violation(&'p StaticViolation),
+    Nothing,
+}
+
+impl Detail<'_> {
+    pub(crate) fn text(self) -> String {
+        match self {
+            Self::Read(role) => format!("read:{role:?}"),
+            Self::OriginOfRead(role) => format!("origin-of-read:{role:?}"),
+            Self::AsyncRead(role) => format!("async-read:{role:?}"),
+            Self::OriginOfAsyncRead(role) => format!("origin-of-async-read:{role:?}"),
+            Self::Write(role) => format!("write:{role:?}"),
+            Self::Action(role) => format!("action:{role:?}"),
+            Self::Defect(defect) => format!(
+                "{}:{}",
+                defect.kind.dedup_identity(),
+                defect.analysis_context
+            ),
+            Self::Violation(violation) => violation.id.clone(),
+            Self::Nothing => String::new(),
+        }
+    }
+}
+
+/// The final program's rows, census obligations, defects and violations by file
+/// and byte span: the best class standing at each (the first of equal classes).
+pub(crate) struct Endings<'p> {
+    at: HashMap<(&'p str, u64, u64), (EndClass, Detail<'p>)>,
     /// The store-write findings (SC2003 violations, direct-mutation defects) by
     /// file: a write through a chain is reported from the chain's root through
     /// the wrappers around it (ADR 0922), which starts inside the chain-end
     /// member's span and ends where it ends.
-    mutations: HashMap<&'p str, Vec<MutationEnding>>,
+    mutations: HashMap<&'p str, Vec<(u64, u64, EndClass, Detail<'p>)>>,
 }
 
-/// The endings by file and byte span: each a class and its detail.
-type EndingsAt<'p> = HashMap<(&'p str, u64, u64), Vec<(&'static str, String)>>;
-
-/// A store-write finding's byte span, class and detail.
-type MutationEnding = (u64, u64, &'static str, String);
-
-fn note<'p>(at: &mut EndingsAt<'p>, location: &'p Location, class: &'static str, detail: String) {
-    at.entry((
+fn note<'p>(
+    at: &mut HashMap<(&'p str, u64, u64), (EndClass, Detail<'p>)>,
+    location: &'p Location,
+    class: EndClass,
+    detail: Detail<'p>,
+) {
+    let key = (
         location.path.as_ref(),
         location.start_byte,
         location.end_byte,
-    ))
-    .or_default()
-    .push((class, detail));
+    );
+    match at.entry(key) {
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert((class, detail));
+        }
+        std::collections::hash_map::Entry::Occupied(mut slot) => {
+            if class < slot.get().0 {
+                slot.insert((class, detail));
+            }
+        }
+    }
 }
 
 impl<'p> Endings<'p> {
-    fn of(program: &'p Program) -> Self {
+    pub(crate) fn of(program: &'p Program) -> Self {
         let mut at = HashMap::default();
+        let rows = program.reads.len()
+            + program.async_reads.len()
+            + program.writes.len()
+            + program.actions.len()
+            + program.static_defects.len()
+            + program.static_violations.len();
+        at.reserve(rows);
         for read in &program.reads {
             note(
                 &mut at,
                 &read.location,
-                "row",
-                format!("read:{:?}", read.execution),
+                EndClass::Row,
+                Detail::Read(read.execution),
             );
             // A row attributed to another place (a helper's call) answers for
             // the read it came from.
@@ -341,8 +407,8 @@ impl<'p> Endings<'p> {
                 note(
                     &mut at,
                     origin,
-                    "row",
-                    format!("origin-of-read:{:?}", read.execution),
+                    EndClass::Row,
+                    Detail::OriginOfRead(read.execution),
                 );
             }
         }
@@ -350,8 +416,8 @@ impl<'p> Endings<'p> {
             note(
                 &mut at,
                 &read.location,
-                "row",
-                format!("async-read:{:?}", read.execution),
+                EndClass::Row,
+                Detail::AsyncRead(read.execution),
             );
             for origin in [read.origin.as_ref(), read.pending_origin.as_ref()]
                 .into_iter()
@@ -360,8 +426,8 @@ impl<'p> Endings<'p> {
                 note(
                     &mut at,
                     origin,
-                    "row",
-                    format!("origin-of-async-read:{:?}", read.execution),
+                    EndClass::Row,
+                    Detail::OriginOfAsyncRead(read.execution),
                 );
             }
         }
@@ -369,25 +435,26 @@ impl<'p> Endings<'p> {
             note(
                 &mut at,
                 &write.location,
-                "row",
-                format!("write:{:?}", write.execution),
+                EndClass::Row,
+                Detail::Write(write.execution),
             );
         }
         for action in &program.actions {
             note(
                 &mut at,
                 &action.location,
-                "row",
-                format!("action:{:?}", action.execution),
+                EndClass::Row,
+                Detail::Action(action.execution),
             );
         }
-        let mut mutations: HashMap<&'p str, Vec<MutationEnding>> = HashMap::default();
+        let mut mutations: HashMap<&'p str, Vec<(u64, u64, EndClass, Detail<'p>)>> =
+            HashMap::default();
         for defect in &program.static_defects {
             let family = defect.kind.dedup_identity();
             let class = if family == "reactive-dispatch-unresolved" {
-                "census"
+                EndClass::Census
             } else {
-                "defect"
+                EndClass::Defect
             };
             if family == "no-store-mutation-outside-setter" {
                 mutations
@@ -397,15 +464,10 @@ impl<'p> Endings<'p> {
                         defect.location.start_byte,
                         defect.location.end_byte,
                         class,
-                        format!("{family}:{}", defect.analysis_context),
+                        Detail::Defect(defect),
                     ));
             }
-            note(
-                &mut at,
-                &defect.location,
-                class,
-                format!("{family}:{}", defect.analysis_context),
-            );
+            note(&mut at, &defect.location, class, Detail::Defect(defect));
         }
         for violation in &program.static_violations {
             if violation.id == "SC2003" {
@@ -415,15 +477,15 @@ impl<'p> Endings<'p> {
                     .push((
                         violation.location.start_byte,
                         violation.location.end_byte,
-                        "violation",
-                        violation.id.clone(),
+                        EndClass::Violation,
+                        Detail::Violation(violation),
                     ));
             }
             note(
                 &mut at,
                 &violation.location,
-                "violation",
-                violation.id.clone(),
+                EndClass::Violation,
+                Detail::Violation(violation),
             );
         }
         Self { at, mutations }
@@ -431,21 +493,24 @@ impl<'p> Endings<'p> {
 
     /// The site's ending: its row, else a census obligation, a defect or a
     /// violation at it, else the compiler's discard, else nothing.
-    fn end(&self, file: &FileFacts, site: &Site) -> (&'static str, String) {
+    pub(crate) fn end(&self, file: &FileFacts, site: &Site) -> Option<(EndClass, Detail<'p>)> {
         let path = file.path.as_str();
-        let found = std::iter::once(site.at)
-            .chain(site.alternates.iter().copied())
-            .flat_map(|span| {
+        let mut best: Option<(EndClass, Detail<'p>)> = None;
+        for span in std::iter::once(site.at).chain(site.alternates.iter().copied()) {
+            let Some((class, detail)) =
                 self.at
                     .get(&(path, u64::from(span.start), u64::from(span.end)))
-                    .into_iter()
-                    .flatten()
-            })
-            .collect::<Vec<_>>();
-        for class in ["row", "census", "defect", "violation"] {
-            if let Some((_, detail)) = found.iter().find(|(candidate, _)| *candidate == class) {
-                return (class, detail.clone());
+            else {
+                continue;
+            };
+            // The strongest ending of the spans a site may be reported at.
+            match &best {
+                Some((held, _)) if *class >= *held => {}
+                _ => best = Some((*class, *detail)),
             }
+        }
+        if best.is_some() {
+            return best;
         }
         // A store write is reported from the chain's root through its wrappers:
         // a finding that ends where the chain-end member ends and starts inside it.
@@ -459,24 +524,20 @@ impl<'p> Endings<'p> {
                     *end == u64::from(site.at.end) && *start >= u64::from(site.at.start)
                 })
         {
-            return (*class, detail.clone());
+            return Some((*class, *detail));
         }
         if crate::execution_role::discarded_region_contains(file, site.at) {
-            return ("discarded", String::new());
+            return Some((EndClass::Discarded, Detail::Nothing));
         }
-        ("none", String::new())
+        None
     }
 }
 
-/// Writes one `site` line for each site of the universe, with its ending in
-/// `program`. Runs once per build, after the program is final, only with the
-/// proof log on.
-pub(crate) fn record(ctx: &AnalysisContext<'_>, program: &Program) {
-    if !proof_log::enabled() {
-        return;
-    }
+/// Every site of the universe, each once, with the file it is in: the sites of
+/// the references of each source symbol outside dependency source, and the
+/// calls of `onFlush`.
+pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)> {
     let lookup = ctx.semantic_lookup;
-    let endings = Endings::of(program);
     let mut symbols = ctx
         .accessors
         .keys()
@@ -490,7 +551,7 @@ pub(crate) fn record(ctx: &AnalysisContext<'_>, program: &Program) {
     // The sites by file, span, table and way, with the alternates every
     // reference of a site added (a composite callee has one per operand).
     type SiteKey = (String, u64, u64, &'static str, &'static str);
-    let mut found: Vec<(&FileFacts, Site)> = Vec::new();
+    let mut found: Vec<(&'a FileFacts, Site)> = Vec::new();
     let mut index: HashMap<SiteKey, usize> = HashMap::default();
     for symbol in symbols {
         let kind = Kind::of(ctx, symbol);
@@ -528,16 +589,8 @@ pub(crate) fn record(ctx: &AnalysisContext<'_>, program: &Program) {
         }
         let mut siblings = Vec::new();
         for (file, span) in &anchors {
-            let file_tables = tables
-                .entry(file.path.as_str())
-                .or_insert_with(|| FileTables::of(file));
             let declaration = file.ast.reference_declaration(*span).unwrap_or(*span);
-            for sibling in file_tables
-                .references_by_declaration
-                .get(&declaration)
-                .into_iter()
-                .flatten()
-            {
+            for sibling in file.ast.references_to(declaration) {
                 if known.insert((file.path.as_str(), *sibling)) {
                     siblings.push((*file, *sibling));
                 }
@@ -575,16 +628,106 @@ pub(crate) fn record(ctx: &AnalysisContext<'_>, program: &Program) {
             }
         }
     }
-    for (file, site) in found {
-        let (ending, detail) = endings.end(file, &site);
-        proof_log::site(&SiteRecord {
-            table: site.table,
-            source: site.source,
-            via: site.via,
-            location: &site.at.location(file.path.shared()),
-            alternates: &site.alternates,
-            end: ending,
-            detail: &detail,
-        });
+    on_flush_sites(ctx, &mut found);
+    found
+}
+
+/// SC3002's sites: each call whose resolved primitive is `onFlush`, outside
+/// dependency source, whatever its callee is spelled (found from the calls
+/// like ADR 0886's owner sites).
+fn on_flush_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
+    let lookup = ctx.semantic_lookup;
+    for file in crate::base::reads::file_slots(ctx.facts) {
+        if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        for call in &file.ast.calls {
+            if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::OnFlush)
+            {
+                found.push((
+                    file,
+                    Site {
+                        table: "on-flush",
+                        source: "primitive",
+                        via: "call",
+                        at: call.callee,
+                        alternates: vec![call.span],
+                    },
+                ));
+            }
+        }
+    }
+}
+
+/// Writes one `site` line: the site and how the final program ends it.
+pub(crate) fn log_site(file: &FileFacts, site: &Site, end: &str, detail: &str) {
+    proof_log::site(&SiteRecord {
+        table: site.table,
+        source: site.source,
+        via: site.via,
+        location: &site.at.location(file.path.shared()),
+        alternates: &site.alternates,
+        end,
+        detail,
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(path: &str, start: u64, end: u64) -> Location {
+        Location {
+            path: path.into(),
+            start_byte: start,
+            end_byte: end,
+        }
+    }
+
+    /// A span with a row and a violation ends as a row; the first of two equal
+    /// classes keeps its detail; another span is another site.
+    #[test]
+    fn the_best_class_at_a_span_stays_and_the_first_of_a_class_wins() {
+        let (first, second, other) = (
+            at("/p/A.tsx", 4, 9),
+            at("/p/A.tsx", 4, 9),
+            at("/p/B.tsx", 4, 9),
+        );
+        let mut found = HashMap::default();
+        note(&mut found, &first, EndClass::Violation, Detail::Nothing);
+        note(
+            &mut found,
+            &first,
+            EndClass::Row,
+            Detail::Read(ExecutionRole::TrackedJsx),
+        );
+        note(
+            &mut found,
+            &second,
+            EndClass::Row,
+            Detail::Write(ExecutionRole::Unknown),
+        );
+        note(&mut found, &first, EndClass::Census, Detail::Nothing);
+        let (class, detail) = found[&("/p/A.tsx", 4, 9)];
+        assert_eq!(class, EndClass::Row);
+        assert_eq!(detail.text(), "read:TrackedJsx");
+        assert!(!found.contains_key(&(other.path.as_ref(), 4, 9)));
+    }
+
+    #[test]
+    fn the_classes_rank_a_row_before_a_census_obligation_before_a_defect_before_a_violation() {
+        assert!(EndClass::Row < EndClass::Census);
+        assert!(EndClass::Census < EndClass::Defect);
+        assert!(EndClass::Defect < EndClass::Violation);
+        assert!(EndClass::Violation < EndClass::Discarded);
+        for class in [
+            EndClass::Row,
+            EndClass::Census,
+            EndClass::Defect,
+            EndClass::Violation,
+            EndClass::Discarded,
+        ] {
+            assert!(!class.name().is_empty());
+        }
     }
 }

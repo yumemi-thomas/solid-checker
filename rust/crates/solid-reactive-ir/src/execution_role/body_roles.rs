@@ -415,18 +415,31 @@ pub(super) fn named_closure_in_tracked_scope<'a>(
 /// same function): an ownerless continuation on a later task, never in a
 /// render window or a tracking scope.
 pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: Span) -> bool {
-    containing_ast_function(&file.ast, span).is_some_and(|function| {
-        // An async generator is resumed by its caller after each `yield`,
-        // synchronously, in whatever window or owner that caller has.
-        function.r#async
-            && !function.generator
-            && file.ast.unconditional_awaits.iter().any(|awaited| {
-                awaited.end <= span.start
-                    && function.body.contains(*awaited)
-                    && containing_ast_function(&file.ast, *awaited)
-                        .is_some_and(|owner| owner.span == function.span)
-            })
-    })
+    unconditional_await_before(file, span).is_some()
+}
+
+/// [`follows_unconditional_await`]'s proof: the `await` itself (ADR 0936 names
+/// it as the fact a silence rests on).
+pub(crate) fn unconditional_await_before(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Option<Span> {
+    let function = containing_ast_function(&file.ast, span)?;
+    // An async generator is resumed by its caller after each `yield`,
+    // synchronously, in whatever window or owner that caller has.
+    if !function.r#async || function.generator {
+        return None;
+    }
+    file.ast
+        .unconditional_awaits
+        .iter()
+        .find(|awaited| {
+            awaited.end <= span.start
+                && function.body.contains(**awaited)
+                && containing_ast_function(&file.ast, **awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+        })
+        .copied()
 }
 
 /// Whether `span` runs only after an await of its own function suspended: it
@@ -436,14 +449,21 @@ pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: S
 /// constructed or rendered, which may be under an owner again, so they are
 /// not included.
 pub(crate) fn follows_dominating_await(file: &solid_facts::FileFacts, span: Span) -> bool {
-    let Some(function) = continuation_function(file, span) else {
-        return false;
-    };
-    file.ast.dominating_awaits.iter().any(|(awaited, region)| {
-        region.contains(span)
-            && containing_ast_function(&file.ast, *awaited)
-                .is_some_and(|owner| owner.span == function.span)
-    })
+    dominating_await_before(file, span).is_some()
+}
+
+/// [`follows_dominating_await`]'s proof: the `await` itself.
+pub(crate) fn dominating_await_before(file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
+    let function = continuation_function(file, span)?;
+    file.ast
+        .dominating_awaits
+        .iter()
+        .find(|(awaited, region)| {
+            region.contains(span)
+                && containing_ast_function(&file.ast, *awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+        })
+        .map(|(awaited, _)| *awaited)
 }
 
 /// The async, non-generator function whose continuation `span` would run in,
@@ -1369,7 +1389,57 @@ pub(super) fn window_after_awaits(
             ExecutionRole::Unknown
         );
     }
+    if role.reports_untracked_read() {
+        return layered_window_after_awaits(file, span, lookup, role);
+    }
     role
+}
+
+/// ADR 0938: [`window_after_awaits`] for a site in layers that run in place
+/// ([`climb_in_place_layers`]: an IIFE, an inline standard-library callback, a
+/// function bound to a name and called once): the site runs where the
+/// outermost layer's call is written, so an await before that call, or before
+/// a call on the way, closes the window as it does for a site written there.
+/// `ref={async (el) => { await p; (() => r())(); }}` reads on a promise
+/// continuation, as the direct read after the await does. Past a layer that
+/// also runs its callback elsewhere, or a call the climb withholds, only one
+/// run is placed: unplaced, as is a possible await and a climb at its bound.
+fn layered_window_after_awaits(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    role: ExecutionRole,
+) -> ExecutionRole {
+    let Some(climb) = climb_in_place_layers(file, span, lookup) else {
+        return role;
+    };
+    if climb.exhausted {
+        return role_arm!(
+            "body_roles.layered_window_after_awaits.climb-exhausted",
+            ExecutionRole::Unknown
+        );
+    }
+    let landing = if follows_unconditional_await(file, climb.at)
+        || follows_dominating_await(file, climb.at)
+        || follows_try_head_await(file, climb.at, lookup)
+    {
+        Some(true)
+    } else if follows_any_suspension(file, climb.at) || may_follow_own_await(file, climb.at) {
+        Some(false)
+    } else {
+        None
+    };
+    match (climb.suspended, landing) {
+        (Some(true), _) | (_, Some(true)) if !climb.among_others && !climb.withheld => role_arm!(
+            "body_roles.layered_window_after_awaits.unreported",
+            ExecutionRole::Unreported
+        ),
+        (None, None) => role,
+        _ => role_arm!(
+            "body_roles.layered_window_after_awaits.unknown",
+            ExecutionRole::Unknown
+        ),
+    }
 }
 
 /// Whether `span` is written in the children of a component (non-intrinsic)

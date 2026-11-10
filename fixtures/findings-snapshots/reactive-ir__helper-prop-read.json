@@ -343,7 +343,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
       "start": 7303,

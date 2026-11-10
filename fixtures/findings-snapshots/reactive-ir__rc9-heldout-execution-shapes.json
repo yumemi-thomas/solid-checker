@@ -30,17 +30,6 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc9-heldout-execution-shapes/App.tsx",
-      "start": 980,
-      "end": 987,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc9-heldout-execution-shapes/App.tsx",
       "start": 1038,
       "end": 1045,
       "fixes": 0

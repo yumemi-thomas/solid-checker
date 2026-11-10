@@ -189,12 +189,44 @@ pub(crate) fn iteration_intrinsic_target(file: &FileFacts, span: Span, depth: us
         .is_some_and(|initializer| iteration_intrinsic_target(file, initializer, depth - 1))
 }
 
+/// ADR 0803: whether some call hands an array intrinsic (`Array.prototype`,
+/// the iterator's prototype) or the global object on as a value. Where one does,
+/// a parameter of the code that receives it may be the intrinsic, so
+/// [`visible_iteration_write`] cannot tell a harmless target from the intrinsic
+/// by what is written at the mutation; the census ([`handed_to_unseen_code`])
+/// leaves a mutating builtin to that scan, and the two deferred to each other.
+pub(crate) fn iteration_intrinsic_handed(lookup: &SemanticLookup<'_>) -> bool {
+    lookup
+        .slot_entries(lookup.base_hazards())
+        .any(|(_, entries)| {
+            entries.iter().any(|(hazard, entry)| {
+                matches!(hazard, crate::base::Hazard::IntrinsicHandedAtCall)
+                    && matches!(
+                        handed_call_of(*entry).2,
+                        Obtained::Intrinsic | Obtained::Global
+                    )
+            })
+        })
+}
+
 /// ADR 0803: a visible write in `file` that can reach the array iteration
 /// protocol: an iterator key (`Symbol.iterator`,
 /// `next`, `return`) on a target not proven separate, an unknown key or
 /// `__proto__` on `Array.prototype` or the iterator prototype, and the same
-/// through the reflective mutators and `setPrototypeOf`.
-pub(crate) fn visible_iteration_write(file: &FileFacts, lookup: &SemanticLookup<'_>) -> bool {
+/// through the reflective mutators and `setPrototypeOf`. `handed` is
+/// [`iteration_intrinsic_handed`]: where it holds, a target not proven separate
+/// may be the intrinsic (a helper's parameter), so an open or named source, a
+/// non-literal key and an unknown key veto there as they do on a spelled
+/// intrinsic.
+pub(crate) fn visible_iteration_write(
+    file: &FileFacts,
+    lookup: &SemanticLookup<'_>,
+    handed: bool,
+) -> bool {
+    let may_be_intrinsic = |span: Span| {
+        iteration_intrinsic_target(file, span, 24)
+            || (handed && !separate_iteration_target(file, span, 24))
+    };
     let iterator_key = |text: &str| {
         matches!(
             text.trim().trim_matches(['"', '\'']),
@@ -217,7 +249,7 @@ pub(crate) fn visible_iteration_write(file: &FileFacts, lookup: &SemanticLookup<
             let unknown = file.ast.computed_members.contains(&member.span)
                 && member_key(file, member).is_none();
             (unknown || member_key(file, member) == Some("__proto__"))
-                && iteration_intrinsic_target(file, member.object, 24)
+                && may_be_intrinsic(member.object)
         });
     writes
         || file.ast.calls.iter().any(|call| {
@@ -229,7 +261,7 @@ pub(crate) fn visible_iteration_write(file: &FileFacts, lookup: &SemanticLookup<
                 return false;
             };
             if name == Some("setPrototypeOf") {
-                return target.spread || iteration_intrinsic_target(file, target.span, 24);
+                return target.spread || may_be_intrinsic(target.span);
             }
             let Some(method) = mutation_builtin(file, call, lookup) else {
                 return false;
@@ -237,7 +269,7 @@ pub(crate) fn visible_iteration_write(file: &FileFacts, lookup: &SemanticLookup<
             if target.spread || separate_iteration_target(file, target.span, 24) {
                 return false;
             }
-            let intrinsic = iteration_intrinsic_target(file, target.span, 24);
+            let intrinsic = may_be_intrinsic(target.span);
             match method {
                 "assign" | "defineProperties" => call.arguments.iter().skip(1).any(|source| {
                     let span = file.ast.peel_ts_sugar_span(source.span);

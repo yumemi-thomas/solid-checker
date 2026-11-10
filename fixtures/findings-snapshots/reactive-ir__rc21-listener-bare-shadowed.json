@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-listener-bare-shadowed/App.tsx",
+      "start": 501,
+      "end": 505,
+      "fixes": 0
+    }
+  ]
+}

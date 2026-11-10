@@ -76,6 +76,11 @@ export function sourceExprAt(lines, line, column) {
   const row = Number.isInteger(line) && Number.isInteger(column) ? lines[line - 1] : undefined;
   if (row === undefined || column < 1 || column > row.length) return null;
   let at = column;
+  // ADR 0938: a finding on a type-only cast head (`(props as typeof props).r1`) starts at its `(`: the read is the member after it.
+  if (row[at - 1] === "(") {
+    const close = matchingClose(row, at - 1);
+    if (close > 0 && row[close + 1] === "." && castOperand(row.slice(at, close))) at = close + 3;
+  }
   if (row[at - 1] === ")") {
     let depth = 0;
     let open = at - 1;
@@ -93,6 +98,13 @@ export function sourceExprAt(lines, line, column) {
   while (word > 0 && /[\w$.]/.test(row[word - 1])) word -= 1;
   let end = row.indexOf(chain, word) + chain.length;
   let text = chain;
+  // ADR 0938: a member of a type-only cast (`(props as typeof props).r1`, Chrome's frame on `r1`) reads the cast's operand, which the
+  // runtime sees with the cast erased: its source is `props.r1`. Any other parenthesized head keeps the member alone, as before.
+  if (row[word] === "." && row[word - 1] === ")") {
+    const open = matchingOpen(row, word - 1);
+    const operand = open >= 0 ? castOperand(row.slice(open + 1, word - 1)) : null;
+    if (operand) text = `${operand}.${text}`;
+  }
   while (row[end] === "(") {
     let depth = 0;
     let close = end;
@@ -106,6 +118,40 @@ export function sourceExprAt(lines, line, column) {
     end = close + 1;
   }
   return text;
+}
+
+/** Whether `at` starts the expression of a JSX attribute (`name={` right before it): a prop getter the compiler wraps around it. */
+function attributeGetterFrame(lines, at) {
+  const row = at && Number.isInteger(at.line) && Number.isInteger(at.column) ? lines[at.line - 1] : undefined;
+  return row !== undefined && /\s[A-Za-z_$][\w$-]*=\{\s*$/.test(row.slice(0, at.column - 1));
+}
+
+/** The `)` closing the `(` at `open` on one row, or -1. */
+function matchingClose(row, open) {
+  let depth = 0;
+  for (let close = open; close < row.length; close += 1) {
+    if (row[close] === "(") depth += 1;
+    if (row[close] === ")") depth -= 1;
+    if (depth === 0) return close;
+  }
+  return -1;
+}
+
+/** The `(` opening the `)` at `close` on one row, or -1. */
+function matchingOpen(row, close) {
+  let depth = 0;
+  for (let open = close; open >= 0; open -= 1) {
+    if (row[open] === ")") depth += 1;
+    if (row[open] === "(") depth -= 1;
+    if (depth === 0) return open;
+  }
+  return -1;
+}
+
+/** The chain a type-only cast (`x.y as T`, `x satisfies T`) wraps, or null: the type has no parentheses, and `as const` is no cast of a read. */
+function castOperand(inner) {
+  const cast = /^\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s+(?:as|satisfies)\s+(?!const\s*$)[^()]+$/.exec(inner);
+  return cast ? cast[1] : null;
 }
 
 /** Diagnostics and coded thrown errors, one row per (code, source, stack), exact repeats merged. */
@@ -256,10 +302,14 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     // warns per source). A repeat needs the first report to name the finding's accessor or store key: the identifier chain at Chrome's
     // innermost authored frame equals the one at the finding's start (`r1`, `s1.v`). No text to read, or another source: a false positive.
     const text = String(built?.files?.["App.tsx"] ?? built?.text ?? "").split("\n");
+    // ADR 0938: a prop's innermost frame is the parent's compiled getter, the expression of a component attribute (`<C1 r1={r1()} />`);
+    // the read that ran it (`props.r1`, the finding's kind of source) is the next authored frame, which is compared as well.
     const sameSource = (event) => {
-      const at = event.positions.find((position) => position.file === "App.tsx" || position.file === undefined);
-      const one = sourceExprAt(text, at?.line, at?.column);
-      return Boolean(one) && one === sourceExprAt(text, finding.line, finding.column);
+      const authored = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
+      const mine = sourceExprAt(text, finding.line, finding.column);
+      if (!mine) return false;
+      const frames = authored.slice(0, attributeGetterFrame(text, authored[0]) ? 2 : 1);
+      return frames.some((at) => sourceExprAt(text, at?.line, at?.column) === mine);
     };
     const elsewhere = reported.find((event) => appLines(event).length && sameSource(event))?.code ?? null;
     const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });

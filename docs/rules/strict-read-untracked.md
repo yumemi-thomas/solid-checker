@@ -156,7 +156,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   the await. The other arm of the same `if` or `?:` does not follow it, and an
   await in a nested closure belongs to that closure. A destructuring default
   runs after the value it destructures, so it follows that value's await. A
-  helper called at such a site is uncertifiable at the call.
+  helper called at such a site is uncertifiable at the call. An in-place
+  layer counts the awaits before its call (ADR 0938).
 - **Named hand-offs (ADR 0531).** Resolved synchronous standard-library carriers,
   template tags and Function.call/apply place a named reader at the carrier's
   role. Other hand-offs are obligations; reviewed fresh-stack callbacks stay legal.
@@ -300,6 +301,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   `error` arm or a leaf scope it is silent. An action whose calls are not all
   followed, or that is also called where nothing proves the run, leaves its
   body's reads obligations (ADR 0547).
+
+A read that no row, discard or named silence ends is uncertifiable: `strict-read-unaccounted` (ADR 0936).
 
 ## Why is this bad?
 

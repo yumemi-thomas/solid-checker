@@ -176,7 +176,7 @@ export const CHECKS = {
     command: [
       "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
       "--config", "packages/cli/vitest.config.mjs",
-      "scripts/proof-gate.test.mjs", "scripts/proof-ablation.test.mjs",
+      "scripts/proof-gate.test.mjs", "scripts/proof-ablation.test.mjs", "scripts/proof-lint.test.mjs",
     ],
   },
   "obligation-audit": {
@@ -211,6 +211,12 @@ export const CHECKS = {
       "a new raw cross-file read in the Reactive IR is a read an incremental build cannot see; " +
       "the lint ratchets the allow-listed sites down (scripts/ir-read-lint.mjs)",
     command: ["bun", "scripts/ir-read-lint.mjs"],
+  },
+  "proof-lint": {
+    why:
+      "a silent role produced outside a role_arm!, a decision read from text, a spelling match and a default on a missing fact are the " +
+      "shapes that make a clean without a proof; the lint ratchets them down (scripts/proof-lint.mjs, ADR 0933)",
+    command: ["bun", "scripts/proof-lint.mjs"],
   },
   "ir-edit-fuzz": {
     why:
@@ -386,7 +392,7 @@ export const ROWS = [
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
     // backend-process: diagnostics_process pins fixture finding counts, so an analysis change can fail it.
-    checks: ["ir-lib", "backend-process", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "ir-edit-fuzz", "wasm-compile"],
+    checks: ["ir-lib", "backend-process", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "proof-lint", "ir-edit-fuzz", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
@@ -485,6 +491,9 @@ export const ROWS = [
   ...[
     "scripts/proof-gate.mjs",
     "scripts/proof-gate.test.mjs",
+    "scripts/proof-lint.mjs",
+    "scripts/proof-lint.test.mjs",
+    "scripts/proof-lint.allowlist.json",
     "scripts/proof-ablation.mjs",
     "scripts/proof-ablation.test.mjs",
     "scripts/lib/proof-log.mjs",
@@ -589,7 +598,7 @@ export function planFor(paths) {
       selected.has(id)
     ),
     ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
-    ...["ir-read-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
+    ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
@@ -810,6 +819,7 @@ export const LANES = {
   // read lint and the IR tool tests build nothing.
   "ir-edit-fuzz": "gates",
   "ir-read-lint": "preflight",
+  "proof-lint": "preflight",
   "ir-tools-test": "preflight",
   "proof-tools-test": "preflight",
   "doc-budget": "preflight",

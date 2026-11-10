@@ -46,7 +46,7 @@ test("every check a row or the universal set names actually exists", () => {
 test("each table row claims its own owner's paths", () => {
   const expected = [
     ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "wasm-compile"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "backend-process", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "ir-read-lint", "ir-edit-fuzz", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "backend-process", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "ir-read-lint", "proof-lint", "ir-edit-fuzz", "wasm-compile"]],
     ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "wasm-compile"]],
     ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate"]],
     [
@@ -111,6 +111,7 @@ test("a mapped change set runs preflight checks before building and testing", ()
     "witnesses",
     "proof-gate",
     "ir-read-lint",
+    "proof-lint",
     "ir-edit-fuzz",
     "wasm-compile",
   ]);

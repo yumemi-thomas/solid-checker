@@ -924,7 +924,8 @@ pub(crate) fn event_keeps_delivery_proof(attribute: &str) -> bool {
 
 pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
     // ADR 0705: the global `reportError` dispatches `error` at the window.
-    if qualified_name == "reportError" {
+    // ADR 0937: lib.dom's global `dispatchEvent` is the window's own method.
+    if matches!(qualified_name, "reportError" | "dispatchEvent") {
         return true;
     }
     let Some((owner, member)) = qualified_name.rsplit_once('.') else {

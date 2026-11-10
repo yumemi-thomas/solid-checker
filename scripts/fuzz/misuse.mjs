@@ -18,10 +18,14 @@ import {
   CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted, setUpdater,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
-import { RECALL_MOUNTS } from "./mounts.mjs";
+import { RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { FLIP_READ_CONTEXTS, FLIP_READ_CONTEXT_ONLY, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, SYNC_COMPUTE_LINES, flipReadContext, openSignal } from "./flip-read.mjs";
 import { FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
 import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
+import { TABLE_CONTEXT_NAMES, tableContext, tablePlacement } from "./table-shapes.mjs";
+import { WRAP_CONTEXT_NAMES, wrapContext, wrapPlacement } from "./boundary-shapes.mjs";
+import { ARM_CONTEXT_NAMES, armContext, armPlacement } from "./arm-shapes.mjs";
+import { REF_LAYER_CONTEXT_NAMES, refLayerContext, refLayerPlacement } from "./ref-layer-shapes.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -32,8 +36,11 @@ export const LAYERS = ["none", "closure", "helper", "iife", "closure+helper", "m
  * (`--mounts`), never drawn: a root program keeps its seed, id and text.
  */
 export const BASE_MOUNTS = ["root", "child", "show", "for"];
-/** Every mount a plan may name: the base ones and the recall ones (mounts.mjs RECALL_MOUNTS, `--recall` grids only). */
-export const MOUNTS = [...BASE_MOUNTS, ...RECALL_MOUNTS];
+/**
+ * Every mount a plan may name: the base ones, the recall ones (mounts.mjs RECALL_MOUNTS, `--recall` grids only) and the wrapper ones
+ * (mounts.mjs WRAP_MOUNTS: a code's `wrapMounts` / `legalWrapMounts` name the cells that take them, `--recall` grids only).
+ */
+export const MOUNTS = [...BASE_MOUNTS, ...RECALL_MOUNTS, ...WRAP_MOUNTS];
 
 /**
  * Where the values the misuse uses come from (the template's `setup` signals; a context's own trigger signal stays local). `local`
@@ -145,7 +152,7 @@ export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
  * a helper and a member. A project method or a local function called `focus` delivers nothing (`project`, `shadow`).
  */
 /** A fire cell is about the call that delivers: one shape of the read or write inside it, not the whole cross of what the grids vary. */
-export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread|dny)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && (!shape.source || (context === "dny-renamed-prop" && shape.source === "prop")) && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
+export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread|dny|tbl|wrap|barm)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && (!shape.source || (context === "dny-renamed-prop" && shape.source === "prop")) && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
 const FIRES = ["focus", "select", "blur", "remove", "steal", "reset", "submit", "validity", "modal", "popover", "focus-wrapper", "focus-member"];
 /**
  * ADR 0645: what a listener reaches, on the stack of what delivers it. A window listener that calls a member (`method`), a bound member, an
@@ -434,6 +441,30 @@ const jsxLine = (variant) => (variant === "jsx-component" ? "function JsxComp1()
 const jsxBindings = (variant, bindings) => (variant?.startsWith("jsx-") ? ["direct"] : bindings);
 const API_PRIMITIVES = { "signal-fn": api("createSignal", "() => 1"), projection: api("createProjection", "(draft: { v: number }) => { draft.v = 1; }, { v: 0 }"), render: api("render", '() => null, document.createElement("div")', { module: "@solidjs/web" }) };
 
+/**
+ * ADR 0803: the iteration patch a project helper applies to `Array.prototype` (REACTIVE_WRITE_IN_OWNED_SCOPE `iter-swap`). A pair of
+ * functions (a signal's tuple) iterates its second element first and every other array as before, so Solid and the page still run.
+ * The helper mutates its parameter through a computed key, a write the visible-write scan cannot read at the mutation: it is a veto only
+ * where an array intrinsic is handed on (`iteration_intrinsic_handed`), as the call below does.
+ */
+const ITER_SWAP_LINES = [
+  [
+    "function patchIteration(target: object, key: PropertyKey) {",
+    "  Object.assign(target, {",
+    "    [key]: function* (this: unknown[]) {",
+    '      if (this.length === 2 && typeof this[0] === "function" && typeof this[1] === "function") {',
+    "        yield this[1];",
+    "        yield this[0];",
+    "      } else {",
+    "        for (let i = 0; i < this.length; i += 1) yield this[i];",
+    "      }",
+    "    },",
+    "  });",
+    "}",
+  ].join("\n"),
+  "patchIteration(Array.prototype, Symbol.iterator);",
+];
+
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
@@ -441,14 +472,16 @@ export const SPEC = {
     recallLegal: [...EVENT_LEGAL, ...RENDER_LEGAL, ...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
-    call: (node, [sig]) => (INSTALLED_SETS[node.variant] ? member(sig.setter, INSTALLED_SETS[node.variant]) : node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
+    // `iter-swap` (ADR 0803, recall): the site reads the signal's first slot, a legal read in a memo; the patch makes it the setter.
+    moduleLines: (variant) => (variant === "iter-swap" ? ITER_SWAP_LINES : []),
+    call: (node, [sig]) => (node.variant === "iter-swap" ? local(sig.name) : INSTALLED_SETS[node.variant] ? member(sig.setter, INSTALLED_SETS[node.variant]) : node.variant === "store" ? local(sig.setter, "(s) => { s.v = 7; }") : node.variant === "refresh" ? api("refresh", sig.name, { locals: true }) : local(sig.setter, "7")),
     // refresh is an API; the other two are local functions, which have no namespace form.
-    bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : INSTALLED_SETS[variant] ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
+    bindingsFor: (variant) => (variant === "refresh" ? BINDINGS : variant === "iter-swap" ? ["direct"] : INSTALLED_SETS[variant] ? ["direct", "alias", "wrapper"] : ["direct", "alias", "destructured", "wrapper"]),
     // API_VARIANTS (recall; measured on rc.17's fast runtime, 2026-11-03): a writable memo's setter (`createSignal(() => 0)`) reports in
     // every owned context and is legal in a handler and an apply; an optimistic setter (`createOptimistic(0)`) and a signal created
     // `{ ownedWrite: true }` report nothing anywhere, so both are legal in the owned contexts too (`legalVariantContexts`).
-    recallVariants: ["writable-memo", ...Object.keys(INSTALLED_SETS)], recallLegalVariants: ["writable-memo", "optimistic", "owned-write"],
-    variantContexts: { "writable-memo": [...OWNED_PURE, "handler", "effect-apply"], optimistic: [...OWNED_PURE, "handler"], "owned-write": [...OWNED_PURE, "handler"] },
+    recallVariants: ["writable-memo", ...Object.keys(INSTALLED_SETS), "iter-swap"], recallLegalVariants: ["writable-memo", "optimistic", "owned-write"],
+    variantContexts: { "writable-memo": [...OWNED_PURE, "handler", "effect-apply"], optimistic: [...OWNED_PURE, "handler"], "owned-write": [...OWNED_PURE, "handler"], "iter-swap": ["memo"] },
     legalVariantContexts: { optimistic: OWNED_PURE, "owned-write": OWNED_PURE },
   },
   STORE_WRITE_OUTSIDE_SETTER: { legal: ["handler", "timer", "then"], recallContexts: [...OWNER_LIFETIME, "effect-cleanup-rerun", ...ASYNC_CONTROL],
@@ -575,7 +608,15 @@ export const SPEC = {
     variants: ["memo", "root", "effect"], contexts: LEAF, bindings: BINDINGS, setup: () => [],
     call: (node) => jsxSite(node.variant) ?? API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },
-  ASYNC_OUTSIDE_LOADING_BOUNDARY: { recallOnly: true, recallContexts: ["jsx", "show", "for"],
+  // ADR 0668: the cover walk reads `children` inside a wrapper component's `<Loading>`. `wrapMounts` render the pending read's component
+  // through a user wrapper that renders its real children outside the boundary (`wrap-foreign`: another object's `children` inside it,
+  // `wrap-outside`: the same with `label`), Chrome warns; `legalWrapMounts` do through one that renders them inside it (`wrap-real`,
+  // `wrap-alias`), Chrome is quiet. The cell takes the direct binding and no layer: the question is the wrapper, not the spelling of the read.
+  // `memo`: a memo reads the async source and the JSX hole is the memo's own `{m1()}`. The other contexts read it in an IIFE the hole calls,
+  // which leaves the read unplaced (SC5001/SC5003 uncertifiable for that reason), so the wrapper's `<Loading>` is then not the question; here
+  // the call chain from the hole is the cover walk's (`loading_cover_at`, ADR 0668).
+  ASYNC_OUTSIDE_LOADING_BOUNDARY: { recallOnly: true, recallContexts: ["jsx", "show", "for", "memo"], recallLegal: ["memo"],
+    wrapMounts: { memo: ["wrap-foreign", "wrap-outside"] }, legalWrapMounts: { memo: ["wrap-real", "wrap-alias"] },
     contexts: [], bindings: ["direct", "alias", "destructured", "wrapper"], placeless: true,
     setup: (variant, name) => [asyncSignal(name("a"))], call: (node, [sig]) => local(sig.name),
   },
@@ -751,12 +792,14 @@ export const TYPED_VARIANTS = {
  * rc.17's `ref` (`@solidjs/web`) runs the callback while the element is created, under `runWithOwner(null)`: no owner, so an owner
  * operation there is NO_OWNER_*, and a signal write or an action call is legal. `ref-factory` is a two-phase directive
  * (`ref={d()}`): the site in the apply `d` returns, which runs like an inline callback; `ref-factory-body` is the site in `d`'s own
- * body, which the component body calls, so it runs owned there. `ref-row` is an inline callback in a `For` row.
+ * body, which the component body calls, so it runs owned there. `ref-row` is an inline callback in a `For` row. `ref-await` (legal,
+ * STRICT_READ_UNTRACKED only) is an async inline callback whose site follows an `await` (ADR 0938).
  */
 export const REF_CONTEXTS = ["ref", "ref-named", "ref-array", "ref-cond", "ref-factory", "ref-row"];
 /** Per code: the ref contexts that are its misuse cells (`misuse`) and its legal cells (`legal`). */
 const REF_PLACEMENT = {
-  STRICT_READ_UNTRACKED: { misuse: [...REF_CONTEXTS, "ref-factory-body"] },
+  // ADR 0938: `ref-await` is the legal twin of `ref`: past the callback's await, a read through an in-place layer runs on the continuation.
+  STRICT_READ_UNTRACKED: { misuse: [...REF_CONTEXTS, "ref-factory-body"], legal: ["ref-await"] },
   PENDING_ASYNC_UNTRACKED_READ: { misuse: REF_CONTEXTS },
   STORE_WRITE_OUTSIDE_SETTER: { misuse: [...REF_CONTEXTS, "ref-factory-body"] },
   NO_OWNER_CLEANUP: { misuse: REF_CONTEXTS, legal: ["ref-factory-body"] },
@@ -997,6 +1040,18 @@ const UPDATER_DISPATCH_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((
   return [code, { misuse: [...placed("misuse"), ...(row ? ["evt-row-dispatch"] : [])], legal: [...placed("legal"), ...(row ? ["evt-row-timer-dispatch"] : [])] }];
 }));
 /**
+ * ADR 0935 (the table-entry shapes, table-shapes.mjs): a context per row of the checker's own tables for what becomes of a function handed to a
+ * standard-library API, each with its exactness twin (the same spelling declared by the program with the opposite behaviour). A read, a write
+ * and an action at the site (TABLE_CODES); base shapes only, the plain shape of each variant (`fireShape`).
+ */
+const TABLE_PLACEMENT = tablePlacement(SPEC);
+/** ADR 0935 (boundary-shapes.mjs): a user component wrapping `props.children` in a boundary the cover walks consult; recall contexts, base shapes. */
+const WRAP_PLACEMENT = wrapPlacement();
+/** ADR 0935 (arm-shapes.mjs): contexts for the classifier arms no fixture reached, each beside its twin; recall contexts, base shapes. */
+const ARM_PLACEMENT = armPlacement();
+/** ADR 0935 (ref-layer-shapes.mjs): a layer in place inside an intrinsic `ref` callback, before an await of the callback or after it; recall contexts, base shapes. */
+const REF_LAYER_PLACEMENT = refLayerPlacement();
+/**
  * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
  * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
  * the site in a function named as that handler (`onScroll={hd}`). The `-timer-` twins dispatch from a timer, on a fresh stack (legal).
@@ -1021,7 +1076,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
 const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
   ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
@@ -1133,13 +1188,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, REF_LAYER_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, REF_LAYER_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1222,6 +1277,8 @@ export function describeUse(node, signals) {
   const sigs = (node.sigs ?? []).map((name) => signals.get(name));
   const target = spec.call(node, sigs);
   const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: typeof spec.contextLine === "function" ? spec.contextLine(node.variant) : spec.contextLine };
+  // A variant's own module-scope lines (the iteration patch of `iter-swap`), above the components that run after them.
+  out.moduleLines.push(...(spec.moduleLines?.(node.variant) ?? []));
   const importsOf = (module) => (module === "@solidjs/web" ? out.web : out.solid);
   if (target.kind === "api") {
     const { module, name, args } = target;
@@ -1596,7 +1653,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
@@ -1967,6 +2024,8 @@ function recallContext(context, stmts, kit) {
     case "ref-factory": { const d = kit.name("dir"); return { body: [decl(d, fn([ret(fn(stmts))]))], view: [refEl(kit.name("v"), call(ref(d)))] }; }
     case "ref-factory-body": { const d = kit.name("dir"); return { body: [decl(d, fn([...stmts, ret(fn([]))]))], view: [refEl(kit.name("v"), call(ref(d)))] }; }
     case "ref-row": return { body: [], view: [forEach([refEl(kit.name("v"), fn(stmts))])] };
+    // ADR 0938: an async ref callback that awaits before the site: the site (and any layer around it) runs on the continuation.
+    case "ref-await": return { body: [], view: [refEl(kit.name("v"), fn([awaitStmt(), ...stmts], { async: true }))] };
     case "pos-attr": return { body: [], view: [attr(kit.name("v"), iife(fn([...stmts, ret(num(1))])))] };
     case "pos-class-sblock": return { body: [contain("class-sblock", 9, stmts)], view: [] };
     case "pos-class-field": return { body: [contain("class-field", 9, stmts, { use: "new" })], view: [] };

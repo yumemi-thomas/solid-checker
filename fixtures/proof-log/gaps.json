@@ -1,17 +1,4 @@
 {
   "version": 1,
-  "gaps": {
-    "reactive-ir/component-function-child|fixtures/reactive-ir/component-function-child/App.tsx|3528-3542|C1/no-decision": {
-      "check": "C1",
-      "why": "ADR 0919: the one JSX site of `Deleting` passes `children` an arrow function, a fresh plain value, so container_root::handed_root joins every route to HandedRoot::Plain and the delete lands on a plain object; the log does not yet record the route spans"
-    },
-    "reactive-ir/prop-body-call-guard|fixtures/reactive-ir/prop-body-call-guard/App.tsx|921-933|C1/no-decision": {
-      "check": "C1",
-      "why": "ADR 0919: the one JSX site of `Deleting` passes `render` an arrow function, a fresh plain value, so container_root::handed_root joins every route to HandedRoot::Plain and the delete lands on a plain object; the log does not yet record the route spans"
-    },
-    "reactive-ir/store-handed-root|fixtures/reactive-ir/store-handed-root/App.tsx|2216-2227|C1/no-decision": {
-      "check": "C1",
-      "why": "ADR 0919: every JSX site of `PlainProp` passes `box` a closed plain literal (the fixture's `Silent: every site passes a closed plain literal`), so container_root::handed_root joins every route to HandedRoot::Plain and the write lands on a plain object; the log does not yet record the route spans"
-    }
-  }
+  "gaps": {}
 }

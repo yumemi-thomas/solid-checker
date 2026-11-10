@@ -274,7 +274,10 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
                     if role == ExecutionRole::Unknown || here == ExecutionRole::Unknown {
                         ExecutionRole::Unknown
                     } else {
-                        ExecutionRole::Unreported
+                        role_arm!(
+                            "event_literals.function_role.non-reporting-mix",
+                            ExecutionRole::Unreported
+                        )
                     }
                 }
                 Some(_) => return None,
@@ -391,7 +394,10 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
             } else {
                 role = Some(match role {
                     Some(role) if role == here => role,
-                    Some(_) => ExecutionRole::Unreported,
+                    Some(_) => role_arm!(
+                        "event_literals.write_function_role.non-reporting-mix",
+                        ExecutionRole::Unreported
+                    ),
                     None => here,
                 });
             }
@@ -536,7 +542,10 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
         }
         if self.test_entries {
             if registered {
-                return Some(Some(ExecutionRole::DeferredCallback));
+                return Some(Some(role_arm!(
+                    "event_literals.owner_site_role.registered-test-entry",
+                    ExecutionRole::DeferredCallback
+                )));
             }
         } else if let Some(callback) = file.compiler.callback_roles.iter().find(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
@@ -545,7 +554,10 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
             if crate::execution_role::handler_event_denied(file, callback.span) {
                 return None;
             }
-            return Some(Some(ExecutionRole::EventCallback));
+            return Some(Some(role_arm!(
+                "event_literals.owner_site_role.compiler-event-handler",
+                ExecutionRole::EventCallback
+            )));
         }
         let key = (format!("\0owner-flow:{}", file.path.as_str()), owner.span);
         if !self.classifying.insert(key.clone()) {

@@ -19,8 +19,9 @@ pub(super) enum HandedRoot {
     /// One proven `createStore` store on every route; `root` is the prefix of
     /// the written chain that holds it.
     Store { symbol: crate::SymbolId, root: Span },
-    /// A plain value on every route: no proxy can drop the write.
-    Plain,
+    /// A plain value on every route: no proxy can drop the write. The places
+    /// of those values, one per route (ADR 0936: the facts the silence rests on).
+    Plain(Vec<PlainAt>),
     /// Some route is not proven either way.
     Open,
 }
@@ -30,6 +31,14 @@ const ROUTE_DEPTH: usize = 16;
 /// How many values one root's join reads before it answers open.
 const ROUTE_STEPS: usize = 256;
 
+/// Where a plain value on a route is: its file and span, or, for a props
+/// object every call site of which passes one, the props declaration.
+#[derive(Clone, PartialEq, Eq)]
+pub(super) struct PlainAt {
+    pub(super) path: std::sync::Arc<str>,
+    pub(super) span: Span,
+}
+
 /// Where one route ends.
 #[derive(Clone, PartialEq, Eq)]
 enum Leaf {
@@ -37,7 +46,7 @@ enum Leaf {
     /// with the member names still to project past it.
     Source(crate::SymbolId, usize),
     /// A fresh plain value: a literal, a function, a `new` object.
-    Plain,
+    Plain(PlainAt),
     Open,
 }
 
@@ -82,11 +91,11 @@ pub(super) fn handed_root(
     };
     routes.value(file, root, &names, ROUTE_DEPTH);
     let mut store: Option<(crate::SymbolId, usize)> = None;
-    let mut plain = false;
+    let mut plain = Vec::new();
     for leaf in &routes.leaves {
         match leaf {
             Leaf::Open => return HandedRoot::Open,
-            Leaf::Plain => plain = true,
+            Leaf::Plain(at) => plain.push(at.clone()),
             Leaf::Source(symbol, rest) => {
                 if plain_createstore(context, symbol) {
                     // A store reached with more names to read than the
@@ -103,19 +112,22 @@ pub(super) fn handed_root(
                 } else if *rest == 0 && function_source(context, symbol) {
                     // An accessor, a setter or an action is an ordinary
                     // function: a property written on it lands.
-                    plain = true;
+                    plain.push(PlainAt {
+                        path: file.path.shared(),
+                        span: root,
+                    });
                 } else {
                     return HandedRoot::Open;
                 }
             }
         }
     }
-    match (store, plain) {
-        (Some((symbol, consumed)), false) => match prefixes.get(consumed) {
+    match (store, plain.is_empty()) {
+        (Some((symbol, consumed)), true) => match prefixes.get(consumed) {
             Some(&root) => HandedRoot::Store { symbol, root },
             None => HandedRoot::Open,
         },
-        (None, true) => HandedRoot::Plain,
+        (None, false) => HandedRoot::Plain(plain),
         _ => HandedRoot::Open,
     }
 }
@@ -214,6 +226,14 @@ impl Routes<'_, '_> {
         self.leaves.push(Leaf::Open);
     }
 
+    /// A plain value at `span` of `file` ends the route.
+    fn plain(&mut self, file: &FileFacts, span: Span) {
+        self.leaves.push(Leaf::Plain(PlainAt {
+            path: file.path.shared(),
+            span,
+        }));
+    }
+
     /// Whether no visible write can replace member `name` of an object the
     /// project made (ADR 0273's census).
     fn stable(&self, file: &FileFacts, name: &str) -> bool {
@@ -256,7 +276,7 @@ impl Routes<'_, '_> {
         }
         if let Some(array) = ast.array_literal_at(expression) {
             let Some((name, rest)) = path.split_first() else {
-                return self.leaves.push(Leaf::Plain);
+                return self.plain(file, expression);
             };
             let Ok(index) = name.parse::<usize>() else {
                 return self.open();
@@ -277,7 +297,7 @@ impl Routes<'_, '_> {
         }
         if ast.function_at(expression).is_some() {
             return if path.is_empty() {
-                self.leaves.push(Leaf::Plain)
+                self.plain(file, expression)
             } else {
                 self.open()
             };
@@ -301,9 +321,11 @@ impl Routes<'_, '_> {
                 .object_get_shapes
                 .iter()
                 .any(|shape| shape.span == literal && shape.closed);
-            return self
-                .leaves
-                .push(if closed { Leaf::Plain } else { Leaf::Open });
+            return if closed {
+                self.plain(file, literal)
+            } else {
+                self.open()
+            };
         };
         let Some(properties) =
             crate::interproc::accessor_provenance::closed_properties(file, literal)
@@ -431,11 +453,18 @@ impl Routes<'_, '_> {
         };
         if plain {
             // A closed literal of functions and primitives, or a function.
-            self.leaves.push(if rest.is_empty() {
-                Leaf::Plain
+            if rest.is_empty() {
+                // The props declaration is the fact: every call site passes one.
+                self.leaves.push(Leaf::Plain(PlainAt {
+                    path: declaration.path.clone(),
+                    span: Span::new(
+                        u32::try_from(declaration.start_byte).unwrap_or(0),
+                        u32::try_from(declaration.end_byte).unwrap_or(0),
+                    ),
+                }));
             } else {
-                Leaf::Open
-            });
+                self.leaves.push(Leaf::Open);
+            }
         }
         for source in sources {
             self.leaves.push(Leaf::Source(source, rest.len()));
@@ -456,7 +485,7 @@ impl Routes<'_, '_> {
         let lookup = context.lookup;
         if call.construct {
             return if path.is_empty() {
-                self.leaves.push(Leaf::Plain)
+                self.plain(file, call.span)
             } else {
                 self.open()
             };
@@ -816,7 +845,7 @@ fn callee_may_set_store(
     routes.leaves.is_empty()
         || routes.leaves.iter().any(|leaf| match leaf {
             Leaf::Open => true,
-            Leaf::Plain => false,
+            Leaf::Plain(_) => false,
             Leaf::Source(symbol, rest) => *rest != 0 || may_be_store_setter(context, symbol),
         })
 }

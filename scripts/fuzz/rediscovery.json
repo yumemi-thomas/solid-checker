@@ -9666,5 +9666,94 @@
    "mx-strict-read-untracked-helper-handed-call-signal-direct-none-s-prop-value-cast"
   ],
   "rediscovered": "origin/main 4f2d529f5: 2 certified false cleans (focus, context helper-handed-call, source prop-value-cast); ADR 0934: none. The legal twin helper-handed-handler: 18 lg-recall clean to uncertifiable"
+ },
+ {
+  "finding": "The Loading cover walk counted any member spelled `children` inside a wrapper's `<Loading>` as the component's: a wrapper that renders its real `props.children` beside the boundary and `other.children` inside it covered the child it wraps, certified clean where Chrome warns ASYNC_OUTSIDE_LOADING_BOUNDARY (`loading_cover_at`, ADR 0668: only the component's own props' `children` covers)",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), Chrome-confirmed (replay: `unproven-clean`, quiet beside the real wrapper)",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-memo-x-direct-none-m-wrap-foreign"
+  ]
+ },
+ {
+  "finding": "The legal twins of the Loading cover fix: a wrapper that renders its own `props.children` (or `const p = props; p.children`) inside its `<Loading>` stays covered, clean and quiet in Chrome; the fix did not move them",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), the twins of the mx-recall program",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "lg-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-real",
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-alias"
+  ]
+ },
+ {
+  "finding": "A project helper handed `Array.prototype` that mutated its parameter under a key or source no literal names (`Object.assign(p, {[k]: f})`, `Object.assign(p, s)`, `Reflect.set(p, k, f)`) escaped both halves of ADR 0803: the visible-write scan read only a spelled intrinsic or a `Symbol.iterator` text, and the census left a mutating builtin to the scan. A patch that makes a signal's tuple yield its setter first turned a legal read in a memo into a write, certified clean where Chrome throws REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "found": "proof-log phase B lint (text-premise, accessor_provenance/mutation_sites.rs), probed and Chrome-confirmed (unproven-clean: REACTIVE_WRITE_IN_OWNED_SCOPE, REACTIVITY_HALTED)",
+  "fixed": "ADR 0803 (iteration_intrinsic_handed)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-memo-iter-swap-direct-none",
+   "mx-reactive-write-in-owned-scope-memo-iter-swap-direct-module-helper"
+  ]
+ },
+ {
+  "finding": "ADR 0938 (1): a read in an in-place layer (IIFE, helper, a function called once, a module helper) past an await of an async ref callback (`ref={async (el) => { await p; (() => r())(); }}`) was an SC1001 violation: ADR 0323's window asked only the read's own function, so the layer kept the body's lexical role",
+  "found": "Proof log phase C (replay-async-ref probes, Chrome rc.21 silent, witness landed)",
+  "fixed": "ADR 0938 (window_after_awaits climbs the in-place layers and asks every landing: silent past an unconditional await, U past a skippable one)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-ref-await-signal-direct-iife",
+   "lg-strict-read-untracked-ref-await-signal-direct-helper",
+   "lg-strict-read-untracked-ref-await-signal-direct-closure-helper",
+   "lg-strict-read-untracked-ref-await-signal-direct-module-helper",
+   "lg-strict-read-untracked-ref-await-signal-direct-module-default",
+   "lg-strict-read-untracked-ref-await-signal-direct-depth-15",
+   "lg-strict-read-untracked-ref-await-signal-direct-forward-2"
+  ],
+  "rediscovered": "claude/batch-7 71b8ec190: 558 Chrome-confirmed false positives in the new legal context ref-await (1,940 programs); ADR 0938: 0 (436 clean, 122 uncertifiable; 221 uncertifiable to clean)"
+ },
+ {
+  "finding": "ADR 0938 (2), judge: a repeated prop read past an await (`aw-helper-late`, source `prop-value-cast`) scored false-positive(repeat-other-source): rc.21 warns once per computation and source, but the repeat test read Chrome's innermost frame, the parent's attribute getter (`r1={r1()}`), and `(props as typeof props).r1` as no source",
+  "found": "PR #198 local check (REPORT-198.md item 1: 3 programs; 6 with helper, iife and module-helper)",
+  "fixed": "ADR 0938 (classify.mjs: the frame after an attribute getter is compared too; a type-only cast head reads as its operand). Checker unchanged: its second V is the signal twin's stacked claim",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-aw-helper-late-x-direct-none-s-prop-value-cast",
+   "mx-untracked-read-after-await-aw-helper-late-x-direct-closure-s-prop-value-cast",
+   "mx-untracked-read-after-await-aw-helper-late-x-direct-helper-s-prop-value-cast",
+   "mx-untracked-read-after-await-aw-helper-late-x-direct-iife-s-prop-value-cast",
+   "mx-untracked-read-after-await-aw-helper-late-x-direct-closure-helper-s-prop-value-cast",
+   "mx-untracked-read-after-await-aw-helper-late-x-direct-module-helper-s-prop-value-cast"
+  ],
+  "rediscovered": "the judge before ADR 0938: 6 false positives (Chrome one diagnostic each, at the getter); after: 6 stacked-claim, as the signal twins"
+ },
+ {
+  "finding": "A listener the bare global `addEventListener` registers in `untrack`, delivered by a bare global `dispatchEvent` in the body, was certified clean; Chrome (rc.21) warns STRICT_READ_UNTRACKED in the listener. lib.dom's global `dispatchEvent` was no synchronous dispatch (its qualified name has no owner)",
+  "found": "proof-log phase C table-entry shapes (tbl-addeventlistener-sync-u-b), Chrome-confirmed",
+  "fixed": "ADR 0937 (4feb80e82)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-tbl-addeventlistener-sync-u-b-signal-direct-none",
+   "mx-strict-read-untracked-tbl-addeventlistener-sync-u-b-memo-direct-none"
+  ],
+  "rediscovered": "the slice-1 build (346b30dc3): 2 false-clean; 4feb80e82 and later: 2 uncertifiable (listener-reach)"
+ },
+ {
+  "finding": "A provider-less `useContext` in the child of a user component that renders `props.children` inside a handling `<Errored>` or `createErrorBoundary` was an SC4002 violation; Chrome (rc.21) reports no CONTEXT_NOT_FOUND. ADR 0893's handled-above test was lexical",
+  "found": "proof-log phase C wrapper shapes (wrap-errored-real, wrap-erroredcall-real), Chrome-confirmed",
+  "fixed": "ADR 0937 (1c30dad41)",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-wrap-errored-real-x-direct-none",
+   "lg-context-not-found-wrap-erroredcall-real-x-direct-none"
+  ],
+  "rediscovered": "main 4f2d529f5: 2 false-positive; 1c30dad41 and later: 2 uncertifiable (computation-error-unobserved)"
  }
 ]

@@ -1520,8 +1520,14 @@ pub(super) fn returned_callback_execution_role(
                 .returned_callback_semantics_at(primitive, result_slot, index, call.arguments.len())
                 .execution?
             {
-                Execution::Tracked => Some(ExecutionRole::TrackedJsx),
-                Execution::Deferred => Some(ExecutionRole::DeferredCallback),
+                Execution::Tracked => Some(role_arm!(
+                    "callback_standing.returned_callback_execution_role.tracked",
+                    ExecutionRole::TrackedJsx
+                )),
+                Execution::Deferred => Some(role_arm!(
+                    "callback_standing.returned_callback_execution_role.deferred",
+                    ExecutionRole::DeferredCallback
+                )),
                 // The returned function restores/inherits its caller's execution
                 // context. Classify the proven invocation span, outside the
                 // callback body itself, so a top-level transition remains
@@ -1618,7 +1624,10 @@ pub(super) fn context_provider_value_role(
         return None;
     }
     Some(if stores_function {
-        ExecutionRole::DeferredCallback
+        role_arm!(
+            "callback_standing.context_provider_value_role.stored-function",
+            ExecutionRole::DeferredCallback
+        )
     } else {
         ExecutionRole::UntrackedRendering
     })

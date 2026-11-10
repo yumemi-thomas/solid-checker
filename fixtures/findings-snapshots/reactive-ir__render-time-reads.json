@@ -27,6 +27,28 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
+      "start": 780,
+      "end": 787,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
+      "start": 987,
+      "end": 994,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-time-reads/App.tsx",
