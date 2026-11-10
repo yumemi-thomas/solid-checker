@@ -534,7 +534,7 @@
       },
       "name-only-match": {
         "count": 4,
-        "why": "pending-review"
+        "why": "`null` is a reserved literal; `undefined` is matched only where `reference_declaration(..).is_none()` (the global); `value` and `children` are prop names of a provider element the census has already resolved, and `children` is read off a member whose object `reference_declaration` binds to the wrapper's own props parameter"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs": {
