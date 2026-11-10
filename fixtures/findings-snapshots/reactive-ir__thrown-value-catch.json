@@ -19,7 +19,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/thrown-value-catch/App.tsx",
-      "start": 547,
+      "start": 548,
       "end": 568,
       "fixes": 0
     },
@@ -74,7 +74,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/thrown-value-catch/App.tsx",
-      "start": 1614,
+      "start": 1615,
       "end": 1635,
       "fixes": 0
     },
@@ -162,7 +162,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/thrown-value-catch/Readers.ts",
-      "start": 421,
+      "start": 422,
       "end": 442,
       "fixes": 0
     },
@@ -184,7 +184,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/thrown-value-catch/Readers.ts",
-      "start": 524,
+      "start": 525,
       "end": 545,
       "fixes": 0
     },
@@ -206,7 +206,7 @@
       "blocker": "value-thrown",
       "severity": "warning",
       "path": "fixtures/reactive-ir/thrown-value-catch/Readers.ts",
-      "start": 627,
+      "start": 628,
       "end": 648,
       "fixes": 0
     },

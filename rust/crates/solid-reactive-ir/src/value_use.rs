@@ -762,6 +762,94 @@ impl<'l, 'a> Census<'l, 'a> {
             .unwrap_or_default()
     }
 
+    /// ADR 0928: the calls of a function through `const` names that hold it
+    /// (`const f = () => s; const g = f; g()`), which the call graph does not
+    /// name: each name the compiler declared with the function, or with a
+    /// reference of such a name, as its whole initializer.
+    fn alias_calls(&mut self, file: &FileFacts, function: Span) -> Vec<Span> {
+        let ast = &file.ast;
+        let names_of = |value: Span| {
+            ast.bindings
+                .iter()
+                .filter(move |binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding
+                            .initializer
+                            .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == value)
+                })
+                .flat_map(|binding| binding.names.iter().map(|name| name.span))
+        };
+        let mut names = names_of(function).collect::<Vec<_>>();
+        let mut seen = HashSet::default();
+        let mut calls = Vec::new();
+        while let Some(name) = names.pop() {
+            if seen.len() > MAX_ALIASES || !seen.insert(name) {
+                continue;
+            }
+            for reference in self.references(file, name) {
+                match ast.calls_with_peeled_callee(reference).next() {
+                    Some(call) if !call.construct => calls.push(call.span),
+                    Some(_) => {}
+                    None => names.extend(names_of(reference)),
+                }
+            }
+        }
+        calls
+    }
+
+    /// ADR 0928: the calls in `file` whose callee the compiler resolves to
+    /// the method or the literal's function slot at `function`
+    /// (`new K().f()`, `v.f()`), which the call graph does not name: the
+    /// callee's symbol is declared exactly at the method's name, or at the key
+    /// of a property whose value is the function.
+    fn method_calls(&self, file: &'a FileFacts, function: Span) -> Vec<Span> {
+        let ast = &file.ast;
+        let Some(fact) = ast.function_at(function) else {
+            return Vec::new();
+        };
+        let mut names = ast
+            .object_properties
+            .iter()
+            .filter(|property| {
+                !property.computed && ast.peel_ts_sugar_span(property.value) == function
+            })
+            .map(|property| property.key)
+            .collect::<Vec<_>>();
+        names.extend(fact.method_name.as_ref().map(|name| name.span));
+        if names.is_empty() {
+            return Vec::new();
+        }
+        let path = file.path.as_str();
+        ast.calls
+            .iter()
+            .filter(|call| !call.construct)
+            .filter(|call| {
+                let callee = ast.peel_ts_sugar_span(call.callee);
+                ast.member_at(callee).is_some()
+                    && self
+                        .lookup
+                        .callee_symbol(file, callee)
+                        .is_some_and(|symbol| {
+                            self.lookup.note_symbol_declarations(symbol);
+                            self.lookup
+                                .symbol_declarations(symbol)
+                                .is_some_and(|declarations| {
+                                    declarations.iter().any(|declaration| {
+                                        declaration.location.path.as_ref() == path
+                                            && names.iter().any(|name| {
+                                                u64::from(name.start)
+                                                    == declaration.location.start_byte
+                                                    && u64::from(name.end)
+                                                        == declaration.location.end_byte
+                                            })
+                                    })
+                                })
+                        })
+            })
+            .map(|call| call.span)
+            .collect()
+    }
+
     fn references(&mut self, file: &FileFacts, declaration: Span) -> Vec<Span> {
         self.files
             .entry(file.path.to_string())
@@ -828,14 +916,18 @@ impl<'l, 'a> Census<'l, 'a> {
     /// A position no table holds: an export or a name.
     fn unheld(&mut self, file: &'a FileFacts, at: Span, mode: Mode) -> Position {
         let ast = &file.ast;
-        if jsx_name(file, at) {
+        if let Some(element) = tag_element(file, at) {
             // `<H />` calls what `H` holds, and no row reads it. A root's tag
             // is a member Get of the root.
-            return if mode == Mode::Value {
-                Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE)
-            } else {
-                Position::Followed
-            };
+            if mode != Mode::Value {
+                return Position::Followed;
+            }
+            // ADR 0928: the element is the call, and the use.
+            self.uses.push((
+                element.location(file.path.as_str()),
+                blockers::VALUE_TO_UNRESOLVED_CALLEE,
+            ));
+            return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
         }
         if ast.deleted_targets.contains(&at) {
             return Position::Followed;
@@ -986,7 +1078,16 @@ impl<'l, 'a> Census<'l, 'a> {
                 }
             }
             Holder::Test | Holder::Inert | Holder::Target => Position::Followed,
-            Holder::JsxChild => self.jsx_child(file, at, mode),
+            Holder::JsxChild => {
+                let recorded = self.uses.len();
+                let answer = self.jsx_child(file, at, mode);
+                // ADR 0928: a component or a primitive holds its child where
+                // its element goes.
+                if jsx_child_parent(file, at).is_some_and(|element| !intrinsic(file, element)) {
+                    self.escape_if_here(file, at, row, mode, answer, recorded);
+                }
+                answer
+            }
             // A tag is a call no row reads (P11).
             Holder::Tag => Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE),
             // A root's coercion reads its keys, a holder's coerces what it
@@ -1212,7 +1313,10 @@ impl<'l, 'a> Census<'l, 'a> {
         match row {
             Holder::Callee(call) => {
                 let call = ast.calls[call].span;
-                self.site(file, call, Site::Call, blocker);
+                // ADR 0928: a call through a root (a bound `push`) may write
+                // it, which no role clears.
+                let site = if root { Site::Write } else { Site::Call };
+                self.site(file, call_use_span(file, call), site, blocker);
                 self.position(file, call, mode);
                 Position::Followed
             }
@@ -1281,10 +1385,22 @@ impl<'l, 'a> Census<'l, 'a> {
                     None => Position::Open(blockers::VALUE_IN_CARRIER),
                 }
             }
-            Holder::ObjectSpread(spread) => match object_spread_literal(file, spread) {
-                Some(literal) => self.position(file, literal, mode),
-                None => Position::Open(blockers::VALUE_IN_CARRIER),
-            },
+            Holder::ObjectSpread(spread) => {
+                // ADR 0928: a call's spread argument is that argument.
+                let argument = ast.calls.iter().enumerate().find_map(|(index, call)| {
+                    call.arguments
+                        .iter()
+                        .position(|argument| argument.spread && argument.span == spread)
+                        .map(|argument| (index, argument))
+                });
+                if let Some((call, index)) = argument {
+                    return self.escaped_argument(file, spread, call, index, mode);
+                }
+                match object_spread_literal(file, spread) {
+                    Some(literal) => self.position(file, literal, mode),
+                    None => Position::Open(blockers::VALUE_IN_CARRIER),
+                }
+            }
             Holder::ConditionalValue(value)
             | Holder::LogicalValue(value)
             | Holder::SequenceTail(value) => self.position(file, value, mode),
@@ -1292,6 +1408,12 @@ impl<'l, 'a> Census<'l, 'a> {
             // An element inserts its child tracked, unless it may be pending.
             Holder::JsxChild => match jsx_child_parent(file, at) {
                 Some(element) if intrinsic(file, element) && !self.async_walk => Position::Followed,
+                // ADR 0928: a component or a primitive holds its child (`For`
+                // maps with it): a call through its element may run it.
+                Some(element) if !intrinsic(file, element) => {
+                    self.position(file, ast.jsx_elements[element].span, mode);
+                    Position::Open(blockers::VALUE_IN_CARRIER)
+                }
                 _ => Position::Open(blockers::VALUE_IN_CARRIER),
             },
             Holder::JsxValue(element, _) | Holder::JsxSpread(element) => {
@@ -1336,10 +1458,11 @@ impl<'l, 'a> Census<'l, 'a> {
         let Mode::Escaped { root, blocker } = mode else {
             return self.unheld(file, at, mode);
         };
-        if jsx_name(file, at) {
-            // `<H />` calls what `H` holds; a root's tag is a Get of it.
+        if let Some(element) = tag_element(file, at) {
+            // `<H />` calls what `H` holds; a root's tag is a Get of it. ADR
+            // 0928: the element is the call.
             let site = if root { Site::Read } else { Site::Call };
-            self.site(file, at, site, blocker);
+            self.site(file, element, site, blocker);
             return Position::Followed;
         }
         if file.ast.deleted_targets.contains(&at) {
@@ -1507,6 +1630,47 @@ impl<'l, 'a> Census<'l, 'a> {
             self.parameter_hops += 1;
             for name in &parameter.names {
                 self.name_uses(callee_file, name.span, mode);
+            }
+            self.parameter_hops -= 1;
+            return Position::Followed;
+        }
+        // ADR 0928: a spread hands what it holds to each parameter at or past
+        // its place (`((h) => h())(...[s])`); a callee reading `arguments`
+        // reads it there too, with no name.
+        let spread_callee = || {
+            // An IIFE's function is its own callee.
+            let inline = ast
+                .function_at(ast.peel_ts_sugar_span(call.callee))
+                .filter(|_| {
+                    !call
+                        .arguments
+                        .iter()
+                        .take(index)
+                        .any(|argument| argument.spread)
+                })
+                .map(|callee| (file, callee));
+            inline.or_else(|| {
+                crate::execution_role::project_callee_at_spread(file, call, index, self.lookup)
+                    .filter(|(_, _, exact)| *exact)
+                    .map(|(callee_file, callee, _)| (callee_file, callee))
+            })
+        };
+        if !call.construct
+            && call.arguments[index].spread
+            && let Some((callee_file, callee)) = spread_callee()
+        {
+            if self.parameter_hops >= MAX_HOPS {
+                return Position::Open(blockers::VALUE_FORWARDED);
+            }
+            if reads_arguments(callee_file, callee.span) {
+                self.uses
+                    .push((at.location(file.path.as_str()), blockers::VALUE_IN_CARRIER));
+            }
+            self.parameter_hops += 1;
+            for parameter in callee.parameters.iter().skip(index) {
+                for name in &parameter.names {
+                    self.name_uses(callee_file, name.span, mode);
+                }
             }
             self.parameter_hops -= 1;
             return Position::Followed;
@@ -1837,6 +2001,15 @@ impl<'l, 'a> Census<'l, 'a> {
                 reached = true;
                 self.position(caller, call, mode);
             }
+        }
+        // ADR 0928: a call through a name that aliases the function
+        // (`const g = f; g()`), or of a method or slot the compiler resolves
+        // to it, which the call graph does not name.
+        let mut more = self.alias_calls(file, function);
+        more.extend(self.method_calls(file, function));
+        for call in more {
+            reached = true;
+            self.position(file, call, mode);
         }
         self.return_hops -= 1;
         if reached {
@@ -2605,7 +2778,18 @@ impl<'l, 'a> Census<'l, 'a> {
                 .map(|call| call.span)
                 .collect::<Vec<_>>();
             for call in calls {
-                let position = if caller.ast.calls_with_peeled_callee(call).next().is_some() {
+                let position = if let Some(outer) = caller.ast.calls_with_peeled_callee(call).next()
+                {
+                    // ADR 0928: `g()()` calls what `g()` returns, where no
+                    // row reads it: the outer call is the use.
+                    if mode == Mode::Value && !outer.construct {
+                        self.site(
+                            caller,
+                            call_use_span(caller, outer.span),
+                            Site::Call,
+                            blockers::VALUE_TO_UNRESOLVED_CALLEE,
+                        );
+                    }
                     Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE)
                 } else {
                     self.position(caller, call, mode)
@@ -2638,6 +2822,21 @@ impl<'l, 'a> Census<'l, 'a> {
             if dialect.callback_may_open_strict_window(primitive, index, arguments)
                 || dialect.reports_untracked_reads_at(primitive, index, arguments)
             {
+                // ADR 0928: the primitive reads it at its own call
+                // (`untrack(c, "x")`), where Chrome's frame stands: the call
+                // is a use beside the argument.
+                if mode == Mode::Value {
+                    let path = file.path.as_str();
+                    if self.steps > 1 {
+                        let argument = ast.peel_ts_sugar_span(call.arguments[index].span);
+                        self.uses
+                            .push((argument.location(path), blockers::VALUE_IN_CARRIER));
+                    }
+                    self.uses.push((
+                        call_use_span(file, call.span).location(path),
+                        blockers::VALUE_IN_CARRIER,
+                    ));
+                }
                 return Position::Open(blockers::VALUE_IN_CARRIER);
             }
             let callback = mode == Mode::Value
@@ -2942,9 +3141,30 @@ fn reads_arguments(file: &FileFacts, function: Span) -> bool {
 
 /// A JSX tag's name, opening or closing.
 fn jsx_name(file: &FileFacts, at: Span) -> bool {
-    file.ast.jsx_elements.iter().any(|element| {
-        element.name.span.contains(at) || element.closing_name.is_some_and(|name| name.contains(at))
-    })
+    tag_element(file, at).is_some()
+}
+
+/// ADR 0928: the element whose opening or closing tag names `at`. The element
+/// is the call: Chrome's frame for what it runs is its start, not the name's.
+fn tag_element(file: &FileFacts, at: Span) -> Option<Span> {
+    file.ast
+        .jsx_elements
+        .iter()
+        .find(|element| {
+            element.name.span.contains(at)
+                || element.closing_name.is_some_and(|name| name.contains(at))
+        })
+        .map(|element| element.span)
+}
+
+/// ADR 0928: where a call's use stands: from its callee's own start, through
+/// parentheses and casts (`(h as T)()`), to the call's end. A frame in the
+/// callee stands for that expression, not the parenthesis.
+fn call_use_span(file: &FileFacts, call: Span) -> Span {
+    let start = file.ast.call_at(call).map_or(call.start, |fact| {
+        file.ast.peel_ts_sugar_span(fact.callee).start
+    });
+    Span::new(start.max(call.start), call.end)
 }
 
 /// A reference that holds a value: not a type query, not a declaration.

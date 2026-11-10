@@ -1267,3 +1267,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-generator-step/node_modules/**
 !fixtures/reactive-ir/write-parameter-call/node_modules/
 !fixtures/reactive-ir/write-parameter-call/node_modules/**
+!fixtures/reactive-ir/value-use-calls-carriers/node_modules/
+!fixtures/reactive-ir/value-use-calls-carriers/node_modules/**
