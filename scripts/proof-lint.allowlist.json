@@ -132,7 +132,7 @@
     "rust/crates/solid-reactive-ir/src/effect_api.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`effect` is the key of the bundle object a classified effect primitive takes (`v2_effect_function_status(.., slot, ..)` is asked of the primitive's own argument slot): a dialect-defined option key of a resolved call, not an identification of what the call is"
       }
     },
     "rust/crates/solid-reactive-ir/src/effect_phase.rs": {
@@ -596,7 +596,7 @@
     "rust/crates/solid-reactive-ir/src/project_consumer.rs": {
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`__proto__` is a spelling used only to REFUSE a proof (a `__proto__` attribute is lowered to an entry that installs a prototype on the props object; the true branch returns None): a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/projection.rs": {
@@ -686,7 +686,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules.rs": {
