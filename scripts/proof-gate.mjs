@@ -12,6 +12,7 @@
 //   bun scripts/proof-gate.mjs --skeleton <file>   write the hits no entry accepts, `why: "UNREVIEWED"` (never accepted by the gate)
 //   --out <dir>   keep the logs there (default: a temporary directory, removed after)
 //   --only <text> only the projects whose id contains the text (repeatable)
+//   --prune-candidates  remove the candidate entries this run has no hit for (the fix that cleared a site), then compare as usual
 //
 // The gap file only shrinks: a hit it does not list fails, and an entry no hit matches fails. A C2 hit (a reporting decision or
 // row with nothing ending it) is a false-clean candidate and is never accepted as a gap; fixtures/proof-log/candidates.json lists
@@ -26,7 +27,7 @@ import { promisify } from "node:util";
 
 import { fixtureProjects, runtimeArguments } from "./lib/fixture-projects.mjs";
 import { gateConcurrency, mapPoolSettled } from "./lib/pool.mjs";
-import { CHECKS, gapProblems, hitKey, proofHits, proofStats, readProofLog } from "./lib/proof-log.mjs";
+import { CHECKS, gapProblems, hitKey, proofHits, proofStats, pruneCandidates, readProofLog } from "./lib/proof-log.mjs";
 
 const run = promisify(execFile);
 export const ROOT = resolve(import.meta.dirname, "..");
@@ -134,7 +135,15 @@ async function main(argv) {
       }
     }
     const gaps = readJson(GAPS).gaps ?? {};
-    const candidates = readJson(CANDIDATES).candidates ?? {};
+    let candidates = readJson(CANDIDATES).candidates ?? {};
+    if (argv.includes("--prune-candidates")) {
+      // The branch that fixes a site removes its candidate entry; the entries of this run's hits stay, the others go (only ever removed).
+      const { kept, removed } = pruneCandidates(candidates, hitsByKey);
+      writeFileSync(CANDIDATES, `${JSON.stringify({ ...readJson(CANDIDATES), candidates: kept }, null, 2)}\n`);
+      console.log(`proof gate: ${removed.length} candidate(s) no longer a hit removed, ${Object.keys(kept).length} kept`);
+      for (const key of removed) console.log(`  removed ${key}`);
+      candidates = kept;
+    }
     const problems = gapProblems(hitsByKey, gaps, candidates);
 
     console.log(`proof gate: ${projects.length - failed.length}/${projects.length} projects, ${totals.sites} sites (${Object.entries(totals.siteEnds).map(([end, count]) => `${end} ${count}`).join(", ")}), ${totals.rows} rows (${totals.reportedRows} reported), ${totals.decisions} decisions, ${totals.silents} named silences`);

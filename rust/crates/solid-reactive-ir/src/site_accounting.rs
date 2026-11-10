@@ -156,8 +156,9 @@ site_silences! {
     /// deferred callback, a handler), and the producer returned without a row.
     CallRoleDoesNotReport => "local_access.discover_call_as.role-does-not-report",
     /// A read in a setter's updater: the setter call's write is a proven
-    /// violation, so the guard throws before the updater runs (ADR 0932).
-    CallSetterCallbackGuardThrows => "local_access.discover_call_as.setter-callback-guard-throws",
+    /// violation (`ownedWrite` proven off), so the guard throws before the
+    /// updater runs (ADR 0932). The premise is that setter call.
+    CallSetterGuardThrowsFirst => "local_access.discover_call_as.setter-guard-throws-first",
     /// A read in a setter's updater, where the setter call's role reports
     /// nothing: the updater runs at the call, in a place the rule allows.
     CallSetterCallbackRoleSilent => "local_access.discover_call_as.setter-callback-role-silent",

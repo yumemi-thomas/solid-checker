@@ -13,9 +13,11 @@
 //   C3  a silent row, or a site with no row, whose silence no tagged, non-default arm of the classifier gave: no decision at the
 //       site (a producer set the role), a decision that said another role (an override outside the classifier), an untagged path,
 //       or a self-declared default arm (silent for want of a proof). Also a named end (`rule: "end"`) that rests on no premise
-//       naming code: a fact kind and its span; a label is not a fact (`label-only-end`).
+//       naming code: a fact kind and its span; a label is not a fact (`label-only-end`); or a premise the log itself can confirm
+//       and does not (`premise-unconfirmed`: a setter's guard that throws first has its SC2001 violation in the final list).
 //
-// C2 and a label-only end are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a stated reason.
+// C2, a label-only end and an unconfirmed premise are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a
+// stated reason.
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -23,6 +25,15 @@ export const CHECKS = ["C1", "C2", "C3"];
 
 /** The decision kinds that answer for a universe site of each table. */
 const DECISION_KIND = { read: "read", write: "write", action: "action" };
+
+/**
+ * The premise kinds whose claim the log itself confirms, each `(premise, verdicts by span) => boolean`. A setter whose write guard
+ * throws first (ADR 0932) has the SC2001 violation of its call in the final list, at the span the premise names, in the end's file.
+ */
+const PREMISE_CONFIRMED = {
+  SetterGuardThrowsFirst: (premise, verdicts) =>
+    premise.in === undefined && (verdicts.get(`${premise.at[0]}:${premise.at[1]}`) ?? []).some((v) => v.code === "SC2001" && v.kind === "violation"),
+};
 
 const logFiles = (path) =>
   statSync(path).isDirectory()
@@ -199,6 +210,12 @@ export function proofHits(lines) {
       const premises = end.premises ?? [];
       if (premises.length === 0 || premises.some((premise) => !Array.isArray(premise.at))) {
         hit("C3", "label-only-end", end, "end", { id: end.proof, premises });
+        continue;
+      }
+      for (const premise of premises) {
+        if (PREMISE_CONFIRMED[premise.kind]?.(premise, verdicts) === false) {
+          hit("C3", "premise-unconfirmed", end, "end", { id: end.proof, kind: premise.kind, at: premise.at });
+        }
       }
     }
 
@@ -262,8 +279,22 @@ export function hitKey(fixture, relativeFile, hit) {
   return `${fixture}|${relativeFile}|${hit.s}-${hit.e}|${hit.check}/${hit.kind}`;
 }
 
-/** A hit no gap entry may accept: a false-clean candidate, and a named end that is a label rather than a fact. */
-export const neverAccepted = (check, kind) => check === "C2" || kind === "label-only-end";
+/** A hit no gap entry may accept: a false-clean candidate, and a named end that is a label rather than a fact, or a claim the log refutes. */
+export const neverAccepted = (check, kind) => check === "C2" || kind === "label-only-end" || kind === "premise-unconfirmed";
+
+/**
+ * The candidate entries a run still has a hit for (`kept`) and those it has none for (`removed`). The branch that fixes a site
+ * removes its entry in the same commit; this does it from a run, and only ever removes.
+ */
+export function pruneCandidates(candidates, hitsByKey) {
+  const kept = {};
+  const removed = [];
+  for (const [key, entry] of Object.entries(candidates)) {
+    if (hitsByKey.has(key)) kept[key] = entry;
+    else removed.push(key);
+  }
+  return { kept, removed };
+}
 
 /** Reasons that state no fact. A gap's `why` must say what makes the silence sound or why the site is outside the claim. */
 export const EMPTY_REASONS = /^(|unreviewed|todo|tbd|known|harmless|ok|fine|n\/a|none|noise|expected|legacy)\.?$/i;
@@ -285,7 +316,7 @@ export function gapProblems(hitsByKey, gaps, candidates = {}) {
     }
     const hitKind = key.slice(key.lastIndexOf("/") + 1);
     if (neverAccepted(entry.check, hitKind)) {
-      problems.push({ kind: "invalid", key, message: "a C2 hit is a false-clean candidate and a label-only end is no fact: never an accepted gap" });
+      problems.push({ kind: "invalid", key, message: "a C2 hit is a false-clean candidate, a label-only end is no fact and an unconfirmed premise is refuted by the log: never an accepted gap" });
     }
     if (typeof entry.why !== "string" || EMPTY_REASONS.test(entry.why.trim()) || entry.why.trim().length < 20) {
       problems.push({ kind: "invalid", key, message: "why must state the fact that makes the silence sound (not empty, 'known' or 'harmless')" });

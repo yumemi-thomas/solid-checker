@@ -3068,6 +3068,21 @@ impl LocalAccessContext<'_, '_> {
         allowed: &[solid_facts::core::Span],
         own: Option<&SymbolId>,
     ) -> Option<ExecutionRole> {
+        self.setter_callback_verdict(file, span, allowed, own)
+            .map(|(role, _)| role)
+    }
+
+    /// [`Self::setter_callback_role`] and, where the role is `Unreported`
+    /// because the write guard provably throws first (`ownedWrite` proven
+    /// off), the setter call whose violation says so: the premise of the proof
+    /// log's named end (ADR 0933). `None` there for every other answer.
+    fn setter_callback_verdict(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        allowed: &[solid_facts::core::Span],
+        own: Option<&SymbolId>,
+    ) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
         let ast = &file.ast;
         let function = crate::owners::owning_function(ast, span)?;
         let (holder, index) = ast
@@ -3090,9 +3105,9 @@ impl LocalAccessContext<'_, '_> {
                 // `setSt((d) => { reconcile(v, key)(d); })`: applied to the
                 // draft, on the setter's stack.
                 _ if self.applied_to_setters_draft(file, holder) => {
-                    return self.setter_callback_role(file, holder.span, allowed, None);
+                    return self.setter_callback_verdict(file, holder.span, allowed, None);
                 }
-                _ => return Some(ExecutionRole::Unknown),
+                _ => return Some((ExecutionRole::Unknown, None)),
             }
         } else if index == 0 && self.exact_setter_row(file, holder).is_some() {
             holder
@@ -3111,15 +3126,15 @@ impl LocalAccessContext<'_, '_> {
             // …))`): when it runs the callback is not this code's to prove.
             // `setA(untrack(() => …))` and `setA(xs.map((x) => …))` run while
             // the argument is built.
-            return Some(ExecutionRole::Unknown);
+            return Some((ExecutionRole::Unknown, None));
         } else {
             return None;
         };
         if let Some(root) = own {
             match self.is_setters_store(root, self.exact_setter_row(file, setter_call)?) {
-                Some(true) => return Some(ExecutionRole::DeferredCallback),
+                Some(true) => return Some((ExecutionRole::DeferredCallback, None)),
                 Some(false) => {}
-                None => return Some(ExecutionRole::Unknown),
+                None => return Some((ExecutionRole::Unknown, None)),
             }
         }
         // A setter call in a named helper runs where the helper's callers do,
@@ -3129,7 +3144,7 @@ impl LocalAccessContext<'_, '_> {
         if inside_non_component_function(file, setter_call.callee, self.lookup)
             && named_callback_execution_role(file, setter_call.callee, self.lookup).is_none()
         {
-            return Some(ExecutionRole::Unknown);
+            return Some((ExecutionRole::Unknown, None));
         }
         let role = read_execution_role(
             file,
@@ -3140,7 +3155,7 @@ impl LocalAccessContext<'_, '_> {
             self.lookup,
         );
         if !role.reports_disallowed_write() {
-            return Some(role);
+            return Some((role, None));
         }
         // ADR 0932: the guard throws first only where the write row is a
         // proven violation. `ownedWrite: true` skips the guard (rc.21
@@ -3148,9 +3163,9 @@ impl LocalAccessContext<'_, '_> {
         // options value the syntax does not show may set it, and then
         // whether the callback runs is not proven.
         Some(match self.exact_setter_row(file, setter_call)?.2 {
-            crate::OwnedWriteOption::Off => ExecutionRole::Unreported,
-            crate::OwnedWriteOption::On => role,
-            crate::OwnedWriteOption::Unknown => ExecutionRole::Unknown,
+            crate::OwnedWriteOption::Off => (ExecutionRole::Unreported, Some(setter_call.span)),
+            crate::OwnedWriteOption::On => (role, None),
+            crate::OwnedWriteOption::Unknown => (ExecutionRole::Unknown, None),
         })
     }
 
@@ -3452,9 +3467,11 @@ impl LocalAccessContext<'_, '_> {
             && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee).is_some();
         // ADR 0676: a setter runs this callback on its own stack.
         if self.accessors.contains_key(symbol)
-            && let Some(role) = self.setter_callback_role(file, call.callee, allowed, None)
+            && let Some((role, guard)) =
+                self.setter_callback_verdict(file, call.callee, allowed, None)
         {
-            if (role.reports_untracked_read() || role.reports_unplaced())
+            let reports = role.reports_untracked_read() || role.reports_unplaced();
+            if reports
                 && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
                 && let Some(accessor) = self.accessors.get(symbol)
             {
@@ -3467,22 +3484,32 @@ impl LocalAccessContext<'_, '_> {
                     self.running_setter_call(file, call.callee),
                     result,
                 );
+            } else if !reports {
+                // ADR 0933: the write guard provably throws first (`ownedWrite`
+                // off, ADR 0932), so the callback never runs and the setter
+                // call's violation is the claim. ADR 0936: any other silent
+                // answer is the role classifier's decision at the setter call
+                // (the updater runs there, where the rule allows the read); an
+                // option the syntax does not show answers `Unknown`, which
+                // reports.
+                match guard {
+                    Some(setter_call) => result.ends.end_at(
+                        file,
+                        call.span,
+                        SiteSilence::CallSetterGuardThrowsFirst,
+                        crate::proof_log::PremiseKind::SetterGuardThrowsFirst,
+                        || Some(setter_call),
+                    ),
+                    None => result.ends.role_silent(
+                        file,
+                        call.span,
+                        SiteSilence::CallSetterCallbackRoleSilent,
+                        role,
+                        self.running_setter_call(file, call.callee)
+                            .unwrap_or(call.span),
+                    ),
+                }
             }
-            // ADR 0936: a role that reports nothing ends the read: the guard
-            // throws before the updater runs (the setter's write is a proven
-            // violation), or the setter call is where the rule allows the read.
-            result.ends.role_silent(
-                file,
-                call.span,
-                if role == ExecutionRole::Unreported {
-                    SiteSilence::CallSetterCallbackGuardThrows
-                } else {
-                    SiteSilence::CallSetterCallbackRoleSilent
-                },
-                role,
-                self.running_setter_call(file, call.callee)
-                    .unwrap_or(call.span),
-            );
             return;
         }
         let Some(multiplicity) = self.reachable_calls.get(&callee).copied().or_else(|| {
@@ -3624,9 +3651,12 @@ impl LocalAccessContext<'_, '_> {
                 || tracked_position_premises(file, call.callee, self.lookup),
             );
         }
-        // ADR 0936: a read of a function the program places elsewhere (its call
-        // edges) ends here as a member read does; failing that, a role the
-        // classifier decided reports nothing.
+        // ADR 0933, 0936: a read in a helper the summaries place: each exact
+        // call edge into the function attributes the read at the call, where
+        // the call's own role decides (a site in a parameter list names only
+        // the reach query, ADR 0454). With no edge, carrier or scheduler to
+        // name (a returned function nothing calls), a role the classifier
+        // decided reports nothing; otherwise the site stays unaccounted.
         if self.accessors.contains_key(symbol)
             && (result.reads.len(), result.async_reads.len()) == rows_before
             && result.ends.len() == ends_before
@@ -3634,7 +3664,7 @@ impl LocalAccessContext<'_, '_> {
             result
                 .ends
                 .end_with(file, call.span, SiteSilence::CallPlacedElsewhere, || {
-                    placement_premises(file, call.callee, self.lookup)
+                    placement_premises(file, call.span, self.lookup)
                 });
             if result.ends.len() == ends_before {
                 result.ends.role_silent(
@@ -9863,13 +9893,15 @@ pub(crate) fn handed_read_role(
     )
 }
 
-/// ADR 0933 (log only): the facts that place the function around `span` where
+/// ADR 0933, 0936: the facts that place the function around `span` where
 /// the summaries attribute its reads: the call graph's exact call edges into
 /// it, the carriers and fresh-stack schedulers its binding is handed to, and
 /// the render that enters a proven component; or that nothing runs the site
 /// (the reach query's `Unreached`). A silence that rests on the function being
 /// placed elsewhere is named on these; with none, it stays unnamed, and the
-/// gate keeps it as a clean nothing explains.
+/// gate keeps it as a clean nothing explains. A site in a nested function's
+/// parameter list has no call edge among them (it runs only where a call omits
+/// the argument), only the reach query's answer.
 pub(crate) fn placement_premises(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
@@ -9878,12 +9910,21 @@ pub(crate) fn placement_premises(
     let Some(function) = containing_ast_function(&file.ast, span) else {
         return Vec::new();
     };
-    let mut premises = function_placement_premises(file, function, lookup);
+    // ADR 0454: a site in a nested function's parameter list belongs to that
+    // function and runs only where a call omits the argument, so the call
+    // edges into the function whose body holds the list place nothing there.
+    let in_body = crate::owners::owning_function(&file.ast, span)
+        .is_some_and(|owner| owner.span == function.span);
+    let mut premises = if in_body {
+        function_placement_premises(file, function, lookup)
+    } else {
+        Vec::new()
+    };
     // ADR 0936: an anonymous function (a closure a factory returns) is entered
     // only through the named function around it: that function's call edges
     // are the facts, as `placed_nowhere` already rules out an escape they do
     // not follow. The innermost named function that is no component decides.
-    if premises.is_empty() {
+    if in_body && premises.is_empty() {
         let mut outers = file
             .ast
             .functions_containing(function.span)
@@ -9898,11 +9939,12 @@ pub(crate) fn placement_premises(
             premises = function_placement_premises(file, outer, lookup);
         }
     }
-    premises.extend(unreached_premise(file, span, function.span, lookup));
+    let reach_at = if in_body { function.span } else { span };
+    premises.extend(unreached_premise(file, span, reach_at, lookup));
     premises
 }
 
-/// ADR 0933 (log only): the reach query proves nothing runs `site`; the fact
+/// ADR 0933, 0936: the reach query proves nothing runs `site`; the fact
 /// is about the code at `at`.
 pub(crate) fn unreached_premise(
     file: &solid_facts::FileFacts,
@@ -9917,7 +9959,7 @@ pub(crate) fn unreached_premise(
     .then(|| crate::proof_log::Premise::at(crate::proof_log::PremiseKind::SiteReach, Some(at)))
 }
 
-/// ADR 0933 (log only): the facts that place `function`: the call graph's
+/// ADR 0933, 0936: the facts that place `function`: the call graph's
 /// exact call edges into it, the carriers and fresh-stack schedulers its
 /// binding is handed to, and the render that enters a proven component.
 pub(crate) fn function_placement_premises(
@@ -9961,7 +10003,7 @@ pub(crate) fn function_placement_premises(
     premises
 }
 
-/// ADR 0933 (log only): the positions that name the function around `span` at
+/// ADR 0933, 0936: the positions that name the function around `span` at
 /// a tracked position, one premise each.
 fn tracked_position_premises(
     file: &solid_facts::FileFacts,
@@ -10869,7 +10911,7 @@ fn in_instance_field_initializer(
         })
 }
 
-/// ADR 0933 (log only): why [`unreached_write_may_run`] answered no: the site
+/// ADR 0933, 0936: why [`unreached_write_may_run`] answered no: the site
 /// is at module scope or in a static initializer, where no function or
 /// instance field owns it, or the reach query proves nothing runs it.
 fn cannot_run_premises(
