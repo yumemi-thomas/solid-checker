@@ -228,10 +228,10 @@ test("a path no row claims escalates to the full verify, and says which path did
 test("a rule page reaches what reads it, and `.gitignore` what asks git", () => {
   const page = planFor(["docs/rules/no-destructure.md"]);
   assert.equal(page.full, false);
-  assert.deepEqual(withoutUniversal(page.checks), ["build-typefacts", "doc-budget", "rule-pages"]);
+  assert.deepEqual(withoutUniversal(page.checks), ["build-typefacts", "rule-pages"]);
   const ignored = planFor([".gitignore"]);
   assert.equal(ignored.full, false);
-  assert.ok(["doc-budget", "coverage", "repro-budget"].every((check) => ignored.checks.includes(check)));
+  assert.ok(["coverage", "repro-budget"].every((check) => ignored.checks.includes(check)));
   // One exact file, and a name inside docs/rules/ only.
   assert.equal(planFor([".gitignore.bak"]).full, true);
   assert.equal(planFor(["docs/rules.md"]).full, true);

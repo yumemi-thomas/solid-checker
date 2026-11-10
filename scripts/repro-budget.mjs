@@ -9,7 +9,7 @@
 // holds only the published bytes its manifest lists. Violation and clean cases
 // (from the pre-release run, ADR 0446) have budget lines of their own, so they
 // never crowd out the uncertifiable ones. Raising a budget is a deliberate edit
-// here, with the reason beside it, as in scripts/doc-budget.mjs.
+// here, with the reason beside it.
 //
 //   bun scripts/repro-budget.mjs        check, exit 1 on any violation
 import { createHash } from "node:crypto";

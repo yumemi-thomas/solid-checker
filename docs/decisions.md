@@ -2429,3 +2429,7 @@ Ten codes' reports depend on the callbacks between a host and the site: `untrack
 <a id="adr-0942"></a>
 ## ADR 0942 — A hand-off to another rule's claim ends a site only where that rule has a row
 SC4001 ended a site under a leaf owner as `LeafOwned` ("SC3001's claim") without asking SC3001: through `untrack`, `latest`, `isPending` or `runWithOwner(owner)` its walk never reaches the call, and CLEANUP_IN_FORBIDDEN_SCOPE was certified clean. A leaf operation now keeps the site it is written at (`sites`; it is reported at the helper call it is reached through), and `Delegate::LeafOwnerForbiddenCall` ends the site only where such a row stands inside the call, else `execution-context-unaccounted` (U). Fixture `leaf-owned-hand-off-without-row`; fuzz `pl-*`.
+
+<a id="adr-0948"></a>
+## ADR 0948 — No enforced documentation size budget
+`scripts/doc-budget.mjs` (byte limits on docs, fixture READMEs and agent-facing files, the `docs/` allow-list, the ratchet on the limits) is removed with its calls in `make verify` and `verify-delta`: owner, 2026-11-11, "it is annoying to slow down because of that". Docs stay short by the guidance in AGENTS.md; nothing condenses them to fit a limit.
