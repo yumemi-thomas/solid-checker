@@ -6,7 +6,7 @@
 // named end, a premise kind or a table row to the Rust makes the test fail until it is covered or stated.
 //
 //   silentArms()    the tagged arms (`role_arm!`) that can answer a silent role: a literal silent role, or a computed role (transported)
-//   namedEnds()     the producers' named early ends (`proof_log::end_at` / `end_with` and the store rules' `end` closure): `<file>.<fn>.<end>`
+//   namedEnds()     the producers' named ends: the closed `SiteSilence` list of site_accounting.rs (ADR 0936), `<producer file>.<fn>.<end>`
 //   premiseKinds()  the variants of `proof_log::PremiseKind`, the typed facts a silence rests on
 //   dropPasses()    the variants of `proof_log::DropPass` with the premise kinds each rests on (the passes that remove or demote a finding)
 //   tableEntries()  the rows of the checker's own tables that decide a role or a silence, per table (TABLES below)
@@ -124,22 +124,27 @@ export const silentArms = (root) => taggedArms(root).filter((arm) => ["read-sile
 // Named ends (ADR 0933)
 
 /**
- * The producers' named early ends: literal ids `<file stem>.<function>.<end>` given to `proof_log::end_at` / `end_with` (and the store rules' `end`
- * closure). Every literal of that shape in a file that calls them is one: an arm id starts with the stem of its own directory's file
- * (`callee_roles.`), never with these files' (`local_access.`, `shared_reactivity.`).
+ * The producers' named ends (ADR 0933, 0936): the ids of `site_silences!` in site_accounting.rs, one variant per producer return, `<file stem>.<function>.<end>`.
+ * An id starts with the stem of the producer's own file (`local_access.`, `shared_reactivity.`), never with site_accounting's. `{ id, file, line, variant }`:
+ * `file` is the producer file the id names (under the IR source root), `line` the variant's line in site_accounting.rs.
  */
 export function namedEnds(root = IR_SRC) {
+  const path = join(root, "site_accounting.rs");
+  const text = withoutTests(source(path));
+  const start = text.indexOf("site_silences! {");
+  if (start < 0) throw new Error("boundary-inventory: no `site_silences!` list in site_accounting.rs");
+  const open = text.indexOf("{", start);
+  const body = text.slice(open, closing(text, open));
+  const stems = new Map(rustFiles(root).map((file) => [basename(file, ".rs"), relative(root, file)]));
   const ends = [];
-  for (const path of rustFiles(root)) {
-    const text = withoutTests(source(path));
-    if (!/proof_log::end_(?:at|with)\b/.test(text)) continue;
-    const stem = basename(path, ".rs");
-    const seen = new Set();
-    for (const match of text.matchAll(new RegExp(`"(${stem}\\.[a-z_0-9]+\\.[a-z0-9-]+)"`, "g"))) {
-      if (seen.has(match[1])) continue;
-      seen.add(match[1]);
-      ends.push({ id: match[1], file: relative(root, path), line: lineAt(text, match.index) });
-    }
+  const seen = new Set();
+  for (const match of body.matchAll(/^\s*([A-Z][A-Za-z0-9]*)\s*=>\s*"([a-z_0-9]+\.[a-z_0-9]+\.[a-z0-9-]+)"/gm)) {
+    const [, variant, id] = match;
+    if (seen.has(id)) throw new Error(`boundary-inventory: the silence id ${id} is listed twice`);
+    seen.add(id);
+    const stem = id.split(".")[0];
+    if (!stems.has(stem)) throw new Error(`boundary-inventory: ${id} (${variant}): no producer file ${stem}.rs under the IR source`);
+    ends.push({ id, file: stems.get(stem), line: lineAt(text, open + match.index), variant });
   }
   return ends;
 }

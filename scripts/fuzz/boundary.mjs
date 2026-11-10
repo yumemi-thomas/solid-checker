@@ -11,7 +11,7 @@
 //   arms        the tagged classifier arms (`role_arm!`) that can answer a silent role: a literal silent role, or a computed (transported) one.
 //               Not these, each stated in the test: `Unknown` arms (an obligation, never a clean), reporting arms (a wrong answer is a false
 //               positive, which the grids' own judge finds), owner arms (ADR 0886's `ARM_ENDINGS` maps each to an ending).
-//   ends        the producers' named early ends (`proof_log::end_at`/`end_with`, ADR 0933)
+//   ends        the producers' named ends: the closed `SiteSilence` list (site_accounting.rs, ADR 0933, 0936)
 //   kinds       the typed facts a silence rests on (`proof_log::PremiseKind`), and through `DropPass::premise_kinds()` the backend passes
 //   tables      the rows of the checker's own tables that decide a role or a silence (TABLES in boundary-inventory.mjs)
 //   dialect     the questions `impl Dialect for Solid2` answers (the dialect API tables)
@@ -326,10 +326,11 @@ premise("kind-binding-before-initialization", { claim: "The site names a binding
 premise("kind-compiler-refused-file", { claim: "The compiler refused the file, so it has no compiler facts (ADR 0360).", kinds: ["CompilerRefusedFile"], fixtures: fixtures("compiler-refused-file", "compiler-refused-dependents"), quality: "fixture" });
 premise("kind-client-runtime-reach", { claim: "The rule claims a client runtime window and the program's execution paths decide whether the site is in one (ADR 0659).", kinds: ["ClientRuntimeReach"], fixtures: fixtures("ssr-client-boundary", "ssr-client-boundary-csr"), quality: "fixture" });
 premise("kind-runtime-configuration", { claim: "The runtime configuration is not the standard one (ADRs 0266, 0268).", kinds: ["RuntimeConfiguration"], fixtures: fixtures("standard-runtime-configuration"), quality: "fixture" });
-premise("kind-apply-never-runs", { claim: "An effect's apply is proven never to run: an exact `defer: true` and a compute that reads nothing (ADR 0590).", kinds: ["ApplyNeverRuns"], pairs: ["deferred-apply-reruns"] });
+premise("kind-apply-never-runs", { claim: "An effect's apply is proven never to run: an exact `defer: true` and a compute that reads nothing (ADR 0590).", kinds: ["ApplyNeverRuns"], pairs: ["deferred-apply-reruns"], ends: ["effect_execution.gate_diagnostics.apply-never-runs"], fixtures: fixtures("deferred-effect-apply") });
 premise("kind-closed-program-callers", { claim: "A closed program: every way into the helper is a call expression the graph resolves; an open one has callers nobody sees (ADR 0203).", kinds: ["ClosedProgramCallers"],
-  fixtures: fixtures("closed-export-member-dispatch", "closed-export-member-dispatch-open"), ends: ["local_access.project_helper_prop_read.calls-accounted", "shared_reactivity.push_parameter_store_flow.callers-pass-no-store"], quality: "fixture" });
-premise("kind-props-callers-static", { claim: "Every call site of the component passes the prop a static value, so the property read is not a reactive read (the props index).", kinds: ["PropsCallersStatic"], fixtures: fixtures("props-callers"), ends: ["local_access.discover_member.props-static"], quality: "fixture" });
+  fixtures: fixtures("closed-export-member-dispatch", "closed-export-member-dispatch-open"), ends: ["local_access.project_helper_prop_read.calls-accounted", "shared_reactivity.push_parameter_store_flow.callers-pass-no-store", "attribution.discharge_closed_program_export_dispatch.closed-callers"], quality: "fixture" });
+premise("kind-props-callers-static", { claim: "Every call site of the component passes the prop a static value, so the property read is not a reactive read (the props index).", kinds: ["PropsCallersStatic"], fixtures: fixtures("props-callers", "component-function-child", "prop-body-call-guard"),
+  ends: ["local_access.discover_member.props-static", "shared_reactivity.push_unproven_container_write.props-static"], quality: "fixture" });
 premise("kind-prop-views", { claim: "A `merge` view serves the key from a plain source, or an `omit` view hides the key the read names.", kinds: ["MergeViewServesPlain", "ViewHidesKey"], fixtures: fixtures("rc21-merge-landing", "omit-view-reads"),
   ends: ["local_access.discover_member.merge-view-plain", "local_access.discover_member.view-hides-key"], quality: "fixture" });
 premise("kind-tracked-position", { claim: "The read sits in a named function at a tracked position (an effect's compute or another place the compiler and the dialect track).", kinds: ["TrackedPosition"], pairs: ["primitive-contexts"],
@@ -350,10 +351,28 @@ premise("kind-callee-not-array-method", { claim: "Type Facts resolves a mutator 
   ends: ["shared_reactivity.no_store_mutator_call.not-array-method"], quality: "fixture" });
 premise("kind-destructured-prop-value", { claim: "The written root is a binding of an object pattern over the props: it holds one prop's value, which the caller owns.", kinds: ["DestructuredPropValue"], fixtures: fixtures("fp-owner-destructured-prop-mutation"),
   ends: ["shared_reactivity.direct_mutations.destructured-prop-value"], quality: "fixture" });
-premise("kind-module-scope", { claim: "The site is at module scope or in a static initializer: no function or instance field owns it (the module-initialization role).", kinds: ["ModuleScope"], fixtures: fixtures("event-dispatch-module-scope"), quality: "fixture" });
+premise("kind-module-scope", { claim: "The site is at module scope or in a static initializer: no function or instance field owns it (the module-initialization role).", kinds: ["ModuleScope"], fixtures: fixtures("event-dispatch-module-scope", "props-callers", "static-api"),
+  ends: ["local_access.no_window.module-scope"], quality: "fixture",
+  note: "A module-scope read is silent where the rc.21 runtime installs strict-read contexts only in component and effect bodies (ADR 0936): `props-callers` and `static-api` hold the read at module scope beside the component-body reads that report." });
 premise("kind-ref-prop-call", { claim: "The read is a component's `ref` prop called once to publish its handle: not a reactive read (only an intrinsic element's `ref` is applied by the runtime).", kinds: ["RefPropCall"], ends: ["local_access.discover_member.ref-prop-call"], fixtures: fixtures("fp-owner-component-ref"), quality: "fixture" });
 premise("kind-store-then-get", { claim: "A store `then` Get the thenable protocol makes exempt (ADR 0293).", kinds: ["StoreThenGetExempt"], ends: ["local_access.discover_member.store-then-exempt"], fixtures: fixtures("store-strict-read-keys"), quality: "fixture" });
 premise("kind-compiler-discarded-region", { claim: "The compiler deleted the code: a template-root void child list is an explicit discarded region, a nested void child stays live and tracked.", kinds: ["CompilerDiscardedRegion"], fixtures: fixtures("jsx-void-child-divergence-solid-2"), quality: "fixture" });
+// ---- ADR 0936: the closed accounting's kinds and ends --------------------------------------------------------------------------------------
+premise("kind-after-await", { claim: "The site follows an `await` of its own async function that every path reaches, or that dominates it: it runs on a later task, off every caller's stack, in no render window and under no tracking scope (ADRs 0320, 0323).",
+  kinds: ["AfterAwait"], ends: ["local_access.no_window.after-await"], fixtures: fixtures("reads-entered-unseen", "reads-entered-unseen-closed"), quality: "fixture",
+  note: "`later()` reads after an unconditional await and stays silent in both fixtures, beside the exports around it that report (open program) or stay silent for another reason (closed one)." });
+premise("kind-nothing-enters", { claim: "Nothing enters the function that holds the site: no call edge, carrier or scheduler names it, it is no possible component, no unseen code calls it (a closed program's export, a private function), and its binding is referenced in no file, so its code never runs (ADR 0936).",
+  kinds: ["NothingEnters"], ends: ["local_access.no_window.nothing-enters"], fixtures: fixtures("reads-entered-unseen-closed", "reads-entered-unseen"), quality: "fixture",
+  note: "The two fixtures are one pair: the same exports, the program boundary closed (silent: nothing calls them) and open (unseen importers may: SC1001 uncertifiable). A returned or stored closure is no such function: `render-time-reads` keeps its `finish` defaults uncertifiable (`strict-read-unaccounted`)." });
+premise("kind-handed-to-silent-slot", { claim: "The function is handed whole to a position the compiler and the dialect place exactly and whose role reports nothing (an event handler slot, a tracked JSX expression): its reads run there (ADR 0936).",
+  kinds: ["HandedToSilentSlot"], fixtures: fixtures("helper-prop-read"), quality: "fixture",
+  note: "The end it rests on, `local_access.project_helper_prop_read.calls-accounted`, is listed under kind-closed-program-callers; helper-prop-read holds the silent slots (handler, tracked helpers) beside the helpers that report." });
+premise("kind-plain-value-on-every-route", { claim: "A container a caller handed in holds a plain value on every route: a literal, a function or a `new` object, or a props declaration every call site of which passes one, so a write into it lands on a plain object (ADR 0919).",
+  kinds: ["PlainValueOnEveryRoute"], ends: ["shared_reactivity.handed_container_write.plain-on-every-route"], fixtures: fixtures("store-handed-root"), quality: "fixture",
+  note: "`PlainProp` (every site passes a closed plain literal) is silent in store-handed-root; the components beside it, whose sites pass a store, report." });
+premise("kind-role-does-not-report", { claim: "The role classifier decided the site's role (the compiler's and the dialect's facts place the code) and that role reports nothing for the rule: an effect's apply, a leaf scope, a handler; the producer returned without a row (ADR 0936).",
+  kinds: ["RoleDoesNotReport"], ends: ["local_access.discover_call_as.setter-callback-role-silent", "local_access.discover_member.role-does-not-report"], fixtures: fixtures("owned-write-updater-read", "prop-head-get"), quality: "fixture",
+  outside: "the role is the classifier's own answer: every tagged arm that can answer silent has its pair or its stated gap in this registry (arms, ARM_GAPS), so a wrong role is that arm's boundary; these ends only record that a producer returned for a role the classifier decided" });
 
 /** What the family covers of the dispatch lists, by row name (cleanup.rs:1498, runtime_semantics.rs:925): the pair that holds the member's twins. */
 export const DISPATCH_PAIRS = {
