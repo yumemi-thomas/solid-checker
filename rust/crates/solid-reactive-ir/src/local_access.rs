@@ -3044,10 +3044,11 @@ impl LocalAccessContext<'_, '_> {
     /// stack: argument 0 (`setA((p) => …)`, `setSt((d) => …)`) or the key of a
     /// `reconcile` that is itself that argument. The setter's call places it:
     /// a window at the call is open in the callback. Where the write guard
-    /// throws first the callback never runs. A key on a `reconcile` held
-    /// anywhere else runs where nothing places it. A setter's own store is
-    /// its draft in the callback, whose Gets never warn (`own`, the read's
-    /// root). `None`: no setter holds the site.
+    /// throws first (the write is a proven violation, ADR 0932) the callback
+    /// never runs. A key on a `reconcile` held anywhere else runs where
+    /// nothing places it. A setter's own store is its draft in the callback,
+    /// whose Gets never warn (`own`, the read's root). `None`: no setter
+    /// holds the site.
     fn setter_callback_role(
         &self,
         file: &solid_facts::FileFacts,
@@ -3126,10 +3127,18 @@ impl LocalAccessContext<'_, '_> {
             self.symbol_names,
             self.lookup,
         );
-        Some(if role.reports_disallowed_write() {
-            ExecutionRole::Unreported
-        } else {
-            role
+        if !role.reports_disallowed_write() {
+            return Some(role);
+        }
+        // ADR 0932: the guard throws first only where the write row is a
+        // proven violation. `ownedWrite: true` skips the guard (rc.21
+        // `setSignal`), so the callback runs at the call under its role; an
+        // options value the syntax does not show may set it, and then
+        // whether the callback runs is not proven.
+        Some(match self.exact_setter_row(file, setter_call)?.2 {
+            crate::OwnedWriteOption::Off => ExecutionRole::Unreported,
+            crate::OwnedWriteOption::On => role,
+            crate::OwnedWriteOption::Unknown => ExecutionRole::Unknown,
         })
     }
 
