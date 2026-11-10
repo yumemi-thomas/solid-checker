@@ -60,7 +60,8 @@ export const set = (sig, e) => ({ k: "set", sig, e });
 export const getOwner = () => ({ k: "getOwner" });
 export const iife = (fn) => ({ k: "iife", fn });
 export const iter = (method, fn) => ({ k: "iter", method, fn });
-export const fn = (body, { params = [], form = "arrow", async = false } = {}) => ({ k: "fn", form, async, params, body });
+/** `concise` (misuse.mjs APPLY_VOID_CONTEXTS): an arrow whose body is its one `return`'s expression, `() => e`. */
+export const fn = (body, { params = [], form = "arrow", async = false, concise = false } = {}) => ({ k: "fn", form, async, params, body, ...(concise ? { concise } : {}) });
 export const param = (def, destructured = false) => ({ k: "param", destructured, default: def });
 export const prim = (name, f, extra = {}) => ({ k: "prim", name, fn: f, ...extra });
 export const expr = (e) => ({ k: "expr", e });
@@ -526,7 +527,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
       switch (e.k) {
         case "num": return T.num;
         case "dom": return T.unknown;
-        case "jsxExpr": if (e.item.handler) checkBlock(e.item.handler, scope, "free"); else typeOf(e.item.e, scope); return T.unknown;
+        case "jsxExpr": if (e.item.handler) checkBlock(e.item.handler, scope, "free"); else if (e.item.k === "flow") checkBlock(e.item.body, scopeOf(scope), "free"); else typeOf(e.item.e, scope); return T.unknown;
         case "listen": fnTypeChecked(e.fn, scope, "free"); return T.void;
         case "read": sigCheck(e.sig, "read"); return T.num;
         case "write": sigCheck(e.sig, "write"); return T.num;

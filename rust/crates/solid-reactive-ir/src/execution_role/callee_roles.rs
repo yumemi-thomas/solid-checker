@@ -443,7 +443,6 @@ pub(super) fn semantic_role_before_awaits(
                     symbol_names,
                     lookup,
                     classifying,
-                    true,
                 );
                 return role_arm!("callee_roles.named-callback-untracked-nested", nested);
             }
@@ -660,7 +659,29 @@ pub(super) fn semantic_role_before_awaits(
     if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
         return role_arm!("callee_roles.forwarded-tracked-compute", role);
     }
-    if allowed.iter().any(|region| region.contains(span)) {
+    // ADR 0927: a flow element's children callback written inside an allowed
+    // region runs its row or child in a window of its own, wherever the
+    // element is created (`untrack(() => <For>{() => read()}</For>)`), and a
+    // JSX expression the compiler wraps runs in its render computation (ADR
+    // 0470): the control-flow and tracked-region arms below answer for the
+    // region's code inside them.
+    let window_inside_allowed = || {
+        allowed
+            .iter()
+            .filter(|region| region.contains(span))
+            .min_by_key(|region| region.end - region.start)
+            .is_some_and(|region| {
+                flow_callback_body(file, span, entities, symbol_names, dialect)
+                    .is_some_and(|body| region.contains(body))
+                    || file.compiler.tracked_regions.iter().any(|tracked| {
+                        region.contains(tracked.span)
+                            && *region != tracked.span
+                            && tracked.span.contains(span)
+                            && !component_child_function_within(file, tracked.span, span)
+                    })
+            })
+    };
+    if allowed.iter().any(|region| region.contains(span)) && !window_inside_allowed() {
         // ADR 0469: a read in a layer that runs in place (an IIFE, a
         // `forEach` callback, a helper's callback) runs on the stack of the
         // layer's call, so it is placed as a read written at that call: in a
@@ -712,7 +733,6 @@ pub(super) fn semantic_role_before_awaits(
             symbol_names,
             lookup,
             classifying,
-            false,
         );
     }
     if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, lookup) {
@@ -813,7 +833,6 @@ pub(super) fn semantic_role_before_awaits(
                 symbol_names,
                 lookup,
                 classifying,
-                true,
             );
             return role_arm!("callee_roles.control-flow-nested", nested);
         }
@@ -966,7 +985,6 @@ fn nested_unplaced_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
-    direct: bool,
 ) -> ExecutionRole {
     let dialect = lookup.dialect;
     // ADR 0516: the climb stops at a generator, whose body runs when its
@@ -1118,26 +1136,76 @@ fn nested_unplaced_role(
     }
     // Proven off this stack: a function only events invoke, a fresh stack,
     // a callback the engine runs on its own schedule. `NotIn` says only that
-    // one run is outside a disposal; under a flow row or a named callback
-    // (`direct`, ADR 0920) it climbs to the component, so the function the
-    // site's in-place layers end in must itself be proven off the stack.
+    // one run is outside a disposal (it climbs a flow row or a deferred
+    // primitive's callback to what created it), so the function the site's
+    // in-place layers end in must itself be proven off the stack (ADR 0920
+    // under a flow row or a named callback, ADR 0927 everywhere).
+    // The region's own callback (`untrack(() => site)`) is the region: its
+    // place is the dialect's deferred or allowed position.
+    let own_region =
+        crate::owners::containing_ast_function(&file.ast, span).is_some_and(|function| {
+            allowed.iter().any(|region| {
+                file.ast.peel_ts_sugar_span(*region) == function.span || *region == function.span
+            })
+        });
     if disposal == super::write_roles::DisposalReach::NotIn
-        && (!direct || super::write_roles::runs_off_callback_stack(file, span, lookup))
+        && (own_region || super::write_roles::runs_off_callback_stack(file, span, lookup))
     {
         return role_arm!(
             "callee_roles.allowed-nested-off-stack",
             ExecutionRole::DeferredCallback
         );
     }
-    // A callback a primitive takes is placed by that primitive's own
-    // arm, and a scheduler's runs on a fresh stack. Nothing above placed
-    // anything else, so no silence is proven.
-    if crate::owners::containing_ast_function(&file.ast, span)
-        .is_some_and(|function| function_placed_by_dialect(file, function.span, lookup))
+    // ADR 0927: a callback a primitive takes is placed by that primitive's
+    // own arm, which the allowed block answers before: a tracked one (a memo
+    // or effect compute) tracks the reads it runs, a control-flow child runs
+    // in the flow's window. Any other is unplaced.
+    if let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+        .filter(|function| function_placed_by_dialect(file, function.span, lookup))
     {
+        if own_region {
+            return role_arm!(
+                "callee_roles.allowed-primitive-callback",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        let tracked = file
+            .ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| {
+                !call.arguments[index].spread
+                    && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                    && crate::call_primitive_name_cached(
+                        lookup,
+                        file,
+                        call,
+                        entities,
+                        symbol_names,
+                        dialect,
+                    )
+                    .as_ref()
+                    .and_then(PrimitiveName::primitive)
+                    .is_some_and(|primitive| {
+                        callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                            && dialect
+                                .callback_semantics_at(primitive, index, call.arguments.len())
+                                .tracks_reads
+                    })
+            });
+        if tracked {
+            return role_arm!(
+                "callee_roles.allowed-primitive-tracked",
+                ExecutionRole::TrackedJsx
+            );
+        }
+        if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, lookup)
+            .filter(|role| *role != ExecutionRole::DeferredCallback)
+        {
+            return role_arm!("callee_roles.allowed-primitive-flow", role);
+        }
         return role_arm!(
-            "callee_roles.allowed-primitive-callback",
-            ExecutionRole::DeferredCallback
+            "callee_roles.allowed-primitive-unplaced",
+            ExecutionRole::Unknown
         );
     }
     if fresh_stack_callback_call(file, span, lookup).is_some() {
@@ -1996,8 +2064,16 @@ pub(super) fn fresh_stack_callback_role(
 
 /// ADR 0695: whether `function` is what a primitive's first callback returns
 /// directly (`createEffect(() => () => read(), …)`) and the literal apply beside
-/// it only `void`s the value it receives, so nothing calls `function`.
-fn returned_to_idle_apply(
+/// it only names the value it receives, so nothing calls `function`.
+///
+/// ADR 0927: the primitive is one whose argument 1 is the apply that receives
+/// argument 0's value ([`solid_dialect::Dialect::apply_callback_argument`]),
+/// the apply is an arrow (no `arguments` object) with no rest parameter and at
+/// most one plain identifier parameter, and every reference of that parameter
+/// is an inert operand ([`solid_facts::ast::AstFacts::inert_operands`]: the
+/// whole operand of `void` or `typeof`, an expression statement, a side of
+/// `===`), so none calls it. `void v()` calls `v`: its operand is the call.
+pub(crate) fn returned_to_idle_apply(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
@@ -2010,27 +2086,38 @@ fn returned_to_idle_apply(
     else {
         return false;
     };
+    let inert = |span: Span| {
+        ast.inert_operands
+            .iter()
+            .any(|operand| ast.peel_ts_sugar_span(*operand) == span)
+    };
     ast.arguments_containing(compute.span).any(|(call, index)| {
         index == 0
+            && !call.arguments[0].spread
             && ast.peel_ts_sugar_span(call.arguments[0].span) == compute.span
-            && lookup.primitive_at_call(file, call.span).is_some()
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup.dialect.apply_callback_argument(primitive) == Some(1)
+                })
             && call.arguments.get(1).is_some_and(|apply| {
-                ast.function_at(ast.peel_ts_sugar_span(apply.span))
-                    .is_some_and(|apply| {
-                        apply.parameters.first().is_none_or(|parameter| {
-                            parameter.names.iter().all(|name| {
-                                ast.identifiers_within(apply.body).all(|identifier| {
-                                    ast.reference_declaration(identifier.span) != Some(name.span)
-                                        || file
-                                            .source
-                                            .get(..identifier.span.start as usize)
-                                            .is_some_and(|before| {
-                                                before.trim_end().ends_with("void")
-                                            })
+                !apply.spread
+                    && ast
+                        .function_at(ast.peel_ts_sugar_span(apply.span))
+                        .is_some_and(|apply| {
+                            apply.kind == solid_facts::ast::FunctionKind::Arrow
+                                && !apply.rest_parameter
+                                && apply.parameters.len() <= 1
+                                && apply.parameters.first().is_none_or(|parameter| {
+                                    parameter.shape == solid_facts::ast::BindingShape::Identifier
+                                        && parameter.names.len() == 1
+                                        && ast.identifiers_within(apply.body).all(|identifier| {
+                                            ast.reference_declaration(identifier.span)
+                                                != Some(parameter.names[0].span)
+                                                || inert(identifier.span)
+                                        })
                                 })
-                            })
                         })
-                    })
             })
     })
 }

@@ -76,6 +76,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   returned, with no strict-read window open, so a read there is not reported
   (probed on rc.3 and rc.9). The scheduler is matched by its standard-library
   declaration, not its name.
+- **A function kept in a collection is uncertifiable** (`Set.add`, `push`,
+  `Map.set`: project code may call it anywhere), and a `For` row or `Show` child
+  created in a closed `untrack` reads in its own window (ADR 0927).
 - **A host-retained callback is uncertifiable.** An `addEventListener`
   listener (on any DOM interface), a `Function.prototype.bind` bound argument, a
   `PromiseLike.then` callback and a Geolocation callback written in a component
