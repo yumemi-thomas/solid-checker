@@ -387,6 +387,17 @@ function render(program, instrument) {
       case "do": return `do ${body()} while (false);`;
       case "switch": return `switch (1 as number) {\n${ind(depth + 1)}case 1: ${block(c.body, depth + 1, null, [], ["break;"])}\n${ind(depth)}}`;
       case "try-catch": return `try ${body()} catch {}`;
+      // ADR 0931: a helper with a parameter default, in a block of its own; the `try` keeps a throwing default off the render.
+      case "gate-default": case "gate-throw": {
+        const inner = depth + 1;
+        const fallback = c.form === "gate-throw" ? "stopGate()" : "0";
+        const lines = [
+          ...(c.form === "gate-throw" ? ['const stopGate = (): number => { throw new Error("gate"); };'] : []),
+          `const gt0 = (g: () => void, _gate: number = ${fallback}) => { g(); };`,
+          `try { gt0(() => ${block(c.body, inner)}); } catch { /* the default threw */ }`,
+        ];
+        return `{\n${lines.map((text) => `${ind(inner)}${text}`).join("\n")}\n${ind(depth)}}`;
+      }
       case "try-finally": return `try {} finally ${body()}`;
       case "label": return `outer: ${body(["break outer;"])}`;
       case "generator": return `(function* () ${body(["yield 1;"])})().next();`;

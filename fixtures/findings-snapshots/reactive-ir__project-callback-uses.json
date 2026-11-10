@@ -627,8 +627,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
       "start": 7792,

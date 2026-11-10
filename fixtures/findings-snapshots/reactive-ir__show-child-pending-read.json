@@ -8,30 +8,18 @@
       "blocker": "parameter-call-argument-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/show-child-pending-read/App.tsx",
-      "start": 565,
-      "end": 566,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/show-child-pending-read/App.tsx",
-      "start": 650,
-      "end": 659,
+      "start": 535,
+      "end": 536,
       "fixes": 0
     },
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "invocation-context-unproven",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/show-child-pending-read/App.tsx",
-      "start": 650,
-      "end": 659,
+      "start": 620,
+      "end": 629,
       "fixes": 0
     },
     {
@@ -41,8 +29,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/show-child-pending-read/App.tsx",
-      "start": 650,
-      "end": 659,
+      "start": 620,
+      "end": 629,
       "fixes": 0
     },
     {
@@ -51,8 +39,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/show-child-pending-read/App.tsx",
-      "start": 930,
-      "end": 939,
+      "start": 900,
+      "end": 909,
       "fixes": 0
     },
     {

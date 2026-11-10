@@ -168,12 +168,11 @@
     {
       "rule": "flush-in-action",
       "code": "SC2006",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-flush-in-action-unplaced/Forwarded.tsx",
-      "start": 465,
-      "end": 470,
+      "start": 408,
+      "end": 413,
       "fixes": 0
     }
   ]

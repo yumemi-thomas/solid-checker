@@ -1,10 +1,10 @@
 import { createEffect, createSignal, For } from "solid-js";
 
-// ADR 0920: a read in a callback handed parameter to parameter (`hc1(g)`
-// passes `g` to `hc0`, which calls it) inside a window callback. No layer
-// places it, so nothing proves it deferred: uncertifiable at the read.
+// ADR 0931: a read in a callback handed parameter to parameter (`hc1(g)`
+// passes `g` to `hc0`, which calls it) runs in place: in a window callback
+// it is the window's read (ADR 0920 left it uncertifiable).
 
-// Uncertifiable: a `For` row (rc.21 warns STRICT_READ_UNTRACKED in Chrome).
+// Violation: a `For` row (rc.21 warns STRICT_READ_UNTRACKED in Chrome).
 export function ForwardedInRow() {
   const [count] = createSignal(3);
   return (
@@ -21,7 +21,7 @@ export function ForwardedInRow() {
   );
 }
 
-// Uncertifiable: a ref callback named by a binding.
+// Violation: a ref callback named by a binding.
 export function ForwardedInNamedRef() {
   const [count] = createSignal(3);
   const ref = () => {
@@ -70,7 +70,7 @@ export function TimerInRow() {
   );
 }
 
-// Unchanged: the same forwarding in the component body was uncertifiable.
+// Violation: the same forwarding in the component body.
 export function ForwardedInBody() {
   const [count] = createSignal(3);
   const hc0 = (g: () => void) => { g(); };

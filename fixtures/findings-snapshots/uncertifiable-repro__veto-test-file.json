@@ -30,6 +30,17 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/veto-test-file/src/carousel.tsx",
+      "start": 942,
+      "end": 965,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-test-file/src/carousel.tsx",
       "start": 947,
       "end": 960,
       "fixes": 0

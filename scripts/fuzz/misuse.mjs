@@ -1082,6 +1082,13 @@ const FLUSH_DRAIN_MEASURED = {
   UNTIL_IN_REACTIVE_SCOPE: { misuse: [], legal: ["body", "effect-apply-defer", "effect-cleanup", "effect-error-arm", "reaction", "render-apply", "render-cleanup", "root"] },
   UNTRACKED_READ_AFTER_AWAIT: { misuse: [], legal: ["effect-error-arm"] },
 };
+/**
+ * ADR 0931 (rediscovery of a false positive): the site in a callback a body hands to a helper with a parameter default, called in a
+ * `try` (model.mjs GATE_FORMS). `gate-default`'s primitive default lets the helper call the callback: the body's codes report there.
+ * `gate-throw`'s default throws before the helper's body, so the site never runs: legal for each.
+ */
+const GATE_CODES = ["STRICT_READ_UNTRACKED", "REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE", "STORE_WRITE_OUTSIDE_SETTER"];
+const GATE_PLACEMENT = Object.fromEntries(GATE_CODES.map((code) => [code, { misuse: ["gate-default"], legal: ["gate-throw"] }]));
 const flushDrainContext = (at) => (["body", "memo", "root", "handler"].includes(at) ? `effect-apply-flush-${at}` : `${at}-flush-rerun`);
 const FLUSH_DRAIN_PLACEMENT = Object.fromEntries(Object.entries(FLUSH_DRAIN_MEASURED).map(([code, { misuse, legal }]) => [code, { misuse: misuse.map(flushDrainContext), legal: legal.map(flushDrainContext) }]));
 // `settled-flush-root` (2026-11-04, 34 probes on rc.17, every variant agreed): a handler's `onSettled` drained by a root's `flush()` runs
@@ -1099,13 +1106,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1910,6 +1917,7 @@ function recallContext(context, stmts, kit) {
     case "pos-foreach": return { body: [expr(iter("forEach", fn(stmts)))], view: [] };
     case "pos-handler-expr": return { body: [], view: [handlerExpr(kit.name("v"), iife(fn([...stmts, ret(num(1))])))] };
     case "pos-flush-fn": return { body: [expr(flush(fn(stmts)))], view: [] };
+    case "gate-default": case "gate-throw": return { body: [ctl(context, stmts)], view: [] };
     case "pos-handler-root": return { body: [], view: [button(kit.name("b"), [expr(prim("root", fn(stmts)))])] };
     case "pos-handler-untrack": return { body: [], view: [button(kit.name("b"), [expr(prim("untrack", fn(stmts)))])] };
     case "pos-handler-owner": return { body: [decl("boundOwner", createOwnerExpr())], view: [button(kit.name("b"), [expr(prim("owner", fn(stmts), { ownerArg: "bound" }))])] };

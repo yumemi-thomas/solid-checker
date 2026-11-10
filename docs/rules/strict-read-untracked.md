@@ -141,8 +141,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   primitive (its own compute tracks), `untrack` around the call or the read, JSX
   the callback writes, a call after an await the compute reaches (that is
   [reactive-read-after-await](reactive-read-after-await.md)'s, also through an
-  immediately invoked function), and a call `tsc` rejects. `createRoot` is
-  `runWithOwner(createOwner(), …)` and reports the same (ADR 0932).
+  immediately invoked function), and a call `tsc` rejects. `createRoot` reports
+  the same (ADR 0932).
 - **A setter's updater runs on the setter's stack** unless the guard throws
   first; `ownedWrite: true` skips it (ADR 0932).
 - **A read an await may precede is uncertifiable.** Past an unconditional
@@ -163,10 +163,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   In `flush(fn)` in a body only `dynamic()` mounts, `s.a` in `s.a.v = 7` stands
   for no read of its own: the same write in the body is uncertifiable, so the
   path claims no more (ADR 0694). A real read there stays a violation.
+- **A callback forwarded to a callee that calls it runs in place** (ADR 0931).
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
-  scope only stores, or a forwarded callback in a flow row or named ref
-  (ADR 0920) has no execution role; a read there is reported as
+  scope only stores, or a call in a compute's returned function (ADR 0931)
+  has no execution role; a read there is reported as
   **uncertifiable**, never dropped. A read past the strict-read window (after
   an unconditional `await`) or in several non-reporting roles (ADR 0323) is
   proven silent.

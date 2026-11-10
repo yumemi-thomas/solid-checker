@@ -14,12 +14,11 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "owner-allocation-unproven",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
       "start": 458,
-      "end": 472,
+      "end": 495,
       "fixes": 0
     },
     {
@@ -46,12 +45,11 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "owner-allocation-unproven",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
       "start": 559,
-      "end": 573,
+      "end": 588,
       "fixes": 0
     },
     {
@@ -78,12 +76,11 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "owner-allocation-unproven",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
       "start": 654,
-      "end": 668,
+      "end": 705,
       "fixes": 0
     },
     {
@@ -100,12 +97,11 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "owner-allocation-unproven",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
       "start": 797,
-      "end": 811,
+      "end": 859,
       "fixes": 0
     },
     {

@@ -111,7 +111,8 @@ export function RootTimeout() {
   return <p />;
 }
 
-// Legal: a memo's compute tracks the read.
+// Legal (a memo's compute tracks the read), yet uncertifiable at the call as
+// a read written in `hf` is: `[1].map` in a compute places no row (ADR 0931).
 export function TrackedCompute() {
   const [r1] = createSignal(1);
   const wrapUse = () => {

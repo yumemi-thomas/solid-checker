@@ -69,8 +69,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
-      "start": 3138,
-      "end": 3142,
+      "start": 2689,
+      "end": 2698,
       "fixes": 0
     },
     {
@@ -80,8 +80,19 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
-      "start": 3220,
-      "end": 3229,
+      "start": 3251,
+      "end": 3255,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
+      "start": 3333,
+      "end": 3342,
       "fixes": 0
     },
     {
@@ -91,8 +102,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
-      "start": 3580,
-      "end": 3589,
+      "start": 3693,
+      "end": 3702,
       "fixes": 0
     },
     {
@@ -102,8 +113,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
-      "start": 3811,
-      "end": 3815,
+      "start": 3924,
+      "end": 3928,
       "fixes": 0
     },
     {
@@ -113,8 +124,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
-      "start": 3907,
-      "end": 3916,
+      "start": 4020,
+      "end": 4029,
       "fixes": 0
     },
     {
@@ -124,8 +135,8 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-through-summary/App.tsx",
-      "start": 3946,
-      "end": 3954,
+      "start": 4059,
+      "end": 4067,
       "fixes": 0
     },
     {

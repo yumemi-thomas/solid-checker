@@ -69,8 +69,7 @@ owner, and its JSX children are render computations. A write in a function the
 row's code runs in place (an IIFE in a JSX child, a helper calling its callback,
 `untrack`, a named closure the row calls) is placed where that code runs, so it
 is a violation (ADR 0460). An event handler, a timer or an effect apply in a row
-keeps its own legal role; a handler only with no synchronous dispatch, else
-uncertifiable (ADR 0932).
+keeps its own legal role (a handler only absent a dispatch, ADR 0932).
 
 A `createRoot` body is not a write region either. It runs during the call
 with the new root as the ambient owner, and a root is a children-capable
@@ -183,6 +182,9 @@ invocation is proven. It is proven for:
 
 - a literal handed to a project function whose own body calls that parameter
   during the call;
+- a setter or action handed by name to such a function, judged as its call
+  there; an obligation where the function may call it on some paths only or
+  also uses the parameter otherwise (ADR 0929);
 - a standard-library inline callback (`[x].forEach(fn)`);
 - an IIFE;
 - a primitive's or a control-flow component's callback;

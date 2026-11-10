@@ -233,6 +233,28 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 2437,
+      "end": 2451,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 2453,
+      "end": 2469,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1203,6 +1225,17 @@
       "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
       "start": 1440,
       "end": 1460,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/ContextStability.tsx",
+      "start": 1578,
+      "end": 1585,
       "fixes": 0
     },
     {
