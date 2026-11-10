@@ -2722,17 +2722,20 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
                         .as_str()
                         .is_some_and(|text| text.contains("no compiler or semantic fact places"))
                 });
+        // ADR 0934: each fixture's reader is an export of an open program, so
+        // unseen code may call it: its read is also an obligation at the
+        // definition, beside the violation its calling component proves.
         assert_eq!(
             unplaced.len(),
-            if fixture == "interprocedural-methods-v2" {
-                4
-            } else if fixture == "callback-forwarding" {
+            match fixture {
+                "interprocedural-methods-v2" => 5,
                 // ADR 0674: `readCount` is handed to a project call in another
                 // file, which no walk follows: an obligation at the read, and
                 // the violation at the calling component stands.
-                1
-            } else {
-                0
+                "callback-forwarding" | "interprocedural" | "returned-closure" | "store-flow" => 1,
+                "polymorphic" => 2,
+                "recursive" => 3,
+                _ => 0,
             },
             "fixture {fixture}: {unplaced:#?}"
         );
