@@ -1252,7 +1252,11 @@ fn local_dispatch_eval_and_depth_limits_keep_obligations() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(start as u64))
+        // ADR 0934: the Get is also the helper's own SC1001 obligation there.
+        .find(|row| {
+            row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+                && row["id"] == "SC9012"
+        })
         .expect("direct eval must keep the member dispatch uncertifiable");
     assert_eq!(row["id"], "SC9012", "{row:#?}");
     assert_eq!(row["kind"], "uncertifiable", "{row:#?}");
@@ -2722,17 +2726,20 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
                         .as_str()
                         .is_some_and(|text| text.contains("no compiler or semantic fact places"))
                 });
+        // ADR 0934: each fixture's reader is an export of an open program, so
+        // unseen code may call it: its read is also an obligation at the
+        // definition, beside the violation its calling component proves.
         assert_eq!(
             unplaced.len(),
-            if fixture == "interprocedural-methods-v2" {
-                4
-            } else if fixture == "callback-forwarding" {
+            match fixture {
+                "interprocedural-methods-v2" => 5,
                 // ADR 0674: `readCount` is handed to a project call in another
                 // file, which no walk follows: an obligation at the read, and
                 // the violation at the calling component stands.
-                1
-            } else {
-                0
+                "callback-forwarding" | "interprocedural" | "returned-closure" | "store-flow" => 1,
+                "polymorphic" => 2,
+                "recursive" => 3,
+                _ => 0,
             },
             "fixture {fixture}: {unplaced:#?}"
         );

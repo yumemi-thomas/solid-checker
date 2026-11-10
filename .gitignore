@@ -987,6 +987,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-listener-shared/node_modules/**
 !fixtures/reactive-ir/rc21-listener-no-dispatch/node_modules/
 !fixtures/reactive-ir/rc21-listener-no-dispatch/node_modules/**
+!fixtures/reactive-ir/event-dispatch-handler-reads/node_modules/
+!fixtures/reactive-ir/event-dispatch-handler-reads/node_modules/**
+!fixtures/reactive-ir/event-dispatch-handler-reads-none/node_modules/
+!fixtures/reactive-ir/event-dispatch-handler-reads-none/node_modules/**
+!fixtures/reactive-ir/reads-entered-unseen/node_modules/
+!fixtures/reactive-ir/reads-entered-unseen/node_modules/**
+!fixtures/reactive-ir/reads-entered-unseen-closed/node_modules/
+!fixtures/reactive-ir/reads-entered-unseen-closed/node_modules/**
 !fixtures/reactive-ir/rc21-anchor-listener-forms/node_modules/
 !fixtures/reactive-ir/rc21-anchor-listener-forms/node_modules/**
 !fixtures/reactive-ir/rc21-created-label/node_modules/

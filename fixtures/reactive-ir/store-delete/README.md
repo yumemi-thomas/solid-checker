@@ -1,11 +1,10 @@
 # SC2003: `delete` of a store path
 
-`delete store.path` written through a `createStore` read proxy (or a
-`createProjection` result) is dropped outside the setter: the proxy's
-`deleteProperty` trap warns `STORE_WRITE_OUTSIDE_SETTER` and stores nothing
-(`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:5761-5767`). The rule reports it
-where it reports the assignment `store.path = x`, with the same exemptions
-(ADR 0461).
+`delete store.path` through a `createStore` proxy (or a `createProjection`
+result) is dropped outside the setter: `deleteProperty` warns
+`STORE_WRITE_OUTSIDE_SETTER` (rc.17 `dist/dev.js:5761-5767`). Reported as the
+assignment `store.path = x` is, with its exemptions (ADR 0461). The exports
+here have no caller: their store Gets are SC1001 uncertifiable (ADR 0934).
 
 TypeScript reports `delete` of a required (TS2790) or readonly (TS2704)
 property, so the operand must carry the Type Fact `writableOptionalProperty`.
@@ -19,10 +18,9 @@ wrapper, a parenthesized operand, another store's setter, a namespace import
 (`Namespace.tsx`), a projection, a `const` alias (ADR 0463), and nested paths
 (`store.a.b` in the body and a handler, `store.o.b` under `if (store.o)`).
 
-Silent: in the store's own setter (it commits), on its draft, on a plain
-object, through a shadowing parameter. Uncertifiable since
-ADR 0829 (Chrome warns, `tsc` accepts; the producer proves the operand neither
-optional and writable nor rejected): a non-optional property whose type
+Silent: the store's own setter, its draft, a plain object, a shadowing
+parameter. Uncertifiable since ADR 0829 (Chrome warns, `tsc` accepts; the
+operand is proven neither optional and writable nor rejected): a non-optional property whose type
 includes `undefined` and a computed key here, and in `Unproven.tsx` a literal
 computed key, an open record key, an index-signature member, an array index, a
 nested computed key, `unknown` and a literal-typed variable key. Its

@@ -9531,5 +9531,140 @@
   "found": "silence audit row 5 and proof-soundness research S3, settled from rc.21 source",
   "fixed": "ADR 0932",
   "outside": "rc.21 emits no diagnostic for this stale read, so no Chrome-judged grid can tell the old build's silence from the new violation; fixtures/reactive-ir/run-with-owner-in-computation/CreateRoot.tsx holds each case as the runWithOwner twin in App.tsx and Aliases.tsx"
+ },
+ {
+  "finding": "ADR 0934: a function named as an intrinsic element's event handler (`onScroll={hd}`), and a closure nested in it, kept the silent `DeferredCallback` role under a visible synchronous dispatch that delivers the event in the component body (the veto reached only an inline handler's `EventCallback`), so its reads, writes and actions were certified clean",
+  "found": "fix 6's ground truth for proof-log hole B1 (probe d-named-handler-dispatch, Chrome rc.21 STRICT_READ_UNTRACKED / REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "fixed": "ADR 0934",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-body-dispatch-named-memo-alias-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-memo-destructured-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-memo-direct-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-memo-hook-member-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-memo-hook-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-memo-tuple-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-signal-alias-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-signal-destructured-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-signal-direct-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-signal-hook-member-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-signal-hook-none",
+   "mx-strict-read-untracked-evt-body-dispatch-named-signal-tuple-none"
+  ],
+  "rediscovered": "origin/main 63725c6bf: 12 strata false clean (focus, context evt-body-dispatch-named); ADR 0934: none"
+ },
+ {
+  "finding": "ADR 0934: a function named as an intrinsic element's event handler (`onScroll={hd}`), and a closure nested in it, kept the silent `DeferredCallback` role under a visible synchronous dispatch that delivers the event in the component body (the veto reached only an inline handler's `EventCallback`), so its reads, writes and actions were certified clean",
+  "found": "fix 6's ground truth for proof-log hole B1 (probe d-named-handler-dispatch, Chrome rc.21 STRICT_READ_UNTRACKED / REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "fixed": "ADR 0934",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-refresh-alias-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-refresh-destructured-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-refresh-namespace-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-refresh-wrapper-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-signal-alias-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-signal-destructured-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-signal-hook-member-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-signal-hook-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-signal-tuple-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-signal-wrapper-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-store-alias-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-store-destructured-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-store-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-store-hook-member-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-store-hook-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-store-tuple-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-named-store-wrapper-none"
+  ],
+  "rediscovered": "origin/main 63725c6bf: 19 strata false clean (focus, context evt-body-dispatch-named); ADR 0934: none"
+ },
+ {
+  "finding": "ADR 0934: a function named as an intrinsic element's event handler (`onScroll={hd}`), and a closure nested in it, kept the silent `DeferredCallback` role under a visible synchronous dispatch that delivers the event in the component body (the veto reached only an inline handler's `EventCallback`), so its reads, writes and actions were certified clean",
+  "found": "fix 6's ground truth for proof-log hole B1 (probe d-named-handler-dispatch, Chrome rc.21 STRICT_READ_UNTRACKED / REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "fixed": "ADR 0934",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-evt-body-dispatch-named-x-alias-none",
+   "mx-action-called-in-owned-scope-evt-body-dispatch-named-x-destructured-none",
+   "mx-action-called-in-owned-scope-evt-body-dispatch-named-x-direct-none",
+   "mx-action-called-in-owned-scope-evt-body-dispatch-named-x-hook-member-none",
+   "mx-action-called-in-owned-scope-evt-body-dispatch-named-x-hook-none",
+   "mx-action-called-in-owned-scope-evt-body-dispatch-named-x-tuple-none",
+   "mx-action-called-in-owned-scope-evt-body-dispatch-named-x-wrapper-none"
+  ],
+  "rediscovered": "origin/main 63725c6bf: 7 strata false clean (focus, context evt-body-dispatch-named); ADR 0934: none"
+ },
+ {
+  "finding": "ADR 0934: a function named as an intrinsic element's event handler (`onScroll={hd}`), and a closure nested in it, kept the silent `DeferredCallback` role under a visible synchronous dispatch that delivers the event in the component body (the veto reached only an inline handler's `EventCallback`), so its reads, writes and actions were certified clean",
+  "found": "fix 6's ground truth for proof-log hole B1 (probe d-named-handler-dispatch, Chrome rc.21 STRICT_READ_UNTRACKED / REACTIVE_WRITE_IN_OWNED_SCOPE)",
+  "fixed": "ADR 0934",
+  "grid": "mx-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-evt-body-dispatch-named-x-alias-none",
+   "mx-on-flush-in-owned-scope-evt-body-dispatch-named-x-destructured-none",
+   "mx-on-flush-in-owned-scope-evt-body-dispatch-named-x-direct-none",
+   "mx-on-flush-in-owned-scope-evt-body-dispatch-named-x-namespace-none",
+   "mx-on-flush-in-owned-scope-evt-body-dispatch-named-x-wrapper-none"
+  ],
+  "rediscovered": "origin/main 63725c6bf: 5 strata false clean (focus, context evt-body-dispatch-named); ADR 0934: none"
+ },
+ {
+  "finding": "ADR 0934: a read in a function that is no component and that code the program does not hold may enter (an export of an open program, or of a module whose namespace escapes unnamed) had no row: the summaries claim a helper's reads at its calls and none holds those entries (proof-log holes B1 `bump`, B2 store Gets, B5 `ByHand`, the u1 class); the write walk's census already refused them",
+  "found": "the proof-log completeness check (C2 reporting-decision-no-row, callee_roles.unplaced), Chrome rc.21 STRICT_READ_UNTRACKED when a body calls the helper (fix 6 probes q1-q4, n1, n2)",
+  "fixed": "ADR 0934",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-export-namespace-call-memo-direct-none",
+   "mx-strict-read-untracked-export-namespace-call-signal-direct-none"
+  ],
+  "rediscovered": "origin/main 63725c6bf: 2 strata false clean (focus, context export-namespace-call: the body calls the export through its own namespace by a computed key; an unseen importer itself cannot be generated); ADR 0934: none"
+ },
+ {
+  "finding": "A helper an intrinsic handler literal calls, the handler delivered by a synchronous dispatch in the body (proof-log hole B1, veto-test-file `goTo`), had no row at the call: the literal was taken for a stored one whose calls claim its reads",
+  "found": "fix 6's ground truth for proof-log hole B1 (probe q7, Chrome rc.21 STRICT_READ_UNTRACKED)",
+  "fixed": "ADR 0931 (#196, 63725c6bf): an unplaced call outside a named helper keeps its row",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-body-dispatch-helper-memo-alias-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-memo-destructured-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-memo-direct-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-memo-hook-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-memo-tuple-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-memo-wrapper-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-signal-alias-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-signal-destructured-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-signal-direct-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-signal-hook-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-signal-tuple-none",
+   "mx-strict-read-untracked-evt-body-dispatch-helper-signal-wrapper-none"
+  ],
+  "rediscovered": "b0eb0467b: 12 strata false clean (focus, context evt-body-dispatch-helper); 63725c6bf and later: none"
+ },
+ {
+  "finding": "ADR 0934 (4): a props read at the head of a longer path under a TypeScript wrapper (`(props as typeof props)[\"value\"].text`, `props!.value.text`) was certified clean: the head test asked Type Facts for an entity at the identifier, which it keeps none of under a wrapper, so the read was dropped as part of the longer path before the binder fallback",
+  "found": "the proof-log completeness check (prop-head-get `Cooked`, C1 props-read-no-row); Chrome rc.21 STRICT_READ_UNTRACKED (fix 6 probes k1, k2)",
+  "fixed": "ADR 0934 (the head resolves through the binder: V)",
+  "outside": "the generator's props hold numbers, so no wrapped head of a longer path is generated; the recall source `prop-value-cast` reads a wrapped prop bare (already proven). Fixture prop-head-get `Cooked` and the probes hold it"
+ },
+ {
+  "finding": "ADR 0934 (3), owner ruling 2026-11-10: a component-local helper's props Get whose use nothing follows (handed to a call, aliased by a `let`, a JSX prop) was ADR 0222's option-B silence: no row and no obligation; Chrome rc.21 warns when the alias runs in the body",
+  "found": "the proof-log completeness check (13 C2 props reads in callback-props-reads, helper-prop-read, literal-argument-member-dispatch); Chrome probes h1-h3",
+  "fixed": "ADR 0934 (U at the Get, `function-run-unplaced`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-helper-handed-call-memo-direct-none-s-prop-value-cast",
+   "mx-strict-read-untracked-helper-handed-call-signal-direct-none-s-prop-value-cast"
+  ],
+  "rediscovered": "origin/main 4f2d529f5: 2 certified false cleans (focus, context helper-handed-call, source prop-value-cast); ADR 0934: none. The legal twin helper-handed-handler: 18 lg-recall clean to uncertifiable"
  }
 ]

@@ -302,8 +302,9 @@
       "rule": "strict-read-untracked",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
-      "why": "Reading an accessor is type-correct wherever it happens; the claim is that this read registers no dependency because of the scope it runs in. No type describes a tracking scope.",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "Reading an accessor is type-correct wherever it happens; the claim is that this read registers no dependency because of the scope it runs in. No type describes a tracking scope. ADR 0934: `read` is an open program's export, so unseen code may call it in a body: an obligation at the read, beside the silent apply call.",
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\nexport const read = () => count();\ncreateEffect(() => 1, () => {\n  read();\n});\n"
     },
     {
@@ -1238,6 +1239,12 @@
       "checkerKind": "uncertifiable",
       "allow": [
         2790
+      ],
+      "distinctFindings": [
+        {
+          "rule": "strict-read-untracked",
+          "why": "ADR 0934: `delete store.req.id` still Gets `store.req`, in an export of an open program no fact places; the obligation is about when that read runs, not the delete TS2790 rejects."
+        }
       ],
       "why": "`delete store.path` on a property TypeScript rejects (ADR 0461 keeps it out). The proxy drops it outside a setter (rc.17 `deleteProperty` trap `dist/dev.js:5761-5767`; probed), but for a required property under strictNullChecks `tsc` reports TS2790 (\"The operand of a 'delete' operator must be optional\"), so the write is TypeScript's and the checker is silent in the strict project. Without strictNullChecks `tsc` accepts the same bytes, so silence there would be a false clean: the producer's `deleteOperandRejected` answers no and the checker reports it uncertifiable, `delete-operand-unproven` (ADR 0829), hence `checkerByPass.loose`. `nick`, which type-checks in both projects, is its own case at the end of this file.",
       "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ req: { id: 1 } });\nexport function Remove() {\n  delete store.req.id;\n}\n"

@@ -214,12 +214,25 @@ impl ProgramDraft {
             })
         };
 
-        self.static_defects
-            .retain(|defect| retained(&defect.location));
-        self.static_violations
-            .retain(|violation| retained(&violation.location));
-        self.directive_creations
-            .retain(|creation| retained(&creation.location));
+        // ADR 0933: a row the compiler's discard removes leaves a typed silence.
+        macro_rules! discard {
+            ($table:ident, $name:literal) => {
+                let stage =
+                    crate::proof_log::RowStage::begin($name, &self.$table, |row| &row.location);
+                self.$table.retain(|row| retained(&row.location));
+                if let Some(stage) = stage {
+                    stage.end(
+                        "CompilerDiscardedRegion",
+                        &[crate::proof_log::PremiseKind::CompilerDiscardedRegion],
+                        &self.$table,
+                        |row| &row.location,
+                    );
+                }
+            };
+        }
+        discard!(static_defects, "static_defects");
+        discard!(static_violations, "static_violations");
+        discard!(directive_creations, "directive_creations");
     }
 
     /// Orders every table by location and assembles the final [`Program`].
@@ -889,6 +902,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     program.early_mention_sites =
         crate::indexes::early_mention_report_sites(&program, semantic_lookup);
+    // ADR 0933: with the proof log on, the site universe and how the final
+    // program ends each site, while the lookup's memos are still open.
+    crate::proof_universe::record(&analysis, &program);
     if defer_memo_end {
         semantic_lookup.defer_end_memos();
     } else if let Some(report) = semantic_lookup.end_memos() {
@@ -896,6 +912,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     }
     program.runtime_configuration = runtime_configuration;
     crate::role_log::flush();
+    crate::proof_log::flush();
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.closure_placements = semantic_lookup.closure_placements();
     build_timings.write_walk_steps = semantic_lookup.write_walk_steps();

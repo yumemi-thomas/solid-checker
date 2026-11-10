@@ -48,6 +48,8 @@ mod owner_flow_process;
 mod owner_parity_process;
 #[path = "path_independence_process.rs"]
 mod path_independence_process;
+#[path = "proof_log_process.rs"]
+mod proof_log_process;
 #[path = "props_reactivity_process.rs"]
 mod props_reactivity_process;
 #[path = "reachability_parity_process.rs"]

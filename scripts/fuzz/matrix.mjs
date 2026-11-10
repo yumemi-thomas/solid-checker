@@ -380,6 +380,8 @@ export function recallAxes(code, context, base, variants, options = {}) {
   if (context === "st-unread") return shapes.filter((shape) => shape.binding === "direct");
   // The question of a computed chain key is the key, not the spelling of the read: the direct binding's closure and helper layers, and an alias.
   if (context.startsWith("aw-forward-") || context.startsWith("aw-mixed-") || context === "aw-pre-pick") return shapes.filter((shape) => shape.binding === "direct" && shape.layer === "none");
+  // ADR 0934: a module-scope helper sees the module's values, not a body's alias or hook: the direct binding.
+  if (context.startsWith("export-namespace-call")) return shapes.filter((shape) => shape.binding === "direct");
   if (context.startsWith("aw-then-computed")) return shapes.filter((shape) => (shape.binding === "direct" && /^(none|closure.*|helper.*)$/.test(shape.layer ?? "none")) || (shape.binding === "alias" && shape.layer === "none"));
   return shapes;
 }

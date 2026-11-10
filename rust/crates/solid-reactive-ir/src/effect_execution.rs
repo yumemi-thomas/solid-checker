@@ -693,36 +693,53 @@ pub(crate) fn gate_diagnostics(
         };
         at_span(file, Span::new(start, end), lookup)
     };
-    draft
-        .reads
-        .retain_mut(|read| match execution(&read.location) {
-            ApplyExecution::Absent => false,
-            ApplyExecution::Unknown => {
-                read.callee_callback_timing = true;
-                // Withholding an invocation is no universal non-strict-use
-                // proof. The callback may still run in its strict apply phase.
-                read.project_consumer_non_strict = false;
-                true
+    // ADR 0933: a row an apply proven absent removes leaves a typed silence.
+    macro_rules! absent {
+        ($table:ident, $name:expr, $closure:expr) => {{
+            let stage =
+                crate::proof_log::RowStage::begin($name, &draft.$table, |row| &row.location);
+            draft.$table.retain_mut($closure);
+            if let Some(stage) = stage {
+                stage.end(
+                    "ApplyExecution::Absent",
+                    &[crate::proof_log::PremiseKind::ApplyNeverRuns],
+                    &draft.$table,
+                    |row| &row.location,
+                );
             }
-            ApplyExecution::Proven => true,
-        });
+        }};
+    }
+    absent!(reads, "reads", |read| match execution(&read.location) {
+        ApplyExecution::Absent => false,
+        ApplyExecution::Unknown => {
+            read.callee_callback_timing = true;
+            // Withholding an invocation is no universal non-strict-use
+            // proof. The callback may still run in its strict apply phase.
+            read.project_consumer_non_strict = false;
+            true
+        }
+        ApplyExecution::Proven => true,
+    });
     macro_rules! gate {
         ($table:ident, $uncertain:ident) => {
-            draft
-                .$table
-                .retain_mut(|row| match execution(&row.location) {
+            absent!(
+                $table,
+                stringify!($table),
+                |row| match execution(&row.location) {
                     ApplyExecution::Absent => false,
                     ApplyExecution::Unknown => {
                         row.$uncertain = true;
                         true
                     }
                     ApplyExecution::Proven => true,
-                });
+                }
+            );
         };
     }
-    draft
-        .missing_owners
-        .retain_mut(|row| match execution(&row.location) {
+    absent!(
+        missing_owners,
+        "missing_owners",
+        |row| match execution(&row.location) {
             ApplyExecution::Absent => false,
             ApplyExecution::Unknown => {
                 row.uncertain = true;
@@ -730,15 +747,17 @@ pub(crate) fn gate_diagnostics(
                 true
             }
             ApplyExecution::Proven => true,
-        });
+        }
+    );
     gate!(leaf_operations, uncertain);
     // ADR 0590: a row an apply of unknown execution supplies; as a read's,
     // its blocker is that the callee's invocation is unresolved.
     macro_rules! gate_named {
         ($table:ident) => {
-            draft
-                .$table
-                .retain_mut(|row| match execution(&row.location) {
+            absent!(
+                $table,
+                stringify!($table),
+                |row| match execution(&row.location) {
                     ApplyExecution::Absent => false,
                     ApplyExecution::Unknown => {
                         row.uncertain = true;
@@ -751,35 +770,50 @@ pub(crate) fn gate_diagnostics(
                         true
                     }
                     ApplyExecution::Proven => true,
-                });
+                }
+            );
         };
     }
     gate_named!(static_defects);
     gate_named!(static_violations);
     gate!(async_reads, invocation_context_unproven);
-    draft
-        .writes
-        .retain_mut(|row| match execution(&row.location) {
+    absent!(writes, "writes", |row| match execution(&row.location) {
+        ApplyExecution::Absent => false,
+        ApplyExecution::Unknown => {
+            row.execution = crate::ExecutionRole::Unknown;
+            true
+        }
+        ApplyExecution::Proven => true,
+    });
+    absent!(
+        action_invocations,
+        "action_invocations",
+        |row| match execution(&row.location) {
             ApplyExecution::Absent => false,
             ApplyExecution::Unknown => {
                 row.execution = crate::ExecutionRole::Unknown;
                 true
             }
             ApplyExecution::Proven => true,
-        });
-    draft
-        .action_invocations
-        .retain_mut(|row| match execution(&row.location) {
-            ApplyExecution::Absent => false,
-            ApplyExecution::Unknown => {
-                row.execution = crate::ExecutionRole::Unknown;
-                true
-            }
-            ApplyExecution::Proven => true,
-        });
+        }
+    );
+    let stage = crate::proof_log::RowStage::begin(
+        "directive_creations",
+        &draft.directive_creations,
+        |row| &row.location,
+    );
     draft
         .directive_creations
         .retain(|row| execution(&row.location) == ApplyExecution::Proven);
+    if let Some(stage) = stage {
+        // Dropped unless the apply is proven, an unknown one included.
+        stage.end(
+            "ApplyExecution::NotProven",
+            &[],
+            &draft.directive_creations,
+            |row| &row.location,
+        );
+    }
 }
 
 #[cfg(test)]

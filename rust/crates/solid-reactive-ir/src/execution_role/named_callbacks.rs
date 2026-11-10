@@ -19,6 +19,11 @@ pub(crate) struct NamedCallbackRoles {
     /// for ([`super::write_roles`]); a position that only names the function
     /// (an unproven callback slot, a result-access one) is not.
     pub(super) positions: HashMap<Span, Vec<Span>>,
+    /// ADR 0933 (read by the proof log only): the argument spans that name each
+    /// function at a position that tracks its reads (a memo's compute, an
+    /// effect's tracked compute), the facts behind `tracked` and
+    /// `effect_compute`. Nothing in an answer reads it.
+    pub(super) tracking: HashMap<Span, Vec<Span>>,
     /// ADR 0517: the functions a callback position that runs in its call's
     /// own window (`createRoot(init)`, `runWithOwner(o, run)`) names by its
     /// binding, with that call and argument index when it is the function's
@@ -66,6 +71,10 @@ pub(super) struct NamedCallbackRole {
     /// (ADR 0466). Reads are not admitted by it (see `admitted`).
     pub(super) effect_compute: bool,
     pub(super) deferred: bool,
+    /// Named as an intrinsic element's event handler (`onScroll={handler}`):
+    /// one of its `deferred` entries is the event's delivery, which a visible
+    /// synchronous dispatch may run on its caller's stack (ADR 0356, 0934).
+    pub(super) event_handler: bool,
     /// Named at a position whose callback runs when the call's returned
     /// object is read ([`Dialect::callback_runs_on_result_access`]). That
     /// time and scope are the reader's, which this index cannot see, so the
@@ -123,6 +132,15 @@ impl NamedCallbackRoles {
     /// The positions whose role this function's entry describes.
     pub(super) fn positions(&self, function: Span) -> &[Span] {
         self.positions.get(&function).map_or(&[], Vec::as_slice)
+    }
+
+    fn track_at(&mut self, function: Span, position: Span) {
+        self.tracking.entry(function).or_default().push(position);
+    }
+
+    /// ADR 0933: the positions that track this function's reads.
+    pub(super) fn tracking_positions(&self, function: Span) -> &[Span] {
+        self.tracking.get(&function).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -391,6 +409,9 @@ pub(crate) fn named_callback_roles(
                     if tracked || deferred {
                         roles.admit_at(function, argument.span);
                     }
+                    if tracked {
+                        roles.track_at(function, argument.span);
+                    }
                 }
                 continue;
             }
@@ -472,16 +493,21 @@ pub(crate) fn named_callback_roles(
                 && callback_owner_at_call(file, call, primitive, argument_index, lookup)
                     == Some(solid_dialect::CallbackOwner::Leaf);
             for candidate in index.identity_at(file, entities, argument.span) {
-                let entry = roles.entry(index.functions[*candidate]);
+                let function = index.functions[*candidate];
+                let entry = roles.entry(function);
                 entry.tracked |= proven && tracked;
                 entry.leaf |= proven && leaf;
                 entry.tracked_owned |= proven && tracked && !leaf;
-                entry.effect_compute |= proven
+                let effect_compute = proven
                     && is_effect(primitive)
                     && dialect
                         .callback_semantics_at(primitive, argument_index, count)
                         .tracks_reads;
+                entry.effect_compute |= effect_compute;
                 entry.deferred |= proven && deferred;
+                if (proven && tracked) || effect_compute {
+                    roles.track_at(function, argument.span);
+                }
             }
         }
     }
@@ -541,6 +567,7 @@ pub(crate) fn named_callback_roles(
             let entry = roles.entry(function);
             entry.admitted = true;
             entry.deferred = true;
+            entry.event_handler = true;
             roles.admit_at(function, callback.span);
         }
     }
@@ -710,6 +737,24 @@ pub(crate) fn named_at_tracked_position(
     })
 }
 
+/// ADR 0933 (log only): the argument positions that name the innermost
+/// function around `span` at a position that tracks its reads, the facts
+/// [`named_at_tracked_position`] answers from.
+pub(crate) fn naming_positions(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    containing_ast_function(&file.ast, span)
+        .map(|function| {
+            lookup
+                .named_callback_roles(file)
+                .tracking_positions(function.span)
+                .to_vec()
+        })
+        .unwrap_or_default()
+}
+
 /// Whether `span` is in a function nested in a named callback (not in the
 /// callback's own body): code [`named_callback_execution_role`] places as
 /// deferred unless the in-place layers between them place it at a call in the
@@ -730,6 +775,18 @@ pub(crate) fn named_callback_execution_role(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    named_callback_role(file, span, lookup, false)
+}
+
+/// [`named_callback_execution_role`] for a read (`write` false) or a write: the
+/// two differ only in which dispatch veto withholds a named event handler's
+/// deferral (ADR 0934).
+fn named_callback_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    write: bool,
 ) -> Option<ExecutionRole> {
     if let Some(role) = inherits_callback_role(file, span, lookup) {
         return Some(role);
@@ -753,13 +810,30 @@ pub(crate) fn named_callback_execution_role(
             ExecutionRole::Unknown
         ));
     }
+    let role = roles.get(callback.span);
+    // ADR 0934: a named event handler is deferred only while no visible
+    // synchronous dispatch can deliver its event on the caller's stack, as
+    // an inline handler's `EventCallback` is (`body_roles`, ADR 0356): the
+    // read veto for reads, the owner veto for writes. So is a closure nested
+    // in it, which the handler's run may call.
+    if role.event_handler
+        && (if write {
+            lookup.synchronous_event_dispatch_present()
+        } else {
+            lookup.synchronous_event_read_dispatch_present()
+        })
+    {
+        return Some(role_arm!(
+            "named_callbacks.named_callback_execution_role.event-handler-dispatch-veto",
+            ExecutionRole::Unknown
+        ));
+    }
     if owner.span != callback.span {
         return Some(role_arm!(
             "named_callbacks.named_callback_execution_role.deferred-callback",
             ExecutionRole::DeferredCallback
         ));
     }
-    let role = roles.get(callback.span);
     if role.result_access {
         return Some(role_arm!(
             "named_callbacks.named_callback_execution_role.unknown",
@@ -847,7 +921,7 @@ pub(crate) fn named_callback_write_execution_role(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
-    let role = named_callback_execution_role(file, span, lookup)?;
+    let role = named_callback_role(file, span, lookup, true)?;
     if role != ExecutionRole::TrackedJsx {
         return Some(role);
     }

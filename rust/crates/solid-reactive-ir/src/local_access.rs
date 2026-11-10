@@ -9,7 +9,7 @@ use crate::owners::{
     LoadingCover, analysis_context, async_read_role, containing_ast_function,
     containing_leaf_owner, counts_as_strict_read_root, enclosing_render_function,
     function_binding_name, inside_known_value_function_argument, inside_non_component_function,
-    read_loading_cover, typed_accessor_descriptor_at,
+    known_value_function_argument_call, read_loading_cover, typed_accessor_descriptor_at,
 };
 use crate::pipeline::{parallel_file_chunk_results, parallel_slice_results};
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
@@ -2200,6 +2200,56 @@ impl LocalAccessContext<'_, '_> {
             if counts {
                 result.strict_read_obligations += 1;
             }
+        } else if unproven_use {
+            // ADR 0934 (owner, 2026-11-10, superseding ADR 0222's option B):
+            // a use no fact follows (handed to a call, aliased, a JSX prop)
+            // runs the helper where nothing here places it: the read is
+            // unplaced at its definition, never silent.
+            let mut open = read;
+            open.execution = ExecutionRole::Unknown;
+            let counts = counts_as_strict_read_root(file, site, open.execution, self.lookup);
+            result.reads.push(Arc::new(open));
+            if counts {
+                result.strict_read_obligations += 1;
+            }
+        } else if !unproven_use {
+            // ADR 0933: every reference of the helper is a call accounted at its
+            // own site (a row there, or a proven non-strict position): the
+            // definition site ends here on those calls.
+            crate::proof_log::end_with(
+                file,
+                site,
+                "local_access.project_helper_prop_read.calls-accounted",
+                || {
+                    let mut premises = file
+                        .ast
+                        .identifiers
+                        .iter()
+                        .filter(|identifier| {
+                            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                                && file.ast.reference_declaration(identifier.span)
+                                    == Some(name.span)
+                        })
+                        .filter_map(|reference| {
+                            file.ast.calls.iter().find(|call| {
+                                call.direct_callee
+                                    && !call.construct
+                                    && file.ast.peel_ts_sugar_span(call.callee) == reference.span
+                            })
+                        })
+                        .map(|call| {
+                            crate::proof_log::Premise::at(
+                                crate::proof_log::PremiseKind::CallEdgePlaces,
+                                Some(call.span),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    if premises.is_empty() {
+                        premises = placement_premises(file, site, self.lookup);
+                    }
+                    premises
+                },
+            );
         }
     }
 
@@ -2922,8 +2972,15 @@ impl LocalAccessContext<'_, '_> {
             return;
         }
         if crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup) {
+            crate::proof_log::end_with(
+                file,
+                call.span,
+                "local_access.unreached_read.named-at-tracked-position",
+                || tracked_position_premises(file, call.callee, self.lookup),
+            );
             return;
         }
+        let rows_before = (result.reads.len(), result.async_reads.len());
         if let Some((role, Some(carrier))) = handed
             && role.reports_untracked_read()
             && seen.insert(key.clone())
@@ -2942,6 +2999,16 @@ impl LocalAccessContext<'_, '_> {
             && seen.insert(key)
         {
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
+        }
+        // ADR 0933: a read the program places elsewhere ends here with no row,
+        // on the facts that place its function.
+        if (result.reads.len(), result.async_reads.len()) == rows_before {
+            crate::proof_log::end_with(
+                file,
+                call.span,
+                "local_access.unreached_read.placed-elsewhere",
+                || placement_premises(file, call.callee, self.lookup),
+            );
         }
     }
 
@@ -3003,6 +3070,21 @@ impl LocalAccessContext<'_, '_> {
         allowed: &[solid_facts::core::Span],
         own: Option<&SymbolId>,
     ) -> Option<ExecutionRole> {
+        self.setter_callback_verdict(file, span, allowed, own)
+            .map(|(role, _)| role)
+    }
+
+    /// [`Self::setter_callback_role`] and, where the role is `Unreported`
+    /// because the write guard provably throws first (`ownedWrite` proven
+    /// off), the setter call whose violation says so: the premise of the proof
+    /// log's named end (ADR 0933). `None` there for every other answer.
+    fn setter_callback_verdict(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        allowed: &[solid_facts::core::Span],
+        own: Option<&SymbolId>,
+    ) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
         let ast = &file.ast;
         let function = crate::owners::owning_function(ast, span)?;
         let (holder, index) = ast
@@ -3025,9 +3107,9 @@ impl LocalAccessContext<'_, '_> {
                 // `setSt((d) => { reconcile(v, key)(d); })`: applied to the
                 // draft, on the setter's stack.
                 _ if self.applied_to_setters_draft(file, holder) => {
-                    return self.setter_callback_role(file, holder.span, allowed, None);
+                    return self.setter_callback_verdict(file, holder.span, allowed, None);
                 }
-                _ => return Some(ExecutionRole::Unknown),
+                _ => return Some((ExecutionRole::Unknown, None)),
             }
         } else if index == 0 && self.exact_setter_row(file, holder).is_some() {
             holder
@@ -3046,15 +3128,15 @@ impl LocalAccessContext<'_, '_> {
             // …))`): when it runs the callback is not this code's to prove.
             // `setA(untrack(() => …))` and `setA(xs.map((x) => …))` run while
             // the argument is built.
-            return Some(ExecutionRole::Unknown);
+            return Some((ExecutionRole::Unknown, None));
         } else {
             return None;
         };
         if let Some(root) = own {
             match self.is_setters_store(root, self.exact_setter_row(file, setter_call)?) {
-                Some(true) => return Some(ExecutionRole::DeferredCallback),
+                Some(true) => return Some((ExecutionRole::DeferredCallback, None)),
                 Some(false) => {}
-                None => return Some(ExecutionRole::Unknown),
+                None => return Some((ExecutionRole::Unknown, None)),
             }
         }
         // A setter call in a named helper runs where the helper's callers do,
@@ -3064,7 +3146,7 @@ impl LocalAccessContext<'_, '_> {
         if inside_non_component_function(file, setter_call.callee, self.lookup)
             && named_callback_execution_role(file, setter_call.callee, self.lookup).is_none()
         {
-            return Some(ExecutionRole::Unknown);
+            return Some((ExecutionRole::Unknown, None));
         }
         let role = read_execution_role(
             file,
@@ -3075,7 +3157,7 @@ impl LocalAccessContext<'_, '_> {
             self.lookup,
         );
         if !role.reports_disallowed_write() {
-            return Some(role);
+            return Some((role, None));
         }
         // ADR 0932: the guard throws first only where the write row is a
         // proven violation. `ownedWrite: true` skips the guard (rc.21
@@ -3083,9 +3165,9 @@ impl LocalAccessContext<'_, '_> {
         // options value the syntax does not show may set it, and then
         // whether the callback runs is not proven.
         Some(match self.exact_setter_row(file, setter_call)?.2 {
-            crate::OwnedWriteOption::Off => ExecutionRole::Unreported,
-            crate::OwnedWriteOption::On => role,
-            crate::OwnedWriteOption::Unknown => ExecutionRole::Unknown,
+            crate::OwnedWriteOption::Off => (ExecutionRole::Unreported, Some(setter_call.span)),
+            crate::OwnedWriteOption::On => (role, None),
+            crate::OwnedWriteOption::Unknown => (ExecutionRole::Unknown, None),
         })
     }
 
@@ -3205,9 +3287,16 @@ impl LocalAccessContext<'_, '_> {
         symbol: &str,
         result: &mut LocalAccessResult,
     ) {
-        if !(self.setters.contains_key(symbol) || self.actions.contains_key(symbol))
-            || !unreached_write_may_run(file, call.span, self.lookup)
-        {
+        if !(self.setters.contains_key(symbol) || self.actions.contains_key(symbol)) {
+            return;
+        }
+        if !unreached_write_may_run(file, call.span, self.lookup) {
+            crate::proof_log::end_with(
+                file,
+                call.span,
+                "local_access.unreached_write.cannot-run",
+                || cannot_run_premises(file, call.span, self.lookup),
+            );
             return;
         }
         let allowed = allowed_callback_spans(file, self.lookup);
@@ -3234,6 +3323,12 @@ impl LocalAccessContext<'_, '_> {
             return;
         };
         if inside_known_value_function_argument(file, call.callee, self.lookup) {
+            dormant_callback_end(
+                file,
+                call,
+                "local_access.discover_call_as.dormant-callback-argument",
+                self.lookup,
+            );
             return;
         }
         // ADR 0511: or a closed alias of the prop (`const d = props.k`,
@@ -3373,9 +3468,11 @@ impl LocalAccessContext<'_, '_> {
             && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee).is_some();
         // ADR 0676: a setter runs this callback on its own stack.
         if self.accessors.contains_key(symbol)
-            && let Some(role) = self.setter_callback_role(file, call.callee, allowed, None)
+            && let Some((role, guard)) =
+                self.setter_callback_verdict(file, call.callee, allowed, None)
         {
-            if (role.reports_untracked_read() || role.reports_unplaced())
+            let reports = role.reports_untracked_read() || role.reports_unplaced();
+            if reports
                 && seen.insert((mention.path.clone(), mention.start_byte, mention.end_byte))
                 && let Some(accessor) = self.accessors.get(symbol)
             {
@@ -3387,6 +3484,19 @@ impl LocalAccessContext<'_, '_> {
                     role,
                     self.running_setter_call(file, call.callee),
                     result,
+                );
+            } else if !reports {
+                // ADR 0933: the write guard provably throws first (`ownedWrite`
+                // off, ADR 0932), so the callback never runs and the setter
+                // call's violation is the claim. Another silent answer (a role
+                // that places the read where no rule reports, an unknown
+                // option) names nothing here.
+                crate::proof_log::end_at(
+                    file,
+                    call.span,
+                    "local_access.discover_call_as.setter-guard-throws-first",
+                    crate::proof_log::PremiseKind::SetterGuardThrowsFirst,
+                    || guard,
                 );
             }
             return;
@@ -3452,6 +3562,7 @@ impl LocalAccessContext<'_, '_> {
             )
         })
         .flatten();
+        let rows_before = (result.reads.len(), result.async_reads.len());
         if let Some(accessor) = self.accessors.get(symbol)
             && let Some((role, Some(carrier))) = handed
             && role.reports_untracked_read()
@@ -3492,6 +3603,64 @@ impl LocalAccessContext<'_, '_> {
             // placed nowhere, so it is an obligation (as at the unreached arm
             // above).
             self.push_accessor_read(file, call, symbol, accessor, ExecutionRole::Unknown, result);
+        }
+        // ADR 0933: a function handed to a carrier that runs it where no read
+        // rule reports: the read ends here with no row, on the facts that place
+        // the function (its carrier, its call edges, its schedulers).
+        if let Some((_, carrier)) = handed
+            && crate::proof_log::enabled()
+            && (result.reads.len(), result.async_reads.len()) == rows_before
+        {
+            crate::proof_log::end_with(
+                file,
+                call.span,
+                "local_access.discover_call_as.handed-silent",
+                || {
+                    let mut premises = placement_premises(file, call.span, self.lookup);
+                    if let Some(carrier) = carrier {
+                        premises.insert(
+                            0,
+                            crate::proof_log::Premise::at(
+                                crate::proof_log::PremiseKind::CarrierPlacesRead,
+                                Some(carrier),
+                            ),
+                        );
+                    }
+                    premises
+                },
+            );
+        }
+        // ADR 0933: a named function at a tracked position (an effect's compute):
+        // the read tracks there, by the compiler's and the dialect's facts.
+        if handed.is_none()
+            && crate::proof_log::enabled()
+            && (result.reads.len(), result.async_reads.len()) == rows_before
+            && crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
+        {
+            crate::proof_log::end_with(
+                file,
+                call.span,
+                "local_access.discover_call_as.named-at-tracked-position",
+                || tracked_position_premises(file, call.callee, self.lookup),
+            );
+        }
+        // ADR 0933: a read in a helper the summaries place: each exact call
+        // edge into the function attributes the read at the call, where the
+        // call's own role decides. With no edge, carrier or scheduler to name
+        // (a returned function nothing calls) it stays unnamed.
+        if handed.is_none()
+            && crate::proof_log::enabled()
+            && self.accessors.contains_key(symbol)
+            && (result.reads.len(), result.async_reads.len()) == rows_before
+            && inside_non_component_function(file, call.callee, self.lookup)
+            && !crate::execution_role::named_at_tracked_position(file, call.callee, self.lookup)
+        {
+            crate::proof_log::end_with(
+                file,
+                call.span,
+                "local_access.discover_call_as.placed-elsewhere",
+                || placement_premises(file, call.span, self.lookup),
+            );
         }
         // ADR 0294: a typed candidate read where an accessor read would be
         // reported. Its type is the only evidence that it reads reactive
@@ -4155,6 +4324,13 @@ impl LocalAccessContext<'_, '_> {
             {
                 write_execution =
                     if primitive == Some(solid_dialect::Primitive::CreateOptimisticStore) {
+                        crate::proof_log::end_at(
+                            file,
+                            call.span,
+                            "local_access.push_setter_write.optimistic-store-unguarded",
+                            crate::proof_log::PremiseKind::OptimisticSetterUnguarded,
+                            || crate::proof_log::span_of(declaration),
+                        );
                         ExecutionRole::UntrackedCallback
                     } else {
                         ExecutionRole::Unknown
@@ -4170,6 +4346,13 @@ impl LocalAccessContext<'_, '_> {
                 && primitive != Some(solid_dialect::Primitive::CreateSignal)
             {
                 write_execution = if primitive == Some(solid_dialect::Primitive::CreateOptimistic) {
+                    crate::proof_log::end_at(
+                        file,
+                        call.span,
+                        "local_access.push_setter_write.optimistic-signal-unguarded",
+                        crate::proof_log::PremiseKind::OptimisticSetterUnguarded,
+                        || crate::proof_log::span_of(declaration),
+                    );
                     ExecutionRole::UntrackedCallback
                 } else {
                     ExecutionRole::Unknown
@@ -5243,6 +5426,12 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             }
             if inside_known_value_function_argument(file, call.callee, self.lookup) {
+                dormant_callback_end(
+                    file,
+                    call,
+                    "local_access.async_sites.dormant-callback-argument",
+                    self.lookup,
+                );
                 continue;
             }
             if let Some(accessor) = self.accessors.get(symbol.as_str())
@@ -7002,17 +7191,27 @@ impl LocalAccessContext<'_, '_> {
             identifier.span == receiver
                 && identifier.role == solid_facts::ast::IdentifierRole::Reference
         });
-        let prop_head = receiver_is_identifier
-            && self
-                .entities
-                .get(&location(
-                    file.path.shared(),
-                    file.ast.peel_ts_sugar_span(member.object),
-                ))
-                .is_some_and(|symbol| {
-                    self.prop_sources.contains_key(symbol)
-                        && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
-                });
+        // Type Facts keeps no entity at an identifier under a TypeScript
+        // wrapper (`(props as P)["value"]`); the binder resolves it, as below.
+        let head_symbol = receiver_is_identifier
+            .then(|| {
+                self.entities
+                    .get(&location(file.path.shared(), receiver))
+                    .cloned()
+                    .or_else(|| {
+                        crate::source_discovery::reference_symbol(
+                            file,
+                            receiver,
+                            self.entities,
+                            self.lookup,
+                        )
+                    })
+            })
+            .flatten();
+        let prop_head = head_symbol.as_ref().is_some_and(|symbol| {
+            self.prop_sources.contains_key(symbol)
+                && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+        });
         if !prop_head && read_as_part_of_longer_path(file, member) {
             return;
         }
@@ -7189,8 +7388,22 @@ impl LocalAccessContext<'_, '_> {
                 || escapes
             {
                 if crate::execution_role::named_at_tracked_position(file, member.span, self.lookup)
-                    || !(unplaced || placed_nowhere(file, member.span, self.lookup))
                 {
+                    crate::proof_log::end_with(
+                        file,
+                        member.span,
+                        "local_access.discover_member.named-at-tracked-position",
+                        || tracked_position_premises(file, member.span, self.lookup),
+                    );
+                    return;
+                }
+                if !(unplaced || placed_nowhere(file, member.span, self.lookup)) {
+                    crate::proof_log::end_with(
+                        file,
+                        member.span,
+                        "local_access.discover_member.placed-elsewhere",
+                        || placement_premises(file, member.span, self.lookup),
+                    );
                     return;
                 }
                 execution = ExecutionRole::Unknown;
@@ -7234,6 +7447,13 @@ impl LocalAccessContext<'_, '_> {
             file.source_text(member.property)
         };
         if property.is_some_and(|key| self.view_hides_key(file, member.object, key, 0)) {
+            crate::proof_log::end_at(
+                file,
+                member.span,
+                "local_access.discover_member.view-hides-key",
+                crate::proof_log::PremiseKind::ViewHidesKey,
+                || Some(member.object),
+            );
             return;
         }
         // A component's `ref` prop is an imperative output channel: the
@@ -7249,6 +7469,18 @@ impl LocalAccessContext<'_, '_> {
                 .next()
                 .is_some()
         {
+            crate::proof_log::end_at(
+                file,
+                member.span,
+                "local_access.discover_member.ref-prop-call",
+                crate::proof_log::PremiseKind::RefPropCall,
+                || {
+                    file.ast
+                        .calls_with_peeled_callee(member.span)
+                        .next()
+                        .map(|call| call.span)
+                },
+            );
             return;
         }
         // Caller-proven props: a prop every call site passes statically
@@ -7261,7 +7493,16 @@ impl LocalAccessContext<'_, '_> {
         // ADR 0630: a key a `merge` view serves from a plain source.
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
             match self.merge_view_get(file, member.object, property) {
-                MergeGet::Plain => return,
+                MergeGet::Plain => {
+                    crate::proof_log::end_at(
+                        file,
+                        member.span,
+                        "local_access.discover_member.merge-view-plain",
+                        crate::proof_log::PremiseKind::MergeViewServesPlain,
+                        || Some(member.object),
+                    );
+                    return;
+                }
                 MergeGet::Unproven => uncertain = true,
                 MergeGet::NoView | MergeGet::Store => {}
             }
@@ -7297,7 +7538,16 @@ impl LocalAccessContext<'_, '_> {
                 PropUse::Unknown
             };
             match backing {
-                PropUse::Static => return,
+                PropUse::Static => {
+                    crate::proof_log::end_at(
+                        file,
+                        member.span,
+                        "local_access.discover_member.props-static",
+                        crate::proof_log::PremiseKind::PropsCallersStatic,
+                        || crate::proof_log::span_of(prop_declaration),
+                    );
+                    return;
+                }
                 PropUse::Reactive => {}
                 PropUse::Unknown => uncertain = true,
             }
@@ -7367,7 +7617,16 @@ impl LocalAccessContext<'_, '_> {
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
             match store_get_decision(file, member.span, declaration, self.lookup) {
                 StoreHeadGet::Warns => {}
-                StoreHeadGet::Exempt => return,
+                StoreHeadGet::Exempt => {
+                    crate::proof_log::end_at(
+                        file,
+                        member.span,
+                        "local_access.discover_member.store-then-exempt",
+                        crate::proof_log::PremiseKind::StoreThenGetExempt,
+                        || Some(member.property),
+                    );
+                    return;
+                }
                 StoreHeadGet::Undecided(reason) => {
                     let key = (object.path.clone(), object.start_byte, object.end_byte);
                     if execution.reports_untracked_read() && seen.insert(key) {
@@ -9134,8 +9393,67 @@ fn placed_nowhere(
     // ADR 0874: a withheld call proves no run, and an impostor may make one.
     crate::execution_role::runs_in_withheld_layer(file, span, lookup)
         || function_escapes_unfollowed(file, span, lookup)
+        || runs_in_function_entered_unseen(file, span, lookup)
         || crate::execution_role::inside_class_member(file, span, lookup)
         || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
+}
+
+/// ADR 0934: whether `span` sits in a function that is no component, or in one
+/// nested in such a function, that code the program does not hold may enter
+/// ([`crate::execution_role::entered_by_unseen_code`]: an export of an open
+/// program, a namespace hand-out). The summaries claim a helper's reads at its
+/// calls; these entries are calls no summary holds, so the reads are placed
+/// nowhere, as the write walk's census already answers (`walk-unknown-11`).
+/// The walk climbs only through anonymous functions: a named one is entered
+/// where it is called, which the summaries follow from there (a call in its
+/// own enclosing function asks this again, in `result_reads`). It stops at a
+/// component (its render enters it), at a callback the compiler places, and at
+/// a primitive's callback argument: each has a role of its own, however the
+/// function around it is entered.
+pub(crate) fn runs_in_function_entered_unseen(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    // Past an await its function reaches on every path, the site runs on a
+    // later task, off every caller's stack (ADR 0323): no entry places it.
+    if crate::execution_role::follows_unconditional_await(file, span)
+        || crate::execution_role::follows_dominating_await(file, span)
+    {
+        return false;
+    }
+    let mut around = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(span) && function.span != span)
+        .collect::<Vec<_>>();
+    around.sort_by_key(|function| function.span.end - function.span.start);
+    for function in around {
+        if lookup.function_may_be_component(file, function)
+            || file
+                .compiler
+                .callback_roles
+                .iter()
+                .any(|callback| callback.span == function.span)
+            || file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span).is_some()
+                })
+        {
+            return false;
+        }
+        if crate::execution_role::entered_by_unseen_code(file, function, lookup) {
+            return true;
+        }
+        if function.name.is_some() || function_binding_name(file, function).is_some() {
+            return false;
+        }
+    }
+    false
 }
 
 pub(crate) fn function_escapes_unfollowed(
@@ -9617,6 +9935,115 @@ pub(crate) fn handed_read_role(
         |at| read_execution_role(file, at, allowed, entities, symbol_names, lookup),
         ExecutionRole::reports_untracked_read,
     )
+}
+
+/// ADR 0933 (log only): the facts that place the function around `span` where
+/// the summaries attribute its reads: the call graph's exact call edges into
+/// it, the carriers and fresh-stack schedulers its binding is handed to, and
+/// the render that enters a proven component; or that nothing runs the site
+/// (the reach query's `Unreached`). A silence that rests on the function being
+/// placed elsewhere is named on these; with none, it stays unnamed, and the
+/// gate keeps it as a clean nothing explains. A site in a nested function's
+/// parameter list has no call edge among them (it runs only where a call omits
+/// the argument), only the reach query's answer.
+pub(crate) fn placement_premises(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<crate::proof_log::Premise> {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return Vec::new();
+    };
+    // ADR 0454: a site in a nested function's parameter list belongs to that
+    // function and runs only where a call omits the argument, so the call
+    // edges into the function whose body holds the list place nothing there.
+    let in_body = crate::owners::owning_function(&file.ast, span)
+        .is_some_and(|owner| owner.span == function.span);
+    let mut premises = if in_body {
+        function_placement_premises(file, function, lookup)
+    } else {
+        Vec::new()
+    };
+    let reach_at = if in_body { function.span } else { span };
+    premises.extend(unreached_premise(file, span, reach_at, lookup));
+    premises
+}
+
+/// ADR 0933 (log only): the reach query proves nothing runs `site`; the fact
+/// is about the code at `at`.
+pub(crate) fn unreached_premise(
+    file: &solid_facts::FileFacts,
+    site: solid_facts::core::Span,
+    at: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<crate::proof_log::Premise> {
+    matches!(
+        crate::execution_role::SiteReach::new(lookup).site(file, site),
+        crate::execution_role::Reach::Unreached(_)
+    )
+    .then(|| crate::proof_log::Premise::at(crate::proof_log::PremiseKind::SiteReach, Some(at)))
+}
+
+/// ADR 0933 (log only): the facts that place `function`: the call graph's
+/// exact call edges into it, the carriers and fresh-stack schedulers its
+/// binding is handed to, and the render that enters a proven component.
+pub(crate) fn function_placement_premises(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<crate::proof_log::Premise> {
+    use crate::proof_log::{Premise, PremiseKind};
+    let mut premises = Vec::new();
+    let edge = |premises: &mut Vec<Premise>, holder: &solid_facts::FileFacts, at| {
+        let premise = if holder.path.as_str() == file.path.as_str() {
+            Premise::at(PremiseKind::CallEdgePlaces, Some(at))
+        } else {
+            Premise::in_file(PremiseKind::CallEdgePlaces, at, holder.path.shared())
+        };
+        if !premises.contains(&premise) {
+            premises.push(premise);
+        }
+    };
+    if lookup.function_proven_component(file, function) {
+        premises.push(Premise::at(
+            PremiseKind::RenderEntersComponent,
+            Some(function.span),
+        ));
+    }
+    for (holder, at) in lookup.function_call_site_references(file.path.as_str(), function.span) {
+        edge(&mut premises, holder, at);
+    }
+    for (at, hand_off) in function_reference_hand_offs(file, function, lookup).unwrap_or_default() {
+        match hand_off {
+            HandOff::Call => edge(&mut premises, file, at),
+            HandOff::Inline(carrier) => {
+                premises.push(Premise::at(PremiseKind::CarrierPlacesRead, Some(carrier)));
+            }
+            HandOff::FreshStack => {
+                premises.push(Premise::at(PremiseKind::FreshStackScheduler, Some(at)));
+            }
+            HandOff::Value | HandOff::Retained | HandOff::Unfollowed => {}
+        }
+    }
+    premises
+}
+
+/// ADR 0933 (log only): the positions that name the function around `span` at
+/// a tracked position, one premise each.
+fn tracked_position_premises(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<crate::proof_log::Premise> {
+    crate::execution_role::naming_positions(file, span, lookup)
+        .into_iter()
+        .map(|position| {
+            crate::proof_log::Premise::at(
+                crate::proof_log::PremiseKind::TrackedPosition,
+                Some(position),
+            )
+        })
+        .collect()
 }
 
 /// ADR 0563: [`handed_read_role`] for an async source read. Each finding about
@@ -10484,8 +10911,21 @@ pub(crate) fn unreached_write_may_run(
     span: solid_facts::core::Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let in_instance_field = file
-        .ast
+    (crate::owners::owning_function(&file.ast, span).is_some()
+        || in_instance_field_initializer(file, span))
+        && !matches!(
+            crate::execution_role::SiteReach::new(lookup).site(file, span),
+            crate::execution_role::Reach::Unreached(_)
+        )
+}
+
+/// Whether `span` is in the initializer of an instance field, which runs when
+/// an instance is constructed.
+fn in_instance_field_initializer(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    file.ast
         .classes
         .iter()
         .flat_map(|class| &class.elements)
@@ -10493,12 +10933,48 @@ pub(crate) fn unreached_write_may_run(
             element.kind == solid_facts::ast::ClassElementKind::Field
                 && !element.r#static
                 && element.value.is_some_and(|value| value.contains(span))
-        });
-    (crate::owners::owning_function(&file.ast, span).is_some() || in_instance_field)
-        && !matches!(
-            crate::execution_role::SiteReach::new(lookup).site(file, span),
-            crate::execution_role::Reach::Unreached(_)
-        )
+        })
+}
+
+/// ADR 0933 (log only): why [`unreached_write_may_run`] answered no: the site
+/// is at module scope or in a static initializer, where no function or
+/// instance field owns it, or the reach query proves nothing runs it.
+fn cannot_run_premises(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<crate::proof_log::Premise> {
+    use crate::proof_log::{Premise, PremiseKind};
+    let mut premises = Vec::new();
+    if crate::owners::owning_function(&file.ast, span).is_none()
+        && !in_instance_field_initializer(file, span)
+    {
+        premises.push(Premise::at(PremiseKind::ModuleScope, Some(span)));
+    }
+    if matches!(
+        crate::execution_role::SiteReach::new(lookup).site(file, span),
+        crate::execution_role::Reach::Unreached(_)
+    ) {
+        premises.push(Premise::at(PremiseKind::SiteReach, Some(span)));
+    }
+    premises
+}
+
+/// ADR 0933: a call inside a function argument that a known primitive never
+/// invokes ends with no row, on that primitive call. `id` names the producer.
+fn dormant_callback_end(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    id: &'static str,
+    lookup: &SemanticLookup<'_>,
+) {
+    crate::proof_log::end_at(
+        file,
+        call.span,
+        id,
+        crate::proof_log::PremiseKind::DormantCallbackArgument,
+        || known_value_function_argument_call(file, call.callee, lookup),
+    );
 }
 
 /// Whether `span` is inside a leaf owner's callback (`onSettled`,

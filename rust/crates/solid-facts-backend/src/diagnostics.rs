@@ -404,7 +404,13 @@ impl DiagnosticSession {
         let reactive_ir = ir_started.elapsed();
         let solve_started = Instant::now();
         let mut findings = self.dialect.solve(&program);
+        // ADR 0933: with the proof log on, every pass below that drops or
+        // demotes a finding writes it under its typed proof.
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         let mut withheld_coverage = retain_enabled(self.dialect, &rule_options, &mut findings)?;
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::RuleDisabled, &findings);
+        }
         // ADR 0284: a package analyzed as source is not the project's code.
         // Its own findings are not reported; what it does to project values
         // is reported at the project's call sites, through summaries and,
@@ -415,7 +421,11 @@ impl DiagnosticSession {
                     .dependency_source_root(&finding.primary_location.path)
                     .is_none()
             };
+            let stage = solid_reactive_ir::ProofStage::begin(&findings);
             findings.retain(in_project);
+            if let Some(stage) = stage {
+                stage.end(solid_reactive_ir::DropPass::DependencySource, &findings);
+            }
             withheld_coverage.retain(in_project);
         }
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
@@ -441,6 +451,7 @@ impl DiagnosticSession {
                 *span,
             ));
         }
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // An instance field initializer runs when an instance is constructed,
         // which no rule places; several rules decide "written directly in
         // this callback" on their own and would place it in the function the
@@ -474,6 +485,10 @@ impl DiagnosticSession {
                 );
             }
         }
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::InstanceField, &findings);
+        }
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // A function analyzed as a component whose identity is not proven
         // (`solid_reactive_ir::UndecidedRegion`): Solid makes it a component
         // only where `createComponent` calls it, so no violation in its own
@@ -498,6 +513,10 @@ impl DiagnosticSession {
                 );
             }
         }
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::UndecidedComponent, &findings);
+        }
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // ADR 0696: proved silent, the one reach the whole program decides.
         findings.retain(|finding| {
             finding.kind != "violation"
@@ -510,6 +529,10 @@ impl DiagnosticSession {
                 )
                 .is_some_and(|site| site.absent_prop)
         });
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::AbsentProp, &findings);
+        }
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // ADR 0458: a violation at a site no execution reaches claims what
         // happens where nothing happens. Style rules claim nothing about
         // execution, and SC2008 claims a no-op wherever it runs.
@@ -551,6 +574,10 @@ impl DiagnosticSession {
                 });
             }
         }
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::SiteUnreached, &findings);
+        }
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // ADR 0464: a violation at a site that names a binding which may not
         // be initialized yet there (a `const`/`let` declared later, a
         // destructured one included) claims what may instead be a
@@ -575,6 +602,13 @@ impl DiagnosticSession {
                 );
             }
         }
+        if let Some(stage) = stage {
+            stage.end(
+                solid_reactive_ir::DropPass::BindingBeforeInitialization,
+                &findings,
+            );
+        }
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // ADR 0360: a file the compiler refused carries no compiler facts, so
         // nothing about it is proven, and neither is anything a finding
         // elsewhere reaches through it. Its sites are unplaced in the IR; a
@@ -628,16 +662,25 @@ impl DiagnosticSession {
                 ));
             }
         }
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::CompilerRefusedFile, &findings);
+        }
         // ADR 0429: after every reclassification, so a comment removes only a
         // violation that would have been reported, and before the notices,
         // which have no site to comment on.
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
         let unknown_names = crate::suppression::apply(
             self.dialect,
             facts,
             rule_options.host_suppressions(),
             &mut findings,
         );
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::HostSuppression, &findings);
+        }
         findings.extend(unknown_names);
+        // ADR 0933: the verdicts, as the backend returns them.
+        solid_reactive_ir::record_verdicts(&findings);
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         // A disabled coverage rule hides its obligations, not the gap they

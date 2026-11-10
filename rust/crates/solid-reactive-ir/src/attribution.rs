@@ -76,6 +76,9 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         attested_project_texts: RefCell::new(None),
         may_name_unresolved: true,
     };
+    let stage = crate::proof_log::RowStage::begin("static_defects", defects.as_slice(), |row| {
+        &row.location
+    });
     defects.retain(|defect| {
         let Some(file) = graph.file(defect.location.path.as_ref()) else {
             return true;
@@ -112,6 +115,14 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         }
         true
     });
+    if let Some(stage) = stage {
+        stage.end(
+            "ClosedProgramExportDischarge",
+            &[crate::proof_log::PremiseKind::ClosedProgramCallers],
+            defects.as_slice(),
+            |row| &row.location,
+        );
+    }
 }
 
 /// Whether the value census may take an exported function's callers as all of

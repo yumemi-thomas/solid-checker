@@ -10,6 +10,17 @@
       "start": 176,
       "end": 187,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-closure/source.ts",
+      "start": 139,
+      "end": 146,
+      "fixes": 0
     }
   ]
 }

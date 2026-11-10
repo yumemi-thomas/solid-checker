@@ -189,6 +189,28 @@
       "start": 2002,
       "end": 2009,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 2147,
+      "end": 2154,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 2451,
+      "end": 2458,
+      "fixes": 0
     }
   ]
 }

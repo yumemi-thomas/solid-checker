@@ -299,6 +299,28 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 1368,
+      "end": 1374,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "source-pending-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/use-site-role/hooks.tsx",
+      "start": 1368,
+      "end": 1374,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",

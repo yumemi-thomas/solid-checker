@@ -81,10 +81,16 @@ pub mod package_boundary;
 mod pending_accounting;
 mod pipeline;
 mod projection;
+mod proof_log;
+mod proof_universe;
 mod reachability;
 mod reactive_analysis;
 mod role_log;
 pub use execution_role::{WALK_STEP_BOUND, bound_walks, follow_every_path};
+pub use proof_log::{
+    DropPass, ProofLogTarget, ProofStage, configure as configure_proof_log, flush_proof_log,
+    record_verdicts,
+};
 pub use role_log::{RoleLogTarget, configure as configure_role_log};
 pub mod route_components;
 pub mod router_params;

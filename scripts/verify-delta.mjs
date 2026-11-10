@@ -160,6 +160,25 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
+  // ADR 0933: the proof log over the fixture projects (scripts/proof-gate.mjs).
+  "proof-gate": {
+    why:
+      "every site of the independent universe must end in a row, a census obligation, a discard or a stated " +
+      "silence; the gap file only shrinks and a reporting decision with nothing ending it is a false-clean candidate",
+    command: ["bun", "scripts/proof-gate.mjs"],
+    env: {
+      SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
+      SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
+    },
+  },
+  "proof-tools-test": {
+    why: "the proof log's fold, the gate's gap file rules and the fixture list it shares with coverage are scripts with their own unit tests",
+    command: [
+      "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+      "--config", "packages/cli/vitest.config.mjs",
+      "scripts/proof-gate.test.mjs", "scripts/proof-ablation.test.mjs",
+    ],
+  },
   "obligation-audit": {
     commands: [
       ["bun", "scripts/tsc-oracle.mjs", "provision", "--dialect", "all"],
@@ -342,7 +361,7 @@ export const UNIVERSAL = [
  * selecting only some is how a red gate reached a push, for `tsc-oracle-gate`
  * and then for `repro-causes` (R1's `clean-interval-hook`).
  */
-export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses"];
+export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate"];
 
 /**
  * One row of the mapping, as a prefix test.
@@ -462,6 +481,20 @@ export const ROWS = [
     owner: "the IR incrementality tools (lint and random-edit harness)",
     checks: ["ir-tools-test", "ir-read-lint", "ir-edit-fuzz"],
   })),
+  // ADR 0933: the proof log's tools and gap files, one exact path each. The gate runs the debug checker over the fixture projects.
+  ...[
+    "scripts/proof-gate.mjs",
+    "scripts/proof-gate.test.mjs",
+    "scripts/proof-ablation.mjs",
+    "scripts/proof-ablation.test.mjs",
+    "scripts/lib/proof-log.mjs",
+    "scripts/lib/fixture-projects.mjs",
+    "fixtures/proof-log/",
+  ].map((prefix) => ({
+    prefix,
+    owner: "the proof log's gate and its gap files",
+    checks: ["proof-tools-test", "proof-gate"],
+  })),
   // The differential fuzzer is operator tooling, but its own unit tests are a lane of `make verify` and CI (scripts/fuzz/test-lane.mjs):
   // they were outside both, and a duplicate role-log arm id reached main. Nothing the checker, the gates or a package reads depends on
   // it, so a change here selects only that lane (which provisions the installs it needs).
@@ -556,7 +589,7 @@ export function planFor(paths) {
       selected.has(id)
     ),
     ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
-    ...["ir-read-lint", "ir-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
+    ...["ir-read-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
@@ -770,6 +803,7 @@ export const LANES = {
   "tsc-oracle-gate": "gates",
   "obligation-audit": "gates",
   "witnesses": "gates",
+  "proof-gate": "gates",
   "repro-causes": "gates",
   "repro-budget": "gates",
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the
@@ -777,6 +811,7 @@ export const LANES = {
   "ir-edit-fuzz": "gates",
   "ir-read-lint": "preflight",
   "ir-tools-test": "preflight",
+  "proof-tools-test": "preflight",
   "doc-budget": "preflight",
   "guard-count": "preflight",
   "flip-tools": "preflight",
