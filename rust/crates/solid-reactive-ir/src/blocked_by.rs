@@ -48,6 +48,10 @@ pub struct BlockedBy {
     pub fired: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub missing: Option<Missing>,
+    /// ADR 0949: the rule (its code) of the package finding the ADR 0284 drop discarded, which this row stands for at the
+    /// project site that enters the package code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dropped: Option<String>,
 }
 
 impl BlockedBy {
@@ -60,6 +64,14 @@ impl BlockedBy {
             formula: None,
             fired: Vec::new(),
             missing: None,
+            // ADR 0949: `package-finding-at-entry:<code>` names the code it stands for.
+            dropped: (kind == crate::blockers::PACKAGE_FINDING_AT_ENTRY)
+                .then(|| {
+                    analysis_context
+                        .split_once(':')
+                        .map(|(_, code)| code.to_owned())
+                })
+                .flatten(),
         })
     }
 }
@@ -177,6 +189,7 @@ pub(crate) fn typed_blockers(
                 formula: Some(formula.to_owned()),
                 fired,
                 missing: None,
+                dropped: None,
             },
         });
     }

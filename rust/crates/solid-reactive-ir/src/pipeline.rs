@@ -51,6 +51,9 @@ pub(crate) struct ProgramDraft {
     pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
     pub(crate) event_dispatch_sites: Vec<crate::EventDispatchSite>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    /// ADR 0949: the owner graph's dense view, kept for the package entry table
+    /// (built over the final rows, `owners::package_entry_table`).
+    pub(crate) owner_view: Option<crate::owners::OwnerView>,
     /// ADR 0936: the silences the producers named for sites they gave no row,
     /// filed beside the rows of the same results.
     pub(crate) site_ends: crate::site_accounting::SiteEnds,
@@ -276,6 +279,8 @@ impl ProgramDraft {
             early_mention_sites: Vec::new(),
             blocked_by: Vec::new(),
             hazards: Vec::new(),
+            package_entries: Vec::new(),
+            package_references: Vec::new(),
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -885,6 +890,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.site_ends,
     );
     let site_ends = std::mem::take(&mut draft.site_ends);
+    let owner_view = draft.owner_view.take();
     let mut program = draft.into_program(factory_instances);
     program.execution_paths = crate::execution_paths::execution_paths(
         facts,
@@ -913,6 +919,13 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     program.early_mention_sites =
         crate::indexes::early_mention_report_sites(&program, semantic_lookup);
+    // ADR 0949: over the final rows, the project sites that may run each package function that
+    // holds one (the ADR 0284 drop reports a dropped finding there), and the references no
+    // exact call or tag decides.
+    if let Some(view) = &owner_view {
+        (program.package_entries, program.package_references) =
+            crate::owners::package_entry_table(facts, semantic_lookup, view, &program);
+    }
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =
         crate::blocked_by::typed_blockers(&program, semantic_lookup);

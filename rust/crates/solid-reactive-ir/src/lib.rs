@@ -1457,6 +1457,35 @@ impl DependencyEntry {
     }
 }
 
+/// ADR 0949: a project site that enters package code, and how.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageEntrySite {
+    pub location: Location,
+    pub kind: DependencyEntry,
+}
+
+/// ADR 0949: the project sites that may run the package function at `function`
+/// (its path and span): each call, render or reference in a project function that may run,
+/// found by walking back through the package's own callers. A finding the ADR 0284 drop pass
+/// discards in that function is reported at each of them (`diagnostics.rs`, the one place).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageEntries {
+    pub function: Location,
+    pub sites: Vec<PackageEntrySite>,
+}
+
+/// ADR 0949: the project references to a symbol a package (`root`, its directory) declares that no
+/// exact call or tag decides: a value handed on, a holder, a namespace. Any of them may run any
+/// function of the package, so a finding dropped in the package stands at each.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageReferences {
+    pub root: String,
+    pub sites: Vec<PackageEntrySite>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum OwnerRequirementOperation {
@@ -1655,6 +1684,7 @@ fn default_async_provenance() -> bool {
     true
 }
 
+pub use blockers::PACKAGE_FINDING_AT_ENTRY;
 pub use blockers::with_detail as blocked_context;
 pub use execution_paths::{ArmSide, BuildArm, ClientPath, ExecutionPaths};
 pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
@@ -1709,6 +1739,13 @@ pub struct Program {
     pub blocked_by: Vec<blocked_by::BlockedRow>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hazards: Vec<blocked_by::HazardSites>,
+    /// ADR 0949: for each package function that holds a row, the project sites that may run it,
+    /// sorted by function location. Not in the internal JSON: the backend reads it.
+    #[serde(default, skip_serializing)]
+    pub package_entries: Vec<PackageEntries>,
+    /// ADR 0949: per package that holds a row, the project references no exact call or tag decides.
+    #[serde(default, skip_serializing)]
+    pub package_references: Vec<PackageReferences>,
 }
 
 /// The site of a reportable row that no execution of the program reaches

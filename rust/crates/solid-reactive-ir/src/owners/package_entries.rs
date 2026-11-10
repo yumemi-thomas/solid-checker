@@ -60,6 +60,297 @@ struct Entry {
     kind: crate::DependencyEntry,
 }
 
+/// The owner graph's dense view, kept past the owner stage for the package entry table
+/// ([`package_entry_table`]).
+pub(crate) struct OwnerView {
+    pub(super) nodes: Vec<OwnerNode>,
+    pub(super) contexts: Vec<u8>,
+    pub(super) outgoing: Vec<Vec<(usize, OwnerEdgeKind)>>,
+    /// The census verdict of each context, for the references that name a context binding.
+    pub(super) provider_free: HashMap<Location, ContextVerdict>,
+}
+
+/// Which project calls the walk takes as entries into a package function it reaches.
+#[derive(Clone, Copy)]
+enum CallMode<'w> {
+    /// A call along an edge that may carry an owner, into a function the call walk
+    /// (`attribute_dependency_requirements`) did not visit: that walk decided the rest,
+    /// with the call's arguments, for a `context-provider` requirement.
+    OwnedUnwalked(&'w HashSet<usize>),
+    /// Every call that enters it (ADR 0949's table: any rule's finding runs wherever the
+    /// function runs, owned or not).
+    Every,
+}
+
+/// The facts the walk back from a package function reads, built once per pass.
+struct WalkCtx<'a, 'f> {
+    facts: &'a ProjectFacts,
+    lookup: &'a SemanticLookup<'f>,
+    nodes: &'a [OwnerNode],
+    contexts: &'a [u8],
+    incoming: Vec<Vec<(usize, OwnerEdgeKind)>>,
+    nodes_by_path: HashMap<&'a str, Vec<usize>>,
+    reach: crate::execution_role::SiteReach<'a, 'f>,
+    /// Local alias tags (`const P2 = Panel; <P2/>`), by the function they render.
+    alias_tags: std::cell::OnceCell<AliasTags>,
+}
+
+impl<'a, 'f> WalkCtx<'a, 'f> {
+    fn new(
+        facts: &'a ProjectFacts,
+        lookup: &'a SemanticLookup<'f>,
+        nodes: &'a [OwnerNode],
+        contexts: &'a [u8],
+        outgoing: &'a [Vec<(usize, OwnerEdgeKind)>],
+    ) -> Self {
+        let mut nodes_by_path = HashMap::<&str, Vec<usize>>::default();
+        for (index, node) in nodes.iter().enumerate() {
+            nodes_by_path
+                .entry(node.path.as_str())
+                .or_default()
+                .push(index);
+        }
+        let mut incoming = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
+        for (source, edges) in outgoing.iter().enumerate() {
+            for &(target, kind) in edges {
+                incoming[target].push((source, kind));
+            }
+        }
+        Self {
+            facts,
+            lookup,
+            nodes,
+            contexts,
+            incoming,
+            nodes_by_path,
+            reach: crate::execution_role::SiteReach::new(lookup),
+            alias_tags: std::cell::OnceCell::new(),
+        }
+    }
+
+    fn in_dependency(&self, path: &str) -> bool {
+        self.facts.dependency_source_root(path).is_some()
+    }
+
+    /// The innermost function whose body is written around `span`.
+    fn node_at(&self, path: &str, span: Span) -> Option<usize> {
+        self.nodes_by_path
+            .get(path)
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|index| self.nodes[*index].body.contains(span))
+            .min_by_key(|index| self.nodes[*index].body.end - self.nodes[*index].body.start)
+    }
+
+    /// The node of the function at exactly `function`.
+    fn seed_of(&self, path: &str, function: Span) -> Option<usize> {
+        self.nodes_by_path
+            .get(path)
+            .into_iter()
+            .flatten()
+            .copied()
+            .find(|index| self.nodes[*index].span == function)
+    }
+
+    /// A project function an owner edge reaches runs its entries. One no edge reaches
+    /// (context zero) is still run by whatever the graph does not follow (a wrapper
+    /// it was handed to, a timer, a handler), unless it is proven never to run:
+    /// as `emit_file`'s `caller_unplaced`, an entry written in it stands. Only that
+    /// proof silences an entry; a function or a file the facts do not name is none.
+    fn may_run(&self, node: usize) -> bool {
+        let never_runs = self
+            .lookup
+            .file_by_path(self.nodes[node].path.as_str())
+            .and_then(|file| {
+                file.ast
+                    .function_at(self.nodes[node].span)
+                    .map(|function| !self.reach.function_runs(file, function))
+            })
+            .is_some_and(|never| never);
+        self.contexts[node] != 0 || !never_runs
+    }
+
+    /// The project sites that enter the package function `seed`: a walk back through the
+    /// package's own callers (every owner edge, the exact call and tag sites of the
+    /// function, a nested function's enclosing function) to the project's calls and
+    /// renders.
+    fn entries_of(&self, seed: usize, calls: CallMode<'_>) -> Vec<Entry> {
+        let mut found = Vec::new();
+        let mut visited = HashSet::<usize>::default();
+        let mut queue = VecDeque::from([seed]);
+        visited.insert(seed);
+        while let Some(node) = queue.pop_front() {
+            let node_path = self.nodes[node].path.as_str();
+            let node_span = self.nodes[node].span;
+            // Every owner edge into the function, whatever its kind.
+            for &(caller, kind) in &self.incoming[node] {
+                if self.in_dependency(self.nodes[caller].path.as_str()) {
+                    if visited.insert(caller) {
+                        queue.push_back(caller);
+                    }
+                    continue;
+                }
+                let CallMode::OwnedUnwalked(walked) = calls else {
+                    self.push_calls(&mut found, caller, node);
+                    continue;
+                };
+                // A project function that calls it: the call walk decided every
+                // function it visited, with the call's arguments.
+                if walked.contains(&node) || !self.may_run(caller) {
+                    continue;
+                }
+                let carries = owner_edge_context(
+                    if kind == OwnerEdgeKind::MayRun {
+                        OwnerEdgeKind::Preserve
+                    } else {
+                        kind
+                    },
+                    self.contexts[caller],
+                ) & OWNER_CONTEXT_RUNS_OWNED
+                    != 0;
+                if carries {
+                    self.push_calls(&mut found, caller, node);
+                }
+            }
+            // The function a nested function is written in runs it, or hands it on.
+            if let Some(parent) = self
+                .nodes_by_path
+                .get(node_path)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|index| {
+                    *index != node
+                        && self.nodes[*index].body.contains(node_span)
+                        && self.nodes[*index].span != node_span
+                })
+                .min_by_key(|index| self.nodes[*index].body.end - self.nodes[*index].body.start)
+                && self.in_dependency(self.nodes[parent].path.as_str())
+                && visited.insert(parent)
+            {
+                queue.push_back(parent);
+            }
+            // The exact call and tag sites of the function.
+            let mut tag_sites = self
+                .lookup
+                .function_call_sites(node_path, node_span)
+                .into_iter()
+                .filter_map(|(file, callee)| {
+                    let element = file
+                        .ast
+                        .jsx_elements
+                        .iter()
+                        .find(|element| element.name.span == callee)?;
+                    Some((file, element))
+                })
+                .map(|(file, element)| (file.path.to_string(), element_site(element)))
+                .collect::<Vec<_>>();
+            let aliases = self
+                .alias_tags
+                .get_or_init(|| alias_rendered_tags(self.facts, self.lookup));
+            if let Some(more) = aliases.get(&(node_path.to_owned(), node_span)) {
+                tag_sites.extend(more.iter().cloned());
+            }
+            for (path, site) in tag_sites {
+                let caller = self.node_at(&path, site);
+                if self.in_dependency(&path) {
+                    if let Some(caller) = caller
+                        && visited.insert(caller)
+                    {
+                        queue.push_back(caller);
+                    }
+                    continue;
+                }
+                if caller.is_some_and(|caller| !self.may_run(caller)) {
+                    continue;
+                }
+                found.push(Entry {
+                    path,
+                    span: site,
+                    kind: crate::DependencyEntry::Render,
+                });
+            }
+        }
+        found
+    }
+
+    /// The calls written directly in the project function `caller` that enter `node`.
+    fn push_calls(&self, found: &mut Vec<Entry>, caller: usize, node: usize) {
+        if !self.may_run(caller) {
+            return;
+        }
+        let Some(caller_file) = self.lookup.file_by_path(self.nodes[caller].path.as_str()) else {
+            return;
+        };
+        for call in &caller_file.ast.calls {
+            if crate::owners::containing_body_function(&caller_file.ast, call.span)
+                .is_some_and(|function| function.span == self.nodes[caller].span)
+                && call_enters(self.lookup, caller_file, call, &self.nodes[node])
+            {
+                found.push(Entry {
+                    path: caller_file.path.to_string(),
+                    span: call.span,
+                    kind: crate::DependencyEntry::Call,
+                });
+            }
+        }
+    }
+
+    /// The project references to a symbol a package of `roots` declares that no call or render
+    /// resolves, with the root each belongs to.
+    fn references_to(
+        &self,
+        roots: &[&str],
+        provider_free: &HashMap<Location, ContextVerdict>,
+    ) -> Vec<(String, Entry)> {
+        let mut found = Vec::new();
+        for symbol in self.facts.typescript.symbols() {
+            let Some(root) = symbol.declarations().iter().find_map(|declaration| {
+                roots.iter().copied().find(|root| {
+                    std::path::Path::new(declaration.location.path.as_ref()).starts_with(root)
+                })
+            }) else {
+                continue;
+            };
+            for reference in symbol.references() {
+                let path = reference.path.as_ref();
+                if self.in_dependency(path) {
+                    continue;
+                }
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(reference.start_byte),
+                    u32::try_from(reference.end_byte),
+                ) else {
+                    continue;
+                };
+                let Some(file) = self.lookup.file_by_path(path) else {
+                    continue;
+                };
+                let span = Span::new(start, end);
+                if reference_is_not_an_entry(self.lookup, file, span, provider_free) {
+                    continue;
+                }
+                if self
+                    .node_at(path, span)
+                    .is_some_and(|node| !self.may_run(node))
+                {
+                    continue;
+                }
+                found.push((
+                    root.to_owned(),
+                    Entry {
+                        path: path.to_owned(),
+                        span: entry_anchor(file, span),
+                        kind: crate::DependencyEntry::Reference,
+                    },
+                ));
+            }
+        }
+        found
+    }
+}
+
 /// The requirements of the project sites that enter package functions that hold
 /// a [`PackageRead`], added to `requirements` (each location and operation once).
 ///
@@ -81,8 +372,6 @@ pub(super) fn attribute_package_entries(
     if reads.is_empty() || facts.dependency_source_roots.is_empty() {
         return;
     }
-    let in_dependency = |path: &str| facts.dependency_source_root(path).is_some();
-    let reach = crate::execution_role::SiteReach::new(lookup);
     let mut reads = reads.to_vec();
     reads.sort_by(|left, right| {
         (
@@ -96,46 +385,7 @@ pub(super) fn attribute_package_entries(
                 right.location.end_byte,
             ))
     });
-    // The function nodes by path, and the owner edges back.
-    let mut nodes_by_path = HashMap::<&str, Vec<usize>>::default();
-    for (index, node) in nodes.iter().enumerate() {
-        nodes_by_path
-            .entry(node.path.as_str())
-            .or_default()
-            .push(index);
-    }
-    let mut incoming = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
-    for (source, edges) in outgoing.iter().enumerate() {
-        for &(target, kind) in edges {
-            incoming[target].push((source, kind));
-        }
-    }
-    // The innermost function whose body is written around `span`.
-    let node_at = |path: &str, span: Span| {
-        nodes_by_path
-            .get(path)
-            .into_iter()
-            .flatten()
-            .copied()
-            .filter(|index| nodes[*index].body.contains(span))
-            .min_by_key(|index| nodes[*index].body.end - nodes[*index].body.start)
-    };
-    // A project function an owner edge reaches runs its entries. One no edge reaches
-    // (context zero) is still run by whatever the graph does not follow (a wrapper
-    // it was handed to, a timer, a handler), unless it is proven never to run:
-    // as `emit_file`'s `caller_unplaced`, an entry written in it stands. Only that
-    // proof silences an entry; a function or a file the facts do not name is none.
-    let never_runs = |node: usize| {
-        lookup
-            .file_by_path(nodes[node].path.as_str())
-            .and_then(|file| {
-                file.ast
-                    .function_at(nodes[node].span)
-                    .map(|function| !reach.function_runs(file, function))
-            })
-            .is_some_and(|never| never)
-    };
-    let may_run = |node: usize| contexts[node] != 0 || !never_runs(node);
+    let walk = WalkCtx::new(facts, lookup, nodes, contexts, outgoing);
     let mut seen = requirements
         .iter()
         .map(|requirement| {
@@ -149,188 +399,38 @@ pub(super) fn attribute_package_entries(
         .collect::<HashSet<_>>();
     // Which package a read belongs to, and the first read of each: the evidence
     // a reference to one of its symbols names.
-    let root_of = |path: &str| facts.dependency_source_root(path).map(str::to_owned);
     let mut first_read_of_root = HashMap::<String, &PackageRead>::default();
     for read in &reads {
-        if let Some(root) = root_of(read.location.path.as_ref()) {
-            first_read_of_root.entry(root).or_insert(read);
+        if let Some(root) = facts.dependency_source_root(read.location.path.as_ref()) {
+            first_read_of_root.entry(root.to_owned()).or_insert(read);
         }
     }
 
     // 1 and 2: the walk back from each read.
     let mut sites: Vec<(Entry, &PackageRead)> = Vec::new();
-    // Local alias tags (`const P2 = Panel; <P2/>`), by the function they render.
-    let mut alias_tags: Option<AliasTags> = None;
     for read in &reads {
-        let Some(seed) = nodes_by_path
-            .get(read.location.path.as_ref())
-            .into_iter()
-            .flatten()
-            .copied()
-            .find(|index| nodes[*index].span == read.function)
-        else {
+        let Some(seed) = walk.seed_of(read.location.path.as_ref(), read.function) else {
             continue;
         };
-        let mut visited = HashSet::<usize>::default();
-        let mut queue = VecDeque::from([seed]);
-        visited.insert(seed);
-        while let Some(node) = queue.pop_front() {
-            let node_path = nodes[node].path.as_str();
-            let node_span = nodes[node].span;
-            // Every owner edge into the function, whatever its kind.
-            for &(caller, kind) in &incoming[node] {
-                if in_dependency(nodes[caller].path.as_str()) {
-                    if visited.insert(caller) {
-                        queue.push_back(caller);
-                    }
-                    continue;
-                }
-                // A project function that calls it: the call walk decided every
-                // function it visited, with the call's arguments.
-                if walked.contains(&node) || !may_run(caller) {
-                    continue;
-                }
-                let Some(caller_file) = lookup.file_by_path(nodes[caller].path.as_str()) else {
-                    continue;
-                };
-                let carries = owner_edge_context(
-                    if kind == OwnerEdgeKind::MayRun {
-                        OwnerEdgeKind::Preserve
-                    } else {
-                        kind
-                    },
-                    contexts[caller],
-                ) & OWNER_CONTEXT_RUNS_OWNED
-                    != 0;
-                if !carries {
-                    continue;
-                }
-                for call in &caller_file.ast.calls {
-                    if crate::owners::containing_body_function(&caller_file.ast, call.span)
-                        .is_some_and(|function| function.span == nodes[caller].span)
-                        && call_enters(lookup, caller_file, call, &nodes[node])
-                    {
-                        sites.push((
-                            Entry {
-                                path: caller_file.path.to_string(),
-                                span: call.span,
-                                kind: crate::DependencyEntry::Call,
-                            },
-                            read,
-                        ));
-                    }
-                }
-            }
-            // The function a nested function is written in runs it, or hands it on.
-            if let Some(parent) = nodes_by_path
-                .get(node_path)
+        sites.extend(
+            walk.entries_of(seed, CallMode::OwnedUnwalked(walked))
                 .into_iter()
-                .flatten()
-                .copied()
-                .filter(|index| {
-                    *index != node
-                        && nodes[*index].body.contains(node_span)
-                        && nodes[*index].span != node_span
-                })
-                .min_by_key(|index| nodes[*index].body.end - nodes[*index].body.start)
-                && in_dependency(nodes[parent].path.as_str())
-                && visited.insert(parent)
-            {
-                queue.push_back(parent);
-            }
-            // The exact call and tag sites of the function.
-            let mut tag_sites = lookup
-                .function_call_sites(node_path, node_span)
-                .into_iter()
-                .filter_map(|(file, callee)| {
-                    let element = file
-                        .ast
-                        .jsx_elements
-                        .iter()
-                        .find(|element| element.name.span == callee)?;
-                    Some((file, element))
-                })
-                .map(|(file, element)| (file.path.to_string(), element_site(element)))
-                .collect::<Vec<_>>();
-            let aliases = alias_tags.get_or_insert_with(|| alias_rendered_tags(facts, lookup));
-            if let Some(more) = aliases.get(&(node_path.to_owned(), node_span)) {
-                tag_sites.extend(more.iter().cloned());
-            }
-            for (path, site) in tag_sites {
-                let caller = node_at(&path, site);
-                if in_dependency(&path) {
-                    if let Some(caller) = caller
-                        && visited.insert(caller)
-                    {
-                        queue.push_back(caller);
-                    }
-                    continue;
-                }
-                if caller.is_some_and(|caller| !may_run(caller)) {
-                    continue;
-                }
-                sites.push((
-                    Entry {
-                        path,
-                        span: site,
-                        kind: crate::DependencyEntry::Render,
-                    },
-                    read,
-                ));
-            }
-        }
+                .map(|entry| (entry, read)),
+        );
     }
-
     // 3: references to a symbol a package declares, no call or render resolves.
     let mut roots = first_read_of_root
         .keys()
         .map(String::as_str)
         .collect::<Vec<_>>();
     roots.sort_unstable();
-    let mut references: Vec<(Entry, &PackageRead)> = Vec::new();
-    for symbol in facts.typescript.symbols() {
-        let Some(root) = symbol.declarations().iter().find_map(|declaration| {
-            roots.iter().copied().find(|root| {
-                std::path::Path::new(declaration.location.path.as_ref()).starts_with(root)
-            })
-        }) else {
-            continue;
-        };
-        let read = first_read_of_root[root];
-        for reference in symbol.references() {
-            let path = reference.path.as_ref();
-            if in_dependency(path) {
-                continue;
-            }
-            let (Ok(start), Ok(end)) = (
-                u32::try_from(reference.start_byte),
-                u32::try_from(reference.end_byte),
-            ) else {
-                continue;
-            };
-            let Some(file) = lookup.file_by_path(path) else {
-                continue;
-            };
-            let span = Span::new(start, end);
-            if reference_is_not_an_entry(lookup, file, span, provider_free) {
-                continue;
-            }
-            if node_at(path, span).is_some_and(|node| !may_run(node)) {
-                continue;
-            }
-            references.push((
-                Entry {
-                    path: path.to_owned(),
-                    span: entry_anchor(file, span),
-                    kind: crate::DependencyEntry::Reference,
-                },
-                read,
-            ));
-        }
-    }
+    sites.extend(
+        walk.references_to(&roots, provider_free)
+            .into_iter()
+            .map(|(root, entry)| (entry, first_read_of_root[root.as_str()])),
+    );
 
     // The requirements, in path and span order.
-    sites.extend(references);
     sites.sort_by(|(left, _), (right, _)| {
         (&left.path, left.span.start, left.span.end).cmp(&(
             &right.path,
@@ -376,6 +476,94 @@ pub(super) fn attribute_package_entries(
             pushed.through_dependency_entry = entry.kind;
         }
     }
+}
+
+/// ADR 0949, the one table the ADR 0284 drop reads: for every package function that holds a row
+/// of the final program, the project sites that may run it (`PackageEntries`), and per package the
+/// project references no exact call or tag decides (`PackageReferences`). A finding the drop pass
+/// discards in a package is reported at those sites, never silent.
+pub(crate) fn package_entry_table(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    view: &OwnerView,
+    program: &crate::Program,
+) -> (Vec<crate::PackageEntries>, Vec<crate::PackageReferences>) {
+    // Every row of the program located in a package.
+    let mut rows = Vec::<&Location>::new();
+    rows.extend(program.reads.iter().map(|row| &row.location));
+    rows.extend(program.writes.iter().map(|row| &row.location));
+    rows.extend(program.actions.iter().map(|row| &row.location));
+    rows.extend(program.leaf_operations.iter().map(|row| &row.location));
+    rows.extend(program.static_violations.iter().map(|row| &row.location));
+    rows.extend(program.static_defects.iter().map(|row| &row.location));
+    rows.extend(program.directive_creations.iter().map(|row| &row.location));
+    rows.extend(program.missing_owners.iter().map(|row| &row.location));
+    rows.extend(program.async_reads.iter().map(|row| &row.location));
+    rows.retain(|location| {
+        facts
+            .dependency_source_root(location.path.as_ref())
+            .is_some()
+    });
+    if rows.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let walk = WalkCtx::new(facts, lookup, &view.nodes, &view.contexts, &view.outgoing);
+    let mut functions = std::collections::BTreeMap::<(String, u32, u32), usize>::new();
+    let mut roots = std::collections::BTreeSet::<String>::new();
+    for location in rows {
+        if let Some(root) = facts.dependency_source_root(location.path.as_ref()) {
+            roots.insert(root.to_owned());
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(location.start_byte),
+            u32::try_from(location.end_byte),
+        ) else {
+            continue;
+        };
+        if let Some(node) = walk.node_at(location.path.as_ref(), Span::new(start, end)) {
+            let span = view.nodes[node].span;
+            functions
+                .entry((location.path.to_string(), span.start, span.end))
+                .or_insert(node);
+        }
+    }
+    let site = |entry: Entry| crate::PackageEntrySite {
+        location: crate::location(
+            lookup
+                .file_by_path(&entry.path)
+                .map_or_else(|| entry.path.as_str().into(), |file| file.path.shared()),
+            entry.span,
+        ),
+        kind: entry.kind,
+    };
+    let mut entries = Vec::new();
+    for ((path, start, end), node) in functions {
+        let mut sites = walk
+            .entries_of(node, CallMode::Every)
+            .into_iter()
+            .map(site)
+            .collect::<Vec<_>>();
+        sites.sort_by(|left, right| crate::location_order(&left.location, &right.location));
+        sites.dedup_by(|left, right| left.location == right.location);
+        entries.push(crate::PackageEntries {
+            function: crate::location(path.as_str(), Span::new(start, end)),
+            sites,
+        });
+    }
+    let root_list = roots.iter().map(String::as_str).collect::<Vec<_>>();
+    let mut by_root = std::collections::BTreeMap::<String, Vec<crate::PackageEntrySite>>::new();
+    for (root, entry) in walk.references_to(&root_list, &view.provider_free) {
+        by_root.entry(root).or_default().push(site(entry));
+    }
+    let references = by_root
+        .into_iter()
+        .map(|(root, mut sites)| {
+            sites.sort_by(|left, right| crate::location_order(&left.location, &right.location));
+            sites.dedup_by(|left, right| left.location == right.location);
+            crate::PackageReferences { root, sites }
+        })
+        .collect();
+    (entries, references)
 }
 
 /// The span a render is reported at: the element's opening tag.

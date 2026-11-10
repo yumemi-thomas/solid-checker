@@ -35,6 +35,9 @@ pub(crate) const SERVER_FUNCTION_VALUE_HANDED: &str = "server-function-value-han
 pub(crate) const LEAF_OPERATION_IDENTITY_UNPROVEN: &str = "leaf-operation-identity-unproven";
 pub(crate) const OPTIMISTIC_REACH_UNRESOLVED: &str = "optimistic-reach-unresolved";
 pub(crate) const PROVIDER_NOT_PROVEN_ABOVE: &str = "provider-not-proven-above";
+/// ADR 0949: a finding the ADR 0284 drop discards in a package, reported at the project site that enters the package code
+/// (`package-finding-at-entry:<code>`), or at the project's import of the package when no entry is proven.
+pub const PACKAGE_FINDING_AT_ENTRY: &str = "package-finding-at-entry";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 
