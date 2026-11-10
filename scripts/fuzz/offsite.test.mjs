@@ -49,6 +49,19 @@ describe("offSiteVerdicts", () => {
     // An operator keyword is not the source: `delete s1.v` at 20 repeats the write at `s1.v` (column 8) at 10.
     expect(offSiteVerdicts({ findings: [finding("no-store-mutation-outside-setter", 20)], built: withText({ 10: "delete s1.v;", 20: "delete s1.v;" }), runtime: run([{ code: "STORE_WRITE_OUTSIDE_SETTER", message: "m", positions: [{ file: "App.tsx", line: 10, column: 8 }] }]), plan: built.plan })[0].verdict).toBe("stacked");
     expect(offSiteVerdicts({ findings: [finding("no-store-mutation-outside-setter", 20)], built: withText({ 10: "s1.v = 7;", 20: "s1.w = 7;" }), runtime: run([event("STORE_WRITE_OUTSIDE_SETTER", 10)]), plan: built.plan })[0].verdict).toBe("false-positive");
+    // ADR 0938: a prop read's innermost frame is the parent's attribute getter (`r1={r1()}`, line 30); the read that ran it is the next
+    // frame, and a type-only cast head (`(props as typeof props).r1`, the frame on `r1`) reads its operand. Rc.21 warns once per source,
+    // so the repeated read at 20 is a repeat; another prop, or a getter frame with no next frame of the same source, is not.
+    const getter = (line10) => withText({ 10: line10, 20: "(props as typeof props).r1;", 30: "<C1 r1={r1()} />" });
+    const propEvent = (column) => ({ code: "STRICT_READ_UNTRACKED", message: "m", positions: [{ file: "App.tsx", line: 30, column: 9 }, { file: "App.tsx", line: 10, column }] });
+    const propVerdict = (line10, column) => offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: getter(line10), runtime: run([propEvent(column)]), plan: built.plan }).map((row) => `${row.verdict}(${row.why})`);
+    expect(propVerdict("(props as typeof props).r1;", 25)).toEqual(["stacked(repeat)"]);
+    expect(propVerdict("props.r1;", 7)).toEqual(["stacked(repeat)"]);
+    expect(propVerdict("(props as typeof props).r2;", 25)).toEqual(["false-positive(repeat-other-source)"]);
+    expect(propVerdict("(get() as typeof props).r1;", 25)).toEqual(["false-positive(repeat-other-source)"]);
+    // Only an attribute getter's frame lets the next frame answer: an ordinary innermost read keeps its own source.
+    const plain = { code: "STRICT_READ_UNTRACKED", message: "m", positions: [{ file: "App.tsx", line: 30, column: 1 }, { file: "App.tsx", line: 10, column: 25 }] };
+    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: withText({ 10: "(props as typeof props).r1;", 20: "(props as typeof props).r1;", 30: "q();" }), runtime: run([plain]), plan: built.plan })[0].verdict).toBe("false-positive");
     // Unplaced (no line at all): a diagnostic nobody can place disturbs the whole run (classify.mjs `disturbances`), and may be this one.
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED")]))).toEqual(["unjudged(disturbed-unplaced)"]);
   });

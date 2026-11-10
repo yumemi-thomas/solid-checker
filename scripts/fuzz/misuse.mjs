@@ -791,12 +791,14 @@ export const TYPED_VARIANTS = {
  * rc.17's `ref` (`@solidjs/web`) runs the callback while the element is created, under `runWithOwner(null)`: no owner, so an owner
  * operation there is NO_OWNER_*, and a signal write or an action call is legal. `ref-factory` is a two-phase directive
  * (`ref={d()}`): the site in the apply `d` returns, which runs like an inline callback; `ref-factory-body` is the site in `d`'s own
- * body, which the component body calls, so it runs owned there. `ref-row` is an inline callback in a `For` row.
+ * body, which the component body calls, so it runs owned there. `ref-row` is an inline callback in a `For` row. `ref-await` (legal,
+ * STRICT_READ_UNTRACKED only) is an async inline callback whose site follows an `await` (ADR 0938).
  */
 export const REF_CONTEXTS = ["ref", "ref-named", "ref-array", "ref-cond", "ref-factory", "ref-row"];
 /** Per code: the ref contexts that are its misuse cells (`misuse`) and its legal cells (`legal`). */
 const REF_PLACEMENT = {
-  STRICT_READ_UNTRACKED: { misuse: [...REF_CONTEXTS, "ref-factory-body"] },
+  // ADR 0938: `ref-await` is the legal twin of `ref`: past the callback's await, a read through an in-place layer runs on the continuation.
+  STRICT_READ_UNTRACKED: { misuse: [...REF_CONTEXTS, "ref-factory-body"], legal: ["ref-await"] },
   PENDING_ASYNC_UNTRACKED_READ: { misuse: REF_CONTEXTS },
   STORE_WRITE_OUTSIDE_SETTER: { misuse: [...REF_CONTEXTS, "ref-factory-body"] },
   NO_OWNER_CLEANUP: { misuse: REF_CONTEXTS, legal: ["ref-factory-body"] },
@@ -2019,6 +2021,8 @@ function recallContext(context, stmts, kit) {
     case "ref-factory": { const d = kit.name("dir"); return { body: [decl(d, fn([ret(fn(stmts))]))], view: [refEl(kit.name("v"), call(ref(d)))] }; }
     case "ref-factory-body": { const d = kit.name("dir"); return { body: [decl(d, fn([...stmts, ret(fn([]))]))], view: [refEl(kit.name("v"), call(ref(d)))] }; }
     case "ref-row": return { body: [], view: [forEach([refEl(kit.name("v"), fn(stmts))])] };
+    // ADR 0938: an async ref callback that awaits before the site: the site (and any layer around it) runs on the continuation.
+    case "ref-await": return { body: [], view: [refEl(kit.name("v"), fn([awaitStmt(), ...stmts], { async: true }))] };
     case "pos-attr": return { body: [], view: [attr(kit.name("v"), iife(fn([...stmts, ret(num(1))])))] };
     case "pos-class-sblock": return { body: [contain("class-sblock", 9, stmts)], view: [] };
     case "pos-class-field": return { body: [contain("class-field", 9, stmts, { use: "new" })], view: [] };
