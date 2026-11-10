@@ -332,7 +332,7 @@ fn only_synchronous_owner_swappers_inherit_the_calling_window() {
 /// window of its call. `createRoot` shares the code read but not a probe, and
 /// the list and count thunks stay tracked computations.
 #[test]
-fn only_map_functions_and_runwithowner_are_untracked_reads_the_runtime_leaves_silent() {
+fn only_map_functions_runwithowner_and_createroot_are_untracked_reads_the_runtime_leaves_silent() {
     let two = Solid2::CONSERVATIVE;
     for primitive in [Primitive::MapArray, Primitive::RepeatMap] {
         assert!(two.callback_runs_untracked_without_window(primitive, 1));
@@ -347,8 +347,10 @@ fn only_map_functions_and_runwithowner_are_untracked_reads_the_runtime_leaves_si
     assert!(two.callback_clears_tracking_in_calling_window(Primitive::RunWithOwner, 1));
     assert!(!two.callback_clears_tracking_in_calling_window(Primitive::RunWithOwner, 0));
     assert!(!two.callback_runs_untracked_without_window(Primitive::RunWithOwner, 1));
+    // ADR 0932: `createRoot` is `runWithOwner(createOwner(), …)` at rc.21.
+    assert!(two.callback_clears_tracking_in_calling_window(Primitive::CreateRoot, 0));
+    assert!(!two.callback_runs_untracked_without_window(Primitive::CreateRoot, 0));
     for primitive in [
-        Primitive::CreateRoot,
         Primitive::Untrack,
         Primitive::CreateMemo,
         Primitive::CreateEffect,

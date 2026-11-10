@@ -55,12 +55,11 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
-      "start": 3008,
-      "end": 3015,
+      "start": 1897,
+      "end": 1904,
       "fixes": 0
     },
     {
@@ -70,8 +69,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
-      "start": 3236,
-      "end": 3243,
+      "start": 3155,
+      "end": 3162,
       "fixes": 0
     },
     {
@@ -81,8 +80,19 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
-      "start": 3584,
-      "end": 3591,
+      "start": 3383,
+      "end": 3390,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
+      "start": 3731,
+      "end": 3738,
       "fixes": 0
     },
     {
@@ -92,8 +102,8 @@
       "blocker": "async-provenance-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
-      "start": 3610,
-      "end": 3613,
+      "start": 3757,
+      "end": 3760,
       "fixes": 0
     }
   ]

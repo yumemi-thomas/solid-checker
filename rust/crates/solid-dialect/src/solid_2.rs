@@ -2339,15 +2339,19 @@ impl Dialect for Solid2 {
     /// once, left `observers(signal)` empty, raised nothing, and a write did
     /// not re-run it, in a root and in a component body.
     ///
-    /// Not `createRoot`: it is `runWithOwner(createOwner(), …)` by the code
-    /// read at `dist/dev-shared.js:3478-3481`, but no probe reached a read in
-    /// one inside a computation, and a root there may be deliberate.
+    /// ADR 0932 (owner ruling, 2026-11-10): `createRoot(init)` too. At rc.21
+    /// it is `runWithOwner(createOwner(), () => init(dispose))`
+    /// (`dist/dev-shared.js:1771-1778`), so its callback runs the same way:
+    /// in a tracked computation a read there is stale and unwarned.
     fn callback_clears_tracking_in_calling_window(
         &self,
         primitive: Primitive,
         argument: usize,
     ) -> bool {
-        primitive == Primitive::RunWithOwner && argument == 1
+        matches!(
+            (primitive, argument),
+            (Primitive::RunWithOwner, 1) | (Primitive::CreateRoot, 0)
+        )
     }
 
     /// The callbacks nothing runs until the returned value is used:

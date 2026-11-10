@@ -15,7 +15,7 @@
 import {
   walk, domExpr, listenExpr, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, asyncDeclaredSignal, asyncMaybeSignal, storeAsyncSignal, storeRawSignal, storeClassSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, CHAIN_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
-  CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted,
+  CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted, setUpdater,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
@@ -975,9 +975,28 @@ const LATER_RUN_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) =
   ].map(([context]) => context);
   return [code, { misuse: at("misuse"), legal: [...at("legal"), ...APPLY_VOID_UNRUN] }];
 }));
+/**
+ * ADR 0932 (Chrome rc.21). `owned-updater-<at>`: the site in the updater of an `ownedWrite: true` setter called at <at>; the option skips
+ * the owned-scope guard, so the setter runs the updater on its own stack, which is <at>'s run (a read in the body's updater warns).
+ * `evt-row-dispatch`: the site in a non-delegated handler (`onScroll`) of an element a `<For>` row creates and dispatches the event to
+ * before it returns, so the handler runs inside the row's window and owner (`flow-for`); `evt-row-timer-dispatch` dispatches from a
+ * timer instead, on a fresh stack (a handler: a read, a write and an action are legal).
+ */
+export const OWNED_UPDATER_CONTEXTS = { "owned-updater-body": "body", "owned-updater-handler": "handler" };
+export const ROW_DISPATCH_CONTEXTS = ["evt-row-dispatch", "evt-row-timer-dispatch"];
+const ROW_DISPATCH_CODES = ["STRICT_READ_UNTRACKED", "REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
+const UPDATER_DISPATCH_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
+  const spec = SPEC[code];
+  const row = ROW_DISPATCH_CODES.includes(code);
+  // A read in a handler is legal (no window), though `handler` is not among the code's base legal contexts.
+  const legalAt = (base) => (spec.legal ?? []).includes(base) || (row && base === "handler");
+  const placed = (kind) => Object.entries(OWNED_UPDATER_CONTEXTS).filter(([, base]) => (kind === "misuse" ? spec.contexts.includes(base) : legalAt(base))).map(([context]) => context);
+  return [code, { misuse: [...placed("misuse"), ...(row ? ["evt-row-dispatch"] : [])], legal: [...placed("legal"), ...(row ? ["evt-row-timer-dispatch"] : [])] }];
+}));
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
 export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
-  ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN];
+  ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
+  ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS];
 
 /**
  * ADR 0613: the site in an effect apply, with a synchronous `flush()` the program calls after the effect is created: in the body
@@ -1087,13 +1106,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1848,6 +1867,20 @@ function recallContext(context, stmts, kit) {
       const effect = expr(prim("effect", fn([ret(fn(stmts))], { concise: true }), { apply: fn([expr(domExpr(context.includes("-call-") ? "void v()" : "void v"))]) }));
       if (context.endsWith("-row")) return { body: [], view: [flowEl(kit.name("v"), "for", [effect])] };
       return { body: [expr(prim("untrack", fn([effect])))], view: [] };
+    }
+    // ADR 0932 (OWNED_UPDATER_CONTEXTS): the site in the updater of an `ownedWrite: true` setter called in the body or a handler.
+    case "owned-updater-body": case "owned-updater-handler": {
+      const w = apiSignal(kit.name("w"), 0, "owned", "src");
+      const run = expr(setUpdater(w.name, fn([...stmts, ret(num(0))])));
+      return context.endsWith("-body") ? { sigs: [w], body: [run], view: [] } : { sigs: [w], body: [], view: [button(kit.name("b"), [run])] };
+    }
+    // ADR 0932 (ROW_DISPATCH_CONTEXTS): a `<For>` row creates an element whose `onScroll` holds the site, and fires it there or from a timer.
+    case "evt-row-dispatch": case "evt-row-timer-dispatch": {
+      const el = kit.name("el");
+      // Detached: nothing can click it (`undriven`); the dispatch is the driver.
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [], view: [flowEl(kit.name("v"), "for", [made, context === "evt-row-dispatch" ? fire : expr(prim("timer", fn([fire])))])] };
     }
     // HANDLER_CONTEXTS: a handler passed by name (a `const`, a `function`, Solid's `[h, 1]` bound form), and one the body also calls.
     case "handler-named-const": case "handler-named-function": case "handler-tuple": case "handler-mixed": {
