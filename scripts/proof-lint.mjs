@@ -13,6 +13,14 @@
 //   name-only-match       a callee, member or binding identified by its spelling: `source_text(..) == Some("name")`.
 //   default-on-missing    a predicate that answers yes when a fact is missing: `is_none_or(..)`, `unwrap_or(true)`, `None => true`.
 //                         Whether yes means "reports" or "silent" depends on the predicate, so each hit needs its polarity stated.
+//   primitive-name-match  a primitive identified by its enum name outside the dialect crate: `== Some(Primitive::Untrack)`,
+//                         `!= Primitive::CreateSignal`, `matches!(kind, Primitive::OnCleanup | ..)` (ADR 0945, G3). The call is
+//                         resolved exactly, but which primitives behave alike is the dialect's answer (AGENTS.md invariant 4),
+//                         not a list the analysis spells; each hit moves behind a `Dialect` question or states why it may stay.
+//   silent-unmatched-slot a `_` or `None` arm that does nothing, `continue`s, `break`s or returns `None`: the walk over slots,
+//                         arguments or facts ends silently for the case no arm names (ADR 0945, G4). Whether a hit-less walk means
+//                         "clean" or "unknown" is the caller's, so each hit states what the unmatched case is, or becomes an
+//                         uncertifiable result.
 //
 // And two checks of the typed premises themselves (rust/crates/solid-reactive-ir/src/proof_log.rs):
 //
@@ -52,6 +60,9 @@ export const PRODUCERS = [
   /^rust\/crates\/solid-reactive-ir\/src\/owners(?:\.rs|\/)/,
 ];
 
+/** The files that own the primitive vocabulary: the dialect's questions are stated in its enum, so a name match there is the answer, not a copy of it (ADR 0945). */
+export const VOCABULARY_OWNERS = [/^rust\/crates\/solid-dialect\//];
+
 /** Roles no read rule reports, and the write-only ones (silent for a write, reporting for a read). */
 const SILENT_ROLES = [
   "TrackedJsx",
@@ -79,6 +90,10 @@ const KINDS = {
   ],
   "name-only-match": [new RegExp(`${NAMED}\\s*(?:==|!=)\\s*(?:Some\\()?"[^"]*"`), new RegExp(String.raw`(?:==|!=)\s*(?:Some\()?"[^"]*"\)?\s*[^;]*${NAMED}`)],
   "default-on-missing": [/\.is_none_or\s*\(/, /\.unwrap_or\(\s*true\s*\)/, /\bNone\s*=>\s*true\b/, /\b_\s*=>\s*true\b/],
+  // ADR 0945 (G3). A comparison or a `matches!` over a `Primitive` variant; `EffectApplyPrimitive::Several` is another type, so the name starts at a word boundary.
+  "primitive-name-match": [/(?:==|!=)\s*(?:Some\(\s*)?(?:(?:crate::)?solid_dialect::)?\bPrimitive::[A-Z]/, /\bmatches!\s*\([^;]*\bPrimitive::[A-Z]/],
+  // ADR 0945 (G4). An arm for the unmatched case (`_`, `None`) whose body ends the walk with no result: empty, `continue`, `break`, `return`, `return None`.
+  "silent-unmatched-slot": [/(?:^|[\s{,(])(?:_|None)\s*=>\s*(?:\{\s*\}|continue\b|break\b|return\s*(?:None\b)?\s*(?:[,;}]|$))/],
 };
 
 export const KIND_NAMES = ["untagged-silent-role", ...Object.keys(KINDS)];
@@ -126,8 +141,8 @@ function taggedLines(lines) {
   return tagged;
 }
 
-/** The hits of one source text: `[{ line (1-based), kind, text }]`. Test modules are excluded; `producer` says whether roles are produced here. */
-export function hitsOf(text, producer = true) {
+/** The hits of one source text: `[{ line (1-based), kind, text }]`. Test modules are excluded; `producer` says whether roles are produced here, `owner` whether the file owns the primitive vocabulary. */
+export function hitsOf(text, producer = true, owner = false) {
   const lines = codeLines(text);
   const tagged = taggedLines(lines);
   const hits = [];
@@ -137,6 +152,7 @@ export function hitsOf(text, producer = true) {
       for (const _ of silentRoleValues(line)) hits.push({ line: index + 1, kind: "untagged-silent-role", text: normal(line) });
     }
     for (const [kind, patterns] of Object.entries(KINDS)) {
+      if (owner && kind === "primitive-name-match") continue;
       if (patterns.some((pattern) => pattern.test(line))) hits.push({ line: index + 1, kind, text: normal(line) });
     }
   });
@@ -152,7 +168,7 @@ export function measure(root = ROOT) {
     if (!existsSync(base)) continue;
     for (const path of sourceFiles(base)) {
       const file = relative(root, path);
-      for (const hit of hitsOf(readFileSync(path, "utf8"), PRODUCERS.some((pattern) => pattern.test(file)))) {
+      for (const hit of hitsOf(readFileSync(path, "utf8"), PRODUCERS.some((pattern) => pattern.test(file)), VOCABULARY_OWNERS.some((pattern) => pattern.test(file)))) {
         counts[file] ??= {};
         counts[file][hit.kind] = (counts[file][hit.kind] ?? 0) + 1;
         hits.push({ file, ...hit });

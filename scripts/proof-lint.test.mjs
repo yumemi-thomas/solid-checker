@@ -44,6 +44,34 @@ describe("the other shapes", () => {
     assert.deepEqual(kinds("None => true,", false), ["default-on-missing"]);
   });
 
+  // ADR 0945, G3: a primitive identified by its enum name outside the dialect crate.
+  test("a primitive compared or matched by its name is a hit, another type's variant of the same suffix is none", () => {
+    assert.deepEqual(kinds("if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Untrack) {", false), ["primitive-name-match"]);
+    assert.deepEqual(kinds("if primitive != Primitive::CreateSignal {", false), ["primitive-name-match"]);
+    assert.deepEqual(kinds("if kind == Some(Primitive::Resolve)", false), ["primitive-name-match"]);
+    assert.deepEqual(kinds("!matches!(kind, Primitive::OnCleanup | Primitive::Flush)", false), ["primitive-name-match"]);
+    assert.deepEqual(kinds("|| matches!(role.effect_apply_primitive, EffectApplyPrimitive::Several);", false), []);
+    assert.deepEqual(kinds("let primitive = Primitive::Untrack;", false), []);
+    assert.deepEqual(kinds("if primitive == self.untrack {", false), []);
+  });
+
+  test("the file that owns the vocabulary is not asked for a primitive name, and is asked for the rest", () => {
+    const line = "if primitive == Primitive::Untrack {";
+    assert.deepEqual(hitsOf(line, false, true).map((hit) => hit.kind), []);
+    assert.deepEqual(hitsOf(`${line}\n_ => {}\n`, false, true).map((hit) => hit.kind), ["silent-unmatched-slot"]);
+  });
+
+  // ADR 0945, G4: the arm for the case no arm names ends the walk with no result.
+  test("an unmatched arm that does nothing, continues, breaks or returns none is a hit, one that answers is none", () => {
+    for (const arm of ["_ => {}", "None => {},", "_ => continue,", "None => continue", "_ => break,", "_ => return None,", "None => return None,", "_ => return,", "_ => {  }"]) {
+      assert.deepEqual(kinds(arm, false), ["silent-unmatched-slot"], arm);
+    }
+    assert.deepEqual(kinds("match slot { Some(x) => visit(x), _ => {} }", false), ["silent-unmatched-slot"]);
+    for (const arm of ["_ => Unknown,", "None => Some(role),", "_ => false,", "_ => return Some(x),", "Some(_) => {}", "Foo => {}", "_ => { record(slot); }", "x_ => {}"]) {
+      assert.deepEqual(kinds(arm, false), [], arm);
+    }
+  });
+
   test("test modules and comments are left out", () => {
     assert.deepEqual(kinds("// source.is_none_or(|x| x)\n#[cfg(test)]\nmod tests {\n    fn t() { let _ = x.unwrap_or(true); }\n}\n", false), []);
   });
