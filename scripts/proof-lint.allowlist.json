@@ -694,7 +694,7 @@
     "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
       "default-on-missing": {
         "count": 11,
-        "why": "pending-review"
+        "why": "the callee-symbol tests (`symbol.is_none_or(..)` of setters and actions) only widen to the handed-value question, which adds an obligation; `site_may_follow` (a span that does not convert, a climb that is missing) answers 'may follow', so the defect stays; the owner filter skips calls owned by another function, whose own walk reports them; a callee that is no resolved standard-library declaration reports the in-place callback's reads; `_ => true` of `fulfills` is `Promise.catch`, where `rejection_only` already forces the `HandlerMayNotRun` obligation; a callback body that cannot be read or mentions `throw` is refused (false); a bare `return` and `setTimeout(resolve, ms)` with no value read the call's own syntax"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs": {
