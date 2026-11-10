@@ -41,6 +41,7 @@
 mod argument_values;
 mod attribution;
 mod base;
+pub mod blocked_by;
 mod blockers;
 mod boundary_defects;
 mod cache;
@@ -1673,6 +1674,12 @@ pub struct Program {
     /// [`site_may_precede_initialization`]), sorted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub early_mention_sites: Vec<Location>,
+    /// ADR 0947: the typed blocker of each uncertifiable row a veto formula holds, sorted by location, and the hazards their
+    /// `fired` ids name, each with the sites the census records. Internal JSON only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocked_by: Vec<blocked_by::BlockedRow>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hazards: Vec<blocked_by::HazardSites>,
 }
 
 /// The site of a reportable row that no execution of the program reaches

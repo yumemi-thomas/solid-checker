@@ -26,6 +26,9 @@ pub struct Snapshot {
     pub feedback_facts: Vec<solid_reactive_ir::DevelopmentFile>,
     pub status: String,
     pub findings: Vec<SnapshotFinding>,
+    /// ADR 0947: the hazards the findings' `blockedBy.fired` ids name, each with the sites the census records.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hazards: Vec<solid_reactive_ir::blocked_by::HazardSites>,
     pub metrics: Metrics,
 }
 
@@ -41,6 +44,9 @@ pub struct SnapshotFinding {
     pub hint: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub analysis_context: String,
+    /// ADR 0947: why an uncertifiable finding is blocked, as typed facts (internal JSON only: uncertifiable stays internal).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_by: Option<solid_reactive_ir::blocked_by::BlockedBy>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_kind: String,
     /// ADR 0205: the analysis-coverage family and subject this gap groups by.
@@ -683,6 +689,7 @@ impl DiagnosticSession {
         solid_reactive_ir::record_verdicts(&findings);
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
+        attach_blocked_by(&mut snapshot, &program);
         // A disabled coverage rule hides its obligations, not the gap they
         // name: the analysis is still incomplete there, so it cannot certify.
         if snapshot.status == "certified" && !withheld_coverage.is_empty() {
@@ -1194,6 +1201,7 @@ pub fn unsupported_runtime_snapshot(
             message,
             hint,
             analysis_context: "dialect-detection".into(),
+            blocked_by: None,
             subject_kind: "project".into(),
             coverage_family: String::new(),
             coverage_subject: String::new(),
@@ -1219,6 +1227,7 @@ pub fn unsupported_runtime_snapshot(
             }],
             fixes: Vec::new(),
         }],
+        hazards: Vec::new(),
         metrics: Metrics {
             files_analyzed: 0,
             functions_analyzed: 0,
@@ -1252,6 +1261,7 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
             message: finding.message,
             hint: finding.hint,
             analysis_context: finding.analysis_context,
+            blocked_by: None,
             subject_kind: finding.subject_kind,
             coverage_family: finding.coverage_family,
             coverage_subject: finding.coverage_subject,
@@ -1295,8 +1305,63 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
         feedback_facts: Vec::new(),
         status: status.into(),
         findings,
+        hazards: Vec::new(),
         metrics,
     }
+}
+
+/// ADR 0947: the typed blocker of each uncertifiable finding: the row's own where a veto formula holds it (`formula`, `fired`),
+/// else the blocker its `analysisContext` names, with no more said. The hazard table the `fired` ids name goes with them.
+fn attach_blocked_by(snapshot: &mut Snapshot, program: &Program) {
+    let typed = program
+        .blocked_by
+        .iter()
+        .map(|row| {
+            (
+                (
+                    row.location.path.as_ref(),
+                    row.location.start_byte,
+                    row.location.end_byte,
+                    row.blocked_by.kind.as_str(),
+                ),
+                &row.blocked_by,
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    for finding in &mut snapshot.findings {
+        if finding.kind != "uncertifiable" {
+            continue;
+        }
+        let Some(kind) = solid_reactive_ir::blocked_by::blocked_kind(&finding.analysis_context)
+        else {
+            continue;
+        };
+        let at = (
+            finding.primary_location.path.as_str(),
+            finding.primary_location.start_byte,
+            finding.primary_location.end_byte,
+            kind,
+        );
+        finding.blocked_by = typed
+            .get(&at)
+            .map(|blocked_by| (*blocked_by).clone())
+            .or_else(|| {
+                solid_reactive_ir::blocked_by::BlockedBy::of_context(&finding.analysis_context)
+            });
+    }
+    // Only the hazards a finding that stays names.
+    let named = snapshot
+        .findings
+        .iter()
+        .filter_map(|finding| finding.blocked_by.as_ref())
+        .flat_map(|blocked_by| blocked_by.fired.iter())
+        .collect::<std::collections::BTreeSet<_>>();
+    snapshot.hazards = program
+        .hazards
+        .iter()
+        .filter(|hazard| named.contains(&hazard.id))
+        .cloned()
+        .collect();
 }
 
 pub fn analysis_metrics(facts: &ProjectFacts, program: &Program) -> Metrics {

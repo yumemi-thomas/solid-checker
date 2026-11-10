@@ -11,7 +11,10 @@ use solid_facts::core::Span;
 use solid_facts::{FileFacts, StandardRoot};
 
 use super::file_table::{FileView, ItemKind};
+
+mod blocked_by;
 use crate::{HashMap, HashSet};
+pub(crate) use blocked_by::*;
 
 /// The build-wide inputs a contribution may read besides its file. A change
 /// of any of them is a different cache domain, so a fresh build.

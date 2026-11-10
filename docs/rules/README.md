@@ -155,7 +155,11 @@ what the analysis could not establish, never a claim about the user's code. It
 has no rule-options key, no ESLint rule and no switch, so nothing disables it
 ([ADR 0440](../decisions.md#adr-0440)). The human formats and ESLint do not
 show it and `--certify` ignores it; `--format json` and `--internal` keep it,
-with the `uncertifiable` status it sets.
+with the `uncertifiable` status it sets. In the JSON an uncertifiable finding
+carries `blockedBy` ([ADR 0947](../decisions.md#adr-0947)): the blocker `kind`
+and, for a veto, the `formula` and the whole-program hazards that `fired`, which
+the report's top-level `hazards` locate; `bun scripts/u-blockers.mjs <report>`
+ranks them.
 
 | Code | Obligation | Raised when |
 | --- | --- | --- |
