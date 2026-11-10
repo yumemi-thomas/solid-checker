@@ -712,7 +712,7 @@
     "rust/crates/solid-reactive-ir/src/static_rules/pre_await.rs": {
       "default-on-missing": {
         "count": 5,
-        "why": "pending-review"
+        "why": "`Reads::opaque` is the 'possibly tracked' side: a bare reference (no member chain: `chain` returns None and sets `opaque`) is counted as an unconditional read, which only turns a violation into `Tracking::Possible` (uncertain); the number-accessor filter keeps a candidate whose destructuring has no setter slot (an immutable array pattern of `createSignal(<number literal>)`, so nothing can write it); the `inert_row` slots read the call's own argument list (no first or second argument, no value to coerce)"
       },
       "name-only-match": {
         "count": 3,
