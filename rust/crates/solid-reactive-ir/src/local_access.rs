@@ -9388,10 +9388,13 @@ pub(crate) fn runs_in_function_entered_unseen(
                 .callback_roles
                 .iter()
                 .any(|callback| callback.span == function.span)
-            || file.ast.arguments_containing(function.span).any(|(call, index)| {
-                file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
-                    && lookup.primitive_at_call(file, call.span).is_some()
-            })
+            || file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span).is_some()
+                })
         {
             return false;
         }

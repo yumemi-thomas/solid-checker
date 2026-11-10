@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx",
+      "start": 305,
+      "end": 326,
+      "fixes": 0
+    }
+  ]
+}

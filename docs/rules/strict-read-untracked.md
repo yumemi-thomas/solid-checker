@@ -92,8 +92,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   synchronous dispatch in the body reaches the listener, so even that case stays
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
   callback. Visible native synchronous dispatch withholds its execution proof
-  (ADR 0356), also a handler named in the attribute's (ADR 0934), so its reads
-  are then uncertifiable; otherwise it is not reported.
+  (ADR 0356), a named handler's too (ADR 0934), so its reads are then
+  uncertifiable; otherwise it is not reported.
   A dispatch on the global `window` (or `document` on web rc.17), or written in
   a scheduler callback or at module top level, does not withhold it (ADR 0435);
   one in a `runWithOwner(null, …)` callback does, because that leaves the

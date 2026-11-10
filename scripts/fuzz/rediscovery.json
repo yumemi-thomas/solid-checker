@@ -9648,5 +9648,23 @@
    "mx-strict-read-untracked-evt-body-dispatch-helper-signal-wrapper-none"
   ],
   "rediscovered": "b0eb0467b: 12 strata false clean (focus, context evt-body-dispatch-helper); 63725c6bf and later: none"
+ },
+ {
+  "finding": "ADR 0934 (4): a props read at the head of a longer path under a TypeScript wrapper (`(props as typeof props)[\"value\"].text`, `props!.value.text`) was certified clean: the head test asked Type Facts for an entity at the identifier, which it keeps none of under a wrapper, so the read was dropped as part of the longer path before the binder fallback",
+  "found": "the proof-log completeness check (prop-head-get `Cooked`, C1 props-read-no-row); Chrome rc.21 STRICT_READ_UNTRACKED (fix 6 probes k1, k2)",
+  "fixed": "ADR 0934 (the head resolves through the binder: V)",
+  "outside": "the generator's props hold numbers, so no wrapped head of a longer path is generated; the recall source `prop-value-cast` reads a wrapped prop bare (already proven). Fixture prop-head-get `Cooked` and the probes hold it"
+ },
+ {
+  "finding": "ADR 0934 (3), owner ruling 2026-11-10: a component-local helper's props Get whose use nothing follows (handed to a call, aliased by a `let`, a JSX prop) was ADR 0222's option-B silence: no row and no obligation; Chrome rc.21 warns when the alias runs in the body",
+  "found": "the proof-log completeness check (13 C2 props reads in callback-props-reads, helper-prop-read, literal-argument-member-dispatch); Chrome probes h1-h3",
+  "fixed": "ADR 0934 (U at the Get, `function-run-unplaced`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-helper-handed-call-memo-direct-none-s-prop-value-cast",
+   "mx-strict-read-untracked-helper-handed-call-signal-direct-none-s-prop-value-cast"
+  ],
+  "rediscovered": "origin/main 4f2d529f5: 2 certified false cleans (focus, context helper-handed-call, source prop-value-cast); ADR 0934: none. The legal twin helper-handed-handler: 18 lg-recall clean to uncertifiable"
  }
 ]

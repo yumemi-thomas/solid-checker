@@ -1364,6 +1364,17 @@
       "start": 587,
       "end": 597,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx",
+      "start": 657,
+      "end": 669,
+      "fixes": 0
     }
   ]
 }

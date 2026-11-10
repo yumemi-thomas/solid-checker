@@ -1015,7 +1015,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 }));
 /**
  * ADR 0934 (owner, 2026-11-10: a use nothing follows is uncertifiable, never ADR 0222's silence). `helper-handed-call`: the site in a
- * component-local helper kept in an array and called from it in the body (a read the helper's census cannot follow);
+ * component-local helper a `let` aliases, the alias called in the body (a use the helper's census cannot follow);
  * `helper-handed-handler` calls it from a click (legal). The recall sources cross it, so `prop-value-cast` puts a props Get there.
  */
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
@@ -1921,12 +1921,12 @@ function recallContext(context, stmts, kit) {
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [decl(h, fn(stmts)), made, context.includes("-timer-") ? expr(prim("timer", fn([fire]))) : fire], view: [] };
     }
-    // ADR 0934 (HELPER_HANDED_CONTEXTS): the helper kept in an array, run from it in the body or a click.
+    // ADR 0934 (HELPER_HANDED_CONTEXTS): the helper aliased by a `let`, the alias called in the body or a click.
     case "helper-handed-call": case "helper-handed-handler": {
       const g = kit.name("g");
-      const box = kit.name("kept");
-      const run = expr(domExpr(`${box}[0]()`));
-      const made = [decl(box, domExpr("[] as Array<() => unknown>")), decl(g, fn(stmts)), expr(domExpr(`${box}.push(${g})`))];
+      const al = kit.name("al");
+      const run = expr(domExpr(`${al}()`));
+      const made = [decl(g, fn(stmts)), decl(al, domExpr(g), { kw: "let" })];
       return context === "helper-handed-call" ? { body: [...made, run], view: [] } : { body: made, view: [button(kit.name("b"), [run])] };
     }
     // ADR 0934 (UNSEEN_ENTRY_CONTEXTS): an exported module function, the component's values hoisted beside it, called through the

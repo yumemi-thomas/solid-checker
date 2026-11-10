@@ -6,24 +6,9 @@
       "why": "a read in a returned function nothing calls: no call edge, carrier or scheduler places it; name the exhaustive-climb exit",
       "at": "fixtures/reactive-ir/accessor-provenance/Anonymous.tsx:14:37"
     },
-    "reactive-ir/callback-props-reads|fixtures/reactive-ir/callback-props-reads/Silent.tsx|2147-2154|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/callback-props-reads/Silent.tsx:68:21"
-    },
-    "reactive-ir/callback-props-reads|fixtures/reactive-ir/callback-props-reads/Silent.tsx|2451-2458|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/callback-props-reads/Silent.tsx:80:21"
-    },
-    "reactive-ir/deferred-effect-apply|fixtures/reactive-ir/deferred-effect-apply/dependencies.ts|163-175|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/deferred-effect-apply/dependencies.ts:5:43"
-    },
     "reactive-ir/eslint-plugin-corpus|fixtures/reactive-ir/eslint-plugin-corpus/after-await-valid.tsx|712-719|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: the read follows an unconditional `await` in `standalone`, so it runs on a later task off every caller's stack (ADR 0323); name that end (ADR 0934 keeps it clean)",
       "at": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-valid.tsx:33:10"
     },
     "reactive-ir/fp-exec-stored-literals|fixtures/reactive-ir/fp-exec-stored-literals/App.tsx|3231-3234|C2/reporting-decision-no-row": {
@@ -46,55 +31,10 @@
       "why": "a read in a helper arrow the summaries place at its exact call edges (the call's own role decides); discover_call_as ends it with no named premise",
       "at": "fixtures/reactive-ir/handed-residuals/App.tsx:356:5"
     },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|10020-10030|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:298:24"
-    },
     "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|10913-10924|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: `browse` is named only at an effect's apply, which has no strict-read window; name the named-apply end",
       "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:324:37"
-    },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|11114-11125|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:329:24"
-    },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|4191-4202|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:118:24"
-    },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|5058-5069|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:144:24"
-    },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|5511-5522|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:158:24"
-    },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|6555-6566|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:192:24"
-    },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|8037-8048|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:240:25"
-    },
-    "reactive-ir/helper-prop-read|fixtures/reactive-ir/helper-prop-read/App.tsx|9829-9840|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/helper-prop-read/App.tsx:293:24"
-    },
-    "reactive-ir/http-response-flush-nested|fixtures/reactive-ir/http-response-flush-nested/App.tsx|565-574|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/http-response-flush-nested/App.tsx:10:27"
     },
     "reactive-ir/impostor-prototype-own|fixtures/reactive-ir/impostor-prototype-own/App.tsx|416-422|C3/untagged": {
       "owner": "proof-log phase B (tag the producing return)",
@@ -122,18 +62,13 @@
       "at": "fixtures/reactive-ir/jsx-creation-sites/App.tsx:111:41"
     },
     "reactive-ir/leaf-scope-host-callbacks|fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx|2386-2393|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "an updater read inside onSettled",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: the setter call is in `onSettled`'s callback, so its updater runs in that callback, outside every strict-read window (Chrome rc.21 silent, fix 6 probe q8); name the setter-call end",
       "at": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx:97:25"
     },
-    "reactive-ir/literal-argument-member-dispatch|fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx|4394-4405|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
-      "at": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx:133:35"
-    },
     "reactive-ir/open-source-computes|fixtures/reactive-ir/open-source-computes/settled-helper.tsx|122-127|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: `h`'s only call is in a memo compute, which tracks the read; name the summary end",
       "at": "fixtures/reactive-ir/open-source-computes/settled-helper.tsx:4:19"
     },
     "reactive-ir/own-setter-wrapper-identity|fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx|1267-1329|C3/no-decision": {
@@ -176,35 +111,10 @@
       "why": "a silent write row whose role no tagged arm answered (untagged)",
       "at": "fixtures/reactive-ir/prop-callback-roles/App.tsx:32:23"
     },
-    "reactive-ir/prop-head-get|fixtures/reactive-ir/prop-head-get/App.tsx|2523-2560|C1/no-decision": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "prop-head-get Cooked: the fixture documents a violation at (props as typeof props)[\"value\"]; no decision, no row (prop_head needs an entity Type Facts does not keep under a wrapper); ruled a false clean",
-      "at": "fixtures/reactive-ir/prop-head-get/App.tsx:61:17"
-    },
     "reactive-ir/props-callers|fixtures/reactive-ir/props-callers/App.tsx|750-761|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a read at module scope; the classifier says it reports, the producer left no row",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a module-scope read has no strict-read window in rc.21 (Chrome silent, fix 6 probe q13); the catalog's module-scope capability is the end",
       "at": "fixtures/reactive-ir/props-callers/App.tsx:13:22"
-    },
-    "reactive-ir/rc17-set-link-claim-csr|fixtures/reactive-ir/rc17-set-link-claim-csr/App.tsx|557-565|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/rc17-set-link-claim-csr/App.tsx:12:43"
-    },
-    "reactive-ir/rc17-set-link-claim-ssr|fixtures/reactive-ir/rc17-set-link-claim-ssr/App.tsx|557-565|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/rc17-set-link-claim-ssr/App.tsx:12:43"
-    },
-    "reactive-ir/rc17-set-link-claim-unknown|fixtures/reactive-ir/rc17-set-link-claim-unknown/App.tsx|557-565|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/rc17-set-link-claim-unknown/App.tsx:12:43"
-    },
-    "reactive-ir/rc21-loading-on-accessor|fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx|2876-2883|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx:88:19"
     },
     "reactive-ir/read-handed-through-summary|fixtures/reactive-ir/read-handed-through-summary/App.tsx|2240-2244|C2/reporting-decision-no-row": {
       "owner": "proof-log phase A follow-up (name the helper reads the summaries place at exact call edges)",
@@ -212,18 +122,18 @@
       "at": "fixtures/reactive-ir/read-handed-through-summary/App.tsx:103:5"
     },
     "reactive-ir/render-time-reads|fixtures/reactive-ir/render-time-reads/App.tsx|780-787|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: the returned `finish` is only passed to `String(...)`, never called, so its default never runs; name the uncalled-return end",
       "at": "fixtures/reactive-ir/render-time-reads/App.tsx:29:27"
     },
     "reactive-ir/render-time-reads|fixtures/reactive-ir/render-time-reads/App.tsx|987-994|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: the returned `finish` is only passed to `String(...)`, never called, so its default never runs; name the uncalled-return end",
       "at": "fixtures/reactive-ir/render-time-reads/App.tsx:36:27"
     },
     "reactive-ir/static-api|fixtures/reactive-ir/static-api/App.tsx|2488-2496|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a read at module scope; the classifier says it reports, the producer left no row",
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a module-scope read has no strict-read window in rc.21 (Chrome silent, fix 6 probe q13); the catalog's module-scope capability is the end",
       "at": "fixtures/reactive-ir/static-api/App.tsx:56:9"
     },
     "reactive-ir/store-delete-anchor|fixtures/reactive-ir/store-delete-anchor/App.tsx|1850-1857|C3/override": {
@@ -231,50 +141,10 @@
       "why": "a silent read row whose role no tagged arm answered (override)",
       "at": "fixtures/reactive-ir/store-delete-anchor/App.tsx:45:61"
     },
-    "reactive-ir/store-delete-anchor|fixtures/reactive-ir/store-delete-anchor/App.tsx|2295-2302|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "B2: a store read in a function nothing places; discover_member returns on placed_nowhere",
-      "at": "fixtures/reactive-ir/store-delete-anchor/App.tsx:56:14"
-    },
-    "reactive-ir/store-delete-anchor|fixtures/reactive-ir/store-delete-anchor/App.tsx|2374-2381|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "B2: a store read in a function nothing places; discover_member returns on placed_nowhere",
-      "at": "fixtures/reactive-ir/store-delete-anchor/App.tsx:59:13"
-    },
-    "reactive-ir/store-delete|fixtures/reactive-ir/store-delete/App.tsx|743-750|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "B2: a store read in a function nothing places; discover_member returns on placed_nowhere",
-      "at": "fixtures/reactive-ir/store-delete/App.tsx:25:7"
-    },
     "reactive-ir/store-mutators|fixtures/reactive-ir/store-mutators/App.tsx|1402-1418|C3/override": {
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent read row whose role no tagged arm answered (override)",
       "at": "fixtures/reactive-ir/store-mutators/App.tsx:54:26"
-    },
-    "reactive-ir/store-mutators|fixtures/reactive-ir/store-mutators/App.tsx|957-968|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "B2: a store read in a function nothing places; discover_member returns on placed_nowhere",
-      "at": "fixtures/reactive-ir/store-mutators/App.tsx:37:20"
-    },
-    "reactive-ir/store-mutators|fixtures/reactive-ir/store-mutators/App.tsx|989-1000|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "B2: a store read in a function nothing places; discover_member returns on placed_nowhere",
-      "at": "fixtures/reactive-ir/store-mutators/App.tsx:39:3"
-    },
-    "reactive-ir/store-write-literal-links|fixtures/reactive-ir/store-write-literal-links/App.ts|1315-1322|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "B2: a store read in a function nothing places; discover_member returns on placed_nowhere",
-      "at": "fixtures/reactive-ir/store-write-literal-links/App.ts:44:11"
-    },
-    "reactive-ir/store-write-literal-links|fixtures/reactive-ir/store-write-literal-links/App.ts|566-573|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "B2: a store read in a function nothing places; discover_member returns on placed_nowhere",
-      "at": "fixtures/reactive-ir/store-write-literal-links/App.ts:16:11"
-    },
-    "reactive-ir/unplaced-site-obligations|fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx|542-549|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "u1: a read in an exported or uncalled helper; the classifier says unplaced, the producer left no row",
-      "at": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx:15:12"
     },
     "reactive-ir/write-named-closure-in-root|fixtures/reactive-ir/write-named-closure-in-root/App.tsx|5900-5904|C3/untagged": {
       "owner": "proof-log phase B (tag the producing return)",
@@ -287,9 +157,79 @@
       "at": "fixtures/reactive-ir/write-past-possible-await/App.tsx:17:22"
     },
     "uncertifiable-repro/sc1001|fixtures/uncertifiable-repro/sc1001/src/local-object-context-value.tsx|629-641|C2/reporting-decision-no-row": {
-      "owner": "fix 6 (claude/proof-log-holes)",
-      "why": "a props read in a helper whose use is unproven and whose definition site the gate refused: option B's silence (ADR 0222), no row; ruled not acceptable silence (unproven is uncertifiable with a named blocker)",
+      "owner": "fix 6 follow-up (open)",
+      "why": "open: a method of a local object handed into a context value runs in any consumer; not closed by ADR 0934 (its function is no export and has a binding no summary follows)",
       "at": "fixtures/uncertifiable-repro/sc1001/src/local-object-context-value.tsx:13:17"
+    },
+    "reactive-ir/event-dispatch-handler-reads-none|fixtures/reactive-ir/event-dispatch-handler-reads-none/App.tsx|416-423|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: no dispatch in the program, so the helper's call in the handler is an EventCallback (no window); the summary row at the call is not written for a non-reporting role; name that end",
+      "at": "fixtures/reactive-ir/event-dispatch-handler-reads-none/App.tsx:11:25"
+    },
+    "reactive-ir/event-dispatch-handler-reads-none|fixtures/reactive-ir/event-dispatch-handler-reads-none/App.tsx|654-662|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: no dispatch in the program, so the helper's call in the handler is an EventCallback (no window); the summary row at the call is not written for a non-reporting role; name that end",
+      "at": "fixtures/reactive-ir/event-dispatch-handler-reads-none/App.tsx:20:20"
+    },
+    "reactive-ir/reads-entered-unseen|fixtures/reactive-ir/reads-entered-unseen/App.tsx|1133-1140|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: `local` is called only from a click handler (EventCallback, no dispatch in the program); name the event-only end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen/App.tsx:38:10"
+    },
+    "reactive-ir/reads-entered-unseen|fixtures/reactive-ir/reads-entered-unseen/App.tsx|1289-1296|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: `dead` is never referenced, so it never runs; name the unreferenced-function end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen/App.tsx:44:15"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|411-418|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:15:7"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|432-443|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:15:28"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|314-321|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:9:12"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|364-371|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:12:10"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|482-489|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:17:28"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|539-546|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:19:23"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|705-712|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:24:11"
+    },
+    "reactive-ir/reads-entered-unseen-closed|fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx|1098-1105|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (name the end; ADR 0934)",
+      "why": "sound: a closed program (ADR 0203) has no unseen caller and nothing here calls the export (or a handler does): it never runs in a window; name the closed-census end",
+      "at": "fixtures/reactive-ir/reads-entered-unseen-closed/App.tsx:38:10"
+    },
+    "uncertifiable-repro/sc9012|fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-call.tsx|657-670|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (a called callback prop's read under an unknown role)",
+      "why": "the dispatch veto (ADR 0934) makes the named handler `toggle` Unknown, and the props read `props.onClose` (a callback prop called) then has no row: a false-clean candidate the veto exposed (before, the handler's silent DeferredCallback role hid it)",
+      "at": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-call.tsx:20:18"
+    },
+    "uncertifiable-repro/sc9012|fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx|684-697|C2/reporting-decision-no-row": {
+      "owner": "fix 6 follow-up (a called callback prop's read under an unknown role)",
+      "why": "the dispatch veto (ADR 0934) makes the named handler `toggle` Unknown, and the props read `props.onClose` (a callback prop called) then has no row: a false-clean candidate the veto exposed (before, the handler's silent DeferredCallback role hid it)",
+      "at": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx:21:47"
     }
   }
 }

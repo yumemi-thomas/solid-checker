@@ -23,6 +23,28 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/helpers.ts",
+      "start": 212,
+      "end": 219,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/helpers.ts",
+      "start": 330,
+      "end": 337,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -52,6 +74,17 @@
       "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
       "start": 0,
       "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
+      "start": 232,
+      "end": 239,
       "fixes": 0
     },
     {
