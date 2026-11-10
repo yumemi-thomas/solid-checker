@@ -239,6 +239,8 @@ function render(program, instrument) {
     return { head, body: block(f.body, depth, entry, f.throwOn ? [`if (${f.throwOn}() === 2) throw new Error("x");`] : []) };
   }
   function fnText(f, depth, { header } = {}) {
+    // A concise arrow (model.mjs `fn`): no block, so no entry counter; its one `return` prints as the body.
+    if (f.concise && f.form === "arrow" && f.body.length === 1 && f.body[0].k === "return") return `${f.async ? "async " : ""}${header ?? `(${params(f, depth)})`} => ${expr(f.body[0].e, depth)}`;
     const { head, body } = fnParts(f, depth, header);
     // A named function expression (the recall axes' callback forms): `function cbNamed() { ... }`.
     if (f.form === "generator") return `function*${head} ${body}`;

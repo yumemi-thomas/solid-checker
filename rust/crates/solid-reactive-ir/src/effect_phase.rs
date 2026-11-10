@@ -845,6 +845,44 @@ impl<'l, 'a> Walk<'l, 'a> {
         })
     }
 
+    /// ADR 0927: `literal` is the value an effect's compute returns, which
+    /// the dialect hands to the apply beside it (`createEffect(() => () => …,
+    /// (v) => { v(); })`): the apply may call it, in its own phase, so any
+    /// origin of the apply is an obligation, unless the apply only names the
+    /// value ([`crate::execution_role::returned_to_idle_apply`]).
+    fn compute_value_layer(
+        &mut self,
+        file: &FileFacts,
+        literal: &FunctionFact,
+        helper_calls: usize,
+    ) -> Option<EffectPhaseOrigin> {
+        if crate::execution_role::returned_to_idle_apply(file, literal, self.lookup) {
+            return None;
+        }
+        let compute = crate::owners::owning_function(&file.ast, literal.span)
+            .filter(|_| returned_by_its_function(file, literal))?;
+        let (call, _) = file
+            .ast
+            .arguments_containing(compute.span)
+            .find(|(call, index)| {
+                *index == 0
+                    && !call.arguments[0].spread
+                    && file.ast.peel_ts_sugar_span(call.arguments[0].span) == compute.span
+                    && call.arguments.len() > 1
+                    && self
+                        .lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            self.lookup.dialect.apply_callback_argument(primitive) == Some(1)
+                        })
+            })?;
+        let origin = self.argument_layer(file, call, 1, helper_calls)?;
+        Some(EffectPhaseOrigin {
+            mixed: true,
+            ..origin
+        })
+    }
+
     /// `literal` is a function bound to a name: its flush runs only in the
     /// effect phase when it has calls, is neither exported nor referenced
     /// other than by those calls, and every one of them is a proven layer.
@@ -951,6 +989,9 @@ impl<'l, 'a> Walk<'l, 'a> {
                 // which nothing here follows: the code around it is walked,
                 // and any origin is an obligation, never silence.
                 if !slot {
+                    if let Some(origin) = self.compute_value_layer(file, literal, helper_calls) {
+                        return Some(origin);
+                    }
                     return if returned_by_its_function(file, literal) {
                         self.unplaced_layer(file, literal.span, helper_calls)
                     } else {
