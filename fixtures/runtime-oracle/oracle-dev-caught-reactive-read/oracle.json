@@ -1,0 +1,3 @@
+{
+  "note": "SC5008 caught-reactive-read: a memo catches the throw of a pending read and completes. rc.21 reports CAUGHT_REACTIVE_READ at the line the compute is created on, not at the read inside its try, so the oracle judges the code by file (placelessCodes, ADR 0946); control: a catch that rethrows reports nothing"
+}
