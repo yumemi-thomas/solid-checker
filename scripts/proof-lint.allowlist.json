@@ -164,7 +164,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
       },
       "untagged-silent-role": {
         "count": 3,
@@ -226,7 +226,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/flow_helpers.rs": {
@@ -312,7 +312,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
@@ -426,7 +426,7 @@
     "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs": {
       "name-only-match": {
         "count": 2,
-        "why": "pending-review"
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative; `null` is a reserved literal, its source text identifies exactly the null literal"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/return_escape.rs": {
