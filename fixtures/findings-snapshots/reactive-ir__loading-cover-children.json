@@ -1,0 +1,60 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/loading-cover-children/App.tsx",
+      "start": 1931,
+      "end": 1941,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/loading-cover-children/App.tsx",
+      "start": 2525,
+      "end": 2535,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/loading-cover-children/App.tsx",
+      "start": 3166,
+      "end": 3176,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/loading-cover-children/App.tsx",
+      "start": 3745,
+      "end": 3755,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "root-mount-pass-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/loading-cover-children/App.tsx",
+      "start": 4292,
+      "end": 4302,
+      "fixes": 0
+    }
+  ]
+}

@@ -297,7 +297,7 @@ fn execution_role_where(
         .chain(callbacks)
         .min_by_key(|(region, _, tie_break)| (region.end - region.start, *tie_break))
     {
-        return role;
+        return role_arm!("execution_role.execution_role_where.compiler-region", role);
     }
     role_arm!(
         "execution_role.execution_role_where.unknown-2",
@@ -470,9 +470,15 @@ pub(crate) fn dynamic_read_role(
         && let Some(exclusive) = dynamic_component_entry(file, span, lookup)
     {
         return if exclusive {
-            ExecutionRole::UntrackedUnwindowed
+            role_arm!(
+                "execution_role.dynamic_read_role.exclusive-entry",
+                ExecutionRole::UntrackedUnwindowed
+            )
         } else {
-            ExecutionRole::Unknown
+            role_arm!(
+                "execution_role.dynamic_read_role.shared-entry",
+                ExecutionRole::Unknown
+            )
         };
     }
     role
