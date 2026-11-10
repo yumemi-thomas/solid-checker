@@ -42,6 +42,7 @@ import {
   BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption, fireShape } from "./misuse.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
+import { PL_CONTEXT_NAMES } from "./primitive-layer-shapes.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
@@ -335,7 +336,9 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
 // `aw-shared-*`: the helper's site past its own await has no owner, so a CONTEXT_NOT_FOUND site there throws NO_OWNER_CONTEXT, and the
 // row's cell is not the code at its line. Both of its violations are true (SC4001 at the helper, SC4002 at the memo's read before the
 // await); `no-owner-context-aw-shared-*` keeps the shape.
-const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
+// ADR 0940: the `pl-*` contexts are the ten codes' cells, each measured (primitive-layer-shapes.mjs `PL_MEASURED`); a pair left out of them reports another code first,
+// never runs its site, or has a throw hidden by a later one, which the generic judge cannot score, so the census leaves them out for every code.
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
@@ -406,6 +409,8 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   // spelling around the site.
   // ADR 0893: the question of a stored-error context is its reader or its compute.
   if ((STORED_CONTEXTS.includes(context) || STORED_ASYNC_CONTEXTS.includes(context)) && context !== "st-unread") return shapes.filter((shape) => shape.binding === "direct" && shape.layer === "none");
+  // ADR 0940: a `pl-*` cell takes its base shapes and, beside them, the plain shape of each of the code's `plVariants` (the site spelled another way the layers decide).
+  if (PL_CONTEXT_NAMES.includes(context)) return recallCell ? [...shapes, ...(SPEC[code].plVariants ?? []).filter(takes).map((variant) => ({ variant, binding: "direct", layer: "none" }))] : shapes;
   if (CBP_CONTEXTS.includes(context) || BASE_ONLY_CONTEXTS().includes(context)) return shapes;
   for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
@@ -431,7 +436,8 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount) && !(lean && LEAN_DEMOTED.mounts.includes(mount))) for (const shape of local) shapes.push({ ...shape, mount });
   // The wrapper mounts a misuse cell takes (misuse.mjs `wrapMounts`): the direct binding and no layer.
   for (const mount of legal ? [] : SPEC[code].wrapMounts?.[context] ?? []) for (const shape of local.filter(wrapShape)) shapes.push({ ...shape, mount });
-  for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
+  // ADR 0940: CONTEXT_NOT_FOUND's `package` source is a recall source too, so it crosses the base shapes of the code's cells here and moves no default grid.
+  for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
 
