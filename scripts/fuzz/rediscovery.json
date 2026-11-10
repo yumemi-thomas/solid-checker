@@ -9687,5 +9687,29 @@
    "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-real",
    "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-alias"
   ]
+ },
+ {
+  "finding": "A listener the bare global `addEventListener` registers in `untrack`, delivered by a bare global `dispatchEvent` in the body, was certified clean; Chrome (rc.21) warns STRICT_READ_UNTRACKED in the listener. lib.dom's global `dispatchEvent` was no synchronous dispatch (its qualified name has no owner)",
+  "found": "proof-log phase C table-entry shapes (tbl-addeventlistener-sync-u-b), Chrome-confirmed",
+  "fixed": "ADR 0937 (4feb80e82)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-tbl-addeventlistener-sync-u-b-signal-direct-none",
+   "mx-strict-read-untracked-tbl-addeventlistener-sync-u-b-memo-direct-none"
+  ],
+  "rediscovered": "the slice-1 build (346b30dc3): 2 false-clean; 4feb80e82 and later: 2 uncertifiable (listener-reach)"
+ },
+ {
+  "finding": "A provider-less `useContext` in the child of a user component that renders `props.children` inside a handling `<Errored>` or `createErrorBoundary` was an SC4002 violation; Chrome (rc.21) reports no CONTEXT_NOT_FOUND. ADR 0893's handled-above test was lexical",
+  "found": "proof-log phase C wrapper shapes (wrap-errored-real, wrap-erroredcall-real), Chrome-confirmed",
+  "fixed": "ADR 0937 (1c30dad41)",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-wrap-errored-real-x-direct-none",
+   "lg-context-not-found-wrap-erroredcall-real-x-direct-none"
+  ],
+  "rediscovered": "main 4f2d529f5: 2 false-positive; 1c30dad41 and later: 2 uncertifiable (computation-error-unobserved)"
  }
 ]

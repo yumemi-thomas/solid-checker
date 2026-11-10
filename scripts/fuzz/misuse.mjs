@@ -23,6 +23,8 @@ import { FLIP_READ_CONTEXTS, FLIP_READ_CONTEXT_ONLY, FLIP_READ_LEGAL, FLIP_READ_
 import { FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
 import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
 import { TABLE_CONTEXT_NAMES, tableContext, tablePlacement } from "./table-shapes.mjs";
+import { WRAP_CONTEXT_NAMES, wrapContext, wrapPlacement } from "./boundary-shapes.mjs";
+import { ARM_CONTEXT_NAMES, armContext, armPlacement } from "./arm-shapes.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -149,7 +151,7 @@ export const sourcedRead = (source) => (valueSource(source) ? "value" : "call");
  * a helper and a member. A project method or a local function called `focus` delivers nothing (`project`, `shadow`).
  */
 /** A fire cell is about the call that delivers: one shape of the read or write inside it, not the whole cross of what the grids vary. */
-export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread|dny|tbl)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && (!shape.source || (context === "dny-renamed-prop" && shape.source === "prop")) && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
+export const fireShape = (context) => (shape) => !(context.includes("-fire-") || /^(lst|rnd|zero|prop-unread|dny|tbl|wrap|barm)-|^evt-apply-owned-flush$/.test(context) || ANCHOR_MISSES.includes(context)) || (!shape.mount && (!shape.source || (context === "dny-renamed-prop" && shape.source === "prop")) && !shape.callback && shape.layer === "none" && ["direct", undefined].includes(shape.binding));
 const FIRES = ["focus", "select", "blur", "remove", "steal", "reset", "submit", "validity", "modal", "popover", "focus-wrapper", "focus-member"];
 /**
  * ADR 0645: what a listener reaches, on the stack of what delivers it. A window listener that calls a member (`method`), a bound member, an
@@ -1014,6 +1016,10 @@ const UPDATER_DISPATCH_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((
  * and an action at the site (TABLE_CODES); base shapes only, the plain shape of each variant (`fireShape`).
  */
 const TABLE_PLACEMENT = tablePlacement(SPEC);
+/** ADR 0935 (boundary-shapes.mjs): a user component wrapping `props.children` in a boundary the cover walks consult; recall contexts, base shapes. */
+const WRAP_PLACEMENT = wrapPlacement();
+/** ADR 0935 (arm-shapes.mjs): contexts for the classifier arms no fixture reached, each beside its twin; recall contexts, base shapes. */
+const ARM_PLACEMENT = armPlacement();
 /**
  * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
  * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
@@ -1039,7 +1045,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
 const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
   ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
@@ -1151,13 +1157,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1614,7 +1620,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
