@@ -212,7 +212,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`children` is a prop name used only to REFUSE: a component's sole child expression is its `children` prop, and a `children` attribute competes with it, so the true branch refuses the flow (the comment at the site says both refuse)"
       },
       "untagged-silent-role": {
         "count": 4,
