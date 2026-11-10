@@ -46,6 +46,8 @@ export function scanCells({ codes, prefix = "", contexts } = {}) {
 export function scanShapes({ code, context, side, layer, callback, mount }, { shapes = "plain" } = {}) {
   const all = side === "legal" ? recallLegalShapes(code, context, { lean: false }) : recallShapes(code, context, { lean: false });
   const base = all.length ? all : gridShapes(code, context);
+  // A callback form with a layer: the callback axis crosses no layer in the grids, so the shape is made from the plain one.
+  if (callback && layer && layer !== "none") return gridShapes(code, context).filter((shape) => shape.layer === "none" && shape.binding === "direct" && !shape.mount && !shape.source).map((shape) => ({ ...shape, layer, callback }));
   // A cell that names its callback form or mount takes that axis value's direct-binding shapes (a callback or mount pair of boundary.mjs).
   if (callback) return base.filter((shape) => shape.callback === callback && shape.binding === "direct" && (!shape.layer || shape.layer === "none") && !shape.mount && !shape.source);
   if (mount) return base.filter((shape) => shape.mount === mount && shape.binding === "direct" && (!shape.layer || shape.layer === "none") && !shape.callback && !shape.source);

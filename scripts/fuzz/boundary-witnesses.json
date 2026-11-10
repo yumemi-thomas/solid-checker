@@ -714,6 +714,90 @@
     }
    }
   },
+  "generator-steps": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 4,
+      "clean": 4,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 6,
+      "clean": 4,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 2,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "generator-loop-awaits": {
+   "codes": {
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 2,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 1,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "flow-climb-after-await": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 2,
+      "violation": 0
+     }
+    }
+   }
+  },
   "table:Array.forEach:b/h": {
    "codes": {
     "STRICT_READ_UNTRACKED": {
@@ -10753,6 +10837,22 @@
      }
     }
    }
+  },
+  "named-callback-carries-closure": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 16,
+      "clean": 0,
+      "violation": 16
+     },
+     "legal": {
+      "programs": 16,
+      "clean": 16,
+      "violation": 0
+     }
+    }
+   }
   }
  },
  "arms": {
@@ -10796,6 +10896,12 @@
     "pair": "callback-prop-call",
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
     "context": "cbp-handler",
+    "decisive": false
+   },
+   {
+    "pair": "generator-steps",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-handler",
     "decisive": false
    },
    {
@@ -10855,12 +10961,6 @@
     "pair": "table:AnimationFrameProvider.requestAnimationFrame:shadow-u/host-u",
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
     "context": "tbl-animationframeprovider-requestanimationframe-host-u",
-    "decisive": false
-   },
-   {
-    "pair": "table:Array.every:b/h",
-    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
-    "context": "tbl-array-every-h",
     "decisive": false
    }
   ],
@@ -11244,6 +11344,14 @@
     "decisive": true
    }
   ],
+  "callee_roles.control-flow-climb-after-await": [
+   {
+    "pair": "flow-climb-after-await",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-climb-await",
+    "decisive": true
+   }
+  ],
   "callee_roles.control-flow-nested": [
    {
     "pair": "apply-void",
@@ -11328,6 +11436,46 @@
     "decisive": false
    }
   ],
+  "callee_roles.generator-never-stepped": [
+   {
+    "pair": "generator-steps",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-never",
+    "decisive": false
+   },
+   {
+    "pair": "generator-steps",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "barm-gen-never",
+    "decisive": false
+   },
+   {
+    "pair": "generator-steps",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-gen-never",
+    "decisive": false
+   }
+  ],
+  "callee_roles.generator-steps": [
+   {
+    "pair": "generator-steps",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-handler",
+    "decisive": false
+   },
+   {
+    "pair": "generator-steps",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "barm-gen-handler",
+    "decisive": false
+   },
+   {
+    "pair": "generator-steps",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-gen-handler",
+    "decisive": false
+   }
+  ],
   "callee_roles.inline-callback": [
    {
     "pair": "primitive-contexts",
@@ -11348,6 +11496,12 @@
     "pair": "fire-exactness",
     "code": "STRICT_READ_UNTRACKED",
     "context": "evt-body-fire-project",
+    "decisive": true
+   },
+   {
+    "pair": "generator-steps",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-gen-handler",
     "decisive": true
    },
    {
@@ -11405,12 +11559,6 @@
     "code": "STRICT_READ_UNTRACKED",
     "context": "tbl-array-foreach-h",
     "decisive": true
-   },
-   {
-    "pair": "table:Array.map:b/h",
-    "code": "STRICT_READ_UNTRACKED",
-    "context": "tbl-array-map-h",
-    "decisive": true
    }
   ],
   "callee_roles.named-callback": [
@@ -11418,6 +11566,14 @@
     "pair": "callback-forms",
     "code": "STRICT_READ_UNTRACKED",
     "context": "memo",
+    "callback": "const",
+    "decisive": true
+   },
+   {
+    "pair": "named-callback-carries-closure",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "memo",
+    "layer": "handoff-foreach",
     "callback": "const",
     "decisive": true
    },
@@ -11434,6 +11590,16 @@
     "context": "tracked",
     "callback": "const",
     "decisive": false
+   }
+  ],
+  "callee_roles.named-callback-carried": [
+   {
+    "pair": "named-callback-carries-closure",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "memo",
+    "layer": "handoff-foreach",
+    "callback": "const",
+    "decisive": true
    }
   ],
   "callee_roles.named-callback-untracked": [
@@ -11502,6 +11668,14 @@
     "code": "STRICT_READ_UNTRACKED",
     "context": "untrack",
     "mount": "show-signal",
+    "decisive": true
+   },
+   {
+    "pair": "named-callback-carries-closure",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "memo",
+    "layer": "handoff-foreach",
+    "callback": "const",
     "decisive": true
    },
    {
@@ -11578,6 +11752,34 @@
     "decisive": true
    }
   ],
+  "write_roles.generator-never-stepped": [
+   {
+    "pair": "generator-steps",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-never",
+    "decisive": true
+   },
+   {
+    "pair": "generator-steps",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "barm-gen-never",
+    "decisive": true
+   }
+  ],
+  "write_roles.generator-steps-walked": [
+   {
+    "pair": "generator-steps",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-handler",
+    "decisive": true
+   },
+   {
+    "pair": "generator-steps",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "barm-gen-handler",
+    "decisive": true
+   }
+  ],
   "write_roles.stepped-generator": [
    {
     "pair": "layers-control",
@@ -11621,6 +11823,18 @@
     "decisive": true
    },
    {
+    "pair": "generator-loop-awaits",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-await",
+    "decisive": true
+   },
+   {
+    "pair": "generator-steps",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-handler",
+    "decisive": true
+   },
+   {
     "pair": "layers-base",
     "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
     "context": "handler",
@@ -11660,20 +11874,6 @@
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
     "context": "handler",
     "layer": "module-default",
-    "decisive": true
-   },
-   {
-    "pair": "layers-hand-off",
-    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
-    "context": "handler",
-    "layer": "handoff-foreach",
-    "decisive": true
-   },
-   {
-    "pair": "layers-hand-off",
-    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-    "context": "handler",
-    "layer": "handoff-foreach",
     "decisive": true
    }
   ],
@@ -11726,6 +11926,20 @@
     "pair": "primitive-contexts",
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
     "context": "async",
+    "decisive": true
+   }
+  ],
+  "write_roles.write_role_walk.unreported-generator": [
+   {
+    "pair": "generator-loop-awaits",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "barm-gen-await",
+    "decisive": true
+   },
+   {
+    "pair": "generator-loop-awaits",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "barm-gen-await",
     "decisive": true
    }
   ],

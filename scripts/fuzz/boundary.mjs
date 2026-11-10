@@ -72,6 +72,10 @@ export const PAIRS = {
   "callback-prop-call": { fact: "the component calls its callback prop in its body (a window), in a handler, or never", codes: WINDOW_CODES, contexts: ["cbp-body", "cbp-handler", "cbp-never", "cbp-attached"] },
   "primitive-contexts": { quality: "family", fact: "the site in the callback of a primitive the dialect places in a window, out of it, or in a body", codes: WINDOW_CODES,
     contexts: ["body", "memo", "effect-compute", "effect-apply", "render-compute", "render-apply", "tracked", "settled", "untrack", "root", "owner-null", "jsx", "handler", "timer", "then", "micro", "async"] },
+  // ADR 0935 (arm-shapes.mjs): the arms no fixture and no other pair of the registry reached (the arm ablation of the fixture projects listed them as unwitnessed).
+  "generator-steps": { fact: "the generator's steps run in the body's window (a spread in the body), or out of it (the same spread in a click handler), or nothing steps it", codes: TABLE_CODES, contexts: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never"] },
+  "generator-loop-awaits": { fact: "the async function that drains a sync generator awaits between the steps, or does not", codes: ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"], contexts: ["barm-gen-drain", "barm-gen-await"] },
+  "flow-climb-after-await": { fact: "the layer that holds the read runs in a flow row's body window, or after an await of its outer layer", codes: ["STRICT_READ_UNTRACKED"], contexts: ["barm-climb-sync", "barm-climb-await"] },
 };
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
@@ -181,6 +185,19 @@ premise("value-only-api-does-not-run-its-argument", {
   source: "runtime_semantics.rs:526 `timing_behavior` (ValueOnly); local_access.rs:9656 `hand_off_at` (HandOff::Value)", tablePairs: ["value"],
 });
 
+// ---- the arm-coverage shapes (arm-shapes.mjs): premises of the arms the fixtures left unwitnessed ----------------------------------
+premise("generator-steps-run-where-stepped", {
+  claim: "Calling a generator runs none of its body; each step runs the next segment on the stack of the code that makes it, so a site in the body takes the role at its steps, a generator nothing steps never runs, and a step the stepping async function makes after one of its suspensions has no owner.",
+  source: "callee_roles.rs:203-255 (ADR 0851); write_roles.rs:2520 `generator_step_resumption`, :2556-2666", adr: "0935",
+  arms: ["callee_roles.generator-steps", "callee_roles.generator-never-stepped", "write_roles.generator-steps-walked", "write_roles.generator-never-stepped", "write_roles.write_role_walk.unreported-generator"],
+  pairs: ["generator-steps", "generator-loop-awaits"],
+});
+premise("flow-row-layer-after-an-await-leaves-the-window", {
+  claim: "A layer that runs in place inside a flow row's body runs in the row's window only until the function that calls it suspends: past an await it runs on a later task, in no window.",
+  source: "callee_roles.rs:741-790 `control-flow-climb-after-await`", adr: "0935",
+  arms: ["callee_roles.control-flow-climb-after-await"], pairs: ["flow-climb-after-await"],
+});
+
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Layer pairs: the hand-off, depth, chain, control and file layers cross every recall context (matrix.mjs `recallShapesOf`). A layer pair is one layer
 // written around the same site in a window (body) and out of it (a handler, an `untrack`): the layer is what carries the function to its run, so the
@@ -197,6 +214,9 @@ export const LAYER_PAIRS = {
   "callback-forms": { fact: "the callback is passed to the primitive by name (const, function, alias, named, let, bundle, shared), run in a window or out of it", codes: WINDOW_CODES, contexts: CALLBACK_CONTEXTS, callbacks: CALLBACK_FORMS },
   "mounts": { fact: "the component is rendered by a parent through a flow element, a boundary, a portal or `dynamic`, run in a window or out of it", codes: WINDOW_CODES, contexts: ["body", "handler", "untrack"], mounts: RECALL_MOUNTS },
   "layers-file": { fact: "the site in a function another module of the project exports, run in a window or out of it", codes: WINDOW_CODES, contexts: ["body", "handler", "untrack"], layers: FILE_LAYERS },
+  // A callback passed to a primitive by name whose body hands a closure to an inline carrier (the hand-off layers): the closure runs in the callback's pass if at all
+  // (callee_roles.rs `named-callback-carried`), a tracked pass for a compute and an untracked one for an apply. The callback axis crosses no layer in the grids.
+  "named-callback-carries-closure": { fact: "the named callback hands a closure to an inline carrier, and the callback is a tracked compute (the read is tracked) or an untracked apply (the read warns)", codes: ["STRICT_READ_UNTRACKED"], contexts: ["memo", "tracked", "effect-apply", "render-apply"], callbacks: ["const", "named"], layers: ["handoff-foreach", "handoff-map"] },
 };
 
 /** Every pair of the registry: `{ id, quality, fact, codes, contexts, layers? }`. */
@@ -215,7 +235,8 @@ export function pairCells(pair) {
     for (const side of ["misuse", "legal"]) {
       for (const context of resolved[side]) {
         for (const layer of pair.layers ?? (pair.callbacks || pair.mounts ? [undefined] : ["none"])) {
-          if (pair.callbacks) for (const callback of pair.callbacks) cells.push({ pair: pair.id, code: resolved.code, side, context, layer: "none", callback });
+          if (pair.callbacks && pair.layers) for (const callback of pair.callbacks) cells.push({ pair: pair.id, code: resolved.code, side, context, layer, callback });
+          else if (pair.callbacks) for (const callback of pair.callbacks) cells.push({ pair: pair.id, code: resolved.code, side, context, layer: "none", callback });
           else if (pair.mounts) for (const mount of pair.mounts) cells.push({ pair: pair.id, code: resolved.code, side, context, layer: "none", mount });
           else cells.push({ pair: pair.id, code: resolved.code, side, context, layer });
         }

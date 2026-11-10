@@ -76,7 +76,7 @@ export const ARM_GAPS = [
     ],
   },
   {
-    reason: "Placing a layer inside an async `ref` callback past its await: the arm is never reached. The registered pair (`ref-layer-after-await`, the `barm-ref-*` contexts) puts the read there, and `callee_roles.inside-component` reports it as in the creation window, a false positive the Chrome host confirmed. The arm leaves this list when a fix makes it answer.",
+    reason: "Placing a layer inside an async `ref` callback past its await: no program reaches the arm. A read there is reported by `callee_roles.inside-component` as in the creation window, a false positive the Chrome host confirmed; the pair that holds the shapes (the `barm-ref-*` contexts) comes with its fix, and the arm leaves this list when the fix makes it answer.",
     arms: [
       "execution_role.ref_applied_read_role.unreported",
     ],
@@ -94,7 +94,6 @@ export const ARM_GAPS = [
       "callee_roles.unwindowed_role_at_call.unreported-2",
       "callee_roles.named-climb-after-await",
       "callee_roles.allowed-climb-after-await",
-      "callee_roles.control-flow-climb-after-await",
     ],
   },
   {
@@ -114,20 +113,6 @@ export const ARM_GAPS = [
     ],
   },
   {
-    reason: "Generator stepping: the `generator` layer steps the first segment only. The stepped-generator arms need the `gstep-*` contexts (flip-gen.mjs), which exist for MISSING_EFFECT_FN alone and are all misuse, so no pair has a legal side for the window codes.",
-    arms: [
-      "callee_roles.generator-steps",
-      "callee_roles.generator-never-stepped",
-      "write_roles.stepped-generator-reaches",
-      "write_roles.stepped-generator-never",
-      "write_roles.write_role_walk.unreported-generator",
-      "write_roles.generator-steps-walked",
-      "write_roles.generator-never-stepped",
-      "write_roles.generator-steps-unknown",
-      "write_roles.generator-steps",
-    ],
-  },
-  {
     reason: "A context provider's `value` position and module-scope initialization: no generated program for these codes has a provider value read or a module-scope site.",
     arms: [
       "callee_roles.context-provider-value",
@@ -141,7 +126,6 @@ export const ARM_GAPS = [
       "callee_roles.named-mount-root",
       "callee_roles.named-callback-called-in-place",
       "callee_roles.named-callback-untracked-nested",
-      "callee_roles.named-callback-carried",
       "callee_roles.named-callback-in-place",
       "callee_roles.returned-callback",
       "callee_roles.returned-factory-callback",
@@ -223,6 +207,15 @@ export const ARM_GAPS = [
       "write_roles.walk-unknown-9",
       "write_roles.walk-unknown-10",
       "write_roles.walk-unknown-11",
+    ],
+  },
+  {
+    reason: "Generator stepping: the `generator` layer steps the first segment only. The stepped-generator arms need the `gstep-*` contexts (flip-gen.mjs), which exist for MISSING_EFFECT_FN alone and are all misuse, so no pair has a legal side for the window codes.",
+    arms: [
+      "write_roles.stepped-generator-reaches",
+      "write_roles.stepped-generator-never",
+      "write_roles.generator-steps-unknown",
+      "write_roles.generator-steps",
     ],
   },
 ];
