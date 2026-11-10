@@ -27,13 +27,13 @@ const reportB = {
   hazards: [{ id: "OpenMemberWrite(*)", sites: [site("/a/x.ts", 10)] }, { id: "VisibleIterationWrite", sites: [] }],
 };
 
-test("rows are grouped by kind, with the share that names no location", () => {
+test("rows are grouped by kind, with the share that has no located alternative", () => {
   const result = analyze([reportA, reportB]);
   assert.equal(result.rows, 6);
   assert.deepEqual(
     result.kinds.map(({ kind, rows, unlocated }) => [kind, rows, unlocated]),
     [
-      ["standard-member-impostor", 3, 2],
+      ["standard-member-impostor", 3, 0],
       ["function-run-unplaced", 1, 1],
       ["provider-not-proven-above", 1, 1],
       ["tuple-iteration-written", 1, 1],
@@ -67,7 +67,7 @@ test("the minimal lifting sets of the handed-root formula are the written side o
   assert.deepEqual(liftingSets("impostor-veto", ["StandardImpostor(map)", "StandardImpostor(*)"]), [["StandardImpostor(*)", "StandardImpostor(map)"]]);
 });
 
-test("a site ranks by the rows whose fired hazards name it, ties by key, and the result does not depend on report order", () => {
+test("a site ranks by the rows whose alternatives name its hazard, ties by key, and the result does not depend on report order", () => {
   const forward = analyze([reportA, reportB]);
   const reverse = analyze([reportB, reportA]);
   assert.deepEqual(forward, reverse);
@@ -79,6 +79,33 @@ test("a site ranks by the rows whose fired hazards name it, ties by key, and the
     ],
   );
   assert.equal(analyze([reportA, reportB], { top: 1 }).locations.length, 1);
+});
+
+test("a hazard on an alternative reports its sites, its rows and the rows it lifts alone", () => {
+  assert.deepEqual(analyze([reportA, reportB]).hazards, [
+    { hazard: "OpenMemberWrite(*)", sites: 2, rows: 3, alone: 3 },
+    { hazard: "StandardRootHanded", sites: 0, rows: 2, alone: 2 },
+    { hazard: "VisibleIterationWrite", sites: 0, rows: 1, alone: 1 },
+  ]);
+});
+
+test("a hazard present but on no alternative decides nothing and ranks no site", () => {
+  // `StandardImpostor(*)` is read only beside `StandardRootIterated`: here it is present and irrelevant.
+  const decoy = {
+    findings: [handed(["OpenMemberWrite(*)", "RootPatch", "StandardImpostor(*)", "StandardRootHanded", "StandardRootReceived"])],
+    hazards: [
+      { id: "OpenMemberWrite(*)", sites: [site("/a/x.ts", 10)] },
+      { id: "StandardImpostor(*)", sites: [site("/a/decoy.ts", 99)] },
+      { id: "RootPatch", sites: [] },
+      { id: "StandardRootHanded", sites: [] },
+      { id: "StandardRootReceived", sites: [] },
+    ],
+  };
+  const result = analyze([decoy]);
+  assert.deepEqual(result.locations.map(({ site }) => site), ["/a/x.ts@10"]);
+  assert.deepEqual(result.hazards.map(({ hazard }) => hazard), ["OpenMemberWrite(*)", "RootPatch", "StandardRootHanded", "StandardRootReceived"]);
+  assert.equal(result.hazards[0].alone, 1);
+  assert.equal(result.kinds[0].unlocated, 0);
 });
 
 test("missing is grouped by its fact and member, and a report with none says so", () => {

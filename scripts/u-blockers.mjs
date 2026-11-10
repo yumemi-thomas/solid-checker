@@ -6,13 +6,15 @@
 //
 // A checker report (`--format json --internal`) carries, on each uncertifiable finding, `blockedBy { kind, scope?, formula?, fired?,
 // missing? }`, and a top-level `hazards: [{ id, sites }]` table the `fired` ids name. A veto is a formula over whole-program hazards, not
-// one fact, so what the report derives is a *set*: the minimal sets of present hazards whose removal lifts the veto. Everything is an
-// upper bound: the first hole proven may expose the next.
+// one fact, so what the report derives is a set of *alternatives*: the minimal sets of present hazards whose removal lifts the veto (any
+// one alternative suffices; every hazard on it must go). A hazard that is on no alternative is present but decides nothing, so it ranks
+// no site. Everything is an upper bound: the first hole proven may expose the next.
 //
 // Output, in this order, every list biggest first and ties by key (no map order anywhere, so two runs and two machines agree):
-//   kinds       rows by blocker kind, and the share whose blocker names no location (kinds with no `hazards` sites, or a hazard of no site)
-//   formulas    rows by (formula, fired set), each with its minimal lifting sets
-//   locations   the top hazard sites by the rows whose `fired` names that hazard (a row is counted once per site)
+//   kinds       rows by blocker kind, and the share with no located alternative (an alternative is located when every hazard on it has a site)
+//   formulas    rows by (formula, fired set), each with its alternatives
+//   hazards     per hazard on some alternative: its sites, the rows it is on an alternative of, and the rows it lifts alone
+//   locations   the top sites of those hazards by the rows whose alternatives name the hazard (a row is counted once per site)
 //   missing     rows by the typed fact that would decide them (`missing.fact`, `missing.member`)
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -96,6 +98,13 @@ function placed(path, start, cache) {
   return `${path}:${line}`;
 }
 
+/** The ways to lift a row's veto: its minimal lifting sets, else (a formula the script does not hold) every fired hazard together. */
+function alternativesOf(formula, fired) {
+  const sets = formula ? liftingSets(formula, fired) : [];
+  if (sets.length > 0) return sets;
+  return fired.length > 0 ? [[...fired].sort()] : [];
+}
+
 /** The analysis of `reports` (parsed checker JSON): plain data, deterministic. */
 export function analyze(reports, { top = 10, source = new Map() } = {}) {
   const kinds = new Map();
@@ -103,6 +112,10 @@ export function analyze(reports, { top = 10, source = new Map() } = {}) {
   const formulas = new Map();
   const missing = new Map();
   const sites = new Map();
+  const onAlternative = new Map();
+  const alone = new Map();
+  const siteSets = new Map();
+  const alternatives = new Map();
   let rows = 0;
   for (const report of reports) {
     const table = new Map((report.hazards ?? []).map((hazard) => [hazard.id, hazard.sites ?? []]));
@@ -112,19 +125,26 @@ export function analyze(reports, { top = 10, source = new Map() } = {}) {
       rows += 1;
       bump(kinds, blocked.kind);
       const fired = blocked.fired ?? [];
-      const located = fired.length > 0 && fired.every((id) => (table.get(id) ?? []).length > 0);
-      if (!located) bump(unlocated, blocked.kind);
+      const key = JSON.stringify([blocked.formula ?? null, [...fired].sort()]);
+      if (!alternatives.has(key)) alternatives.set(key, alternativesOf(blocked.formula, fired));
+      const ways = alternatives.get(key);
+      const hasSites = (id) => (table.get(id) ?? []).length > 0;
+      if (!ways.some((set) => set.every(hasSites))) bump(unlocated, blocked.kind);
       if (blocked.formula) bump(formulas, JSON.stringify([blocked.kind, blocked.formula, [...fired].sort()]));
       if (blocked.missing) bump(missing, JSON.stringify([blocked.kind, blocked.missing.fact, blocked.missing.member ?? null]));
       const named = new Set();
-      for (const id of fired) {
+      for (const id of new Set(ways.flat())) {
+        bump(onAlternative, id);
         for (const site of table.get(id) ?? []) {
-          const key = JSON.stringify([id, site.path, site.start]);
-          if (named.has(key)) continue;
-          named.add(key);
-          bump(sites, key);
+          if (!siteSets.has(id)) siteSets.set(id, new Set());
+          siteSets.get(id).add(`${site.path}\u0000${site.start}`);
+          const siteKey = JSON.stringify([id, site.path, site.start]);
+          if (named.has(siteKey)) continue;
+          named.add(siteKey);
+          bump(sites, siteKey);
         }
       }
+      for (const set of ways) if (set.length === 1) bump(alone, set[0]);
     }
   }
   return {
@@ -134,6 +154,9 @@ export function analyze(reports, { top = 10, source = new Map() } = {}) {
       const [kind, formula, fired] = JSON.parse(key);
       return { kind, formula, fired, rows: count, lifting: liftingSets(formula, fired) };
     }),
+    hazards: ranked(onAlternative)
+      .map(([id, count]) => ({ hazard: id, sites: siteSets.get(id)?.size ?? 0, rows: count, alone: alone.get(id) ?? 0 }))
+      .sort((a, b) => b.alone - a.alone || b.rows - a.rows || (a.hazard < b.hazard ? -1 : a.hazard > b.hazard ? 1 : 0)),
     locations: ranked(sites)
       .slice(0, top)
       .map(([key, count]) => {
@@ -149,14 +172,16 @@ export function analyze(reports, { top = 10, source = new Map() } = {}) {
 
 /** The report as text. */
 export function render(result) {
-  const out = [`uncertifiable rows with a blockedBy: ${result.rows}`, "", "kinds (rows, share with no hazard location)"];
+  const out = [`uncertifiable rows with a blockedBy: ${result.rows}`, "", "kinds (rows, share with no located alternative)"];
   for (const row of result.kinds) out.push(`  ${String(row.rows).padStart(8)}  ${((100 * row.unlocated) / row.rows).toFixed(1).padStart(5)}%  ${row.kind}`);
-  out.push("", "formulas (rows; fired set; minimal lifting sets: every set must go to lift the veto, any one set lifts it)");
+  out.push("", "formulas (rows; fired set; each `lifts with` line is one way to lift the veto: every hazard on it must go)");
   for (const row of result.formulas) {
     out.push(`  ${String(row.rows).padStart(8)}  ${row.kind} ${row.formula} [${row.fired.join(", ")}]`);
     for (const set of row.lifting) out.push(`            lifts with: ${set.join(" + ")}`);
   }
-  out.push("", `locations (top ${result.locations.length}: rows whose fired hazards name the site, an upper bound)`);
+  out.push("", "hazards on an alternative (sites; rows it is on an alternative of; rows it lifts alone, an upper bound)");
+  for (const row of result.hazards) out.push(`  ${String(row.alone).padStart(8)} alone  ${String(row.rows).padStart(8)} rows  ${String(row.sites).padStart(5)} sites  ${row.hazard}`);
+  out.push("", `locations (top ${result.locations.length}: sites of those hazards, by the rows whose alternatives name them)`);
   for (const row of result.locations) out.push(`  ${String(row.rows).padStart(8)}  ${row.site}  (${row.hazard})`);
   out.push("", "missing (rows by the typed fact that would decide them)");
   if (result.missing.length === 0) out.push("  none: no emitter fills `missing` yet");
