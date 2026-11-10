@@ -275,6 +275,19 @@ pub(crate) fn runs_as_child(
         }
 }
 
+/// ADR 0937: the element `function` is such a child of, written in place.
+pub(crate) fn control_flow_parent<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f JsxElementFact> {
+    innermost_element(file, function.span).filter(|element| {
+        control_flow_child(file, element, lookup).is_some_and(|(expression, run)| {
+            file.ast.peel_ts_sugar_span(expression) == function.span && runs_as_child(function, run)
+        })
+    })
+}
+
 /// Whether `function` is such a child, written in place. A function named there
 /// gets no edge: it keeps its other entries, and only a literal has none.
 pub(crate) fn is_control_flow_child(
@@ -282,11 +295,7 @@ pub(crate) fn is_control_flow_child(
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    innermost_element(file, function.span).is_some_and(|element| {
-        control_flow_child(file, element, lookup).is_some_and(|(expression, run)| {
-            file.ast.peel_ts_sugar_span(expression) == function.span && runs_as_child(function, run)
-        })
-    })
+    control_flow_parent(file, function, lookup).is_some()
 }
 
 /// ADR 0884: the primitive's exported name, when the resolved declaration of a

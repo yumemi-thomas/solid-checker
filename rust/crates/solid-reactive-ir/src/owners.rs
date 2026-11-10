@@ -37,7 +37,7 @@ mod owner_emission;
 pub(crate) use owner_emission::Emission;
 use owner_emission::{EmissionInputs, emit_file};
 mod jsx_sites;
-pub(crate) use jsx_sites::{JsxSiteKind, aliased_primitive, jsx_sites};
+pub(crate) use jsx_sites::{JsxSiteKind, aliased_primitive, control_flow_parent, jsx_sites};
 use jsx_sites::{control_flow_child, is_control_flow_child, runs_as_child};
 mod owner_discovery;
 pub(crate) use owner_discovery::*;

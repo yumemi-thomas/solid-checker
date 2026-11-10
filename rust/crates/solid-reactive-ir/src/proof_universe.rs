@@ -497,12 +497,16 @@ impl<'p> Endings<'p> {
         let path = file.path.as_str();
         let mut best: Option<(EndClass, Detail<'p>)> = None;
         for span in std::iter::once(site.at).chain(site.alternates.iter().copied()) {
-            if let Some((class, detail)) =
+            let Some((class, detail)) =
                 self.at
                     .get(&(path, u64::from(span.start), u64::from(span.end)))
-                && best.is_none_or(|(held, _)| *class < held)
-            {
-                best = Some((*class, *detail));
+            else {
+                continue;
+            };
+            // The strongest ending of the spans a site may be reported at.
+            match &best {
+                Some((held, _)) if *class >= *held => {}
+                _ => best = Some((*class, *detail)),
             }
         }
         if best.is_some() {

@@ -9666,5 +9666,26 @@
    "mx-strict-read-untracked-helper-handed-call-signal-direct-none-s-prop-value-cast"
   ],
   "rediscovered": "origin/main 4f2d529f5: 2 certified false cleans (focus, context helper-handed-call, source prop-value-cast); ADR 0934: none. The legal twin helper-handed-handler: 18 lg-recall clean to uncertifiable"
+ },
+ {
+  "finding": "The Loading cover walk counted any member spelled `children` inside a wrapper's `<Loading>` as the component's: a wrapper that renders its real `props.children` beside the boundary and `other.children` inside it covered the child it wraps, certified clean where Chrome warns ASYNC_OUTSIDE_LOADING_BOUNDARY (`loading_cover_at`, ADR 0668: only the component's own props' `children` covers)",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), Chrome-confirmed (replay: `unproven-clean`, quiet beside the real wrapper)",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-memo-x-direct-none-m-wrap-foreign"
+  ]
+ },
+ {
+  "finding": "The legal twins of the Loading cover fix: a wrapper that renders its own `props.children` (or `const p = props; p.children`) inside its `<Loading>` stays covered, clean and quiet in Chrome; the fix did not move them",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), the twins of the mx-recall program",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "lg-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-real",
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-alias"
+  ]
  }
 ]

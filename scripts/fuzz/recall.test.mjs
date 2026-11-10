@@ -6,7 +6,7 @@ import {
   CBP_CONTEXTS, EFFECT_WINDOW_CONTEXTS, REF_CONTEXTS, SPEC, TEMPLATE_CODES, recallContextsOf, recallLegalOf, recallVariantsOf,
 } from "./misuse.mjs";
 import { CBP_CALLS, CBP_FORMS } from "./model.mjs";
-import { RECALL_MOUNTS, mountParts } from "./mounts.mjs";
+import { RECALL_MOUNTS, WRAP_MOUNTS, mountParts } from "./mounts.mjs";
 import { legalPartner, pairOutcome, siteAnswer } from "./mutation.mjs";
 import { drivingPlan } from "./print.mjs";
 import { DEFAULT_GRIDS, GRIDS } from "./focus.mjs";
@@ -132,6 +132,51 @@ describe("printed forms", () => {
 });
 
 const text = (code, context, shape) => generateShape({ seed: 1 }, { code, context }, { variant: null, binding: "direct", layer: "none", ...shape }, 0).built.files;
+
+// ADR 0668: the wrapper mounts put the misuse component under a user component whose `<Loading>` the cover walk reads `children` in.
+describe("the Loading wrapper mounts (ASYNC_OUTSIDE_LOADING_BOUNDARY, `memo`)", () => {
+  const code = "ASYNC_OUTSIDE_LOADING_BOUNDARY";
+  const app = (mount) => text(code, "memo", { mount })["App.tsx"];
+  it("print a module-scope wrapper above the parent, the child inside it, and import Loading", () => {
+    for (const mount of WRAP_MOUNTS) {
+      const used = new Set();
+      const parts = mountParts(mount, ["<C1 />"], { index: 1, name: "C1", used, web: new Set() });
+      expect(parts.module.join("\n"), mount).toMatch(/^function Wrap1\(props: \{ children: any \}\) \{/);
+      expect(parts.lines, mount).toEqual(["<Wrap1>", "  <C1 />", "</Wrap1>"]);
+      expect(used.has("Loading"), mount).toBe(true);
+      const source = app(mount);
+      expect(source.indexOf("function Wrap1"), mount).toBeLessThan(source.indexOf("export function P1"));
+      expect(source, mount).toContain("<Wrap1>");
+    }
+  });
+  it("differ in what the boundary holds: the component's props, an alias of them, another object's `children`, or `label`", () => {
+    expect(app("wrap-real")).toMatch(/<Loading fallback=\{0\}>\s*\{props\.children\}\s*<\/Loading>/);
+    expect(app("wrap-alias")).toMatch(/const p = props;[\s\S]*\{p\.children\}/);
+    for (const mount of ["wrap-foreign", "wrap-outside"]) expect(app(mount), mount).toMatch(/<div>\s*\{props\.children\}\s*<Loading/);
+    expect(app("wrap-foreign")).toContain("{other.children}");
+    expect(app("wrap-outside")).toContain("{other.label}");
+  });
+  it("is the cell's own: the root program and the misuse mounts in the misuse cell, the legal mounts in the legal one, no layer, no other binding", () => {
+    expect(recallContextsOf(code)).toContain("memo");
+    expect(recallLegalOf(code)).toContain("memo");
+    const misuse = recallShapes(code, "memo", FULL).map((shape) => shape.mount ?? "root");
+    expect(misuse).toEqual(["root", "wrap-foreign", "wrap-outside"]);
+    const legal = recallLegalShapes(code, "memo", FULL).map((shape) => shape.mount);
+    expect(legal).toEqual(["wrap-real", "wrap-alias"]);
+    for (const shape of [...recallShapes(code, "memo", FULL), ...recallLegalShapes(code, "memo", FULL)]) expect([shape.binding, shape.layer]).toEqual(["direct", "none"]);
+    // No other code, and no other context, takes a wrapper mount.
+    for (const other of [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES]) for (const context of [...recallContextsOf(other), ...recallLegalOf(other)]) {
+      if (other === code && context === "memo") continue;
+      expect(recallShapes(other, context, FULL).concat(recallLegalShapes(other, context, FULL)).filter((shape) => WRAP_MOUNTS.includes(shape.mount)), `${other}/${context}`).toEqual([]);
+    }
+  });
+  it("read the pending value through a memo the hole calls, so the wrapper is the cover walk's question and no IIFE leaves the read unplaced", () => {
+    const source = app("wrap-foreign");
+    expect(source).toMatch(/const m1 = createMemo\(\(\) => \{\s*a1\(\);\s*return 1;\s*\}\);/);
+    expect(source).toContain("{m1()}");
+    expect(source).not.toContain("{(() =>");
+  });
+});
 
 describe("shapes rc.17 cannot observe or tsc rejects", () => {
   it("no dynamic() mount for a body's strict-read or pending read, which dynamic() leaves unlabelled", () => {
