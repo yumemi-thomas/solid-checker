@@ -73,7 +73,7 @@ A clean is only as sound as the premise of the item that gave it. The proof log 
 
 | item | where it comes from | evidence |
 | --- | --- | --- |
-| tagged arm (`role_arm!`) that can answer a silent role: 121 | `boundary-inventory.mjs` reads the Rust source | a measured witness (below) or a stated gap |
+| tagged arm (`role_arm!`) that can answer a silent role: 137 | `boundary-inventory.mjs` reads the Rust source | a measured witness (below) or a stated gap |
 | named end (`proof_log::end_at/end_with`): 36; `PremiseKind`: 37; `DropPass` through its kinds | same | a premise: a pair, a fixture directory, or an `outside` reason |
 | row of the checker's own tables (`timing_behavior`, the schedulers, carriers, dispatch lists): ~300 | same | the table family `tbl-*`, a dispatch pair, or a stated gap |
 | dialect question (`impl Dialect for Solid2`): 133 | same | vocabulary, source or role, with the primitive contexts as family evidence |

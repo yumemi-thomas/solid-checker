@@ -73,6 +73,19 @@ export const ARM_GAPS = [
     reason: "No registered pair's programs reach the arm in a clean legal program (the scan of 2026-11-10 on 71b8ec190 found it silent nowhere in the plain, layered, table, wrapper, dispatch, callback and mount shapes).",
     arms: [
       "execution_role.execution_role_where.deferred-callback",
+      "execution_role.execution_role_where.compiler-region",
+      "execution_role.dynamic_read_role.exclusive-entry",
+      "callback_standing.returned_callback_execution_role.tracked",
+      "callback_standing.returned_callback_execution_role.deferred",
+      "callback_standing.context_provider_value_role.stored-function",
+      "callee_roles.forwarded_tracked_compute_role.tracked-compute",
+      "callee_roles.inheriting_call_role.clears-tracking-in-tracked-compute",
+      "event_literals.function_role.non-reporting-mix",
+      "event_literals.write_function_role.non-reporting-mix",
+      "event_literals.owner_site_role.registered-test-entry",
+      "event_literals.owner_site_role.compiler-event-handler",
+      "events.forwarded_event_prop_role.reaches-only-events",
+      "read_context.async_execution_role.deferred-in-jsx",
     ],
   },
   {
@@ -124,6 +137,7 @@ export const ARM_GAPS = [
     arms: [
       "callee_roles.named-climb",
       "callee_roles.named-mount-root",
+      "callee_roles.named-callback-write",
       "callee_roles.named-callback-called-in-place",
       "callee_roles.named-callback-untracked-nested",
       "callee_roles.named-callback-in-place",
@@ -131,6 +145,7 @@ export const ARM_GAPS = [
       "callee_roles.returned-factory-callback",
       "callee_roles.forwarded-tracked-compute",
       "named_callbacks.named_callback_execution_role.deferred-callback",
+      "named_callbacks.named_callback_execution_role.ref-applied",
       "named_callbacks.named_callback_execution_role.untracked-callback",
       "named_callbacks.named_callback_execution_role.untracked-unwindowed",
       "named_callbacks.named_callback_execution_role.tracked-jsx",
@@ -165,6 +180,7 @@ export const ARM_GAPS = [
       "control_flow.control_flow_execution_role.tracked-jsx",
       "control_flow.control_flow_execution_role.tracked-jsx-2",
       "flow_helpers.primitive_slot_role.tracked-jsx",
+      "flow_helpers.primitive_slot_role.deferred",
     ],
   },
   {

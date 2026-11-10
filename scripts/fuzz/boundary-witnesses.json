@@ -1,6 +1,6 @@
 {
  "version": 1,
- "checker": "origin/claude/batch-7 71b8ec190 (debug build)",
+ "checker": "origin/claude/batch-7 d79da3034 (debug build)",
  "pairs": {
   "kept-collection": {
    "codes": {
@@ -11625,22 +11625,6 @@
     "decisive": false
    }
   ],
-  "callee_roles.named-callback-write": [
-   {
-    "pair": "callback-forms",
-    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
-    "context": "tracked",
-    "callback": "const",
-    "decisive": true
-   },
-   {
-    "pair": "callback-forms",
-    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-    "context": "tracked",
-    "callback": "const",
-    "decisive": true
-   }
-  ],
   "callee_roles.own-jsx-compiler": [
    {
     "pair": "callback-forms",
@@ -11749,6 +11733,22 @@
     "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
     "context": "effect-apply",
     "callback": "shared",
+    "decisive": true
+   }
+  ],
+  "named_callbacks.named_callback_write_execution_role.leaf-tracked": [
+   {
+    "pair": "callback-forms",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "tracked",
+    "callback": "const",
+    "decisive": true
+   },
+   {
+    "pair": "callback-forms",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "tracked",
+    "callback": "const",
     "decisive": true
    }
   ],
