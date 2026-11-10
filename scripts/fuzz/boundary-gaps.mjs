@@ -19,6 +19,7 @@ export const END_GAPS = {
   "local_access.async_sites.dormant-callback-argument": "Rests on DormantCallbackArgument, which has no pair or fixture yet (see KIND_GAPS).",
   "shared_reactivity.direct_mutations.create-mutable": "Rests on CreateMutableProxy, which has no fixture or shape (see KIND_GAPS).",
   "shared_reactivity.direct_mutations.logical-assignment-skips": "Rests on LogicalAssignmentSkipsWrite, which has no fixture or shape (see KIND_GAPS).",
+  "local_access.discover_call_as.role-does-not-report": "Rests on RoleDoesNotReport (kind-role-does-not-report), but no fixture or generated shape reaches this return: a call read whose role the classifier decided reports nothing still gets its silent row, so the producer returns without one only where another pass owns the site. A pair needs a program that hits it; none is known.",
 };
 
 /** Table rows the table family and the dispatch pairs do not cover, `<table>:<row>`, with the reason shared by the group. */
