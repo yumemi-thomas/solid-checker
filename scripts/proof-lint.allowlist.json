@@ -1,0 +1,777 @@
+{
+  "about": "Baseline of the proof lint (ADR 0933, phase B; scripts/proof-lint.mjs): per file and kind, how many hits of a code shape that decides a silence without a fact stand and why. A hit not counted fails; a count that fell fails until `--update` lowers it. A `why` is a stated fact or `pending-review` (counted, frozen, not yet audited).",
+  "files": {
+    "rust/crates/solid-dialect/src/solid_2/releases.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
+      "default-on-missing": {
+        "count": 22,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 9,
+        "why": "`this` is a reserved word (its text is the ThisExpression); `arguments` is a spelling used only to refuse a proof (the true branch returns None/false); `Reflect` and `Proxy` are matched only where `reference_declaration(..)` is none, so no binding shadows the global, or are refused when one exists"
+      },
+      "text-premise": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/projection_helpers.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_dependencies.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`value` is the prop key of a provider element whose tag `is_context_reference` resolved to a context exactly; a tag that is not one exact identifier marks the census unkeyed, so no provider census closes"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_memos.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_values.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/accessor_provenance/transport_memos.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/argument_values.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/attribution.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "`keyed` and `when` are the prop names of an element already resolved to the dialect's `Show` (`known_primitive(..) == Some(Show)`, never a lookalike); `arguments` is a spelling used only to refuse a proof (the true branch returns false)"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/contributions.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 5,
+        "why": "a spelled runtime or standard name tied to an exact fact, or one that only adds hazards: `preload` is `lazy()`'s own method on an object `ReturnedUses` resolves to the exact symbols holding the factory's result (the span adds a use, never removes one); `prototype` picks the standard-root patch, resolved by `file.standard_root` (otherwise `UnownedPrototype`, owned by `PrototypeOwnerAt`); `Symbol.for` is the global `Symbol` (no declaration) and a non-computed member; a bare `Reflect` mention and a `require` call the facts did not record as a load only add the `Unknown` and `UnmodeledRequire` hazards"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/index.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/base/memo.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/callback_host.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/callback_return.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/cleanup.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/directives.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/effect_api.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`effect` is the key of the bundle object a classified effect primitive takes (`v2_effect_function_status(.., slot, ..)` is asked of the primitive's own argument slot): a dialect-defined option key of a resolved call, not an identification of what the call is"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/effect_phase.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_paths.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "loop control of a `retain`: a candidate no arm joins yet (`None`) is kept undecided for the next round, so the default keeps a candidate open and decides nothing silent"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "`within` is an optional filter of which compiler facts may place the span: `None` means the caller asked for no restriction, which is the question `execution_role_where` is asked without it, not a verdict"
+      },
+      "untagged-silent-role": {
+        "count": 4,
+        "why": "four candidate (span, role, rank) tuples of execution_role_where's compiler regions: none is an answer; the chosen candidate is returned through role_arm! as execution_role.execution_role_where.compiler-region"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
+      },
+      "untagged-silent-role": {
+        "count": 3,
+        "why": "none produces an answer: two are the expected-role arguments of named_helper_runs_during_body and one is a match pattern in excluded_role_holds"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "`prototype` only adds a refusal (`class_exposed` vetoes the proof); `value` is the provider's prop key beside `is_context_reference`, checked in both dialect branches (`context_provider_value_role`)"
+      },
+      "untagged-silent-role": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/callee_roles.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/control_flow.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`children` is a prop name used only to REFUSE (a `children` attribute disqualifies the proof), inside a conjunction that also requires the element to resolve exactly to a primitive that renders its children through a callback (`exact_jsx_primitive_name`)"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/event_literals.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`children` is a prop name used only to REFUSE: a component's sole child expression is its `children` prop, and a `children` attribute competes with it, so the true branch refuses the flow (the comment at the site says both refuse)"
+      },
+      "untagged-silent-role": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/events.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/flow_helpers.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/flow_memos.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/pending_sources.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
+      "untagged-silent-role": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/write_components.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "`walk_step`: with no bounded walk open (`None`) there is no bound to exceed, so the step is allowed; the step counter never produces a role or a verdict"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs": {
+      "default-on-missing": {
+        "count": 11,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/hosts.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/callee_world.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/callees.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "`component` only takes the value out of `used_as_render_value`: the reference then stays unaccounted unless the dialect's renderer resolves it (ADR 0138), and a project component's `component` prop is just a prop"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/completion.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "`Object.assign` is a prefilter on the callee's text; both sites then require the call to be in `assign_builtin_calls`, which asks `mutation_builtin` (a Type Facts resolution to the built-in) before the call is treated as the built-in"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 3,
+        "why": "`markRaw` is a presence veto (any mention makes store values possibly raw, the conservative answer); `createElement` is accepted only on a receiver `global_dom_variable` proves to be `document`; `addEventListener` is matched only as a bare identifier with `reference_declaration(..).is_none()` (the global) that is not a member property"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/hand_outs.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/member_values.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "a bare `Reflect` only widens `objects_may_be_assigned_into` (`true` is \"some code may copy keys into an object\"), the answer the member proofs treat as the veto; it never narrows it"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/primitive_proof.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`.length` is accepted as a primitive only on a receiver whose value origin is proven a built-in (`ValueOrigin::Builtin`) and only where the project never reassigns `length` on built-ins (`member_may_be_reassigned_on_builtin`), so the spelling is combined with a proof of the receiver"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/returned_invocations.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/returned_uses.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "`preload` is `lazy()`'s own method: `direct_uses` takes it on the factory call's own result and the second use only on `named`, the exact symbols holding that result; any other member is no use"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/installed_members.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 3,
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/completeness.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/dependency_values.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/graph.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/parameter_use.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/reads.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative; `null` is a reserved literal, its source text identifies exactly the null literal"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/return_escape.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/lib.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/listener_reach.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "a registered listener that is not a function literal and resolves to no function (`None`) is assumed to reach project code, which makes the registration a defect (the module's veto): the default adds an obligation, never a clean"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "a spelled `addEventListener` registration only produces an uncertain `ReactiveDispatchUnresolved` obligation (`push`) or widens `project_reaches`, the listener-reach premise a veto reads; it is never a proof or a violation"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/literal_member_slots.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/loading_hold.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "`on` and `children` are the prop names of a boundary the code has already resolved: every element and call reaches them only through `known_primitive(&primitives.jsx[index])` or `primitives.calls[index]` with `boundary_on_may_hold_outside`, so the spelling is the primitive's own prop, not an identification of what the element is"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/local_access.rs": {
+      "default-on-missing": {
+        "count": 17,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
+      },
+      "untagged-silent-role": {
+        "count": 26,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/object_members/assigned.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/object_members/memo.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "`Object.freeze`: the receiver spelled `Object` is refused when `reference_declaration(receiver)` is some, so a shadowing binding is excluded and the global is what remains"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "untagged-silent-role": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/async_context.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 11,
+        "why": "a spelled prop key beside an exact fact, never a binding: a JSX attribute name (`when`, `fallback`, `each`, `value`, `ref`) is tested only where the element resolves exactly (`element_primitive`, `jsx_primitive_name`, or the holder's `reference_declaration` is the context declaration) or as a refusal (`!= Some(\"ref\")`, `!= Some(\"value\")`); `children` covers only where `is_props_of` resolves the member's object to the component's props parameter or an exact `const` alias (the foreign-object false clean, ADR 0668), and its second use only answers `Unresolved`"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/bindings.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`default` is the key the dialect's `lazy` reads from the loader's module (`renders_loaded_default_argument` for the exact primitive at the call); an own `then` is a spelled refusal"
+      },
+      "untagged-silent-role": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/context_census.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "`null` is a reserved literal; `undefined` is matched only where `reference_declaration(..).is_none()` (the global); `value` and `children` are prop names of a provider element the census has already resolved, and `children` is read off a member whose object `reference_declaration` binds to the wrapper's own props parameter"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`bind` only follows a transport shape toward the object, whose primitive `referenced_primitive` resolves exactly first; the name describes the transport, never a primitive"
+      },
+      "text-premise": {
+        "count": 1,
+        "why": "JSX grammar: a child of an element whose source starts with `{` is exactly an expression container, since a text child cannot contain an unescaped brace; this is a syntactic test of the node's own source, not a spelling match on a symbol"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_context.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_graph.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/pending_accounting.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "an import binding with no entity, or whose symbol is undeclared, sets `source_module_unresolved`, which marks the row uncertain with a blocker: the default adds a blocker, never a clean"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/pipeline.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/project_consumer.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`__proto__` is a spelling used only to REFUSE a proof (a `__proto__` attribute is lowered to an entry that installs a prototype on the props object; the true branch returns None): a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/projection.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/property_gets.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/route_components.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`routes` is the option key of the config handed to the exact router `create` call (`locals.calls(.., &locals.create)`), in a closed `this`-free literal"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/router_params.rs": {
+      "default-on-missing": {
+        "count": 6,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "a write of `apply` beside `useAction` only vetoes the proof (the function returns the reason it gives up)"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/server_rules.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "`None` (TypeScript does not resolve the member) sets `unresolved_member = true`, and the comment at the site says an unresolved member is uncertain, never a violation: the default answers yes to 'unproven'"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`serializeArgs` is an option key of the exact `configureServerFunctionsClient` call (declaration name and origin module checked); options that are not a closed literal leave the proof `Unresolved`, and a closed one without the key is the `Disabled` proof"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/discover_file.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "`children` and `keyed` are prop keys read off an element the caller resolved to a dialect primitive: `children` only collects a candidate expression, and a `keyed` that no proven function decides is the ambiguous `DynamicFlag`, for which the dialect claims no accessor"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/post_passes.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/post_rows.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "`keyed` is the prop key of an element whose `jsx_primitive_name` is a known dialect primitive (`known_primitive`); the accessor parameters are the dialect's answer for that primitive and key form"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "a spelling used only to REFUSE a proof: reading `arguments` or `this` makes the function's parameters or receiver possibly aliased, so the true branch returns None/false and a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_api.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "an import binding with no entity, or whose symbol is undeclared, is `unresolved` and yields the unresolved-import defect: the default adds an obligation, never a clean"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
+      "default-on-missing": {
+        "count": 11,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "a wrapper whose text is missing, or that mentions `arguments`, returns `open()` (unproven): the default refuses the proof"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/native_promise.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "the identifier is spelled `Promise` and has no declaration in the file (`reference_declaration(..).is_none()`), so it names the global that a local or imported binding would shadow"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/static_rules/pre_await.rs": {
+      "default-on-missing": {
+        "count": 5,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 3,
+        "why": "`Promise` as a constructor callee and `undefined` are matched only where `reference_declaration(..)` is none, so no binding shadows the global; `null` is a literal keyword"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`fallback` is read only off an element with `element_primitive == Errored` (`handled_above`)"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/symbols.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`value` is the prop key of a provider of the exact context key the census resolved; anything else is `self.open()`"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/mod.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
+      "default-on-missing": {
+        "count": 13,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 7,
+        "why": "no silence is granted by the spelling: `.apply` only adds a call to `reactive_source_uncaptured`'s candidates (`hands_over_a_source`), whose callee is then resolved exactly (`caller_target`, `undescribed_callee`); `arguments` is the implicit binding (`reference_declaration` none) and a bare mention only keeps the parameter walk running; `keyed` and `each` are prop keys of an element `primitives.jsx` resolved to `For`; `class` on a lowercase-led tag only makes a position type-owned, which yields an uncertifiable blocker or the same silence the unrecognized position gets (`type_owned_position`, ADR 0830)"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/upstream_compat/structure.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`map` only selects the candidate of `prefer-for`; the preference needs the callee to resolve to a valid standard-library array or tuple `map` declaration, else nothing is reported"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/value_use.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 4,
+        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
+      }
+    }
+  }
+}

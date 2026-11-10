@@ -41,7 +41,7 @@ import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
   BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption, fireShape } from "./misuse.mjs";
-import { LATER_MOUNTS, RECALL_MOUNTS } from "./mounts.mjs";
+import { LATER_MOUNTS, RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
@@ -376,6 +376,9 @@ export const LEAN_DEMOTED = {
 };
 export function recallAxes(code, context, base, variants, options = {}) {
   const shapes = recallShapesOf(code, context, base, variants, options);
+  // ASYNC_OUTSIDE_LOADING_BOUNDARY's `memo` cell (misuse.mjs SPEC): the wrapper's boundary around the hole is its question, so the root
+  // program and the wrapper mounts, on the direct binding with no layer.
+  if (code === "ASYNC_OUTSIDE_LOADING_BOUNDARY" && context === "memo") return shapes.filter((shape) => shape.binding === "direct" && shape.layer === "none" && !shape.source && !shape.callback && (!shape.mount || WRAP_MOUNTS.includes(shape.mount)));
   // ADR 0893: `st-unread` takes every layer around the site, on the direct binding: a layer the walk cannot follow is its question.
   if (context === "st-unread") return shapes.filter((shape) => shape.binding === "direct");
   // The question of a computed chain key is the key, not the spelling of the read: the direct binding's closure and helper layers, and an alias.
@@ -388,6 +391,10 @@ export function recallAxes(code, context, base, variants, options = {}) {
 function recallShapesOf(code, context, base, variants, { legal = false, lean = true } = {}) {
   // A recall-only code has no base grid: its `legal` contexts are recall cells too.
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context) || (legal && SPEC[code].recallOnly && SPEC[code].legal?.includes(context));
+  // A cell only the wrapper mounts make legal (misuse.mjs `legalWrapMounts`): its base shapes read a pending value under no boundary, so the
+  // wrapper's own `<Loading>` is the whole question, on the direct binding with no layer.
+  const wrapShape = (shape) => shape.binding === "direct" && shape.layer === "none" && !shape.mount && !shape.source && !shape.callback;
+  if (legal && recallCell && SPEC[code].legalWrapMounts?.[context]) return base.filter(wrapShape).flatMap((shape) => SPEC[code].legalWrapMounts[context].map((mount) => ({ ...shape, mount })));
   // A variant a recall-only context cannot take (`recallVariantsNotIn`: there it reports another code, so it is neither cell).
   // A legal cell only some legal variants take (misuse.mjs `variantOnlyLegal`: an `ownedWrite` signal's write in a body) takes those.
   const only = legal ? SPEC[code].variantOnlyLegal?.[context] : null;
@@ -422,6 +429,8 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   // A mount a recall-only context's code cannot take (`recallMountsNotIn`: there Solid reports nothing).
   const mountTakes = (mount) => !SPEC[code].recallMountsNotIn?.[context]?.includes(mount);
   for (const mount of RECALL_MOUNTS) if (!(mount === "dynamic" && bodyLabelled) && mountTakes(mount) && !(lean && LEAN_DEMOTED.mounts.includes(mount))) for (const shape of local) shapes.push({ ...shape, mount });
+  // The wrapper mounts a misuse cell takes (misuse.mjs `wrapMounts`): the direct binding and no layer.
+  for (const mount of legal ? [] : SPEC[code].wrapMounts?.[context] ?? []) for (const shape of local.filter(wrapShape)) shapes.push({ ...shape, mount });
   for (const source of SOURCE_AXES.files) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }

@@ -9668,6 +9668,27 @@
   "rediscovered": "origin/main 4f2d529f5: 2 certified false cleans (focus, context helper-handed-call, source prop-value-cast); ADR 0934: none. The legal twin helper-handed-handler: 18 lg-recall clean to uncertifiable"
  },
  {
+  "finding": "The Loading cover walk counted any member spelled `children` inside a wrapper's `<Loading>` as the component's: a wrapper that renders its real `props.children` beside the boundary and `other.children` inside it covered the child it wraps, certified clean where Chrome warns ASYNC_OUTSIDE_LOADING_BOUNDARY (`loading_cover_at`, ADR 0668: only the component's own props' `children` covers)",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), Chrome-confirmed (replay: `unproven-clean`, quiet beside the real wrapper)",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-memo-x-direct-none-m-wrap-foreign"
+  ]
+ },
+ {
+  "finding": "The legal twins of the Loading cover fix: a wrapper that renders its own `props.children` (or `const p = props; p.children`) inside its `<Loading>` stays covered, clean and quiet in Chrome; the fix did not move them",
+  "found": "proof-log phase B lint (name-only-match, owners/async_context.rs), the twins of the mx-recall program",
+  "fixed": "ADR 0668 (amended)",
+  "grid": "lg-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-real",
+   "lg-async-outside-loading-boundary-memo-x-direct-none-m-wrap-alias"
+  ]
+ },
+ {
   "finding": "ADR 0938 (1): a read in an in-place layer (IIFE, helper, a function called once, a module helper) past an await of an async ref callback (`ref={async (el) => { await p; (() => r())(); }}`) was an SC1001 violation: ADR 0323's window asked only the read's own function, so the layer kept the body's lexical role",
   "found": "Proof log phase C (replay-async-ref probes, Chrome rc.21 silent, witness landed)",
   "fixed": "ADR 0938 (window_after_awaits climbs the in-place layers and asks every landing: silent past an unconditional await, U past a skippable one)",

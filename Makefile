@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
+.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint proof-lint ir-edit-fuzz ir-edit-fuzz-corpus fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -253,6 +253,10 @@ IR_FUZZ_SEED ?= 1
 IR_FUZZ_PROJECT ?=
 ir-read-lint:
 	$(BUN) scripts/ir-read-lint.mjs
+
+# ADR 0933 phase B: a ratchet on the code shapes that decide a silence without a fact (scripts/proof-lint.mjs).
+proof-lint:
+	$(BUN) scripts/proof-lint.mjs
 
 ir-edit-fuzz: build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \

@@ -17,11 +17,18 @@ import { legalCells } from "./legal.mjs";
 import { cellList, judge, recallShapes, siteOf } from "./matrix.mjs";
 import { API_CONTEXTS, API_VARIANTS, APPLY_VOID_UNRUN, BASE_ONLY_CONTEXTS, CBP_CONTEXTS, DEAD_CONTEXTS, SPEC, recallVariantsOf } from "./misuse.mjs";
 import { recallLegalShapes } from "./legal.mjs";
+import { WRAP_CONTEXT_NAMES } from "./boundary-shapes.mjs";
+import { ARM_CONTEXT_NAMES } from "./arm-shapes.mjs";
+import { REF_LAYER_CONTEXT_NAMES } from "./ref-layer-shapes.mjs";
+import { TABLE_CONTEXT_NAMES } from "./table-shapes.mjs";
 
 // ADR 0927: an apply that only names the compute's returned function never runs it.
 const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer", ...DEAD_CONTEXTS, ...APPLY_VOID_UNRUN];
 /** The contexts of the later-fire, named-handler, never-run and attached-callback-prop cells: one program a (code, context). */
-const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context)), ...CBP_CONTEXTS.filter((context) => context.startsWith("cbp-attached"))]);
+// ADR 0935: the table family, the boundary wrappers and the arm shapes are base-only contexts too, but their legal twins run nothing by design (a scheduler's
+// callback, an observer's, a generator nothing steps): the Chrome host judges them (focus.mjs) and boundary-scan.mjs screens them, not this fast-runtime test.
+const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context) && !TABLE_CONTEXT_NAMES.includes(context) && !WRAP_CONTEXT_NAMES.includes(context) && !ARM_CONTEXT_NAMES.includes(context) && !REF_LAYER_CONTEXT_NAMES.includes(context)),
+  ...CBP_CONTEXTS.filter((context) => context.startsWith("cbp-attached"))]);
 
 /** One program per (code, context, variant) the recall grids hold for the API variants and contexts, direct, no layer. */
 function plans() {
