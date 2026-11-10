@@ -184,7 +184,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .source_text(callback_span)
                     .unwrap_or_default()
                     .to_owned();
-                for (kind, guaranteed, identity_unproven) in kinds {
+                for (kind, guaranteed, identity_unproven, sites) in kinds {
                     operations.push(LeafOwnerOperation {
                         kind,
                         owner: owner.to_string(),
@@ -195,6 +195,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         possible: !guaranteed,
                         via: Some(via.clone()),
                         identity_unproven,
+                        sites,
                         computation_error_unobserved: false,
                     });
                 }
@@ -211,6 +212,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: false,
                     via: None,
                     identity_unproven: false,
+                    sites: Vec::new(),
                     computation_error_unobserved: false,
                 });
                 continue;
@@ -241,6 +243,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 possible: false,
                 via: None,
                 identity_unproven: false,
+                sites: Vec::new(),
                 computation_error_unobserved: false,
             });
             continue;
@@ -327,6 +330,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 possible: step_unproven(site.span),
                 via: None,
                 identity_unproven: false,
+                sites: Vec::new(),
                 computation_error_unobserved: false,
             });
         }
@@ -450,6 +454,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: false,
                     via: None,
                     identity_unproven: false,
+                    sites: Vec::new(),
                     computation_error_unobserved: false,
                 });
                 continue;
@@ -493,7 +498,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .unwrap_or_default()
                     .to_owned();
                 let step_unproven = step_unproven(call.span);
-                for (kind, guaranteed, identity_unproven) in kinds {
+                for (kind, guaranteed, identity_unproven, sites) in kinds {
                     operations.push(LeafOwnerOperation {
                         kind,
                         owner: owner.to_string(),
@@ -504,6 +509,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         possible: !guaranteed || step_unproven,
                         via: Some(via.clone()),
                         identity_unproven,
+                        sites,
                         computation_error_unobserved: false,
                     });
                 }
@@ -518,6 +524,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         possible: false,
                         via: Some(via),
                         identity_unproven: false,
+                        sites: Vec::new(),
                         computation_error_unobserved: false,
                     });
                 }
@@ -555,6 +562,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 possible: step_unproven(call.span),
                 via: None,
                 identity_unproven: !identity_proven,
+                sites: Vec::new(),
                 computation_error_unobserved: false,
             });
         }
@@ -589,7 +597,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 .source_text(template.tag)
                 .unwrap_or_default()
                 .to_owned();
-            for (kind, guaranteed, identity_unproven) in kinds {
+            for (kind, guaranteed, identity_unproven, sites) in kinds {
                 operations.push(LeafOwnerOperation {
                     kind,
                     owner: owner.to_string(),
@@ -600,6 +608,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: !guaranteed || step_unproven,
                     via: Some(via.clone()),
                     identity_unproven,
+                    sites,
                     computation_error_unobserved: false,
                 });
             }
@@ -614,6 +623,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     possible: false,
                     via: Some(via),
                     identity_unproven: false,
+                    sites: Vec::new(),
                     computation_error_unobserved: false,
                 });
             }
@@ -954,20 +964,33 @@ struct LeafScopeResolution<'a, 'lookup> {
 /// violation; the others are proof obligations. The last field says no proven
 /// run names the primitive: only an attribution the binder does not confirm
 /// (ADR 0711) reached it.
-type Reached = Vec<(crate::LeafOwnerOperationKind, bool, bool)>;
+type Reached = Vec<(
+    crate::LeafOwnerOperationKind,
+    bool,
+    bool,
+    Vec<typefacts::Location>,
+)>;
 
+/// `sites`: where the operation is written (ADR 0942). An operation reached through a helper is reported at the helper call, so the site
+/// itself is kept to let another rule's hand-off to this one (SC4001's `LeafOwned`) find its row.
 fn record(
     kinds: &mut Reached,
     kind: crate::LeafOwnerOperationKind,
     guaranteed: bool,
     identity_unproven: bool,
+    sites: Vec<typefacts::Location>,
 ) {
     match kinds.iter_mut().find(|(known, ..)| *known == kind) {
-        Some((_, known, open)) => {
+        Some((_, known, open, known_sites)) => {
             *known |= guaranteed;
             *open &= identity_unproven;
+            for site in sites {
+                if !known_sites.contains(&site) {
+                    known_sites.push(site);
+                }
+            }
         }
-        None => kinds.push((kind, guaranteed, identity_unproven)),
+        None => kinds.push((kind, guaranteed, identity_unproven, sites)),
     }
 }
 
@@ -1187,9 +1210,9 @@ fn helper_forbidden_operations(
             None,
             Entry::ActionStep { guaranteed },
         );
-        for (kind, guaranteed, identity_unproven) in step {
+        for (kind, guaranteed, identity_unproven, sites) in step {
             if kind != crate::LeafOwnerOperationKind::Flush {
-                record(kinds, kind, guaranteed, identity_unproven);
+                record(kinds, kind, guaranteed, identity_unproven, sites);
             }
         }
         return complete;
@@ -1947,6 +1970,7 @@ fn function_forbidden_operations(
                 crate::LeafOwnerOperationKind::Primitive("JSX".into()),
                 guaranteed,
                 false,
+                vec![location(helper_file.path.shared(), site.span)],
             );
         }
     }
@@ -2040,7 +2064,13 @@ fn function_forbidden_operations(
             // ADR 0711: an attribution the binder does not confirm is
             // possible only.
             let proven = primitive_identity_proven(dialect, helper_file, inner, &primitive);
-            record(kinds, kind, guaranteed && proven, !proven);
+            record(
+                kinds,
+                kind,
+                guaranteed && proven,
+                !proven,
+                vec![location(helper_file.path.shared(), inner.span)],
+            );
         }
     }
     // ADR 0537: a tagged template written in the body calls its tag there.

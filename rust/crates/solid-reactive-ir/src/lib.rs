@@ -798,6 +798,11 @@ pub struct LeafOwnerOperation {
     /// not confirm the callee is that primitive (ADR 0711): a named blocker.
     #[serde(default, skip_serializing_if = "is_false")]
     pub identity_unproven: bool,
+    /// ADR 0942: where the operation is written, when the finding anchors elsewhere (at the helper call it is reached through): another
+    /// rule's hand-off to this one (SC4001's `LeafOwned`) finds its row by the call it ends. Empty for an operation reported at its own
+    /// call, whose `location` is the site.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<Location>,
     /// ADR 0893: the throw reaches no proven report.
     #[serde(default, skip_serializing_if = "is_false")]
     pub computation_error_unobserved: bool,

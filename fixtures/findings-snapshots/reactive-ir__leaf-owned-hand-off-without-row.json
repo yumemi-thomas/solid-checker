@@ -1,0 +1,26 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owned-hand-off-without-row/App.tsx",
+      "start": 665,
+      "end": 674,
+      "fixes": 1
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "execution-context-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owned-hand-off-without-row/App.tsx",
+      "start": 797,
+      "end": 806,
+      "fixes": 0
+    }
+  ]
+}
