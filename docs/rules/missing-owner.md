@@ -99,7 +99,8 @@ created in another module is placed only when it is created at that module's
 top level. A tracker a hook makes and returns is placed at the hook's call (one hook,
 same module). A tracker that escapes where no call is named (exported, passed
 to a call or a JSX attribute, returned, assigned) is an obligation at its
-creation unless that is owned (ADRs 0549, 0551).
+creation unless that is owned (ADRs 0549, 0551). One called at once
+(`useMade()(…)`) is placed at that call (ADR 0931).
 
 A function returned by its function (a factory's result, or a value returned
 through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller

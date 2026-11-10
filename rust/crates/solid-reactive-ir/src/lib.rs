@@ -555,6 +555,12 @@ pub struct ReactiveRead {
     /// attributions were 73 false, 16 benign and 0 user-visible defects.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summary_attributed: bool,
+    /// ADR 0930: the read reached this call through a generator's creation,
+    /// which runs none of the body, so the call is on no stack of the read;
+    /// its finding stands at `origin`, the read. `location` stays the call's,
+    /// the key every other row of this read is matched by.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reported_at_origin: bool,
     /// Reactive origin supplied by project-owned accessor transport. This
     /// proves source identity for strict reads, not a synchronous condition
     /// dependency; ordinary summary hops must preserve the distinction.

@@ -537,16 +537,16 @@ fn detached_in_place(
 /// generator's body, in an async generator (its steps run on later tasks), in
 /// a generator that is itself a primitive's callback (placed as that
 /// callback), or in one whose iterator is stored or never stepped.
-pub(super) struct SteppedGenerator {
+pub(crate) struct SteppedGenerator {
     /// The call that creates the iterator, where the first step runs.
-    pub(super) created: Span,
+    pub(crate) created: Span,
     /// Whether the one step reaches the site.
-    pub(super) first_step: StepReach,
+    pub(crate) first_step: StepReach,
 }
 
 /// Whether the one step of a [`SteppedGenerator`] runs the site.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum StepReach {
+pub(crate) enum StepReach {
     /// The step is a `next`, and no `yield` of the generator's own body may
     /// run before the site (none written before it outside an exclusive arm,
     /// none in a loop that repeats the site): the first step reaches the
@@ -562,7 +562,7 @@ pub(super) enum StepReach {
 }
 
 /// [`SteppedGenerator`] for `span`, when its own function is such a generator.
-pub(super) fn stepped_generator_in_place(
+pub(crate) fn stepped_generator_in_place(
     file: &solid_facts::FileFacts,
     span: Span,
     allowed: &[Span],

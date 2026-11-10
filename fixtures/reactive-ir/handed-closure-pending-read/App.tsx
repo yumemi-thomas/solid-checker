@@ -2,9 +2,9 @@ import { createMemo } from "solid-js";
 
 // ADR 0837: a named helper's pending read, called in an anonymous closure
 // handed down forwarding helpers in a tracked insert. Chrome (rc.21) reports
-// ASYNC_OUTSIDE_LOADING_BOUNDARY, unplaced. Nothing places the closure and
-// no binding climbs out of it: the read is SC5003 and SC5001 uncertifiable
-// at the read (the build before left SC5003 with no row).
+// ASYNC_OUTSIDE_LOADING_BOUNDARY, unplaced. The forward runs in place (ADR
+// 0931), so the read is the insert's: SC5003 uncertifiable at the call (the
+// build before ADR 0837 left SC5003 with no row).
 export function HandedInInsert() {
   const pending = createMemo(async () => 1);
   const wrapUse = () => { pending(); };

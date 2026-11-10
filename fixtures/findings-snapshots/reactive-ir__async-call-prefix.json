@@ -211,8 +211,8 @@
       "blocker": "summary-read-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
-      "start": 4725,
-      "end": 4731,
+      "start": 4707,
+      "end": 4714,
       "fixes": 0
     },
     {

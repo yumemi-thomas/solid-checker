@@ -1566,7 +1566,10 @@ fn package_of_specifier(specifier: &str) -> &str {
 
 fn primary_location(seed: FindingSeed<'_>) -> Location {
     match seed {
-        FindingSeed::StrictRead { read, .. } => read.location.clone(),
+        FindingSeed::StrictRead { read, .. } => match &read.origin {
+            Some(origin) if read.reported_at_origin => origin.clone(),
+            _ => read.location.clone(),
+        },
         FindingSeed::OwnedWrite(value) => value.location.clone(),
         FindingSeed::Action(value) => value.location.clone(),
         FindingSeed::LeafOperation(value) => value.location.clone(),

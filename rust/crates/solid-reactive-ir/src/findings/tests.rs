@@ -15,6 +15,7 @@ fn read(missing_jsx_census: bool) -> ReactiveRead {
         pending_open: false,
         withdrawn_slot: false,
         summary_attributed: false,
+        reported_at_origin: false,
         transported: false,
         kind: "accessor".into(),
         accessor: "count".into(),

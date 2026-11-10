@@ -251,34 +251,60 @@ pub(super) fn leaf_owner_operations_for_file(
         // code (the strict judge, Chrome). The IIFE call itself takes no
         // helper path, so the operation is not claimed at it too. `None`:
         // past the bound, no answer: an obligation, never a drop.
-        let through_iife = |span: Span| {
+        // ADR 0929: a sync generator literal stepped once by `.next()` at its
+        // own call (`(function* () { … })().next()`) is such a layer for the
+        // part of its body that first step runs (ADR 0521's `StepReach`):
+        // `Reaches` runs in place, `Never` does not run, and `Unproven` (a
+        // `yield` may stop the step first) runs in place on some paths only,
+        // the second half of the answer.
+        let climb = |span: Span| -> Option<(bool, bool)> {
             let ast = &callback_file.ast;
             let mut at = span;
+            let mut step_unproven = false;
             for _ in 0..16 {
                 let Some(function) = crate::owners::owning_function(ast, at) else {
-                    return Some(false);
+                    return Some((false, step_unproven));
                 };
                 // A parameter list is the helper path's (argument facts,
                 // defaults): only a layer with none is the leaf's own text.
                 if function.span == leaf_callback.span
                     || function.r#async
-                    || function.generator
                     || !function.parameters.is_empty()
                     || function.rest_parameter
                     || !function.body.contains(at)
                 {
-                    return Some(false);
+                    return Some((false, step_unproven));
                 }
-                let Some(iife) = ast.calls_with_peeled_callee(function.span).next() else {
-                    return Some(false);
+                let layer = if function.generator {
+                    let Some(step) =
+                        crate::execution_role::stepped_generator_in_place(callback_file, at, &[])
+                    else {
+                        return Some((false, step_unproven));
+                    };
+                    match step.first_step {
+                        crate::execution_role::StepReach::Reaches => {}
+                        crate::execution_role::StepReach::Unproven => step_unproven = true,
+                        crate::execution_role::StepReach::Never => {
+                            return Some((false, step_unproven));
+                        }
+                    }
+                    step.created
+                } else {
+                    let Some(iife) = ast.calls_with_peeled_callee(function.span).next() else {
+                        return Some((false, step_unproven));
+                    };
+                    iife.span
                 };
-                if direct_callback_runs(callback_file, leaf_callback.span, iife.span) {
-                    return Some(true);
+                if direct_callback_runs(callback_file, leaf_callback.span, layer) {
+                    return Some((true, step_unproven));
                 }
-                at = iife.span;
+                at = layer;
             }
             None
         };
+        let through_iife = |span: Span| climb(span).map(|(runs, _)| runs);
+        // Whether a stepped generator on the way may stop before `span`.
+        let step_unproven = |span: Span| climb(span).is_some_and(|(_, unproven)| unproven);
         // ADR 0883: JSX in the leaf's own text creates a computation or a root
         // with no call to name it. A creating call elsewhere is the helper
         // paths'; JSX there is the owner rule's (`jsx-effect`).
@@ -298,7 +324,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 fix: None,
                 call_site_gate: call_site_gate.clone(),
                 uncertain: false,
-                possible: false,
+                possible: step_unproven(site.span),
                 via: None,
                 identity_unproven: false,
                 computation_error_unobserved: false,
@@ -399,7 +425,12 @@ pub(super) fn leaf_owner_operations_for_file(
                 .function_at(callback_file.ast.peel_ts_sugar_span(call.callee))
                 .is_some_and(|literal| {
                     !literal.r#async
-                        && !literal.generator
+                        // ADR 0929: a generator literal the climb steps
+                        // through (`(function* () { … })().next()`).
+                        && (!literal.generator
+                            || (crate::owners::generator_iterator_used(callback_file, literal)
+                                .is_some_and(|created| created.span == call.span)
+                                && crate::owners::iterator_stepped_at(callback_file, call.span)))
                         && literal.parameters.is_empty()
                         && !literal.rest_parameter
                 })
@@ -461,6 +492,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .source_text(call.callee)
                     .unwrap_or_default()
                     .to_owned();
+                let step_unproven = step_unproven(call.span);
                 for (kind, guaranteed, identity_unproven) in kinds {
                     operations.push(LeafOwnerOperation {
                         kind,
@@ -469,7 +501,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
-                        possible: !guaranteed,
+                        possible: !guaranteed || step_unproven,
                         via: Some(via.clone()),
                         identity_unproven,
                         computation_error_unobserved: false,
@@ -520,7 +552,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 fix,
                 call_site_gate: call_site_gate.clone(),
                 uncertain: !identity_proven,
-                possible: false,
+                possible: step_unproven(call.span),
                 via: None,
                 identity_unproven: !identity_proven,
                 computation_error_unobserved: false,
@@ -529,11 +561,19 @@ pub(super) fn leaf_owner_operations_for_file(
         // ADR 0537: a tagged template written in the callback's own extent
         // calls its tag there (ADR 0531), as a call of it would.
         for template in &callback_file.ast.tagged_templates {
+            // ADR 0929: in a stepped generator's first step too, which the
+            // call loop above no longer claims at the generator's own call.
+            let in_generator =
+                crate::owners::containing_ast_function(&callback_file.ast, template.span)
+                    .is_some_and(|function| function.generator);
             if !callback_region.contains(template.span)
-                || !direct_callback_runs(callback_file, leaf_callback.span, template.span)
+                || !(direct_callback_runs(callback_file, leaf_callback.span, template.span)
+                    || (in_generator && through_iife(template.span) != Some(false)))
             {
                 continue;
             }
+            let step_unproven =
+                step_unproven(template.span) || through_iife(template.span).is_none();
             let mut kinds = Vec::new();
             let mut visited = Vec::new();
             let complete = tag_forbidden_operations(
@@ -557,7 +597,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     fix: None,
                     call_site_gate: call_site_gate.clone(),
                     uncertain: false,
-                    possible: !guaranteed,
+                    possible: !guaranteed || step_unproven,
                     via: Some(via.clone()),
                     identity_unproven,
                     computation_error_unobserved: false,
