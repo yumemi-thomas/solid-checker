@@ -62,7 +62,9 @@ export const SOURCE_AXES = {
   async: ["async-prop", "async-value", "async-value-member", "async-value-dstr", "async-context", "async-loading"],
   // The recall axes (`--recall`): the values through a barrel module that re-exports `helpers.ts` (`lib.ts`), or a hook that is
   // `helpers.ts`'s default export. Not under `module`, so `--sources module` keeps its programs.
-  files: ["module-barrel", "module-default-hook"],
+  // ADR 0934: a prop value read through a TypeScript wrapper on `props` (`(props as typeof props).w1`), which Type Facts keeps no
+  // entity under (the binder resolves it).
+  files: ["module-barrel", "module-default-hook", "prop-value-cast"],
 };
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** Sources the grids enumerate and a random draw never takes (as `gridVariants`): random programs and combinations keep theirs. */
@@ -72,7 +74,7 @@ export const parentSource = (source) => source !== "local" && !source.startsWith
 /** A source whose values `helpers.ts` creates at its own scope (print.mjs `moduleFiles`), before App.tsx runs a statement of its own. */
 export const moduleScoped = (source) => source === "module" || source === "module-barrel";
 /** A source that hands the component a read's value, not the accessor: only a read written as the misuse itself can use it. */
-const valueSource = (source) => source === "prop-value" || source === "async-value" || source === "async-value-member" || source === "async-value-dstr";
+const valueSource = (source) => source === "prop-value" || source === "prop-value-cast" || source === "async-value" || source === "async-value-member" || source === "async-value-dstr";
 
 /**
  * The sources a (code, variant, binding) can take: the template must have values (`setup`); `async` sources need an async value and
@@ -118,6 +120,7 @@ export function sourcesOption(value) {
  */
 export function sourcedName(source, name) {
   switch (source) {
+    case "prop-value-cast": return `(props as typeof props).${name}`;
     case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-value-member": case "async-loading": return `props.${name}`;
     // ADR 0823: the read is a body destructure of the props object, written where the read is.
     case "async-value-dstr": return `(() => { const { ${name} } = props; return ${name}; })()`;
@@ -992,6 +995,13 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
   const placed = (kind) => (row ? Object.entries({ ...BODY_DISPATCH_CONTEXTS, ...UNSEEN_ENTRY_CONTEXTS }).filter(([, side]) => side === kind).map(([context]) => context) : []);
   return [code, { misuse: placed("misuse"), legal: placed("legal") }];
 }));
+/**
+ * ADR 0934 (owner, 2026-11-10: a use nothing follows is uncertifiable, never ADR 0222's silence). `helper-handed-call`: the site in a
+ * component-local helper kept in an array and called from it in the body (a read the helper's census cannot follow);
+ * `helper-handed-handler` calls it from a click (legal). The recall sources cross it, so `prop-value-cast` puts a props Get there.
+ */
+export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
+const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
 export const BASE_ONLY_CONTEXTS = () => [...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
@@ -1105,13 +1115,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UNSEEN_ENTRY_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UNSEEN_ENTRY_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1878,6 +1888,14 @@ function recallContext(context, stmts, kit) {
         : button(kit.name("b"), [expr(call(ref(h)))], { tag: "div", on: "onScroll", undriven: true })));
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [decl(h, fn(stmts)), made, context.includes("-timer-") ? expr(prim("timer", fn([fire]))) : fire], view: [] };
+    }
+    // ADR 0934 (HELPER_HANDED_CONTEXTS): the helper kept in an array, run from it in the body or a click.
+    case "helper-handed-call": case "helper-handed-handler": {
+      const g = kit.name("g");
+      const box = kit.name("kept");
+      const run = expr(domExpr(`${box}[0]()`));
+      const made = [decl(box, domExpr("[] as Array<() => unknown>")), decl(g, fn(stmts)), expr(domExpr(`${box}.push(${g})`))];
+      return context === "helper-handed-call" ? { body: [...made, run], view: [] } : { body: made, view: [button(kit.name("b"), [run])] };
     }
     // ADR 0934 (UNSEEN_ENTRY_CONTEXTS): an exported module function, the component's values hoisted beside it, called through the
     // module's own namespace by a key built at run time.

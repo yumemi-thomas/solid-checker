@@ -1,3 +1,3 @@
 # event-dispatch-handler-reads
 
-**Claim (ADR 0934).** A visible synchronous dispatch withholds an event handler's placement (ADR 0356) for every read the handler runs, not only those written in it: a helper an inline handler calls (`onScroll={() => goTo(…)}`, its reads held at the call), a module helper two calls deep, and a function named in the attribute (`onScroll={onScroll}`: its reads and its write). Each is uncertifiable. Chrome (rc.21) warns STRICT_READ_UNTRACKED at each read and REACTIVE_WRITE_IN_OWNED_SCOPE at each write. Twin: `event-dispatch-handler-reads-none`, the same code with no dispatch, is clean. Stubs: `rc21-listener-no-dispatch`'s.
+ADR 0934 (Chrome rc.21 warns at each): under a body dispatch (ADR 0356), a helper an inline handler calls, one two calls deep, and a named handler (reads, write) are uncertifiable. Twin: `-none`.
