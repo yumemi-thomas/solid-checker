@@ -1846,7 +1846,7 @@
     "proved": "reactive-ir/prop-callback-roles-after-await",
     "open": "reactive-ir/arrow-bound-helper-module-loads"
    },
-   "note": "writes in a callback past an await run ownerless, as the direct twin already did: the layer climb answers silent on every path"
+   "note": "the 3 writes (AfterAwaitInline, AfterAwaitIife, ViaHelperAfterAwait) run only after an `await` on every path, so they run ownerless: no SC2001 (the direct twin was already clean). Chrome rc.21, the fixture text with `load` defined: no diagnostic at any of them; its only warning is BeforeAwait's, a violation"
   },
   {
    "fixture": "reactive-ir/rc9-heldout-execution-shapes",
@@ -1859,7 +1859,7 @@
     "proved": "reactive-ir/rc9-heldout-execution-shapes",
     "open": "reactive-ir/ref-await-in-place-layers"
    },
-   "note": "a read only through a call past an await: the layer climb proves it silent"
+   "note": "`draft()` in `isCurrent`, called only after an `await` on every path: no strict-read window. Chrome rc.21, the fixture text with `load` defined and `save(\"x\")` called: no diagnostic at it"
   },
   {
    "fixture": "reactive-ir/helper-prop-read",
