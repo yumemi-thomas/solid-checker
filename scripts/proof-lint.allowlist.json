@@ -202,7 +202,7 @@
       },
       "name-only-match": {
         "count": 1,
-        "why": "pending-review"
+        "why": "`children` is a prop name used only to REFUSE (a `children` attribute disqualifies the proof), inside a conjunction that also requires the element to resolve exactly to a primitive that renders its children through a callback (`exact_jsx_primitive_name`)"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/event_literals.rs": {
