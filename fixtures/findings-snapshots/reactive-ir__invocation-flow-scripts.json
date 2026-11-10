@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 450,
+      "end": 457,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -61,6 +72,17 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 666,
+      "end": 673,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
       "start": 666,
@@ -123,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 891,
+      "end": 898,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -160,6 +193,17 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 1153,
+      "end": 1160,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
       "start": 1153,

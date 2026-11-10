@@ -81,3 +81,27 @@ export function HookCalls() {
     </button>
   );
 }
+
+// ADR 0931: a hook's call, or the creating call itself, called at once
+// (`useArrow()(…)`): the tracker is that call's value, with no binding on the
+// way. Owned from the body (silent); from the handler each call warns at the
+// `track()` call, through an arrow hook, a creating call, a hook returning
+// its binding. A hook a `let` holds may be replaced: an obligation there.
+const useArrow = () => createReaction(() => {});
+let useLet = () => createReaction(() => {});
+export function ImmediateCalls() {
+  useArrow()(() => count());
+  return (
+    <button
+      onClick={() => {
+        useArrow()(() => count());
+        createReaction(() => {})(() => count());
+        useMade()(() => count());
+        useLet()(() => count());
+        useLet = useArrow;
+      }}
+    >
+      go
+    </button>
+  );
+}

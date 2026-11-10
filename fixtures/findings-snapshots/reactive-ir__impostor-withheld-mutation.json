@@ -57,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 760,
+      "end": 771,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -109,6 +120,17 @@
       "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
       "start": 1110,
       "end": 1125,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-withheld-mutation/App.tsx",
+      "start": 1118,
+      "end": 1123,
       "fixes": 0
     },
     {

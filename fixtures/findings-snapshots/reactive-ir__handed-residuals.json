@@ -305,6 +305,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 6897,
+      "end": 6906,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -312,6 +323,17 @@
       "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
       "start": 7106,
       "end": 7108,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 7204,
+      "end": 7213,
       "fixes": 0
     },
     {
@@ -342,6 +364,17 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 7551,
+      "end": 7560,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
       "start": 7803,
       "end": 7807,
       "fixes": 0
@@ -355,6 +388,17 @@
       "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
       "start": 7803,
       "end": 7805,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
+      "start": 7960,
+      "end": 7969,
       "fixes": 0
     }
   ]

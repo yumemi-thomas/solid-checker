@@ -66,6 +66,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1078,
+      "end": 1081,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -110,6 +121,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1392,
+      "end": 1395,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -129,6 +151,17 @@
       "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
       "start": 1608,
       "end": 1612,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1671,
+      "end": 1674,
       "fixes": 0
     },
     {
@@ -187,6 +220,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1969,
+      "end": 1973,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -198,6 +242,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1978,
+      "end": 1982,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -206,6 +261,17 @@
       "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
       "start": 1978,
       "end": 1982,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1989,
+      "end": 1992,
       "fixes": 0
     },
     {
@@ -231,6 +297,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 2398,
+      "end": 2402,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -250,6 +327,17 @@
       "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
       "start": 2433,
       "end": 2437,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 2512,
+      "end": 2515,
       "fixes": 0
     },
     {

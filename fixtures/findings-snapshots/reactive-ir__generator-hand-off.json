@@ -68,17 +68,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
-      "start": 1478,
-      "end": 1481,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -109,17 +98,6 @@
       "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
       "start": 1732,
       "end": 1733,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
-      "start": 2049,
-      "end": 2052,
       "fixes": 0
     },
     {

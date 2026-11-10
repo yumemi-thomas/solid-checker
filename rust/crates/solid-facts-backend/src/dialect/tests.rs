@@ -150,6 +150,7 @@ fn catalog_prose_program() -> Program {
             pending_apply: None,
             origin: None,
             unaccounted: false,
+            read_unresolved: false,
             source_module_unresolved: false,
             walk_cut: false,
         }],

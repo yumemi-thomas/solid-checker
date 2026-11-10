@@ -1217,6 +1217,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-iife-placement/node_modules/**
 !fixtures/reactive-ir/pending-read-accounted/node_modules/
 !fixtures/reactive-ir/pending-read-accounted/node_modules/**
+!fixtures/reactive-ir/pending-read-unresolved/node_modules/
+!fixtures/reactive-ir/pending-read-unresolved/node_modules/**
 !fixtures/reactive-ir/declared-served-closure/node_modules/
 !fixtures/reactive-ir/declared-served-closure/node_modules/**
 !fixtures/reactive-ir/flow-prop-read/node_modules/
@@ -1271,3 +1273,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/write-parameter-call/node_modules/**
 !fixtures/reactive-ir/value-use-calls-carriers/node_modules/
 !fixtures/reactive-ir/value-use-calls-carriers/node_modules/**
+!fixtures/reactive-ir/forwarded-const-callback/node_modules/
+!fixtures/reactive-ir/forwarded-const-callback/node_modules/**

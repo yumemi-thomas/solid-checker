@@ -99,7 +99,8 @@ created in another module is placed only when it is created at that module's
 top level. A tracker a hook makes and returns is placed at the hook's call (one hook,
 same module). A tracker that escapes where no call is named (exported, passed
 to a call or a JSX attribute, returned, assigned) is an obligation at its
-creation unless that is owned (ADRs 0549, 0551).
+creation unless that is owned (ADRs 0549, 0551). One called at once
+(`useMade()(…)`) is placed at that call (ADR 0931).
 
 A function returned by its function (a factory's result, or a value returned
 through `runWithOwner`, `createRoot`, `untrack` or a memo) runs where its caller
@@ -370,4 +371,4 @@ A generator's body runs where its iterator is stepped. An owner operation after 
 
 Every owner-requiring call ends in a finding or a named proof that its owner context is settled: an owned-only context, a providing region, code that never runs, or a callback proven to return no cleanup. A call with neither is uncertifiable (`execution-context-unaccounted`, ADR 0886).
 
-An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||= f)(…)`) whose operand names the primitive is SC4001's uncertifiable where the direct call would be: an attribution, never a proof of invocation or owner; a local function of the same name is none. An operation that is already uncertain is still reported where its named layer has an open entry (ADR 0902).
+An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||= f)(…)`) whose operand names the primitive is SC4001's uncertifiable where the direct call would be, after an `await` too (ADR 0926): an attribution, never a proof of invocation or owner; a local function of the same name is none. An operation that is already uncertain is still reported where its named layer has an open entry (ADR 0902).

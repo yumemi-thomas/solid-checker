@@ -197,7 +197,7 @@ impl<'a> SemanticLookup<'a> {
         }
         let mut parameters = HashMap::<&str, (Span, usize)>::default();
         for function in &file.ast.functions {
-            if function.r#async || function.generator {
+            if function.r#async || function.generator || !parameter_defaults_inert(file, function) {
                 continue;
             }
             for (index, parameter) in function.parameters.iter().enumerate() {
@@ -261,12 +261,16 @@ impl<'a> SemanticLookup<'a> {
                     && crate::interproc::site_on_every_completion(self, file, function, call.span)
                 {
                     // `g` must be a function declaration: a `const` callee
-                    // may be in its temporal dead zone (ADR 0218).
+                    // may be in its temporal dead zone (ADR 0218), unless its
+                    // declarator runs before `function` can exist (ADR 0931).
                     let target = crate::execution_role::project_callee_at_parameter(
                         file, call, position, self,
                     )
-                    .filter(|(_, callee, exact)| {
-                        *exact && callee.kind == solid_facts::ast::FunctionKind::Declaration
+                    .filter(|(callee_file, callee, exact)| {
+                        *exact
+                            && (callee.kind == solid_facts::ast::FunctionKind::Declaration
+                                || (callee_file.path == file.path
+                                    && const_initialized_before(file, callee, function)))
                     })
                     .map(|(callee_file, callee, _)| (callee_file.path.to_string(), callee.span));
                     slot.forwards.push((function, index, position, target));
@@ -336,6 +340,75 @@ impl<'a> SemanticLookup<'a> {
             })
         })
     }
+}
+
+/// ADR 0931: whether no default in `function`'s parameter list can run code
+/// before its body: each initializer is a primitive literal or a function
+/// literal, and no destructured parameter holds one. A default runs whenever
+/// its argument is missing or `undefined`, and one that throws
+/// (`(read, gate = stop()) => read()`) ends every call before the body, so
+/// no parameter call in the body is proven to run.
+fn parameter_defaults_inert(file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
+    let ast = &file.ast;
+    // A slice, not the slot's `parameters` map: no map is iterated here.
+    let declared = function.parameters.as_slice();
+    declared.iter().all(|parameter| {
+        let inert_initializer = parameter.initializer.is_none_or(|initializer| {
+            let initializer = ast.peel_ts_sugar_span(initializer);
+            ast.function_at(initializer).is_some()
+                || file
+                    .source_text(initializer)
+                    .is_some_and(crate::execution_role::primitive_literal_body)
+        });
+        inert_initializer
+            && (parameter.shape == solid_facts::ast::BindingShape::Identifier
+                || !file
+                    .source_text(parameter.pattern)
+                    .unwrap_or("=")
+                    .contains('='))
+    })
+}
+
+/// ADR 0931: whether the `const`-bound function `callee` is initialized at
+/// every run of the function at `forwarder` (same file): `callee` is the whole
+/// initializer of a `const` declarator outside a `switch` clause, `forwarder`
+/// is written after that declarator, and neither it nor any function around it
+/// inside the declarator's own scope function is a hoisted `function`
+/// declaration. So `forwarder` exists only once control passed the declarator
+/// in the activation its references see, and a call of `callee` in its body
+/// never meets the temporal dead zone.
+pub(super) fn const_initialized_before(
+    file: &FileFacts,
+    callee: &solid_facts::ast::FunctionFact,
+    forwarder: Span,
+) -> bool {
+    use solid_facts::ast::FunctionKind;
+    let ast = &file.ast;
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == callee.span)
+    }) else {
+        return false;
+    };
+    if binding.in_switch_case || binding.declaration.end > forwarder.start {
+        return false;
+    }
+    let scope = ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(binding.declaration))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span);
+    ast.functions
+        .iter()
+        .filter(|function| {
+            function.span.contains(forwarder)
+                && scope.is_none_or(|scope| scope != function.span && scope.contains(function.span))
+        })
+        .all(|function| function.kind != FunctionKind::Declaration)
 }
 
 /// One file's part of ADR 0277's answer ([`SemanticLookup::parameter_completion_slot`]).

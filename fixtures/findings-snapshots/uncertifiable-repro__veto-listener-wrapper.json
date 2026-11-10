@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/handler-argument.tsx",
+      "start": 1155,
+      "end": 1161,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -101,6 +112,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
+      "start": 1378,
+      "end": 1384,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -109,6 +131,17 @@
       "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
       "start": 1378,
       "end": 1382,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/keyboard.tsx",
+      "start": 1422,
+      "end": 1428,
       "fixes": 0
     },
     {
@@ -197,6 +230,17 @@
       "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/unplaced-action.tsx",
       "start": 515,
       "end": 527,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/veto-listener-wrapper/src/unplaced-action.tsx",
+      "start": 530,
+      "end": 537,
       "fixes": 0
     },
     {
