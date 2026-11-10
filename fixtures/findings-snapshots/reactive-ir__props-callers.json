@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/props-callers/App.tsx",
+      "start": 750,
+      "end": 761,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",

@@ -234,6 +234,8 @@ ADR 0717), judged by the declaration; `Object.assign` only when its first source
 `this`, so a write of `this.x` in it is uncertifiable (ADR 0638). A write through a `merge` of
 several sources, or on a store whose value may be raw, is uncertifiable (ADRs 0630, 0634).
 
+A store write that no row, SC9012, compiler discard or named silence ends is uncertifiable, blocker `store-write-unaccounted` (ADR 0936).
+
 ## Why is this bad?
 
 Solid updates the graph only through setters: the setter is what notifies

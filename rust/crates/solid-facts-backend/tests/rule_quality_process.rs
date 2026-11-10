@@ -22,8 +22,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // Two of them are uncertifiable reads in the closures the two `nested`
         // memos return (ADR 0452), pinned below. One more since ADR 0535,
         // pinned as incidental below. ADR 0920: one more, the cleanup a named
-        // apply returns, pinned below.
-        ("strict-read-untracked", 22),
+        // apply returns, pinned below. ADR 0936: one more, a read in an
+        // exported helper nothing places that no row or silence ends, pinned
+        // as incidental below.
+        ("strict-read-untracked", 23),
         // ADR 0516: one is the uncertifiable read after `loopAwait`'s loop,
         // pinned below. ADR 0870: two more, the reads after
         // `conditionalAwait`'s and `shortCircuitAwait`'s skippable awaits.
@@ -201,7 +203,13 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     let incidental = HashMap::from([
         (
             "after-await-valid.tsx",
-            [("cleanup-return-unresolved", 0)].as_slice(),
+            // ADR 0936: `return count()` in an exported async helper with no
+            // caller ends in no row and no named silence: an obligation.
+            [
+                ("cleanup-return-unresolved", 0),
+                ("strict-read-untracked", 1),
+            ]
+            .as_slice(),
         ),
         (
             "component-return-valid.tsx",

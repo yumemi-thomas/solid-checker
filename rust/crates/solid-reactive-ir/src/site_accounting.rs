@@ -130,6 +130,12 @@ site_silences! {
     MutatorShallowStoreRoot => "shared_reactivity.no_store_mutator_call.shallow-store-root",
     /// A mutator call through a nullish link: TypeScript's.
     MutatorTscNullishLink => "shared_reactivity.no_store_mutator_call.tsc-nullish-link",
+    /// A write through a prop every caller passes a static value: it lands on a
+    /// plain object.
+    ContainerPropStatic => "shared_reactivity.push_unproven_container_write.props-static",
+    /// A write into a container a caller handed in, which holds a plain value
+    /// (a literal, a function, a `new` object) on every route (ADR 0919).
+    HandedRootPlain => "shared_reactivity.handed_container_write.plain-on-every-route",
     /// Every caller of the function whose parameter is the root was enumerated
     /// and none hands a store.
     FlowCallersPassNoStore => "shared_reactivity.push_parameter_store_flow.callers-pass-no-store",
@@ -143,9 +149,21 @@ site_silences! {
     /// A dispatch obligation of an exported helper every caller of which is in
     /// view and passes a closed value: the pass removed the row.
     ClosedProgramExportDischarge => "attribution.discharge_closed_program_export_dispatch.closed-callers",
-    /// The role classifier decided the site's role reports nothing, and the
-    /// producer returned without a row on that decision.
-    RoleDoesNotReport => "local_access.role-does-not-report",
+    /// A function the program places elsewhere (its call edges), read through
+    /// a call: the summaries decide at the calls.
+    CallPlacedElsewhere => "local_access.discover_call_as.placed-elsewhere",
+    /// The classifier decided the call's role reports nothing (tracked JSX, a
+    /// deferred callback, a handler), and the producer returned without a row.
+    CallRoleDoesNotReport => "local_access.discover_call_as.role-does-not-report",
+    /// A read in a setter's updater: the setter call's write is a proven
+    /// violation, so the guard throws before the updater runs (ADR 0932).
+    CallSetterCallbackGuardThrows => "local_access.discover_call_as.setter-callback-guard-throws",
+    /// A read in a setter's updater, where the setter call's role reports
+    /// nothing: the updater runs at the call, in a place the rule allows.
+    CallSetterCallbackRoleSilent => "local_access.discover_call_as.setter-callback-role-silent",
+    /// A store Get under a key the checker cannot spell, at a site whose role
+    /// reports nothing.
+    MemberRoleDoesNotReport => "local_access.discover_member.role-does-not-report",
     /// `onFlush` where the write role allows it (an effect's apply, a leaf, a
     /// handler): no owner rejects the call.
     OnFlushRoleAllows => "static_api.on-flush.role-allows",
@@ -277,6 +295,32 @@ impl SiteEnds {
         });
     }
 
+    /// How many ends are recorded: a producer compares it before and after a
+    /// return to know whether it named one.
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// An end for a site whose role the classifier decided reports nothing (it is
+    /// recorded only for such a role: an unplaced one is an obligation, a
+    /// reporting one a row). The fact is the decision at the site itself, or at
+    /// `premise_at` where the role came from another place (a setter call).
+    pub(crate) fn role_silent(
+        &mut self,
+        file: &FileFacts,
+        site: Span,
+        silence: SiteSilence,
+        role: crate::ExecutionRole,
+        premise_at: Span,
+    ) {
+        if role.reports_untracked_read() || role.reports_unplaced() {
+            return;
+        }
+        self.end_at(file, site, silence, PremiseKind::RoleDoesNotReport, || {
+            Some(premise_at)
+        });
+    }
+
     /// `other`'s ends after this one's.
     pub(crate) fn extend(&mut self, other: &Self) {
         self.0.extend(other.0.iter().cloned());
@@ -395,10 +439,9 @@ pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program, ends: &S
     if rows.is_empty() {
         return;
     }
+    // In the universe's order, after the rows the program holds: the findings
+    // are ordered by place when they are projected.
     program.static_violations.extend(rows);
-    program
-        .static_violations
-        .sort_by(|left, right| crate::location_order(&left.location, &right.location));
 }
 
 #[cfg(test)]

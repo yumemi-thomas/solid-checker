@@ -46,6 +46,8 @@ inline and keeps the owner context, so an action invoked inside `untrack(...)`
 or `flush(() => ...)` within a memo, component body or root body still throws
 `ACTION_CALLED_IN_OWNED_SCOPE` at runtime.
 
+A action call that no row, SC9012, compiler discard or named silence ends is uncertifiable, blocker `action-unaccounted` (ADR 0936).
+
 ## Why is this bad?
 
 Invoking an action starts a write transaction: optimistic writes apply, async work
@@ -108,4 +110,4 @@ and read it under a `<Loading>` boundary.
 - [no-write-in-pure-computation](no-write-in-pure-computation.md) — the same constraint for setters
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — reactive data loading
 
-A generator is placed at its steps, never at iterator creation (ADR 0851). Exported iterators, mixed step contexts, and a named generator also handed on as a value retain `function-run-unplaced` obligations; the creation call cannot restore a rejecting compute role (ADR 0853). Some synchronous consumption/first-segment write positions also remain obligations where the write-role proof does not preserve the step context.
+Generators are placed as for [no-write-in-pure-computation](no-write-in-pure-computation.md) (ADRs 0851, 0853).

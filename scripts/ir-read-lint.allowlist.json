@@ -275,8 +275,8 @@
     "hashmap-iteration": 2
   },
   "rust/crates/solid-reactive-ir/src/proof_universe.rs": {
-    "file_by_path": 2,
-    "hashmap-iteration": 1
+    "file_slots": 1,
+    "file_by_path": 2
   },
   "rust/crates/solid-reactive-ir/src/reachability.rs": {
     "file_slots": 11,

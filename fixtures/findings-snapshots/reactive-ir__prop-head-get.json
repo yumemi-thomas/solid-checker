@@ -71,6 +71,17 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
+      "start": 2523,
+      "end": 2560,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-head-get/App.tsx",

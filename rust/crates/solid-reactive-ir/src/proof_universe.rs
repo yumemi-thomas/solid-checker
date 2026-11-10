@@ -667,3 +667,63 @@ pub(crate) fn log_site(file: &FileFacts, site: &Site, end: &str, detail: &str) {
         detail,
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(path: &str, start: u64, end: u64) -> Location {
+        Location {
+            path: path.into(),
+            start_byte: start,
+            end_byte: end,
+        }
+    }
+
+    /// A span with a row and a violation ends as a row; the first of two equal
+    /// classes keeps its detail; another span is another site.
+    #[test]
+    fn the_best_class_at_a_span_stays_and_the_first_of_a_class_wins() {
+        let (first, second, other) = (
+            at("/p/A.tsx", 4, 9),
+            at("/p/A.tsx", 4, 9),
+            at("/p/B.tsx", 4, 9),
+        );
+        let mut found = HashMap::default();
+        note(&mut found, &first, EndClass::Violation, Detail::Nothing);
+        note(
+            &mut found,
+            &first,
+            EndClass::Row,
+            Detail::Read(ExecutionRole::TrackedJsx),
+        );
+        note(
+            &mut found,
+            &second,
+            EndClass::Row,
+            Detail::Write(ExecutionRole::Unknown),
+        );
+        note(&mut found, &first, EndClass::Census, Detail::Nothing);
+        let (class, detail) = found[&("/p/A.tsx", 4, 9)];
+        assert_eq!(class, EndClass::Row);
+        assert_eq!(detail.text(), "read:TrackedJsx");
+        assert!(!found.contains_key(&(other.path.as_ref(), 4, 9)));
+    }
+
+    #[test]
+    fn the_classes_rank_a_row_before_a_census_obligation_before_a_defect_before_a_violation() {
+        assert!(EndClass::Row < EndClass::Census);
+        assert!(EndClass::Census < EndClass::Defect);
+        assert!(EndClass::Defect < EndClass::Violation);
+        assert!(EndClass::Violation < EndClass::Discarded);
+        for class in [
+            EndClass::Row,
+            EndClass::Census,
+            EndClass::Defect,
+            EndClass::Violation,
+            EndClass::Discarded,
+        ] {
+            assert!(!class.name().is_empty());
+        }
+    }
+}

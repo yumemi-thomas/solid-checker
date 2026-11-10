@@ -483,6 +483,15 @@
       "typescript": { "ownership": "checker-only", "diagnostics": [] }
      },
      {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "st.user" },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -568,6 +577,24 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "st.items", "occurrence": 1 },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "marker": "st.items", "occurrence": 2 },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
      },
      {
       "rule": "reactive-dispatch-unresolved",

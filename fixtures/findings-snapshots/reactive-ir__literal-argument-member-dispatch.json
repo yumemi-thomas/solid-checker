@@ -621,6 +621,17 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 1763,
+      "end": 1774,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
@@ -791,6 +802,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 4191,
       "end": 4202,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 4394,
+      "end": 4405,
       "fixes": 0
     },
     {

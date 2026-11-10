@@ -1976,6 +1976,9 @@ impl LocalAccessContext<'_, '_> {
         // facts open the proof rather than hiding an observed call or escape.
         let mut unproven_use = dynamic_lexical_observation;
         let mut retained_in_layer = false;
+        // ADR 0936: the references that hand the helper whole to an exact slot
+        // whose role reports nothing (an event handler, a tracked expression).
+        let mut silent_slots = Vec::new();
         // ADR 0509: an unproven call from another named local function
         // (`const outer = () => helper()`) runs the read wherever that
         // function runs, which nothing here follows.
@@ -2000,6 +2003,9 @@ impl LocalAccessContext<'_, '_> {
                     && body_runs
                     && let Some(execution) = self.helper_value_execution(file, reference.span)
                 {
+                    if !execution.reports_untracked_read() && !execution.reports_unplaced() {
+                        silent_slots.push(reference.span);
+                    }
                     if execution.reports_untracked_read() {
                         let mut attributed = read.clone();
                         attributed.location = location(file.path.shared(), reference.span);
@@ -2231,6 +2237,12 @@ impl LocalAccessContext<'_, '_> {
                             )
                         })
                         .collect::<Vec<_>>();
+                    premises.extend(silent_slots.iter().map(|slot| {
+                        crate::proof_log::Premise::at(
+                            crate::proof_log::PremiseKind::HandedToSilentSlot,
+                            Some(*slot),
+                        )
+                    }));
                     if premises.is_empty() {
                         premises = placement_premises(file, site, self.lookup);
                     }
@@ -3456,6 +3468,21 @@ impl LocalAccessContext<'_, '_> {
                     result,
                 );
             }
+            // ADR 0936: a role that reports nothing ends the read: the guard
+            // throws before the updater runs (the setter's write is a proven
+            // violation), or the setter call is where the rule allows the read.
+            result.ends.role_silent(
+                file,
+                call.span,
+                if role == ExecutionRole::Unreported {
+                    SiteSilence::CallSetterCallbackGuardThrows
+                } else {
+                    SiteSilence::CallSetterCallbackRoleSilent
+                },
+                role,
+                self.running_setter_call(file, call.callee)
+                    .unwrap_or(call.span),
+            );
             return;
         }
         let Some(multiplicity) = self.reachable_calls.get(&callee).copied().or_else(|| {
@@ -3520,6 +3547,7 @@ impl LocalAccessContext<'_, '_> {
         })
         .flatten();
         let rows_before = (result.reads.len(), result.async_reads.len());
+        let ends_before = result.ends.len();
         if let Some(accessor) = self.accessors.get(symbol)
             && let Some((role, Some(carrier))) = handed
             && role.reports_untracked_read()
@@ -3595,6 +3623,28 @@ impl LocalAccessContext<'_, '_> {
                 SiteSilence::CallNamedAtTrackedPosition,
                 || tracked_position_premises(file, call.callee, self.lookup),
             );
+        }
+        // ADR 0936: a read of a function the program places elsewhere (its call
+        // edges) ends here as a member read does; failing that, a role the
+        // classifier decided reports nothing.
+        if self.accessors.contains_key(symbol)
+            && (result.reads.len(), result.async_reads.len()) == rows_before
+            && result.ends.len() == ends_before
+        {
+            result
+                .ends
+                .end_with(file, call.span, SiteSilence::CallPlacedElsewhere, || {
+                    placement_premises(file, call.callee, self.lookup)
+                });
+            if result.ends.len() == ends_before {
+                result.ends.role_silent(
+                    file,
+                    call.span,
+                    SiteSilence::CallRoleDoesNotReport,
+                    execution,
+                    call.span,
+                );
+            }
         }
         // ADR 0294: a typed candidate read where an accessor read would be
         // reported. Its type is the only evidence that it reads reactive
@@ -7569,6 +7619,14 @@ impl LocalAccessContext<'_, '_> {
                             uncertain: true,
                         });
                     }
+                    // ADR 0936: a role that reports nothing ends the Get.
+                    result.ends.role_silent(
+                        file,
+                        member.span,
+                        SiteSilence::MemberRoleDoesNotReport,
+                        execution,
+                        member.span,
+                    );
                     return;
                 }
             }

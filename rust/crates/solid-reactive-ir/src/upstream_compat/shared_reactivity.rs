@@ -1493,15 +1493,15 @@ fn direct_mutations(
                 decided.push(written);
             }
         };
-        // ADR 0933: the typed fact a plain write is proven legal on, for the
-        // proof log; it decides nothing.
+        // ADR 0933, ADR 0936: the typed fact a plain write is proven legal on. It
+        // ends the write's site, a write that also reads its target (`+=`, `??=`)
+        // included; it decides nothing for the census, which keeps such a write
+        // undecided without a row of its own.
         let proven_by = |ends: &mut SiteEnds,
                          silence: SiteSilence,
                          kind: crate::proof_log::PremiseKind,
                          at: solid_facts::core::Span| {
-            if !reads_target {
-                ends.end_at(file, written, silence, kind, || Some(at));
-            }
+            ends.end_at(file, written, silence, kind, || Some(at));
         };
         // The assignment target is either the reactive binding itself or the
         // object of a member chain rooted at one. The root is resolved with
@@ -1874,7 +1874,7 @@ fn push_unproven_container_write(
         return;
     }
     // ADR 0919: the container's value on every route a caller hands it in.
-    if handed_container_write(file, context, site, root, sink, defects) {
+    if handed_container_write(file, context, site, root, sink, defects, ends) {
         return;
     }
     // Every enumerated caller passes the prop a static value (a plain
@@ -1888,6 +1888,15 @@ fn push_unproven_container_write(
         && context.props_reactivity.prop_use(declaration, name)
             == crate::source_discovery::PropUse::Static
     {
+        // ADR 0936: the props declaration is the fact: every caller passes a
+        // static value.
+        ends.end_at(
+            file,
+            site,
+            SiteSilence::ContainerPropStatic,
+            crate::proof_log::PremiseKind::PropsCallersStatic,
+            || crate::proof_log::span_of(declaration),
+        );
         return;
     }
     defects.push(StaticDefect {
@@ -1915,6 +1924,7 @@ fn handed_container_write(
     root: Span,
     sink: SinkWrite,
     defects: &mut Vec<StaticDefect>,
+    ends: &mut SiteEnds,
 ) -> bool {
     let member = file.ast.peel_ts_sugar_span(sink.member);
     // The object written into: the target itself where the operation writes
@@ -1929,7 +1939,30 @@ fn handed_container_write(
     };
     match container_root::handed_root(file, context, container) {
         container_root::HandedRoot::Open => false,
-        container_root::HandedRoot::Plain => true,
+        container_root::HandedRoot::Plain(routes) => {
+            // ADR 0936: a plain value on every route; the values are the facts.
+            ends.end_with(file, site, SiteSilence::HandedRootPlain, || {
+                routes
+                    .iter()
+                    .map(|at| {
+                        let span = at.span;
+                        if at.path.as_ref() == file.path.as_str() {
+                            crate::proof_log::Premise::at(
+                                crate::proof_log::PremiseKind::PlainValueOnEveryRoute,
+                                Some(span),
+                            )
+                        } else {
+                            crate::proof_log::Premise::in_file(
+                                crate::proof_log::PremiseKind::PlainValueOnEveryRoute,
+                                span,
+                                std::sync::Arc::clone(&at.path),
+                            )
+                        }
+                    })
+                    .collect()
+            });
+            true
+        }
         container_root::HandedRoot::Store {
             symbol,
             root: store_root,

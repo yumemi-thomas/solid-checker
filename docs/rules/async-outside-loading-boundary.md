@@ -52,7 +52,7 @@ argument cannot be read statically (a spread, a variable), the bare render is
 **uncertifiable**, never a violation (ADR 0430; the same for the SSR variant
 below and SC5001). Pass the options as an object literal.
 
-A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; one an SC9012 row holds (a value no row follows to the read) has this rule's own row, blocker `pending-read-unresolved` (ADR 0926); a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source created with a `sync` option not proved `false` (`createMemo(async () => 1, { sync: true })`) is never proved pending: its reads are uncertifiable, blocker `async-options-opaque` (ADR 0889). Where the source starts from an import nothing resolves (`createSignal(fromAbsentModule())`), the same row has blocker `source-module-unresolved` (ADR 0891).
+A read of a source not proved synchronous that no producer places or rules out is uncertifiable, blocker `async-read-unaccounted` (ADR 0838), never silent; one an SC9012 row holds (a value no row follows to the read) has this rule's own row, blocker `pending-read-unresolved` (ADR 0926); a read in a `try` whose catch swallows its throw is uncertifiable (`async-read-caught`) wherever the function that holds it is run. A source whose `sync` option is not proved `false`, or that starts from an import nothing resolves, is never proved pending: blockers `async-options-opaque` (ADR 0889) and `source-module-unresolved` (ADR 0891), as in [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md).
 
 ## Why is this bad?
 
