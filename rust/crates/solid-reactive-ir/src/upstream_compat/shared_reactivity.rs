@@ -1483,6 +1483,14 @@ fn direct_mutations(
                 decided.push(written);
             }
         };
+        // ADR 0933: the typed fact a plain write is proven legal on, for the
+        // proof log; it decides nothing.
+        let proven_by =
+            |id: &'static str, kind: crate::proof_log::PremiseKind, at: solid_facts::core::Span| {
+                if !reads_target {
+                    crate::proof_log::end_at(file, written, id, kind, || Some(at));
+                }
+            };
         // The assignment target is either the reactive binding itself or the
         // object of a member chain rooted at one. The root is resolved with
         // the same reference-index fallback `uncalled-accessor` uses: an
@@ -1536,6 +1544,14 @@ fn direct_mutations(
                     })
             })
         {
+            // ADR 0933: the binding names a prop's value, not the container.
+            crate::proof_log::end_at(
+                file,
+                written,
+                "shared_reactivity.direct_mutations.destructured-prop-value",
+                crate::proof_log::PremiseKind::DestructuredPropValue,
+                || Some(root),
+            );
             continue;
         }
         let name = name.as_str();
@@ -1588,6 +1604,11 @@ fn direct_mutations(
                 .get(symbol)
                 .is_some_and(|primitive| primitive.as_str() == "createMutable")
         {
+            proven_by(
+                "shared_reactivity.direct_mutations.create-mutable",
+                crate::proof_log::PremiseKind::CreateMutableProxy,
+                root,
+            );
             decide(defects, true);
             continue;
         }
@@ -1672,6 +1693,19 @@ fn direct_mutations(
                         root,
                     },
                 );
+            if !tsc_owned {
+                proven_by(
+                    "shared_reactivity.direct_mutations.exempt-standing",
+                    crate::proof_log::PremiseKind::StoreWriteExemptStanding,
+                    root,
+                );
+            } else if tsc_reports_at(file, written) {
+                proven_by(
+                    "shared_reactivity.direct_mutations.tsc-rejects-root-write",
+                    crate::proof_log::PremiseKind::TscReportsAtSite,
+                    written,
+                );
+            }
             decide(defects, !tsc_owned || tsc_reports_at(file, written));
             continue;
         }
@@ -1680,6 +1714,19 @@ fn direct_mutations(
         let past_root = if store {
             let Some(past_root) = chain_links_verdict(file, context, written, root) else {
                 // A shallow store's write lands; a nullish link is TypeScript's.
+                if shallow_store_root(file, context, root) {
+                    proven_by(
+                        "shared_reactivity.direct_mutations.shallow-store-root",
+                        crate::proof_log::PremiseKind::ShallowStoreRoot,
+                        root,
+                    );
+                } else if tsc_reports_at(file, written) {
+                    proven_by(
+                        "shared_reactivity.direct_mutations.tsc-nullish-link",
+                        crate::proof_log::PremiseKind::TscReportsAtSite,
+                        written,
+                    );
+                }
                 decide(
                     defects,
                     shallow_store_root(file, context, root) || tsc_reports_at(file, written),
@@ -1699,6 +1746,11 @@ fn direct_mutations(
             _ => Some(true),
         };
         if writes == Some(false) {
+            proven_by(
+                "shared_reactivity.direct_mutations.logical-assignment-skips",
+                crate::proof_log::PremiseKind::LogicalAssignmentSkipsWrite,
+                written,
+            );
             decide(defects, true);
             continue;
         }
@@ -2011,6 +2063,24 @@ fn push_parameter_store_flow(
         }
     }
     let Some(past_root) = chain_links_verdict(file, context, sink.member, root) else {
+        // A shallow store's write lands; a nullish link is TypeScript's.
+        if shallow_store_root(file, context, root) {
+            crate::proof_log::end_at(
+                file,
+                site,
+                "shared_reactivity.push_parameter_store_flow.shallow-store-root",
+                crate::proof_log::PremiseKind::ShallowStoreRoot,
+                || Some(root),
+            );
+        } else if tsc_reports_at(file, sink.member) {
+            crate::proof_log::end_at(
+                file,
+                site,
+                "shared_reactivity.push_parameter_store_flow.tsc-nullish-link",
+                crate::proof_log::PremiseKind::TscReportsAtSite,
+                || Some(sink.member),
+            );
+        }
         return;
     };
     let mut flow = ParameterFlow {
@@ -2042,7 +2112,33 @@ fn push_parameter_store_flow(
     let (name, proven) = match (flow.store, flow.open) {
         (Some(store), _) => (store.name, store.proven && !sink_open),
         (None, true) => (text(file, root).to_owned(), false),
-        (None, false) => return,
+        (None, false) => {
+            // ADR 0719: every caller of the function whose parameter is the
+            // root was enumerated and none hands a store: the call edges are
+            // the facts the silence rests on.
+            if let Some((function, _)) = plain_parameter_at(file, root) {
+                crate::proof_log::end_with(
+                    file,
+                    site,
+                    "shared_reactivity.push_parameter_store_flow.callers-pass-no-store",
+                    || {
+                        let mut premises = crate::local_access::function_placement_premises(
+                            file,
+                            function,
+                            context.lookup,
+                        );
+                        premises.extend(crate::local_access::unreached_premise(
+                            file,
+                            site,
+                            function.span,
+                            context.lookup,
+                        ));
+                        premises
+                    },
+                );
+            }
+            return;
+        }
     };
     defects.push(StaticDefect {
         kind: StaticDefectKind::DirectMutation {
@@ -5461,6 +5557,13 @@ fn no_store_mutator_call(
             continue;
         };
         if declaration.qualified_name.as_ref() != format!("Array.{}", text(file, member.property)) {
+            crate::proof_log::end_at(
+                file,
+                call.span,
+                "shared_reactivity.no_store_mutator_call.not-array-method",
+                crate::proof_log::PremiseKind::CalleeNotArrayMethod,
+                || Some(callee),
+            );
             continue;
         }
         // ADR 0874: a withheld mutator may be the program's: the row stays
@@ -5516,11 +5619,36 @@ fn no_store_mutator_call(
             symbol,
         );
         if standing == WriteStanding::Exempt {
+            crate::proof_log::end_at(
+                file,
+                call.span,
+                "shared_reactivity.no_store_mutator_call.exempt-standing",
+                crate::proof_log::PremiseKind::StoreWriteExemptStanding,
+                || Some(root),
+            );
             continue;
         }
         // ADR 0465: the receiver of `store.items.push(1)` is a link past the
         // root; only a store that is itself the array (`list.push(1)`) has none.
         let Some(past_root) = chain_links_verdict(file, context, callee, root) else {
+            // A shallow store's write lands; a nullish link is TypeScript's.
+            if shallow_store_root(file, context, root) {
+                crate::proof_log::end_at(
+                    file,
+                    call.span,
+                    "shared_reactivity.no_store_mutator_call.shallow-store-root",
+                    crate::proof_log::PremiseKind::ShallowStoreRoot,
+                    || Some(root),
+                );
+            } else if tsc_reports_at(file, callee) {
+                crate::proof_log::end_at(
+                    file,
+                    call.span,
+                    "shared_reactivity.no_store_mutator_call.tsc-nullish-link",
+                    crate::proof_log::PremiseKind::TscReportsAtSite,
+                    || Some(callee),
+                );
+            }
             continue;
         };
         let writes = mutator_always_writes(text(file, member.property));
@@ -5954,7 +6082,16 @@ fn no_store_delete(
             None => {
                 let member = file.ast.peel_ts_sugar_span(target);
                 match file.tsc_silence_at(member.start) {
-                    TscSilence::Reports => continue,
+                    TscSilence::Reports => {
+                        crate::proof_log::end_at(
+                            file,
+                            member,
+                            "shared_reactivity.no_store_delete.tsc-operand-assertion",
+                            crate::proof_log::PremiseKind::TscReportsAtSite,
+                            || Some(member),
+                        );
+                        continue;
+                    }
                     silence => (member, silence),
                 }
             }
@@ -6030,6 +6167,13 @@ fn no_store_delete(
             symbol,
         );
         if standing == WriteStanding::Exempt {
+            crate::proof_log::end_at(
+                file,
+                member,
+                "shared_reactivity.no_store_delete.exempt-standing",
+                crate::proof_log::PremiseKind::StoreWriteExemptStanding,
+                || Some(root),
+            );
             continue;
         }
         let path = file.path.as_str();
@@ -6048,6 +6192,13 @@ fn no_store_delete(
         let rejected = entity.is_some_and(|entity| entity.delete_operand_rejected);
         let silence = file.tsc_silence_at(member.start);
         if rejected && silence == TscSilence::Reports && tsc_reports_in(file) {
+            crate::proof_log::end_at(
+                file,
+                member,
+                "shared_reactivity.no_store_delete.tsc-rejects-delete",
+                crate::proof_log::PremiseKind::TscReportsAtSite,
+                || Some(member),
+            );
             continue;
         }
         let operand_unproven = sugar == TscSilence::Maybe
@@ -6055,7 +6206,27 @@ fn no_store_delete(
                 || rejected && silence == TscSilence::Silent);
         let uncertain = operand_unproven
             || match chain_links_verdict(file, context, member, root) {
-                None => continue,
+                None => {
+                    // A shallow store's write lands; a nullish link is TypeScript's.
+                    if shallow_store_root(file, context, root) {
+                        crate::proof_log::end_at(
+                            file,
+                            member,
+                            "shared_reactivity.no_store_delete.shallow-store-root",
+                            crate::proof_log::PremiseKind::ShallowStoreRoot,
+                            || Some(root),
+                        );
+                    } else if tsc_reports_at(file, member) {
+                        crate::proof_log::end_at(
+                            file,
+                            member,
+                            "shared_reactivity.no_store_delete.tsc-nullish-link",
+                            crate::proof_log::PremiseKind::TscReportsAtSite,
+                            || Some(member),
+                        );
+                    }
+                    continue;
+                }
                 Some(past_root) => past_root,
             };
         let analysis_context = if optional {

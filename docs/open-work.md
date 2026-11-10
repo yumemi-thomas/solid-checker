@@ -342,6 +342,8 @@ Known false-positive shapes left open (fire today, wanted gone):
 - ADR 0840 stage 3 (a census of every standard member) is deferred past the rc.21 PR. Step 0 on m20: 8,396 impostor rows, 3,529 `*` only, 4,866 named; first holders dependency 5,530, project src 2,485, project test 380; row sites src 6,554, test 1,842. Top holders: router `liveQuery.js:153`, `data/action.js:215`, `@solid-primitives/utils` `array.js:133`.
 - ADR 0781, an unknown key on a global (`globalThis[key] = v`) vetoes standard functions and constructors, not instance methods: `x.push` stays proved though `key` could name `Array`. A project-wide veto of every method was +751 rows, from a test helper and a build plugin.
 
+**Proof log (ADR 0933):** `fixtures/proof-log/candidates.json` lists the C2 hits under review (a reporting decision no row ends); a read placed by a summary with no edge has no premise. Not built: premise lint (B), a premise test per arm (C: audit S2), closed accounting for SC1001 and the write rules (D); a daemon's log misses decisions replayed from a memo.
+
 ## What the server build does (ADR 0659)
 
 Measured on rc.21; the input to `claims_client_runtime` and `ExecutionPaths`.

@@ -1267,6 +1267,37 @@ fn returned_function_escapes(
     false
 }
 
+/// ADR 0933: how a site of SC4001 that is no obligation ends (ADR 0886's list).
+#[derive(Clone, Copy)]
+enum SiteEnd {
+    /// A reported row stands at the site.
+    Row,
+    /// The file's emission recorded this proof.
+    Proof(super::owner_emission::ContextProof),
+    /// The compiler deleted the call.
+    Discarded,
+    /// An owner probe guards the call.
+    OwnerProbe,
+    /// An effect call proven to register nothing.
+    RegistersNothing,
+}
+
+/// ADR 0933: writes the typed ending of a site that is no obligation. A row
+/// is its own account (the row ledger writes it); the others are silences.
+fn log_site_end(file: &solid_facts::FileFacts, site: Span, ending: SiteEnd) {
+    if !crate::proof_log::enabled() {
+        return;
+    }
+    let proof = match ending {
+        SiteEnd::Row => return,
+        SiteEnd::Proof(proof) => format!("ContextProof::{proof:?}"),
+        SiteEnd::Discarded => "Discarded".to_owned(),
+        SiteEnd::OwnerProbe => "OwnerProbe".to_owned(),
+        SiteEnd::RegistersNothing => "EffectRegistersNothing".to_owned(),
+    };
+    crate::proof_log::silent("SC4001", &site.location(file.path.shared()), &proof, &[]);
+}
+
 /// ADR 0886: every call this build resolves to an owner-requiring primitive
 /// (outside dependency source, whose sites are attributed to the project's
 /// calls) is one site of SC4001. A site ends with a reported row, a named
@@ -1321,15 +1352,29 @@ fn unaccounted_owner_sites(
                 OwnerRequirementRole::ContextRead => ("context-read", call.callee),
                 OwnerRequirementRole::Boundary => ("boundary-call", call.callee),
             };
-            if rows.contains(&(path.to_owned(), u64::from(site.start), u64::from(site.end)))
-                || accounted.is_some_and(|proofs| proofs.iter().any(|(span, _)| *span == site))
-                || crate::execution_role::discarded_region_contains(file, site)
-                || guarded_by_owner_probe(file, site, lookup)
-                || (role == OwnerRequirementRole::Effect
+            // ADR 0933: the same endings in the same order, each named.
+            let ending =
+                if rows.contains(&(path.to_owned(), u64::from(site.start), u64::from(site.end))) {
+                    Some(SiteEnd::Row)
+                } else if let Some((_, proof)) =
+                    accounted.and_then(|proofs| proofs.iter().find(|(span, _)| *span == site))
+                {
+                    Some(SiteEnd::Proof(*proof))
+                } else if crate::execution_role::discarded_region_contains(file, site) {
+                    Some(SiteEnd::Discarded)
+                } else if guarded_by_owner_probe(file, site, lookup) {
+                    Some(SiteEnd::OwnerProbe)
+                } else if role == OwnerRequirementRole::Effect
                     && crate::effect_api::classify_effect_call(file, call, primitive, lookup)
                         .owner_registration
-                        == ProofStatus::No)
-            {
+                        == ProofStatus::No
+                {
+                    Some(SiteEnd::RegistersNothing)
+                } else {
+                    None
+                };
+            if let Some(ending) = ending {
+                log_site_end(file, site, ending);
                 continue;
             }
             push_owner_requirement(

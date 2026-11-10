@@ -109,8 +109,11 @@ impl RoleLogTarget {
     }
 }
 
-/// Whether a sink is set: read by every hook, so the log off costs a load.
+/// Whether decisions are framed: a sink is set, or the proof log (ADR 0933) is
+/// on and needs them. Read by every hook, so both logs off cost one load.
 static ON: AtomicBool = AtomicBool::new(false);
+/// The proof log is on: [`ON`] stays set whatever the role log's sink is.
+static PROOF_TRACKS: AtomicBool = AtomicBool::new(false);
 static SINK: Mutex<Option<Sink>> = Mutex::new(None);
 /// The environment is read once, before the first hook or [`configure`].
 static FROM_ENV: std::sync::Once = std::sync::Once::new();
@@ -149,7 +152,18 @@ fn init_from_env() {
             *lock_sink() = Some(sink);
             ON.store(true, Ordering::Release);
         }
+        // The proof log frames its decisions through this flag; reading its
+        // environment here turns the flag on before the first decision.
+        crate::proof_log::init_from_env();
     });
+}
+
+/// The proof log (ADR 0933) is on (`on`) or off: decisions are framed while
+/// either log is. Called from the proof log's configuration only.
+pub(crate) fn track_for_proof_log(on: bool) {
+    PROOF_TRACKS.store(on, Ordering::Release);
+    let framed = on || lock_sink().is_some();
+    ON.store(framed, Ordering::Release);
 }
 
 /// Points the role log at `target` (none: off), for the analyses that run
@@ -159,12 +173,16 @@ fn init_from_env() {
 /// and with none after it.
 pub fn configure(target: Option<&RoleLogTarget>) {
     FROM_ENV.call_once(|| {});
+    crate::proof_log::init_from_env();
     let mut sink = lock_sink();
     if let Some(previous) = sink.as_mut() {
         flush_locked(previous);
     }
     *sink = target.and_then(open_sink);
-    ON.store(sink.is_some(), Ordering::Release);
+    ON.store(
+        sink.is_some() || PROOF_TRACKS.load(Ordering::Acquire),
+        Ordering::Release,
+    );
 }
 
 /// The process id a log directory's file is named by; none where the
@@ -350,9 +368,48 @@ fn silent(kind: &str, role: ExecutionRole) -> Option<bool> {
 }
 
 fn write_decision(decision: &Decision, role: ExecutionRole) {
+    forward_decision(decision, role);
     if let Some(path) = path_ref(&decision.path) {
         append(&decision_line(decision, path, role));
     }
+}
+
+/// Hands a closed decision to the proof log (ADR 0933), which frames none of
+/// its own. Reached only with a log on.
+fn forward_decision(decision: &Decision, role: ExecutionRole) {
+    if !crate::proof_log::enabled() {
+        return;
+    }
+    crate::proof_log::decision(
+        decision.kind,
+        &decision.path,
+        decision.span,
+        role,
+        answering_arm(decision, role),
+        &arm_names(decision),
+        silent(decision.kind, role),
+    );
+}
+
+/// The last tagged arm that returned `role`, with whether it is a default.
+fn answering_arm(decision: &Decision, role: ExecutionRole) -> Option<(&'static str, bool)> {
+    decision
+        .arms
+        .iter()
+        .rev()
+        .find(|(_, answered)| *answered == role)
+        .map(|(id, _)| *id)
+}
+
+/// Every tagged arm the decision passed, once each, in order.
+fn arm_names(decision: &Decision) -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = Vec::with_capacity(decision.arms.len());
+    for ((id, _), _) in &decision.arms {
+        if !names.contains(id) {
+            names.push(*id);
+        }
+    }
+    names
 }
 
 /// The process (`q`) and the id (`p`) a line names its file by.
@@ -473,6 +530,7 @@ fn owner_logged(
     context: u8,
     silent: bool,
 ) {
+    crate::proof_log::owner_decision(rule, path, span, arm, context, silent);
     let Some(path) = path_ref(path) else {
         return;
     };
@@ -504,6 +562,7 @@ pub(crate) fn pending(rule: &str, path: &str, span: Span, exit: &str) {
 #[cold]
 #[inline(never)]
 fn pending_logged(rule: &str, path: &str, span: Span, exit: &str) {
+    crate::proof_log::pending_exit(rule, path, span, exit);
     let Some(path) = path_ref(path) else {
         return;
     };

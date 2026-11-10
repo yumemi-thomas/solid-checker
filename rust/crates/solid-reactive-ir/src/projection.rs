@@ -682,14 +682,61 @@ pub fn project_findings(
         .iter()
         .map(|read| (&read.location, read))
         .collect::<std::collections::HashMap<_, _>>();
+    // ADR 0933: one account of why a read row is or is not projected, shared by
+    // the filter below and the proof log, so the log cannot drift from the
+    // rule: the same clauses, in the same order.
+    let read_withheld = |read: &crate::ReactiveRead| {
+        read_silence(read, capabilities).or_else(|| {
+            if pending_first_runs.contains(&read.location) {
+                Some(ReadSilence::PendingFirstRun)
+            } else if withdrawn_through_origin(read) {
+                Some(ReadSilence::WithdrawnThroughOrigin)
+            } else {
+                None
+            }
+        })
+    };
+    if crate::proof_log::enabled() {
+        for read in &program.reads {
+            let why = read_withheld(read);
+            crate::proof_log::row(
+                crate::proof_log::RowTable::Read,
+                &read.location,
+                Some(read.execution),
+                why.is_none(),
+                why.map(ReadSilence::name),
+            );
+        }
+        for write in &program.writes {
+            let why = write_silence(write, capabilities);
+            crate::proof_log::row(
+                crate::proof_log::RowTable::Write,
+                &write.location,
+                Some(write.execution),
+                why.is_none(),
+                why.map(WriteSilence::name),
+            );
+        }
+        for action in &program.actions {
+            let why = if capabilities.actions {
+                action_silence(action)
+            } else {
+                Some("capability-off")
+            };
+            crate::proof_log::row(
+                crate::proof_log::RowTable::Action,
+                &action.location,
+                Some(action.execution),
+                why.is_none(),
+                why,
+            );
+        }
+    }
     findings.extend(
         program
             .reads
             .iter()
-            .filter(|read| read_reported(read, capabilities))
-            .filter(|read| {
-                !pending_first_runs.contains(&read.location) && !withdrawn_through_origin(read)
-            })
+            .filter(|read| read_withheld(read).is_none())
             .map(|read| {
                 let read = if read.uncertain {
                     read
@@ -708,7 +755,7 @@ pub fn project_findings(
     );
     findings.extend(
         distinct_runs(&program.writes, ReactiveWrite::same_row)
-            .filter(|write| write_reported(write, capabilities))
+            .filter(|write| write_silence(write, capabilities).is_none())
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
     if capabilities.leaf_operations {
@@ -763,15 +810,52 @@ pub fn project_findings(
     // ADR 0509: where a strict read of a proven async source is open because
     // it may meet the source pending (`open_at`), the pending read is the
     // other outcome: an obligation of its own rule.
-    if capabilities.async_reads {
-        let reported_open = program
+    let reported_open = || {
+        program
             .reads
             .iter()
             .filter(|read| {
                 read_reported(read, capabilities) && open_at.contains_key(&read.location)
             })
             .map(|read| &read.location)
-            .collect::<std::collections::HashSet<_>>();
+            .collect::<std::collections::HashSet<_>>()
+    };
+    // ADR 0933: how each async row ends, from the same clauses as the two
+    // projections below.
+    if crate::proof_log::enabled() {
+        let open = reported_open();
+        for read in &program.async_reads {
+            let clause = async_read_clause(read);
+            let superseded = read
+                .pending_origin
+                .as_ref()
+                .is_some_and(|origin| direct_pending.contains(origin));
+            let (reported, why) = if !capabilities.async_reads {
+                (false, Some("capability-off"))
+            } else if !clause.reports()
+                && read.async_provenance
+                && !read.apply_first_run_pending
+                && open.contains(&read.location)
+            {
+                (true, Some("open-strict-read"))
+            } else if clause.reports() && superseded {
+                (false, Some("superseded-by-direct-pending"))
+            } else if clause.reports() {
+                (true, None)
+            } else {
+                (false, Some(clause.name()))
+            };
+            crate::proof_log::row(
+                crate::proof_log::RowTable::AsyncRead,
+                &read.location,
+                Some(read.execution),
+                reported,
+                why,
+            );
+        }
+    }
+    if capabilities.async_reads {
+        let reported_open = reported_open();
         findings.extend(
             program
                 .async_reads
@@ -816,27 +900,41 @@ pub fn project_findings(
         );
     }
 
+    // ADR 0933: each pass below that can drop or demote a finding is a stage
+    // the proof log names (a no-op with the log off).
+    let stage = crate::proof_log::ProofStage::begin(&findings);
     for finding in &mut findings {
         if finding.kind == "violation" {
             program.runtime_configuration.apply(finding);
         }
     }
+    if let Some(stage) = stage {
+        stage.end(crate::DropPass::RuntimeConfiguration, &findings);
+    }
+    let stage = crate::proof_log::ProofStage::begin(&findings);
     findings.retain_mut(|finding| {
         program.execution_paths.apply_deferred_mount(finding);
         !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
     });
+    if let Some(stage) = stage {
+        stage.end(crate::DropPass::ExecutionPaths, &findings);
+    }
     // ADR 0822: a Get a violation proves needs no open row for its value.
     let proved = findings
         .iter()
         .filter(|finding| finding.kind == "violation")
         .map(|finding| finding.primary_location.clone())
         .collect::<crate::HashSet<_>>();
+    let stage = crate::proof_log::ProofStage::begin(&findings);
     findings.retain(|finding| {
         !finding
             .analysis_context
             .starts_with(crate::blockers::DEPENDENCY_VALUE_UNFOLLOWED)
             || !proved.contains(&finding.primary_location)
     });
+    if let Some(stage) = stage {
+        stage.end(crate::DropPass::SupersededByViolation, &findings);
+    }
     // ADR 0680: after every step that may make a row uncertifiable.
     for finding in &mut findings {
         if finding.kind == "uncertifiable" && !crate::blockers::named(&finding.analysis_context) {
@@ -846,7 +944,13 @@ pub fn project_findings(
             );
         }
     }
-    finish_findings(findings, total_started, construction_started)
+    let stage = crate::proof_log::ProofStage::begin(&findings);
+    let (findings, timings) = finish_findings(findings, total_started, construction_started);
+    if let Some(stage) = stage {
+        stage.end(crate::DropPass::EqualFinding, &findings);
+    }
+    crate::proof_log::findings(&findings);
+    (findings, timings)
 }
 
 /// `rows` without the rows that are the one before them on other paths
@@ -899,25 +1003,164 @@ fn distinct_runs<T>(rows: &[T], same: fn(&T, &T) -> bool) -> impl Iterator<Item 
         .map(|(_, row)| row)
 }
 
+/// ADR 0933: why a read row is not projected to a finding. The rule is
+/// [`read_silence`]; [`read_reported`] is its absence, so the proof log and
+/// the projection read one account.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ReadSilence {
+    /// The row's role is one no read rule reports (tracked JSX, a deferred
+    /// callback, an event callback, ...).
+    RoleDoesNotReport,
+    /// A closed project consumer proves the read non-strict.
+    ProjectConsumerNonStrict,
+    /// The catalog reports no module-scope strict reads.
+    ModuleScopeNotReported,
+    /// ADR 0504: the pending read stands for it.
+    PendingFirstRun,
+    /// ADR 0504: the apply's pending row withdrew it.
+    WithdrawnThroughOrigin,
+}
+
+impl ReadSilence {
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::RoleDoesNotReport => "role-does-not-report",
+            Self::ProjectConsumerNonStrict => "project-consumer-non-strict",
+            Self::ModuleScopeNotReported => "module-scope-not-reported",
+            Self::PendingFirstRun => "pending-first-run",
+            Self::WithdrawnThroughOrigin => "withdrawn-through-origin",
+        }
+    }
+}
+
+/// Why `read` is not projected, or `None` where it is. The first two clauses
+/// of a read's rule, then the catalog's capability.
+pub(crate) fn read_silence(
+    read: &crate::ReactiveRead,
+    capabilities: CatalogCapabilities,
+) -> Option<ReadSilence> {
+    if !(read.execution.reports_untracked_read() || read.execution.reports_unplaced()) {
+        return Some(ReadSilence::RoleDoesNotReport);
+    }
+    if read.project_consumer_non_strict {
+        return Some(ReadSilence::ProjectConsumerNonStrict);
+    }
+    if !capabilities.module_scope_strict_reads
+        && read.execution == crate::ExecutionRole::ModuleInitialization
+    {
+        return Some(ReadSilence::ModuleScopeNotReported);
+    }
+    None
+}
+
 fn read_reported(read: &crate::ReactiveRead, capabilities: CatalogCapabilities) -> bool {
-    (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
-        && !read.project_consumer_non_strict
-        && (capabilities.module_scope_strict_reads
-            || read.execution != crate::ExecutionRole::ModuleInitialization)
+    read_silence(read, capabilities).is_none()
+}
+
+/// ADR 0933: why a write row is not projected (see [`ReadSilence`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum WriteSilence {
+    /// The source was created with `ownedWrite: true`: its setter is exempt
+    /// from the owned-scope write guard.
+    OwnedWriteOn,
+    /// The row's role is one no write rule reports.
+    RoleDoesNotReport,
+    /// The catalog reports no render-phase (untracked rendering) writes.
+    UntrackedRenderingNotReported,
+}
+
+impl WriteSilence {
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::OwnedWriteOn => "owned-write-on",
+            Self::RoleDoesNotReport => "role-does-not-report",
+            Self::UntrackedRenderingNotReported => "untracked-rendering-not-reported",
+        }
+    }
+}
+
+pub(crate) fn write_silence(
+    write: &crate::ReactiveWrite,
+    capabilities: CatalogCapabilities,
+) -> Option<WriteSilence> {
+    if write.owned_write == crate::OwnedWriteOption::On {
+        return Some(WriteSilence::OwnedWriteOn);
+    }
+    if !(write.execution.reports_disallowed_write() || write.execution.reports_unplaced()) {
+        return Some(WriteSilence::RoleDoesNotReport);
+    }
+    if !capabilities.untracked_rendering_writes
+        && write.execution == crate::ExecutionRole::UntrackedRendering
+    {
+        return Some(WriteSilence::UntrackedRenderingNotReported);
+    }
+    None
 }
 
 fn write_reported(write: &crate::ReactiveWrite, capabilities: CatalogCapabilities) -> bool {
-    write.owned_write != crate::OwnedWriteOption::On
-        && (write.execution.reports_disallowed_write() || write.execution.reports_unplaced())
-        && (capabilities.untracked_rendering_writes
-            || write.execution != crate::ExecutionRole::UntrackedRendering)
+    write_silence(write, capabilities).is_none()
+}
+
+/// ADR 0933: why an action row is not projected: its role reports nothing.
+pub(crate) fn action_silence(action: &crate::ActionInvocation) -> Option<&'static str> {
+    if action.execution.reports_disallowed_write() || action.execution.reports_unplaced() {
+        None
+    } else {
+        Some("role-does-not-report")
+    }
 }
 
 fn action_reported(action: &crate::ActionInvocation) -> bool {
-    action.execution.reports_disallowed_write() || action.execution.reports_unplaced()
+    action_silence(action).is_none()
+}
+
+/// ADR 0933: which clause of the async-read rule decided a row
+/// ([`async_read_clause`]); the first four report, the last two do not.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AsyncClause {
+    /// The compiler deleted the read.
+    Discarded,
+    /// ADR 0504: an apply's first run meets its source pending.
+    ApplyFirstRunPending,
+    /// A pending read that throws: a leaf owner, module evaluation, an
+    /// untracked rendering, or an invocation context not proven.
+    PendingUnsuspendable,
+    /// A render read with no strict window and no boundary above it.
+    UnwindowedNoBoundary,
+    /// Tracked JSX outside a Loading boundary.
+    TrackedNoBoundary,
+    /// No clause speaks.
+    NoClause,
+}
+
+impl AsyncClause {
+    pub(crate) const fn reports(self) -> bool {
+        matches!(
+            self,
+            Self::ApplyFirstRunPending
+                | Self::PendingUnsuspendable
+                | Self::UnwindowedNoBoundary
+                | Self::TrackedNoBoundary
+        )
+    }
+
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Discarded => "discarded",
+            Self::ApplyFirstRunPending => "apply-first-run-pending",
+            Self::PendingUnsuspendable => "pending-unsuspendable",
+            Self::UnwindowedNoBoundary => "unwindowed-no-boundary",
+            Self::TrackedNoBoundary => "tracked-no-boundary",
+            Self::NoClause => "no-clause",
+        }
+    }
 }
 
 pub(crate) fn async_read_reported(read: &crate::AsyncRead) -> bool {
+    async_read_clause(read).reports()
+}
+
+pub(crate) fn async_read_clause(read: &crate::AsyncRead) -> AsyncClause {
     // Deletion first, ahead of the leaf-owner short-circuit
     // below. Every clause after this one is a claim about a
     // read that happens -- "a pending read here throws at
@@ -935,11 +1178,11 @@ pub(crate) fn async_read_reported(read: &crate::AsyncRead) -> bool {
     // constructible from a fixture. The gate stays because the
     // ordering, not the reachability, is what was wrong.
     if read.execution == crate::ExecutionRole::DiscardedRendering {
-        return false;
+        return AsyncClause::Discarded;
     }
     // ADR 0504: a read in an apply's first run that meets its source pending.
     if read.apply_first_run_pending {
-        return true;
+        return AsyncClause::ApplyFirstRunPending;
     }
     // Pending-read rules (SC5001/SC5002) need proven async
     // provenance; they stay reported for loadingValue-declared
@@ -953,7 +1196,7 @@ pub(crate) fn async_read_reported(read: &crate::AsyncRead) -> bool {
             || (read.execution == crate::ExecutionRole::Unknown
                 && read.invocation_context_unproven))
     {
-        return true;
+        return AsyncClause::PendingUnsuspendable;
     }
     // Tracked JSX outside a Loading boundary: the SSR client
     // hole (SC5005, error — it subsumes the SC5003 warning on
@@ -968,14 +1211,18 @@ pub(crate) fn async_read_reported(read: &crate::AsyncRead) -> bool {
         && read.async_provenance
         && !read.declared_loading
     {
-        return true;
+        return AsyncClause::UnwindowedNoBoundary;
     }
-    read.leaf_owner.is_none()
+    if read.leaf_owner.is_none()
         && read.execution == crate::ExecutionRole::TrackedJsx
         && !read.under_loading
         && (read.ssr_client_hole
             || read.server_rendering_unresolved
             || (read.async_provenance && !read.declared_loading))
+    {
+        return AsyncClause::TrackedNoBoundary;
+    }
+    AsyncClause::NoClause
 }
 
 /// The primary location of every row [`project_findings`] may turn into a
@@ -1046,6 +1293,8 @@ pub fn suppress_findings_owned_by_enabled_rules(
     findings: &mut Vec<Finding>,
     capabilities: CatalogCapabilities,
 ) {
+    // ADR 0933: the findings this drops are named, with the owner at the site.
+    let stage = crate::proof_log::ProofStage::begin(findings);
     let pending_reads = findings
         .iter()
         // ADR 0838: an accounting row adds a claim; it owns no strict read.
@@ -1113,6 +1362,9 @@ pub fn suppress_findings_owned_by_enabled_rules(
                     && location.end_byte <= condition.end_byte
             })
     });
+    if let Some(stage) = stage {
+        stage.end(crate::DropPass::OwnedByEnabledRule, findings);
+    }
 }
 
 /// What lets ordinary analysis read a package's runtime source (ADR 0297),
