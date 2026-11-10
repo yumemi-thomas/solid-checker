@@ -1,15 +1,3 @@
 {
-  "note": "reviewer c2d: register() from a method called in JSX, run by a later component body",
-  "open": [
-    {
-      "code": "STRICT_READ_UNTRACKED",
-      "site": "App.tsx:19",
-      "reason": "Recorded pre-existing gap (c2/c2c/c2d/c3d): a function registered from a tracked-scope helper and run by a later component body."
-    },
-    {
-      "code": "STRICT_READ_UNTRACKED",
-      "site": "App.tsx:32",
-      "reason": "Recorded pre-existing gap (c2/c2c/c2d/c3d): a function registered from a tracked-scope helper and run by a later component body."
-    }
-  ]
+  "note": "reviewer c2d: register() from a method called in JSX, run by a later component body. Both reads (App.tsx:19, :32) are SC1001 uncertifiable, which covers the runtime's STRICT_READ_UNTRACKED there, so no site is open (ADR 0952)."
 }
