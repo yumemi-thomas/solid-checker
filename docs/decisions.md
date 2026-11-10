@@ -2475,3 +2475,86 @@ Evidence only: no ledger row, classification or ratchet moved. The cell is mx-re
 Why the ledger (`open-defects-rows.json`, `complete: false`, listing the problem rows earlier smokes drew by id) names 36 (30, and the 6 `prop-value-cast` ids added at 75a37bc83 when ADR 0938's judge turned them from false positives into stacked claims): the covering sample no longer draws the cell. Since ADR 0916 the pull request's tier asks a recall program only for its pairs with its code: 1 program of the cell with no required ids, 44 with the ledger's (36 stacked, all held: CI's smoke on main ran mx-recall `R-stacked 36`); an every-pair cover, as before, drew 66 of the 706 at any seed. `open-defects.json` has no family entry with outcome `stacked-claim`, so `gridStanding` gives the other 323 no standing in a strict or a non-strict run: each is a problem row where a run reaches it, the full grids (the audit's 323) or a rotated cover seed (15 of 30 seeds draw at least one). Reproduce: `focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --runtime-diff all -- --contexts aw-helper-late`.
 Options, each a classification or ratchet change, so not made: (a) ledger the 323 ids (`stackedClaim` 202 to 525, the pair 46 to 369); (b) one family entry (`idPrefix mx-untracked-read-after-await-aw-helper-late-`, the code, outcome `stacked-claim`), so an unlisted row prints as `unlisted` in a non-strict run, no ratchet moves, strict runs still need ids; (c) the judge scores a `repeat` claim as the agreement it is where the pair's twin holds (the pair's count 46 to 0 in the ratchet); (d) one SC1002 per source per computation, which changes what a user sees. Recommended: (c), since Chrome's silence there is Solid's dedup and the twin proves each claim, with (b) until it lands.
 
+<a id="adr-0954"></a>
+## ADR 0954 — Which uncertifiable rows are legal code and which are misuse, per veto formula
+The blocker report (ADR 0947) says what lifts a veto, not whether lifting is safe. `scripts/fuzz/blocker-scan.mjs` regenerates the grids' programs from their rows and runs the checker alone on each (no runtime; `--format json --feedback-facts`, as the harness does), writing per program its uncertifiable rows by blocker kind (in the judged site region, or away) and the rows whose `blockedBy` names a formula or a missing fact. `scripts/u-verdicts.mjs` joins them with the verdicts a grid run already holds (Chrome's, per program: the audit at 63725c6bf's `per-program/ids-<grid>.tsv.gz`, 11 grids; a program it lacks is `unjudged`, never guessed) and ranks the groups `(kind, formula, fired set)` and `(kind, missing fact)`, every list biggest first and ties by key, so two runs print the same bytes. A row is `legal` (a legal-grid program Chrome ran: `clean` or `uncertifiable`), `away` (elsewhere in a confirmed misuse program: Chrome reported nothing there), `blocking` (it stands in the judged site of a misuse program whose outcome is `recall-gap`: Chrome confirmed the defect and the checker only declined, so lifting it must give a violation, never a clean), `shadowed` (at the site beside a violation) or `unjudged`; `misuse%` is blocking plus shadowed over the judged rows. The site region is the harness's (`regionOf`); a row at a frame only Chrome recorded reads `away`. Tests: `u-verdicts.test.mjs`, `blocker-scan.test.mjs`.
+Measured on 29b3f9312 (release checker 7f5a78f05b36), a 10% sample of every grid (`--sample 0.1`, seed 1: 216,060 programs, 186 programs/s; one, mx-census `mx-caught-reactive-read-prop-unread-cap-async-direct-none`, Oxc cannot parse and the checker exits 2); counts are the sample's, the grids' are about ten times these, and 3,886 programs (1.8%) are newer than the audit's table:
+```
+classes (every row)
+       rows     legal      away  blocking  shadowed  unjudged   misuse%
+     684124    256496    242819    114678     16649     53482     20.8%
+
+formula groups (top 20 of 57; each `lifts with` is one way to lift the veto: every hazard on it must go)
+       rows     legal      away  blocking  shadowed  unjudged   misuse%  group
+      98802     45340     47485       135         1      5841      0.1%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), RootPatch, StandardImpostor(*), StandardRootHanded, StandardRootReceived]
+            lifts with: OpenMemberWrite(*)
+            lifts with: RootPatch + StandardRootHanded
+            lifts with: StandardRootHanded + StandardRootReceived
+      56989     38637     15510        45         2      2795      0.1%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), RootPatch, StandardImpostor(*), StandardRootReceived]
+            lifts with: OpenMemberWrite(*)
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+      35433      2999     29683        87         0      2664      0.3%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), RootPatch, StandardRootHanded, StandardRootReceived]
+            lifts with: OpenMemberWrite(*)
+            lifts with: RootPatch + StandardRootHanded
+            lifts with: StandardRootHanded + StandardRootReceived
+      28538      3414     20221       158         0      4745      0.7%  standard-member-impostor handed-root-patch [ReflectiveDefinitionSpelling, RootPatch, StandardRootReceived]
+            lifts with: ReflectiveDefinitionSpelling
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+      18624     11504      3454      2983         3       680     16.6%  tuple-iteration-written array-slots-withdrawn [TupleSlotIterationMayBeMutated, VisibleIterationWrite]
+            lifts with: TupleSlotIterationMayBeMutated + VisibleIterationWrite
+      14138      7135      3299      2963        49       692     22.4%  tuple-iteration-written array-slots-withdrawn [TupleSlotIterationMayBeMutated]
+            lifts with: TupleSlotIterationMayBeMutated
+      11618      3645      7118        31         0       824      0.3%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), RootPatch, StandardRootReceived]
+            lifts with: OpenMemberWrite(*)
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+      11597      3113      7753        20         0       711      0.2%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), RootPatch, StandardImpostor(*), StandardPatch(.*), StandardRootHanded, StandardRootReceived]
+            lifts with: OpenMemberWrite(*)
+            lifts with: RootPatch + StandardRootHanded
+            lifts with: StandardRootHanded + StandardRootReceived
+       9999      7955        44         0         0      2000      0.0%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), StandardImpostor(*), StandardRootHanded, StandardRootReceived]
+            lifts with: OpenMemberWrite(*)
+            lifts with: StandardRootHanded
+       9145      8569        24         0         0       552      0.0%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), ReflectiveDefinitionSpelling, RootPatch, StandardImpostor(*), StandardImpostor(forEach), StandardOverride(Array.forEach), StandardRootReceived]
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+            lifts with: OpenMemberWrite(*) + ReflectiveDefinitionSpelling
+       8310         0      7176        32         0      1102      0.4%  standard-member-impostor handed-root-patch [ReflectiveDefinitionSpelling, RootPatch, StandardRootHanded, StandardRootReceived]
+            lifts with: ReflectiveDefinitionSpelling
+            lifts with: RootPatch + StandardRootHanded
+            lifts with: StandardRootHanded + StandardRootReceived
+       7266         0      6465        24         0       777      0.4%  standard-member-impostor handed-root-patch [OpenMemberWrite(<symbol>), RootPatch, StandardPatch(.Symbol), StandardRootHanded, StandardRootReceived]
+            lifts with: OpenMemberWrite(<symbol>)
+            lifts with: StandardPatch(.Symbol)
+            lifts with: RootPatch + StandardRootHanded
+            lifts with: StandardRootHanded + StandardRootReceived
+       5311      3622       536        22         1      1130      0.6%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), ReflectiveDefinitionSpelling, RootPatch, StandardImpostor(*), StandardRootHanded, StandardRootReceived]
+            lifts with: OpenMemberWrite(*) + ReflectiveDefinitionSpelling
+            lifts with: RootPatch + StandardRootHanded
+            lifts with: StandardRootHanded + StandardRootReceived
+       4675         0      4226         0         0       449      0.0%  standard-member-impostor handed-root-patch [OpenMemberWrite(then), RootPatch, StandardRootReceived]
+            lifts with: OpenMemberWrite(then)
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+       4514         0      4022         0         0       492      0.0%  standard-member-impostor impostor-veto [StandardImpostor(then)]
+            lifts with: StandardImpostor(then)
+       3782      3482        37         0         0       263      0.0%  standard-member-impostor impostor-veto []
+       3251      3155         0         0         0        96      0.0%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), RootPatch, StandardImpostor(*), StandardImpostor(find), StandardRootReceived]
+            lifts with: OpenMemberWrite(*)
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+       2856         0      2568         0         0       288      0.0%  standard-member-impostor handed-root-patch [OpenMemberWrite(setTimeout), RootPatch, StandardRootReceived]
+            lifts with: OpenMemberWrite(setTimeout)
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+       2758      2569         0         0         0       189      0.0%  standard-member-impostor handed-root-patch [OpenMemberWrite(*), ReflectiveDefinitionSpelling, RootPatch, StandardRootReceived]
+            lifts with: RootPatch
+            lifts with: StandardRootReceived
+            lifts with: OpenMemberWrite(*) + ReflectiveDefinitionSpelling
+       2642      1776       526         0         0       340      0.0%  standard-member-impostor impostor-veto [StandardImpostor(*)]
+            lifts with: StandardImpostor(*)
+```
+Reading it. `standard-member-impostor` is 326,951 of the 684,124 rows (48%) and 600 of them (0.2% of the judged) stand at a confirmed defect: each of the 15 `handed-root-patch` groups above has at most 158 blocking rows (misuse% 0.7 or less), the 3 `impostor-veto` groups none; the veto's cost on the grids is legal and off-site code (legal plus away is 99.8% of its judged rows). `array-slots-withdrawn` (`tuple-iteration-written`, 33,651 rows) is the other way: its two groups carry 2,983 and 2,963 blocking rows (16.6% and 22.4%), so a narrowing there must keep a violation. Not a veto but the same table's lesson: `function-run-unplaced` has 82,097 rows at 56.5% misuse%, `value-in-carrier` 53.1%, `owner-varies-by-caller` 96.2%, `store-write-unproven` 93.1%: lifting those blindly would certify defects. Not done: `missing` has no emitter (0 groups); the exact scan of every program (about 3 hours here) and the blocking rows themselves, which are not read here.
+
