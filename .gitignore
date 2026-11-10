@@ -1291,3 +1291,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/value-use-calls-carriers/node_modules/**
 !fixtures/reactive-ir/forwarded-const-callback/node_modules/
 !fixtures/reactive-ir/forwarded-const-callback/node_modules/**
+!fixtures/reactive-ir/rc21-listener-bare-global/node_modules/
+!fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
+!fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/
+!fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/**
