@@ -29,6 +29,7 @@ import { CALLBACK_CONTEXTS, CALLBACK_FORMS, CONTROL_LAYERS, FILE_LAYERS, LAYERS,
 import { RECALL_MOUNTS } from "./mounts.mjs";
 import { DEPTH_FORMS, CHAIN_FORMS, HANDOFF_FORMS } from "./model.mjs";
 import { TABLE_CODES, TABLE_GAPS, TABLE_ROWS, tableContexts } from "./table-shapes.mjs";
+import { SEAM_FORMS } from "./seam-shapes.mjs";
 
 /** The side of a context for a code: `misuse`, `legal`, or null when the code lists it on neither. */
 export function sideOf(code, context) {
@@ -81,6 +82,9 @@ export const PAIRS = {
   "generator-steps": { fact: "the generator's steps run in the body's window (a spread in the body), or out of it (the same spread in a click handler), or nothing steps it", codes: TABLE_CODES, contexts: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never"] },
   "generator-loop-awaits": { fact: "the async function that drains a sync generator awaits between the steps, or does not", codes: ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"], contexts: ["barm-gen-drain", "barm-gen-await"] },
   "flow-climb-after-await": { fact: "the layer that holds the read runs in a flow row's body window, or after an await of its outer layer", codes: ["STRICT_READ_UNTRACKED"], contexts: ["barm-climb-sync", "barm-climb-await"] },
+  // ADR 0935 (seam-shapes.mjs): `Number.isFinite` is the declared member (a value-only row), or a helper that takes the intrinsic as a parameter replaced it under a computed key.
+  "seam-isfinite": { fact: "`Number.isFinite` ignores a function argument (the declared member), or a helper handed `Number` replaced it with one that runs the function at once", codes: TABLE_CODES,
+    contexts: SEAM_FORMS.flatMap((form) => [`bseam-isfinite-${form}`, `bseam-isfinite-${form}-other`]) },
 };
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
@@ -201,6 +205,13 @@ premise("flow-row-layer-after-an-await-leaves-the-window", {
   claim: "A layer that runs in place inside a flow row's body runs in the row's window only until the function that calls it suspends: past an await it runs on a later task, in no window.",
   source: "callee_roles.rs:741-790 `control-flow-climb-after-await`", adr: "0935",
   arms: ["callee_roles.control-flow-climb-after-await"], pairs: ["flow-climb-after-await"],
+});
+
+// ---- the seam shapes (seam-shapes.mjs): a premise two checks each leave to the other ------------------------------------------------------------------
+premise("standard-member-is-the-declared-one", {
+  claim: "A standard-library member the rows describe is the declared one: `Number.isFinite` never runs a function argument, and no program replaces it through a helper that takes the intrinsic as a parameter and writes it under an unspelled key.",
+  source: "runtime_semantics.rs:526 `timing_behavior` (ValueOnly); accessor_provenance/mutation_sites.rs `handed_to_unseen_code` and `visible_iteration_write`; boundary-seams.mjs", adr: "0935",
+  pairs: ["seam-isfinite"],
 });
 
 // ---- boundary wrappers (boundary-shapes.mjs): the cover walks consult a user component's body, by the property's spelling ------------------------------
