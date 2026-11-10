@@ -118,7 +118,7 @@
   "SC5003 mount-form-window": 2,
   "SC5003 mount-unresolved": 348,
   "SC5003 pending-read-unresolved": 710,
-  "SC5003 root-mount-pass-unproven": 43,
+  "SC5003 root-mount-pass-unproven": 48,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
   "SC5003 source-pending-unproven": 1,
