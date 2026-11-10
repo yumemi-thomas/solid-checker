@@ -387,7 +387,8 @@ fn root_window_edits_match_cold() {
         (true, true),
         &[
             ("App.tsx", APP_ROOT_EVENT, (false, false)),
-            ("App.tsx", APP_ROOT_MEMO, (false, false)),
+            // ADR 0932 (owner ruling): a stale read, as under `runWithOwner`.
+            ("App.tsx", APP_ROOT_MEMO, (true, true)),
             ("App.tsx", APP_ROOT_THEN, (false, false)),
             ("App.tsx", APP_ROOT_BODY, (true, true)),
         ],

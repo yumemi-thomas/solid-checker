@@ -747,6 +747,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/provider-value-untracked/node_modules/**
 !fixtures/reactive-ir/run-with-owner-in-computation/node_modules/
 !fixtures/reactive-ir/run-with-owner-in-computation/node_modules/**
+!fixtures/reactive-ir/owned-write-updater-read/node_modules/
+!fixtures/reactive-ir/owned-write-updater-read/node_modules/**
+!fixtures/reactive-ir/row-handler-sync-dispatch/node_modules/
+!fixtures/reactive-ir/row-handler-sync-dispatch/node_modules/**
+!fixtures/reactive-ir/row-handler-no-dispatch/node_modules/
+!fixtures/reactive-ir/row-handler-no-dispatch/node_modules/**
 !fixtures/reactive-ir/component-census-no-entry/node_modules/
 !fixtures/reactive-ir/component-census-no-entry/node_modules/**
 # ADR 0446: the reproduction set's one node_modules (published bytes, packages.json).

@@ -57,6 +57,8 @@ export const obj = (fields) => ({ k: "obj", fields: fields.map(([key, e]) => ({ 
 export const call = (callee, args = []) => ({ k: "call", callee, args });
 /** `setSink(<expr>)`: writes an expression's number to a sink signal (never a site). */
 export const set = (sig, e) => ({ k: "set", sig, e });
+/** `setX(() => { …; return 0; })` (misuse.mjs OWNED_UPDATER_CONTEXTS): a setter called with an updater, which it runs on its own stack. */
+export const setUpdater = (sig, f) => ({ k: "set", sig, e: f, updater: true });
 export const getOwner = () => ({ k: "getOwner" });
 export const iife = (fn) => ({ k: "iife", fn });
 export const iter = (method, fn) => ({ k: "iter", method, fn });
@@ -567,6 +569,11 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "flush": if (e.fn) typeOf(e.fn, scope); return T.void;
         case "set": {
           sigCheck(e.sig, "set");
+          if (e.updater) {
+            const updater = fnTypeChecked(e.e, scope, "free");
+            if (updater?.ret && updater.ret.t !== "num") fail(`${where}: an updater returns a number, not ${updater.ret.t}`);
+            return T.num;
+          }
           const type = typeOf(e.e, scope);
           if (type && type.t !== "num") fail(`${where}: a sink takes a number, not ${type.t}`);
           return T.num;

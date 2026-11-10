@@ -139,8 +139,12 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   the callback writes, a call after an await the compute reaches (that is
   [reactive-read-after-await](reactive-read-after-await.md)'s, also through an
   immediately invoked function), and a call `tsc` rejects. `createRoot` is
-  `runWithOwner(createOwner(), …)` but was not probed in a computation, so it
-  keeps its role (`fixtures/reactive-ir/run-with-owner-in-computation`).
+  `runWithOwner(createOwner(), …)` at rc.21 and is reported the same way (owner
+  ruling, ADR 0932; `fixtures/reactive-ir/run-with-owner-in-computation`).
+- **A setter's updater runs on the setter's stack** unless the guard throws
+  first: with `ownedWrite: true` a body read there is reported, with options
+  the syntax does not show it is uncertifiable (ADR 0932). A handler in a flow
+  row whose program dispatches synchronously is uncertifiable, not deferred.
 - **A read an await may precede is uncertifiable.** Past an unconditional
   `await` the window is closed and the read is silent. Past a conditional
   (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a
