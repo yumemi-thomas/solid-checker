@@ -817,6 +817,15 @@ impl LeafOwnerOperation {
         matches!(self.kind, LeafOwnerOperationKind::ObserverGuarded(_))
             && self.owner == "createTrackedEffect"
     }
+
+    /// ADR 0944: the call fails with a plain `throw` here, no diagnostic before it: `flush()` in a tracked
+    /// queue callback, and a call that meets the observer guard. A call that takes whatever its callback throws
+    /// (`isPending`) reports nothing for such a failure; one emitted before the throw (a cleanup or a creation
+    /// refused by the leaf owner) is still reported.
+    #[must_use]
+    pub fn fails_with_plain_throw(&self) -> bool {
+        matches!(self.kind, LeafOwnerOperationKind::Flush) || self.observer_guarded()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

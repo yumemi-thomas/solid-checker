@@ -16,7 +16,7 @@
 use crate::HashMap;
 use std::cell::RefCell;
 
-use solid_dialect::{CleanupRule, Primitive};
+use solid_dialect::{CleanupRule, Primitive, SlotObserver, SlotOwner, SlotRun, SlotThrows};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
@@ -53,6 +53,270 @@ pub(crate) fn collect_project(
         .flat_map(|operations| operations.iter().cloned())
         .collect::<Vec<_>>();
     draft.leaf_operations.extend(operations);
+}
+
+/// The owner a site runs under, relative to the leaf callback it is written in, once the primitive slots between
+/// them are crossed (ADR 0944).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CrossedOwner {
+    /// The leaf's own: every slot inherits it, or hands `runWithOwner` the owner the call itself runs under.
+    Leaf,
+    /// `runWithOwner(null, …)`, `undefined` or another owner (a component's): no leaf owner is current, so
+    /// nothing the leaf forbids is.
+    Detached,
+    /// An owner supplied as a value the walk does not follow: whether it is the leaf's is not proven.
+    Unproven,
+}
+
+/// What the primitive slots between a site and the leaf callback do to the context the site runs in (ADR 0944):
+/// the owner, whether the observer is still active, and whether the primitive of any of them is attributed
+/// without the binder confirming it (ADR 0711).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Crossed {
+    owner: CrossedOwner,
+    /// A crossed slot clears tracking (`untrack`, `runWithOwner`): `resolve` and `until` meet no observer guard.
+    observer_cleared: bool,
+    /// A crossed slot takes what its callback throws (`isPending`).
+    swallows: bool,
+    identity_unproven: bool,
+}
+
+/// What a leaf operation becomes at a site reached through `crossed` slots, or `None` when the site is no
+/// longer this walk's claim: the kind (tracking off turns the observer guard's call into the creation the leaf
+/// owner refuses) and whether the owner it needs is not proven.
+fn through_slots_kind(
+    kind: crate::LeafOwnerOperationKind,
+    crossed: &Crossed,
+) -> Option<(crate::LeafOwnerOperationKind, bool)> {
+    use crate::LeafOwnerOperationKind as Kind;
+    let kind = match kind {
+        Kind::ObserverGuarded(primitive) if crossed.observer_cleared => Kind::Primitive(primitive),
+        other => other,
+    };
+    let owner_needed = |kind: Kind| match crossed.owner {
+        CrossedOwner::Leaf => Some((kind, false)),
+        CrossedOwner::Detached => None,
+        CrossedOwner::Unproven => Some((kind, true)),
+    };
+    match kind {
+        // A cleanup or a creation meets the leaf owner's guard only where the callback runs under that owner.
+        Kind::Cleanup | Kind::Primitive(_) | Kind::ObserverGuarded(_) => owner_needed(kind),
+        // The per-key tracking needs an active observer as well.
+        Kind::ObserverCacheTracking => {
+            if crossed.observer_cleared {
+                None
+            } else {
+                owner_needed(kind)
+            }
+        }
+        // `flush()`'s guard reads the queue's own marker, whatever owner and observer the callback has.
+        Kind::Flush | Kind::UnresolvedCallback => Some((kind, false)),
+    }
+}
+
+/// `crossed` once the callback of the primitive call at `call`, which runs in place as `run` says, is crossed
+/// (ADR 0944): the owner it runs under, whether tracking is off in it, whether the call takes what it throws, and
+/// whether the primitive is attributed without the binder confirming it. `None` for a callback that has an owner of
+/// its own (`createRoot` under a leaf throws before it runs the callback) or none whatever the caller's: it is not
+/// the leaf's extent.
+fn cross_slot(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    run: solid_dialect::InPlaceRun,
+    lookup: &SemanticLookup<'_>,
+    identity_proven: bool,
+    mut crossed: Crossed,
+) -> Option<Crossed> {
+    use crate::execution_role::{SuppliedOwner, supplied_owner};
+    match run.observer {
+        SlotObserver::Clears => crossed.observer_cleared = true,
+        SlotObserver::Keeps | SlotObserver::Unstated => {}
+    }
+    match run.throws {
+        SlotThrows::Swallows => crossed.swallows = true,
+        SlotThrows::Escapes => {}
+    }
+    crossed.owner = match run.owner {
+        SlotOwner::Inherits => crossed.owner,
+        SlotOwner::Supplied { argument } => match supplied_owner(file, call, argument, lookup) {
+            // The owner the call itself runs under: whatever the walk has so far.
+            SuppliedOwner::Ambient => crossed.owner,
+            SuppliedOwner::Null | SuppliedOwner::Undefined | SuppliedOwner::Elsewhere => {
+                CrossedOwner::Detached
+            }
+            SuppliedOwner::Unproven => CrossedOwner::Unproven,
+        },
+        SlotOwner::Creates | SlotOwner::Detached => return None,
+    };
+    crossed.identity_unproven |= !identity_proven;
+    Some(crossed)
+}
+
+/// ADR 0944: what the callbacks the primitive call at `call` runs in place do under the leaf owner, for the
+/// ones the walk reads as a function it follows: a callback named by value (`untrack(cb)`) is read as a helper
+/// called there, and a callback written as a literal is the text of the body being walked (a helper's, or an
+/// argument followed), which no lexical loop reads. `named_only` leaves the literals to the lexical walk of the
+/// leaf's own extent. `false` when a callback could not be read.
+#[allow(clippy::too_many_arguments)]
+fn slot_callback_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: &PrimitiveName,
+    kinds: &mut Reached,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+    guaranteed: bool,
+    named_only: bool,
+) -> bool {
+    let Some(kind) = primitive.primitive() else {
+        return true;
+    };
+    let lookup = resolution.lookup;
+    let dialect = lookup.dialect;
+    let identity_proven = primitive_identity_proven(dialect, file, call, primitive);
+    let mut complete = true;
+    for (index, argument) in call.arguments.iter().enumerate() {
+        // An index after a spread names nothing.
+        if argument.spread {
+            break;
+        }
+        let SlotRun::InPlace(run) = dialect.slot_run(kind, index, call.arguments.len()) else {
+            continue;
+        };
+        if named_only && callback_argument_literal(file, argument.span).is_some() {
+            continue;
+        }
+        if crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind) {
+            continue;
+        }
+        let peeled = file.ast.peel_ts_sugar_span(argument.span);
+        // An accessor, a setter or an action cannot open a leaf scope of its own.
+        let symbol = lookup.entities().at(file.path.as_str(), peeled);
+        if symbol.is_some_and(|symbol| resolution.tables.safe_call(symbol)) {
+            continue;
+        }
+        let Some(crossed) = cross_slot(
+            file,
+            call,
+            run,
+            lookup,
+            identity_proven,
+            Crossed {
+                owner: CrossedOwner::Leaf,
+                observer_cleared: false,
+                swallows: false,
+                identity_unproven: false,
+            },
+        ) else {
+            continue;
+        };
+        let mut inner = Vec::new();
+        complete &= argument_body_operations(
+            resolution,
+            file,
+            argument.span,
+            &mut inner,
+            visited,
+            depth,
+            guaranteed,
+        );
+        for (kind, guaranteed, identity_unproven, sites) in inner {
+            let Some((kind, owner_unproven)) = through_slots_kind(kind, &crossed) else {
+                continue;
+            };
+            // `flush()` fails with a plain throw, which a call that takes what its callback throws reports
+            // nothing for. What `resolve` and `until` do under an observer is left to the stored-throw pass,
+            // which knows the host: an obligation in a tracked effect, a refused creation in `onSettled`.
+            if crossed.swallows && matches!(kind, crate::LeafOwnerOperationKind::Flush) {
+                continue;
+            }
+            record(
+                kinds,
+                kind,
+                guaranteed && !owner_unproven,
+                identity_unproven || crossed.identity_unproven,
+                sites,
+            );
+        }
+    }
+    complete
+}
+
+/// Pushes what a walk reached through the call at `call` as the operations it is reported as: each anchored at the
+/// call, the code of the leaf scope that introduces the defect, with the callee it was reached through, what the
+/// slots between the call and the leaf make of it (ADR 0944), and a callback the walk could not read as an
+/// obligation.
+#[allow(clippy::too_many_arguments)]
+fn push_reached(
+    operations: &mut Vec<LeafOwnerOperation>,
+    owner: &str,
+    call_site_gate: Option<&typefacts::Location>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    kinds: Reached,
+    complete: bool,
+    crossed: Option<&Crossed>,
+    step_unproven: bool,
+) {
+    let via = file.source_text(call.callee).unwrap_or_default().to_owned();
+    for (kind, guaranteed, identity_unproven, sites) in kinds {
+        let (kind, owner_unproven, slot_identity_unproven) = match crossed {
+            Some(crossed) => {
+                let Some((kind, owner_unproven)) = through_slots_kind(kind, crossed) else {
+                    continue;
+                };
+                (kind, owner_unproven, crossed.identity_unproven)
+            }
+            None => (kind, false, false),
+        };
+        push_crossed(
+            operations,
+            LeafOwnerOperation {
+                kind,
+                owner: owner.to_owned(),
+                location: location(file.path.shared(), call.callee),
+                fix: None,
+                call_site_gate: call_site_gate.cloned(),
+                uncertain: owner_unproven || slot_identity_unproven,
+                possible: !guaranteed || step_unproven,
+                via: Some(via.clone()),
+                identity_unproven,
+                sites,
+                computation_error_unobserved: false,
+            },
+            crossed,
+        );
+    }
+    if !complete {
+        operations.push(LeafOwnerOperation {
+            kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
+            owner: owner.to_owned(),
+            location: location(file.path.shared(), call.callee),
+            fix: None,
+            call_site_gate: call_site_gate.cloned(),
+            uncertain: true,
+            possible: false,
+            via: Some(via),
+            identity_unproven: false,
+            sites: Vec::new(),
+            computation_error_unobserved: false,
+        });
+    }
+}
+
+/// Pushes `operation` found through `crossed` slots, unless it fails with a plain throw and a crossed slot takes
+/// what its callback throws (ADR 0944): nothing is reported then. A cleanup or a creation the leaf owner refuses
+/// emits its diagnostic before it throws, so it is.
+fn push_crossed(
+    operations: &mut Vec<LeafOwnerOperation>,
+    operation: LeafOwnerOperation,
+    crossed: Option<&Crossed>,
+) {
+    if crossed.is_some_and(|crossed| crossed.swallows) && operation.fails_with_plain_throw() {
+        return;
+    }
+    operations.push(operation);
 }
 
 pub(super) fn leaf_owner_operations_for_file(
@@ -308,6 +572,79 @@ pub(super) fn leaf_owner_operations_for_file(
         let through_iife = |span: Span| climb(span).map(|(runs, _)| runs);
         // Whether a stepped generator on the way may stop before `span`.
         let step_unproven = |span: Span| climb(span).is_some_and(|(_, unproven)| unproven);
+        // ADR 0944: the code at `span` runs in the leaf's own extent through callbacks of primitives (and
+        // IIFEs between them) that the dialect says run in place, on the stack of their call: `untrack(() =>
+        // onCleanup(..))` is still the leaf owner's child. `Some` only where a primitive slot is crossed: a
+        // path of IIFE layers alone is `through_iife`'s, a direct site needs neither. A callback that has an
+        // owner of its own (`createRoot`), runs later or in a computation of its own is not crossed, and the
+        // path answers `None`: nothing is claimed through it.
+        let through_slots = |span: Span| -> Option<Crossed> {
+            let ast = &callback_file.ast;
+            let mut at = span;
+            let mut slots = Vec::new();
+            for _ in 0..16 {
+                if direct_callback_runs(callback_file, leaf_callback.span, at) {
+                    break;
+                }
+                let function = crate::owners::owning_function(ast, at)?;
+                if function.r#async
+                    || function.generator
+                    || !function.parameters.is_empty()
+                    || function.rest_parameter
+                    || !function.body.contains(at)
+                {
+                    return None;
+                }
+                if let Some(iife) = ast.calls_with_peeled_callee(function.span).next() {
+                    at = iife.span;
+                    continue;
+                }
+                let layer = crate::execution_role::slot_layer(callback_file, function, lookup)?;
+                // A slot written in a JSX expression runs where the compiler places that expression.
+                if crate::execution_role::call_in_jsx_expression(callback_file, layer.call.span) {
+                    return None;
+                }
+                let identity_proven = crate::call_primitive_name_cached(
+                    lookup,
+                    callback_file,
+                    layer.call,
+                    entities,
+                    symbol_names,
+                    dialect,
+                )
+                .is_some_and(|name| {
+                    primitive_identity_proven(dialect, callback_file, layer.call, &name)
+                });
+                slots.push((layer, identity_proven));
+                at = slots.last()?.0.call.span;
+            }
+            if !direct_callback_runs(callback_file, leaf_callback.span, at) || slots.is_empty() {
+                return None;
+            }
+            let mut crossed = Crossed {
+                owner: CrossedOwner::Leaf,
+                observer_cleared: false,
+                swallows: false,
+                identity_unproven: false,
+            };
+            // The outermost slot first: the owner a site runs under is the innermost owner the slots set.
+            for (layer, identity_proven) in slots.iter().rev() {
+                match layer.run {
+                    SlotRun::InPlace(run) => {
+                        crossed = cross_slot(
+                            callback_file,
+                            layer.call,
+                            run,
+                            lookup,
+                            *identity_proven,
+                            crossed,
+                        )?;
+                    }
+                    SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => return None,
+                }
+            }
+            Some(crossed)
+        };
         // ADR 0883: JSX in the leaf's own text creates a computation or a root
         // with no call to name it. A creating call elsewhere is the helper
         // paths'; JSX there is the owner rule's (`jsx-effect`).
@@ -315,24 +652,49 @@ pub(super) fn leaf_owner_operations_for_file(
             if site.kind == crate::owners::JsxSiteKind::MaybeRenderEffect
                 || site.in_getter
                 || !callback_region.contains(site.span)
-                || !(direct_callback_runs(callback_file, leaf_callback.span, site.span)
-                    || through_iife(site.span) != Some(false))
             {
                 continue;
             }
-            operations.push(LeafOwnerOperation {
-                kind: crate::LeafOwnerOperationKind::Primitive("JSX".into()),
-                owner: owner.to_string(),
-                location: location(callback_file.path.shared(), site.span),
-                fix: None,
-                call_site_gate: call_site_gate.clone(),
-                uncertain: false,
-                possible: step_unproven(site.span),
-                via: None,
-                identity_unproven: false,
-                sites: Vec::new(),
-                computation_error_unobserved: false,
-            });
+            // ADR 0944: JSX in the callback of a primitive that runs in place creates under the callback's owner.
+            let crossed = through_slots(site.span);
+            if !(direct_callback_runs(callback_file, leaf_callback.span, site.span)
+                || through_iife(site.span) != Some(false)
+                || crossed.is_some())
+            {
+                continue;
+            }
+            let (kind, slots_unproven) = match &crossed {
+                Some(crossed) => {
+                    let Some((kind, owner_unproven)) = through_slots_kind(
+                        crate::LeafOwnerOperationKind::Primitive("JSX".into()),
+                        crossed,
+                    ) else {
+                        continue;
+                    };
+                    (kind, owner_unproven || crossed.identity_unproven)
+                }
+                None => (
+                    crate::LeafOwnerOperationKind::Primitive("JSX".into()),
+                    false,
+                ),
+            };
+            push_crossed(
+                &mut operations,
+                LeafOwnerOperation {
+                    kind,
+                    owner: owner.to_string(),
+                    location: location(callback_file.path.shared(), site.span),
+                    fix: None,
+                    call_site_gate: call_site_gate.clone(),
+                    uncertain: slots_unproven,
+                    possible: step_unproven(site.span),
+                    via: None,
+                    identity_unproven: false,
+                    sites: Vec::new(),
+                    computation_error_unobserved: false,
+                },
+                crossed.as_ref(),
+            );
         }
         for call in &callback_file.ast.calls {
             if call.span == owner_call.span || !callback_region.contains(call.span) {
@@ -459,10 +821,13 @@ pub(super) fn leaf_owner_operations_for_file(
                 });
                 continue;
             }
+            // ADR 0944: through the callbacks of primitives that run in place.
+            let crossed = through_slots(call.span);
             if !own_list
                 && !direct_callback_runs(callback_file, leaf_callback.span, call.span)
                 && through_iife(call.span) != Some(true)
                 && !(handed() && in_place())
+                && crossed.is_none()
             {
                 continue;
             }
@@ -493,46 +858,63 @@ pub(super) fn leaf_owner_operations_for_file(
                 if kinds.is_empty() && complete {
                     continue;
                 }
-                let via = callback_file
-                    .source_text(call.callee)
-                    .unwrap_or_default()
-                    .to_owned();
-                let step_unproven = step_unproven(call.span);
-                for (kind, guaranteed, identity_unproven, sites) in kinds {
-                    operations.push(LeafOwnerOperation {
-                        kind,
-                        owner: owner.to_string(),
-                        location: location(callback_file.path.shared(), call.callee),
-                        fix: None,
-                        call_site_gate: call_site_gate.clone(),
-                        uncertain: false,
-                        possible: !guaranteed || step_unproven,
-                        via: Some(via.clone()),
-                        identity_unproven,
-                        sites,
-                        computation_error_unobserved: false,
-                    });
-                }
-                if !complete {
-                    operations.push(LeafOwnerOperation {
-                        kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
-                        owner: owner.to_string(),
-                        location: location(callback_file.path.shared(), call.callee),
-                        fix: None,
-                        call_site_gate: call_site_gate.clone(),
-                        uncertain: true,
-                        possible: false,
-                        via: Some(via),
-                        identity_unproven: false,
-                        sites: Vec::new(),
-                        computation_error_unobserved: false,
-                    });
-                }
+                push_reached(
+                    &mut operations,
+                    &owner.to_string(),
+                    call_site_gate.as_ref(),
+                    callback_file,
+                    call,
+                    kinds,
+                    complete,
+                    crossed.as_ref(),
+                    step_unproven(call.span),
+                );
                 continue;
             };
+            // ADR 0944: a callback named by value that a primitive runs in place (`untrack(cb)`) is a function
+            // called here, read as a helper is; one written as a literal is text of this walk.
+            {
+                let mut named = Vec::new();
+                let mut named_visited = Vec::new();
+                let named_complete = slot_callback_operations(
+                    resolution,
+                    callback_file,
+                    call,
+                    &primitive,
+                    &mut named,
+                    &mut named_visited,
+                    8,
+                    true,
+                    true,
+                );
+                if !named.is_empty() || !named_complete {
+                    push_reached(
+                        &mut operations,
+                        &owner.to_string(),
+                        call_site_gate.as_ref(),
+                        callback_file,
+                        call,
+                        named,
+                        named_complete,
+                        crossed.as_ref(),
+                        step_unproven(call.span),
+                    );
+                }
+            }
             let Some(kind) = forbidden_operation_kind(dialect, callback_file, call, &primitive)
             else {
                 continue;
+            };
+            // ADR 0944: what the slots on the way make of the call; an owner or a primitive identity they
+            // leave unproven keeps it an obligation.
+            let (kind, slots_unproven) = match &crossed {
+                Some(crossed) => {
+                    let Some((kind, owner_unproven)) = through_slots_kind(kind, crossed) else {
+                        continue;
+                    };
+                    (kind, owner_unproven || crossed.identity_unproven)
+                }
+                None => (kind, false),
             };
             // ADR 0711: the attribution must name the primitive the callee
             // is bound to; otherwise the operation is an obligation.
@@ -546,25 +928,30 @@ pub(super) fn leaf_owner_operations_for_file(
             // A body named by value may have other callers, where the
             // rewrite would change what runs (ADR 0918).
             let fix = (by_value.is_none()
+                && crossed.is_none()
                 && primitive.primitive() == Some(Primitive::OnCleanup)
                 && owner
                     .primitive()
                     .is_some_and(|owner| dialect.accepts_cleanup_return(owner)))
             .then(|| terminal_cleanup_fix(callback_file, leaf_callback.span, call))
             .flatten();
-            operations.push(LeafOwnerOperation {
-                kind,
-                owner: owner.to_string(),
-                location: location(callback_file.path.shared(), call.callee),
-                fix,
-                call_site_gate: call_site_gate.clone(),
-                uncertain: !identity_proven,
-                possible: step_unproven(call.span),
-                via: None,
-                identity_unproven: !identity_proven,
-                sites: Vec::new(),
-                computation_error_unobserved: false,
-            });
+            push_crossed(
+                &mut operations,
+                LeafOwnerOperation {
+                    kind,
+                    owner: owner.to_string(),
+                    location: location(callback_file.path.shared(), call.callee),
+                    fix,
+                    call_site_gate: call_site_gate.clone(),
+                    uncertain: !identity_proven || slots_unproven,
+                    possible: step_unproven(call.span),
+                    via: None,
+                    identity_unproven: !identity_proven,
+                    sites: Vec::new(),
+                    computation_error_unobserved: false,
+                },
+                crossed.as_ref(),
+            );
         }
         // ADR 0537: a tagged template written in the callback's own extent
         // calls its tag there (ADR 0531), as a call of it would.
@@ -2055,6 +2442,18 @@ fn function_forbidden_operations(
             );
             continue;
         };
+        // ADR 0944: the callbacks a primitive runs in place are part of the helper's synchronous extent.
+        complete &= slot_callback_operations(
+            resolution,
+            helper_file,
+            inner,
+            &primitive,
+            kinds,
+            visited,
+            depth,
+            guaranteed,
+            false,
+        );
         // One kind per call site, however many helper calls or transitive
         // hops reach it: the finding names the operation, not each way of
         // arriving at it. Kinds arrive interleaved across hops, so an

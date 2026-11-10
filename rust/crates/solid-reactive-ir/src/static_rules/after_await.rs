@@ -53,7 +53,7 @@ use crate::owners::written_directly_in;
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
 use crate::{AfterAwaitObligation, StaticDefect, StaticDefectKind, location};
-use solid_dialect::Primitive;
+use solid_dialect::{Primitive, SlotObserver, SlotOwner, SlotRun};
 use solid_facts::FileFacts;
 use solid_facts::ast::{
     ArgumentValueKind, CallFact, FunctionFact, FunctionKind, TaggedTemplateFact,
@@ -2003,37 +2003,93 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
             }
             return;
         }
-        // `runWithOwner(owner, fn)` runs `fn` at once with `owner` as the
-        // context and tracking off (`dev-shared.js` `runWithOwner`), and
-        // `checkPostAwaitRead` returns only for a context that is not `null`:
-        // a literal `null` owner (the detached-root spelling) keeps the read
-        // a warning, `undefined` silences it, and an owner the analysis
-        // cannot see through may be either.
-        if self.primitive(file, call) == Some(Primitive::RunWithOwner)
-            && let [owner, callback] = call.arguments.as_slice()
-            && !owner.spread
-            && !callback.spread
-            && let Some((callback_file, callback)) = callback_argument_literal(file, callback.span)
-                .map(|callback| (file, callback))
-                .or_else(|| {
-                    ctx.semantic_lookup
-                        .function_called_at(
-                            file.path.as_str(),
-                            file.ast.peel_ts_sugar_span(callback.span),
-                        )
-                        .filter(|(f, fun)| ctx.semantic_lookup.function_value_is_current(f, fun))
+        // ADR 0944: a callback of a primitive the dialect says runs in place runs on this stack, past the
+        // suspension, as an IIFE's does: asked of the dialect, not of the primitive's name.
+        if !call.construct
+            && let Some(primitive) = self.primitive(file, call)
+            && let Some((index, callback_file, callback)) = call
+                .arguments
+                .iter()
+                .enumerate()
+                .take_while(|(_, argument)| !argument.spread)
+                .find_map(|(index, argument)| {
+                    matches!(
+                        ctx.dialect.slot_run(primitive, index, call.arguments.len()),
+                        SlotRun::InPlace(_)
+                    )
+                    .then(|| {
+                        callback_argument_literal(file, argument.span)
+                            .map(|callback| (file, callback))
+                            .or_else(|| {
+                                ctx.semantic_lookup
+                                    .function_called_at(
+                                        file.path.as_str(),
+                                        file.ast.peel_ts_sugar_span(argument.span),
+                                    )
+                                    .filter(|(f, fun)| {
+                                        ctx.semantic_lookup.function_value_is_current(f, fun)
+                                    })
+                            })
+                            .map(|(callback_file, callback)| (index, callback_file, callback))
+                    })
+                    .flatten()
                 })
             && !callback.generator
+            && let SlotRun::InPlace(run) =
+                ctx.dialect.slot_run(primitive, index, call.arguments.len())
         {
-            let mark = draft.static_defects.len();
-            if owner.value != ArgumentValueKind::Undefined {
-                self.report_prefix(draft, walk, callback_file, callback, depth);
-            }
-            if !matches!(
-                owner.value,
-                ArgumentValueKind::Null | ArgumentValueKind::Undefined
-            ) {
-                mark_uncertain(draft, mark, &AfterAwaitObligation::OwnerUnresolved);
+            let via = callee_text(file, call.callee);
+            match run.owner {
+                // `runWithOwner(owner, fn)` runs `fn` at once with `owner` as the context and tracking off
+                // (`dev-shared.js` `runWithOwner`), and `checkPostAwaitRead` returns only for a context that
+                // is not `null`: a literal `null` owner (the detached-root spelling) keeps the read a
+                // warning, `undefined` silences it, and an owner the analysis cannot see through may be
+                // either.
+                SlotOwner::Supplied { argument } => {
+                    let owner = call.arguments.get(argument).map(|owner| owner.value);
+                    let mark = draft.static_defects.len();
+                    if owner != Some(ArgumentValueKind::Undefined) {
+                        self.report_prefix(draft, walk, callback_file, callback, depth);
+                    }
+                    if !matches!(
+                        owner,
+                        Some(ArgumentValueKind::Null | ArgumentValueKind::Undefined)
+                    ) {
+                        mark_uncertain(draft, mark, &AfterAwaitObligation::OwnerUnresolved);
+                    }
+                }
+                // The callback adds no owner and the continuation has none: the read is as untracked as one
+                // written here, and a thrown error needs no word (a read is no throw). A callback that keeps
+                // the observer (`latest`, `isPending`, `flush(fn)`) runs on this stack under none, so its
+                // reads are the continuation's; one that clears tracking (`untrack`) is the documented way to
+                // read here on purpose, so what it reads is no defect; an observer the dialect does not
+                // state is nothing claimed either way, an obligation.
+                SlotOwner::Inherits => match run.observer {
+                    SlotObserver::Keeps => {
+                        self.report_prefix(draft, walk, callback_file, callback, depth);
+                    }
+                    SlotObserver::Clears => {}
+                    SlotObserver::Unstated => self.report_conditional_region(
+                        draft,
+                        walk,
+                        callback_file,
+                        callback,
+                        depth,
+                        &AfterAwaitObligation::HandOffNotFollowed { via: Some(via) },
+                    ),
+                },
+                // A root's callback runs under an owner the call creates, and the guard returns for a context
+                // that is not `null`: the runtime stays silent (`createRoot` after an await, measured).
+                SlotOwner::Creates => {}
+                // No owner, whatever the continuation's: whether the read warns is not stated here.
+                SlotOwner::Detached => self.report_conditional_region(
+                    draft,
+                    walk,
+                    callback_file,
+                    callback,
+                    depth,
+                    &AfterAwaitObligation::HandOffNotFollowed { via: Some(via) },
+                ),
             }
             return;
         }

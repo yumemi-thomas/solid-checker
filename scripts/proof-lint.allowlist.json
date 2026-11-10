@@ -259,6 +259,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/execution_role/slot_layers.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "`call_in_jsx_expression`: with no owning function (module scope) any JSX around the call counts, the answer that ends a climb; `call_may_run_code`: a call that resolves to no primitive may run code, the answer that makes a claim uncertifiable. Neither answer extends a claim."
+      }
+    },
     "rust/crates/solid-reactive-ir/src/execution_role/write_components.rs": {
       "default-on-missing": {
         "count": 1,

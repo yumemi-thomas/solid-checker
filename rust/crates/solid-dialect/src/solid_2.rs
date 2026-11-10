@@ -1346,6 +1346,18 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// ADR 0944: `getOwner()` returns `context` and runs nothing
+    /// (`@solidjs/signals@2.0.0-rc.21` `dist/dev-shared.js:1639`).
+    fn runs_no_user_code(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::GetOwner
+    }
+
+    /// ADR 0944: `runWithOwner(owner, fn)` runs `fn` with `context = owner` whatever `owner` is
+    /// (`@solidjs/signals@2.0.0-rc.21` `dist/dev-shared.js:6740-6763`; a disposed owner only warns first).
+    fn callback_owner_argument(&self, primitive: Primitive, argument: usize) -> Option<usize> {
+        (primitive == Primitive::RunWithOwner && argument == 1).then_some(0)
+    }
+
     /// Source: the `solid-js@2.0.0-rc.0` and `@solidjs/web@2.0.0-rc.0`
     /// implementations, read
     /// rather than inferred. What matters is whether the body creates an owner

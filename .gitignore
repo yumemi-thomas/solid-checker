@@ -1309,3 +1309,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/**
+!fixtures/reactive-ir/slot-run-leaf-owner/node_modules/
+!fixtures/reactive-ir/slot-run-leaf-owner/node_modules/**
+!fixtures/reactive-ir/slot-run-effect-phase/node_modules/
+!fixtures/reactive-ir/slot-run-effect-phase/node_modules/**
+!fixtures/reactive-ir/slot-run-action-step/node_modules/
+!fixtures/reactive-ir/slot-run-action-step/node_modules/**
+!fixtures/reactive-ir/slot-run-after-await/node_modules/
+!fixtures/reactive-ir/slot-run-after-await/node_modules/**

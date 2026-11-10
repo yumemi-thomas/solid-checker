@@ -1072,3 +1072,137 @@ fn the_wrappers_that_run_a_callback_inline_are_pinned_slot_by_slot() {
         );
     }
 }
+
+/// ADR 0944: `slot_run` is the one answer the rule walks match, so a row that moves is a deliberate edit here.
+/// The slots are the ones the runtime runs on the caller's stack (`@solidjs/signals@2.0.0-rc.21`: `untrack`
+/// `dist/dev-shared.js:5842`, `runWithOwner` `:6740`, `latest` `dist/dev.js:1654`, `isPending` `:1699`), a
+/// computation's compute, and the callbacks that run later.
+#[test]
+fn the_slot_run_of_the_primitives_that_take_a_callback_is_pinned() {
+    use SlotObserver::{Clears, Keeps, Unstated};
+    use SlotOwner::{Creates, Inherits, Supplied};
+    use SlotThrows::{Escapes, Swallows};
+    let two = &Solid2 as &dyn Dialect;
+    let in_place = |owner, observer, throws| {
+        SlotRun::InPlace(InPlaceRun {
+            owner,
+            observer,
+            throws,
+        })
+    };
+    let pinned = [
+        (Primitive::Untrack, 0, in_place(Inherits, Clears, Escapes)),
+        (
+            Primitive::DynamicStatic,
+            0,
+            in_place(Inherits, Clears, Escapes),
+        ),
+        (Primitive::Latest, 0, in_place(Inherits, Keeps, Escapes)),
+        (Primitive::IsPending, 0, in_place(Inherits, Keeps, Swallows)),
+        (Primitive::Flush, 0, in_place(Inherits, Keeps, Escapes)),
+        (
+            Primitive::RunWithOwner,
+            1,
+            in_place(Supplied { argument: 0 }, Clears, Escapes),
+        ),
+        (Primitive::CreateRoot, 0, in_place(Creates, Clears, Escapes)),
+        (
+            Primitive::CreateRevealOrder,
+            0,
+            in_place(Creates, Clears, Escapes),
+        ),
+        (Primitive::Render, 0, in_place(Creates, Unstated, Escapes)),
+        (Primitive::CreateMemo, 0, SlotRun::Computation),
+        (Primitive::CreateTrackedEffect, 0, SlotRun::Computation),
+        (Primitive::CreateEffect, 0, SlotRun::Computation),
+        (Primitive::CreateEffect, 1, SlotRun::Deferred),
+        (Primitive::OnSettled, 0, SlotRun::Deferred),
+        (Primitive::OnCleanup, 0, SlotRun::Deferred),
+        (Primitive::Action, 0, SlotRun::Deferred),
+        // No execution row, no word: nothing is claimed.
+        (Primitive::CreateMemo, 2, SlotRun::Unknown),
+        (Primitive::GetOwner, 0, SlotRun::Unknown),
+    ];
+    for (primitive, argument, expected) in pinned {
+        assert_eq!(
+            two.slot_run(primitive, argument, argument + 1),
+            expected,
+            "{primitive:?} argument {argument}"
+        );
+    }
+}
+
+/// ADR 0944: `slot_run` says what the questions it is derived from say, for every primitive, slot and call
+/// shape in every vocabulary, and an inline slot is never left unclassified by an owner the vocabulary has no
+/// word for: that would be a slot a walk silently refuses.
+#[test]
+fn the_slot_run_is_derived_from_the_callback_questions() {
+    let two = &Solid2 as &'static dyn Dialect;
+    let mut dialects: Vec<&'static dyn Dialect> = vec![
+        two,
+        &Solid2::RC3,
+        &Solid2::RC9,
+        &Solid2::RC13,
+        &Solid2::RC17,
+        &Solid2::RC21,
+    ];
+    dialects.extend(two.variants().iter().copied().step_by(10_007));
+    let mut in_place = 0;
+    for dialect in dialects {
+        for primitive in profiled_primitives(dialect) {
+            for argument in 0..3 {
+                for count in argument + 1..=4 {
+                    let profile = SlotProfile::of(dialect, primitive, argument, count);
+                    let run = dialect.slot_run(primitive, argument, count);
+                    let at = format!("{primitive:?} argument {argument} of {count}");
+                    match (profile.execution, run) {
+                        (None, SlotRun::Unknown) => {}
+                        (Some(Execution::Tracked), SlotRun::Computation) => {}
+                        (Some(Execution::Deferred), SlotRun::Deferred) => {}
+                        (Some(Execution::Inline), SlotRun::InPlace(run)) => {
+                            in_place += 1;
+                            assert_eq!(
+                                run.observer == SlotObserver::Keeps,
+                                profile.keeps_observer,
+                                "{at}: the observer"
+                            );
+                            assert_eq!(
+                                run.observer == SlotObserver::Clears,
+                                profile.clears_listener && !profile.keeps_observer,
+                                "{at}: the listener"
+                            );
+                            assert_eq!(
+                                run.throws == SlotThrows::Swallows,
+                                profile.swallows_throw,
+                                "{at}: the thrown error"
+                            );
+                            assert_eq!(
+                                run.owner == SlotOwner::Inherits,
+                                profile.owner == Some(CallbackOwner::Inherits),
+                                "{at}: the inherited owner"
+                            );
+                            assert_eq!(
+                                run.owner == SlotOwner::Creates,
+                                profile.owner == Some(CallbackOwner::Creates),
+                                "{at}: the created owner"
+                            );
+                            // The observer the callback keeps is the caller's, so the owner is too.
+                            assert!(
+                                run.observer != SlotObserver::Keeps
+                                    || run.owner == SlotOwner::Inherits,
+                                "{at}: a callback that keeps the observer inherits the owner"
+                            );
+                        }
+                        (execution, run) => {
+                            panic!("{at}: execution {execution:?} answered {run:?}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        in_place > 100,
+        "{in_place} in-place slots: the enumeration lost its primitives"
+    );
+}

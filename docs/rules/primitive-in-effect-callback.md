@@ -12,11 +12,17 @@ Flags `createMemo`, `createEffect`, `createRenderEffect`, `createRoot`,
 `Loading`/`Errored` called as functions, and `resolve` and `until`, which create
 a root and a computation for their thunk (ADR 0614), when the call runs synchronously inside the apply (second) argument of a
 `createEffect(compute, apply)` in a client build, reached directly or through
-an IIFE, an inline standard-library callback, `untrack`, or project helpers,
+an IIFE, an inline standard-library callback, a callback of `untrack`,
+`latest`, `isPending` or `flush(fn)` (ADR 0944: each runs the callback in place
+and sets no owner), `runWithOwner(null, fn)` or `runWithOwner(owner, fn)` with
+the `owner` that `getOwner()` returned in the apply itself (both `context ===
+null`), or project helpers,
 a named function handed to such a callback position or a callback prop the
 child component only calls (ADR 0538; a hand-off nothing places is
-uncertifiable), and never through `runWithOwner`, `createRoot` or another call
-that sets an owner (ADR 0483). A `createReaction` callback, the apply of a
+uncertifiable), and never through `createRoot` or another call that sets an
+owner, nor through `runWithOwner(undefined, fn)` (the guard tests `=== null`),
+an owner captured in a component body, or an owner the walk cannot follow
+(ADR 0483). `getOwner()` is no earlier call. A `createReaction` callback, the apply of a
 deferred user effect, is claimed the same way (ADR 0541).
 An apply `defer: true` provably never runs (ADR 0302) claims nothing, in itself
 or in a function only it calls (ADR 0590).

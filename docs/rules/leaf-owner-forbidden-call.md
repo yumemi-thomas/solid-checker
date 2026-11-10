@@ -50,6 +50,23 @@ a call of `f`, resolved through its declaration (ADR 0538).
 `(function* () { … })().next()` runs its first step in place, as an IIFE; U
 where a `yield` may stop it first (ADR 0929).
 
+The callback of a primitive the dialect says runs in place is such a layer too
+(`Dialect::slot_run`, ADR 0944): `untrack`, `latest`, `isPending`, `flush(fn)`
+and `runWithOwner(owner, fn)` keep the leaf as the owner, so `untrack(() =>
+onCleanup(…))` is reported at the `onCleanup`, in the leaf's text, in a helper's
+body, or in a function named by value (`untrack(cb)`, reported at that call).
+Tracking is off in `untrack` and `runWithOwner`, so `resolve` and `until` there
+create a root under the leaf (this rule's, not the observer guard's). A call
+that takes what its callback throws (`isPending`) leaves a plain throw
+(`flush()`, the observer guard) unreported, while a cleanup or a creation the
+leaf refuses emits its diagnostic first and is reported. `runWithOwner(null |
+undefined, …)` and an owner captured in a component body have no leaf owner
+(silent); the `getOwner()` of the leaf's own function is the leaf's (reported);
+any other owner value, a primitive attributed without the binder's
+confirmation and a callback the walk cannot read are uncertifiable.
+`createRoot` is refused at its own call and its callback is not crossed, nor is
+a computation's or a deferred one's.
+
 An action called in that extent runs its generator's first step there, under
 the leaf owner (ADR 0520): a `const`-held action's body is followed as a
 helper's is, up to its first `yield`. A site after a yielded promise runs with

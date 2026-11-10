@@ -246,7 +246,9 @@ package store holds, and nothing says it does not. A call whose declaration the
 type facts did not resolve is judged the same way. A conditional read in
 the computation's own flow does not hide the finding (the run that skips it
 warns, the feasible-path premise). A callback of `untrack` or `runWithOwner`
-runs with tracking off and is not part of the segment. A store key is a
+runs with tracking off and is not part of the segment; one of `latest`,
+`isPending` or `flush(fn)` runs on the continuation under no owner, so a read in
+it is (ADR 0944; `createRoot`'s callback has an owner and is silent). A store key is a
 dependency by its path only when the same path was read; a key another path
 may share (`{ a: item, b: item }`, `store.a.n` before and `store.b.n` after) is
 uncertifiable when a read before the await used a key of that name or anything

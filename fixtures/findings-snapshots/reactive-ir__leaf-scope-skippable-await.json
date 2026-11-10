@@ -194,6 +194,17 @@
       "blocker": "leaf-owner-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
+      "start": 1114,
+      "end": 1122,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
       "start": 1330,
       "end": 1339,
       "fixes": 0

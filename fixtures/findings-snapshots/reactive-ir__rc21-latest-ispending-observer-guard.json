@@ -47,6 +47,16 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 1023,
+      "end": 1028,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
       "start": 1168,
       "end": 1175,
       "fixes": 0

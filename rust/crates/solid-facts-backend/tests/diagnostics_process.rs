@@ -2411,7 +2411,12 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     // step as anywhere else.
     let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
     for (fixture, lines, notice) in [
-        ("rc9-flush-in-action", &[14_u64, 20, 27, 32, 39, 44][..], 1),
+        // ADR 0944: line 97 is `untrack(() => flush())`, an in-place callback of a primitive.
+        (
+            "rc9-flush-in-action",
+            &[14_u64, 20, 27, 32, 39, 44, 97][..],
+            1,
+        ),
         ("release-triple-flush-rc8", &[9, 15][..], 1),
         ("release-triple-flush-rc3", &[][..], 1),
     ] {
