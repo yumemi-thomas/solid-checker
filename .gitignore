@@ -1353,3 +1353,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-in-action-unmodelled-slot/node_modules/**
 !fixtures/reactive-ir/generator-stepped-in-apply/node_modules/
 !fixtures/reactive-ir/generator-stepped-in-apply/node_modules/**
+!fixtures/reactive-ir/package-action-step/node_modules/
+!fixtures/reactive-ir/package-action-step/node_modules/**
+!fixtures/reactive-ir/package-action-step-plain/node_modules/
+!fixtures/reactive-ir/package-action-step-plain/node_modules/**
+!fixtures/reactive-ir/leaf-visited-entry-namespace/node_modules/
+!fixtures/reactive-ir/leaf-visited-entry-namespace/node_modules/**

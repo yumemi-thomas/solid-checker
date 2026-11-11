@@ -50,3 +50,34 @@ export function InBody() {
   });
   return <p>x</p>;
 }
+
+import * as S from "solid-js";
+import { createSignal, runWithOwner } from "solid-js";
+
+const [count] = createSignal(0);
+
+// The namespace spelling of the primitive.
+export function NamespaceParamCleanup() {
+  createTrackedEffect(() => {
+    S.untrack((p0?: number) => {
+      onCleanup(() => {});
+    });
+  });
+  return <p>x</p>;
+}
+// A layer with its own climb path: `runWithOwner(null, …)`.
+export function OwnerNullAsync() {
+  createTrackedEffect(() => {
+    void runWithOwner(null, async () => {
+      createMemo(() => 1);
+    });
+  });
+  return <p>x</p>;
+}
+// A parameter callback whose only call reads an accessor: nothing that operates, no row.
+export function ParamAccessor() {
+  createTrackedEffect(() => {
+    untrack((p0?: number) => count() + (p0 ?? 0));
+  });
+  return <p>x</p>;
+}

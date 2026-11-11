@@ -65,3 +65,38 @@ export function Recursion() {
   });
   return <p>x</p>;
 }
+
+// The two entries written in a closure the host's callback declares and calls (the walk reads the closure's body, then each call in it).
+export function TwiceInCallback() {
+  createTrackedEffect(() => {
+    n();
+    const both = () => {
+      make(true);
+      make(false);
+    };
+    both();
+  });
+  return <p>x</p>;
+}
+export function SwallowedThenDirectInCallback() {
+  createTrackedEffect(() => {
+    n();
+    const flushesHere = () => {
+      flush();
+    };
+    isPending(flushesHere);
+    flushesHere();
+  });
+  return <p>x</p>;
+}
+// An argument the walk cannot decide: exactly one of `make(x)` and `make(!x)` creates, whatever `x` is. Never clean.
+function runUnknown(x: boolean) {
+  make(x);
+  make(!x);
+}
+export function TwiceUnknown() {
+  createTrackedEffect(() => {
+    runUnknown(n() > 0);
+  });
+  return <p>x</p>;
+}

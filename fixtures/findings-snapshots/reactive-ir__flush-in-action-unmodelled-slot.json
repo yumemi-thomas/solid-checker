@@ -8,8 +8,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
-      "start": 395,
-      "end": 400,
+      "start": 452,
+      "end": 457,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
-      "start": 517,
-      "end": 522,
+      "start": 574,
+      "end": 579,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
-      "start": 637,
-      "end": 642,
+      "start": 694,
+      "end": 699,
       "fixes": 0
     },
     {
@@ -40,8 +40,41 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
-      "start": 821,
-      "end": 826,
+      "start": 878,
+      "end": 883,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 1314,
+      "end": 1319,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 1449,
+      "end": 1454,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 1581,
+      "end": 1586,
       "fixes": 0
     }
   ]

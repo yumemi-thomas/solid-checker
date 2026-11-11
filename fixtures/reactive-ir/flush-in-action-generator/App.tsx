@@ -90,10 +90,30 @@ const viaDiscard = action(function* () {
   yield Promise.resolve();
 });
 
+// `yield*` two levels deep, and a generator handed to the helper by name: no walk follows either, so each flush is an uncertifiable row.
+function* innermost() {
+  flush();
+  yield 1;
+}
+function* middle() {
+  yield* innermost();
+}
+const viaChain = action(function* () {
+  yield* middle();
+  yield Promise.resolve();
+});
+function* namedBody() {
+  flush();
+  yield Promise.resolve();
+}
+const viaNamed = useSave(namedBody);
+
 export function App() {
   return (
     <button
       onClick={() => {
+        void viaChain();
+        void viaNamed();
         void viaHelper();
         void viaDelegate();
         void direct();

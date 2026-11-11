@@ -84,6 +84,10 @@ declare module "solid-js" {
     _config: number;
   }
   export function runWithOwner<T>(owner: Owner | null, fn: () => T): T;
+  export function createRoot<T>(init: ((dispose: () => void) => T) | (() => T), options?: {
+    id?: string;
+    transparent?: boolean;
+  }): T;
   export function until<T>(fn: () => T, options?: UntilOptions): Promise<Truthy<T>>;
   export function onSettled(callback: () => void | (() => void)): void;
   // Copied from the published 2.0.0-rc.13 `types/client/core.d.ts`, the
