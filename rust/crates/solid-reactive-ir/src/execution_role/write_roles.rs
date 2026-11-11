@@ -3613,6 +3613,11 @@ pub(crate) struct InPlaceClimb {
     /// ADR 0874: the climb crossed a call the census withholds, which only
     /// [`in_place_run_site_placing`] does: a row it places is undecided.
     pub(crate) withheld: bool,
+    /// ADR 0959: the climb crossed the callback of a primitive that runs it in place, where the callback takes a
+    /// parameter, is async or is a generator ([`climb_through_slots`]): a parameter the primitive may never pass, an
+    /// async callback's code before its first await run in place, shapes no proof reads. The placement the climb gives
+    /// is an obligation.
+    pub(crate) unmodelled: bool,
 }
 
 /// ADR 0493 review: whether the climb from `span` to `to` crosses a layer that
@@ -4810,6 +4815,7 @@ fn climb_in_place_layers_recording(
         among_others: false,
         suspended: None,
         withheld: false,
+        unmodelled: false,
     };
     // Bounded: each step moves to the call that holds the previous function.
     for step in 0..16 {
@@ -4944,6 +4950,7 @@ fn in_place_run_site_recording(
         among_others: false,
         suspended: None,
         withheld: false,
+        unmodelled: false,
     };
     let mut through_generator = false;
     for step in 0..8 {

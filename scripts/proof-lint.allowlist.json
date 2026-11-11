@@ -153,6 +153,10 @@
       "finding-filter": {
         "count": 1,
         "why": "the sorted hazard site locations of one hazard id, deduplicated: an equal location is one site"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 0950, feature `what-if` only: `hazard_of_id` answers none for an id that names no hazard of the table, and its one caller (what_if.rs) refuses the `--assume` argument with an error, so an unknown name is never an assumption; a default build does not compile it"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {

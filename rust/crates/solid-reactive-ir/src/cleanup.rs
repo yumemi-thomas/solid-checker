@@ -110,7 +110,7 @@ fn through_slots_kind(
             }
         }
         // `flush()`'s guard reads the queue's own marker, whatever owner and observer the callback has.
-        Kind::Flush | Kind::UnresolvedCallback => Some((kind, false)),
+        Kind::Flush | Kind::UnresolvedCallback | Kind::UnmodelledSlot => Some((kind, false)),
     }
 }
 
@@ -164,7 +164,7 @@ fn slot_callback_operations(
     call: &solid_facts::ast::CallFact,
     primitive: &PrimitiveName,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     guaranteed: bool,
     named_only: bool,
@@ -212,12 +212,16 @@ fn slot_callback_operations(
             continue;
         };
         let mut inner = Vec::new();
+        // What the slots on the way make of the callback's operations is applied below, so its visits must not
+        // suppress the same body entered directly later in the walk (`isPending(g); g();`, ADR 0961); the entries
+        // above it still end a cycle.
+        let mut entered = visited.clone();
         complete &= argument_body_operations(
             resolution,
             file,
             argument.span,
             &mut inner,
-            visited,
+            &mut entered,
             depth,
             guaranteed,
         );
@@ -645,6 +649,44 @@ pub(super) fn leaf_owner_operations_for_file(
             }
             Some(crossed)
         };
+        // ADR 0959: whether the code at `span` is written in a callback of a primitive that runs it in place
+        // (`untrack`, `latest`, `isPending`, `flush(fn)`, `runWithOwner`, `createRoot`) that takes a parameter, is
+        // async or is a generator: the climb of `through_slots` cannot cross it, and "not this walk's site" would
+        // be a silence there. Such a callback runs on the stack of its primitive's call (a parameter the primitive
+        // never passes, an async callback's code before its first await), so a call written in it may be any of
+        // the forbidden operations: an obligation, not a proof that nothing is claimed.
+        let unmodelled_slot = |span: Span| -> bool {
+            let ast = &callback_file.ast;
+            let mut at = span;
+            for _ in 0..16 {
+                if direct_callback_runs(callback_file, leaf_callback.span, at) {
+                    return false;
+                }
+                let Some(function) = crate::owners::owning_function(ast, at) else {
+                    return false;
+                };
+                if !function.body.contains(at) {
+                    return false;
+                }
+                let layer = crate::execution_role::slot_layer(callback_file, function, lookup);
+                if function.r#async
+                    || function.generator
+                    || !function.parameters.is_empty()
+                    || function.rest_parameter
+                {
+                    return layer.is_some_and(|layer| matches!(layer.run, SlotRun::InPlace(_)));
+                }
+                if let Some(iife) = ast.calls_with_peeled_callee(function.span).next() {
+                    at = iife.span;
+                    continue;
+                }
+                let Some(layer) = layer else {
+                    return false;
+                };
+                at = layer.call.span;
+            }
+            false
+        };
         // ADR 0883: JSX in the leaf's own text creates a computation or a root
         // with no call to name it. A creating call elsewhere is the helper
         // paths'; JSX there is the owner rule's (`jsx-effect`).
@@ -829,6 +871,50 @@ pub(super) fn leaf_owner_operations_for_file(
                 && !(handed() && in_place())
                 && crossed.is_none()
             {
+                // ADR 0959: a call under a slot callback the climb cannot cross is an obligation of this rule,
+                // unless it is a call no operation can come from (a primitive the leaf owner never refuses).
+                if unmodelled_slot(call.span) {
+                    // A call of a primitive the leaf owner never refuses cannot operate; a call that is no
+                    // primitive (a helper, a member) may, which is the polarity of an obligation.
+                    // An accessor or a setter opens no leaf scope of its own (the helper walk's `safe_call`).
+                    let reads_or_writes = entities
+                        .at(
+                            callback_file.path.as_str(),
+                            callback_file.ast.peel_ts_sugar_span(call.callee),
+                        )
+                        .is_some_and(|symbol| {
+                            resolution.tables.safe_call(symbol) && !resolution.tables.action(symbol)
+                        });
+                    let may_operate = if reads_or_writes {
+                        false
+                    } else if let Some(primitive) = crate::call_primitive_name_cached(
+                        lookup,
+                        callback_file,
+                        call,
+                        entities,
+                        symbol_names,
+                        dialect,
+                    ) {
+                        forbidden_operation_kind(dialect, callback_file, call, &primitive).is_some()
+                    } else {
+                        true
+                    };
+                    if may_operate {
+                        operations.push(LeafOwnerOperation {
+                            kind: crate::LeafOwnerOperationKind::UnmodelledSlot,
+                            owner: owner.to_string(),
+                            location: location(callback_file.path.shared(), call.callee),
+                            fix: None,
+                            call_site_gate: call_site_gate.clone(),
+                            uncertain: true,
+                            possible: true,
+                            via: None,
+                            identity_unproven: false,
+                            sites: Vec::new(),
+                            computation_error_unobserved: false,
+                        });
+                    }
+                }
                 continue;
             }
             let primitive = crate::call_primitive_name_cached(
@@ -1381,6 +1467,11 @@ fn record(
     }
 }
 
+/// The function bodies a walk has entered, by the file, the span and how they were entered ([`entry_key`]): a cycle
+/// ends where a body is entered again the same way, and a body entered again under another context (another
+/// argument standing, a stepped action, another `this`) is walked again (ADR 0961).
+type Visited = Vec<(String, Span, String)>;
+
 /// How the walk entered a function body (ADR 0275).
 #[derive(Clone, Copy)]
 enum Entry<'v> {
@@ -1403,6 +1494,18 @@ enum Entry<'v> {
     /// stack and under its owner (`@solidjs/signals@2.0.0-rc.17`
     /// `dist/dev.js:1573-1600`).
     ActionStep { guaranteed: bool },
+}
+
+/// The identity of how a function body is entered, for [`Visited`]: the kind of entry, whether it is guaranteed, the
+/// argument standings it proves, and the class `this` is exact for.
+fn entry_key(entry: Entry<'_>, exact_this: &ExactThis) -> String {
+    let how = match entry {
+        Entry::LeafBody => "leaf".to_owned(),
+        Entry::Called { guaranteed } => format!("called:{guaranteed}"),
+        Entry::CalledWith { guaranteed, values } => format!("with:{guaranteed}:{values:?}"),
+        Entry::ActionStep { guaranteed } => format!("step:{guaranteed}"),
+    };
+    format!("{how}|{exact_this:?}")
 }
 
 /// Whether `inner`, written directly in `function`, runs on every call that
@@ -1569,7 +1672,7 @@ fn helper_forbidden_operations(
     call_file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     exact_this: ExactThis,
     guaranteed: bool,
@@ -1801,7 +1904,7 @@ fn member_call_operations(
     call: &solid_facts::ast::CallFact,
     callee: Span,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     guaranteed: bool,
 ) -> bool {
@@ -1996,7 +2099,7 @@ fn standard_library_argument_operations(
     call: &solid_facts::ast::CallFact,
     resolved: &typefacts::ResolvedCall,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     guaranteed: bool,
 ) -> bool {
@@ -2113,7 +2216,7 @@ fn setter_updater_operations(
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     guaranteed: bool,
 ) -> bool {
@@ -2175,7 +2278,7 @@ fn argument_body_operations(
     file: &FileFacts,
     argument: Span,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     guaranteed: bool,
 ) -> bool {
@@ -2229,7 +2332,7 @@ fn function_forbidden_operations(
     helper_file: &FileFacts,
     helper: &solid_facts::ast::FunctionFact,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     exact_this: ExactThis,
     entry: Entry<'_>,
@@ -2242,7 +2345,11 @@ fn function_forbidden_operations(
     if depth == 0 {
         return false;
     }
-    let key = (helper_file.path.as_str().to_owned(), helper.span);
+    let key = (
+        helper_file.path.as_str().to_owned(),
+        helper.span,
+        entry_key(entry, &exact_this),
+    );
     if visited.contains(&key) {
         return true;
     }
@@ -2518,7 +2625,7 @@ fn tag_forbidden_operations(
     file: &FileFacts,
     template: &solid_facts::ast::TaggedTemplateFact,
     kinds: &mut Reached,
-    visited: &mut Vec<(String, Span)>,
+    visited: &mut Visited,
     depth: usize,
     guaranteed: bool,
 ) -> bool {

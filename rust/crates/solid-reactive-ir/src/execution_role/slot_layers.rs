@@ -191,8 +191,9 @@ pub(crate) fn call_may_run_code(
 /// `crosses` is the walk's policy and is asked once per slot, innermost first. It matches [`SlotRun`] with no
 /// wildcard and records what it needs of each slot it accepts (the owner, the observer, a thrown error), which
 /// this does not know. A slot that is not accepted ends the climb at the call inside it. A callback with a
-/// parameter, an `async` or generator callback, and a slot call written in a JSX expression (the compiler places
-/// that, not the code around the element) end it too, as they end an in-place layer.
+/// parameter, an `async` or generator callback of a slot that runs it in place is crossed and marked `unmodelled` (ADR
+/// 0959: its placement is an obligation, never a proof); one of any other slot, and a slot call written in a JSX
+/// expression (the compiler places that, not the code around the element), end it, as they end an in-place layer.
 pub(crate) fn climb_through_slots(
     file: &FileFacts,
     span: Span,
@@ -206,6 +207,7 @@ pub(crate) fn climb_through_slots(
         among_others: false,
         suspended: None,
         withheld: false,
+        unmodelled: false,
     };
     // Bounded: each step moves to the call that holds the previous function.
     for step in 0..16 {
@@ -227,20 +229,26 @@ pub(crate) fn climb_through_slots(
         let Some(function) = owning_function(&file.ast, merged.at) else {
             break;
         };
-        if function.generator
-            || function.r#async
-            || !function.parameters.is_empty()
-            || function.rest_parameter
-            || !function.body.contains(merged.at)
-        {
+        if !function.body.contains(merged.at) {
             break;
         }
         let Some(layer) = slot_layer(file, function, lookup) else {
             break;
         };
+        // ADR 0959: a callback with a parameter, an async or a generator callback of a primitive that runs it in
+        // place is crossed, and the climb says so (`unmodelled`): the placement it gives is an obligation. Any
+        // other slot with such a callback ends the climb, as a callback that is no slot does.
+        let unmodelled = function.generator
+            || function.r#async
+            || !function.parameters.is_empty()
+            || function.rest_parameter;
+        if unmodelled && !matches!(layer.run, SlotRun::InPlace(_)) {
+            break;
+        }
         if call_in_jsx_expression(file, layer.call.span) || !crosses(&layer) {
             break;
         }
+        merged.unmodelled |= unmodelled;
         merged.at = layer.call.span;
         merged.exhausted |= step == 15;
     }

@@ -1,0 +1,48 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 395,
+      "end": 400,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 517,
+      "end": 522,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 637,
+      "end": 642,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 821,
+      "end": 826,
+      "fixes": 0
+    }
+  ]
+}

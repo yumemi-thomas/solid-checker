@@ -107,6 +107,18 @@ whose imported name is the primitive's, or a member of a namespace import of a
 Solid module. Any other attribution (a renamed re-export through a project
 barrel, an import whose target the producer could not read) is uncertifiable.
 
+A function entered twice under different contexts is walked twice (ADR 0961): the walk's visited set is keyed by how a
+body is entered (the entry kind, whether it is guaranteed, the argument standings the call proves, the class `this` is
+exact for), so `make(true); make(false)` reads the second entry and `isPending(g); g();` reads the direct call after the
+one `isPending` catches; a slot callback is walked on a copy, so its visits never suppress a later direct entry. A cycle
+still ends where a body is entered again the same way.
+
+A call written in a callback of a primitive that runs it in place, where the callback takes a parameter, is async or is a
+generator (`untrack((p) => onCleanup(…))`, `untrack(async () => { createMemo(…); })`), is an uncertifiable row of this
+rule (ADR 0959, the `UnmodelledSlot` operation, blocker `leaf-owner-unproven`): the slot climb does not cross such a
+callback, and what it runs is not read. A call that cannot operate is not claimed (a primitive the leaf owner never
+refuses, an accessor read, a setter call); any other call is, a helper or a member too. Never a violation.
+
 A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
 tracked-effect body whose every creation is inside an owned leaf body, where
 the creation itself throws first (`docs/open-work.md`).

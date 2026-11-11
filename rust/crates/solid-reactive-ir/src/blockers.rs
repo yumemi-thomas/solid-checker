@@ -60,6 +60,9 @@ pub(crate) const ACTION_HANDED_TO_PACKAGE: &str = "action-handed-to-package";
 /// rule's own obligation at the site.
 pub(crate) const PACKAGE_OPERATION_IN_EFFECT_APPLY: &str = "package-operation-in-effect-apply";
 pub(crate) const PACKAGE_OPERATION_AFTER_AWAIT: &str = "package-operation-after-await";
+/// ADR 0959: the callback of a primitive that catches what its callback throws (`isPending`) is async, so its synchronous
+/// throw is a rejection the primitive does not catch: what the observer guard does there is an obligation.
+pub(crate) const ASYNC_SLOT_UNMODELLED: &str = "async-slot-unmodelled";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 

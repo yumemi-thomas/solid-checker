@@ -1341,3 +1341,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/package-handed-values/node_modules/**
 !fixtures/reactive-ir/package-operations/node_modules/
 !fixtures/reactive-ir/package-operations/node_modules/**
+!fixtures/reactive-ir/leaf-visited-entry/node_modules/
+!fixtures/reactive-ir/leaf-visited-entry/node_modules/**
+!fixtures/reactive-ir/flush-in-action-generator/node_modules/
+!fixtures/reactive-ir/flush-in-action-generator/node_modules/**
+!fixtures/reactive-ir/flush-in-generator-without-action/node_modules/
+!fixtures/reactive-ir/flush-in-generator-without-action/node_modules/**
+!fixtures/reactive-ir/leaf-unmodelled-slot/node_modules/
+!fixtures/reactive-ir/leaf-unmodelled-slot/node_modules/**
+!fixtures/reactive-ir/flush-in-action-unmodelled-slot/node_modules/
+!fixtures/reactive-ir/flush-in-action-unmodelled-slot/node_modules/**

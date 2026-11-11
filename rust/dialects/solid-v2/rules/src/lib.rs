@@ -386,9 +386,20 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
             "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations.".into(),
         ),
+        LeafOwnerOperationKind::UnmodelledSlot => (
+            Rule::LeafOwnerForbiddenCall,
+            format!(
+                "this call is written in a callback of a primitive that runs it on the stack of {} (a callback with a parameter, an async callback or a generator is a shape the slot walk does not follow); whether it performs cleanup, flush, or creates a nested primitive in this leaf scope cannot be certified",
+                operation.owner
+            ),
+            "Move the call out of that callback, or give the primitive a plain callback with no parameter that is not async, so solid-checker can inspect it and certify or report its leaf-scope operations.".into(),
+        ),
     };
     if let Some(via) = &operation.via
-        && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
+        && !matches!(
+            operation.kind,
+            LeafOwnerOperationKind::UnresolvedCallback | LeafOwnerOperationKind::UnmodelledSlot
+        )
     {
         message.push_str(&if operation.identity_unproven {
             format!(" — reached through {via}()")
@@ -407,6 +418,8 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
     let mut evidence = vec![EvidenceStep {
         message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
             "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
+        } else if matches!(operation.kind, LeafOwnerOperationKind::UnmodelledSlot) {
+            "the call is written in the callback of a primitive that runs it in place, and the callback takes a parameter, is async or is a generator, a shape the slot walk does not follow".into()
         } else {
             match &operation.via {
                 Some(via) if operation.possible && !operation.identity_unproven => format!(
@@ -434,8 +447,10 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             location: Some(operation.location.clone()),
         });
     } else if operation.uncertain
-        && (!matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
-            || operation.call_site_gate.is_some())
+        && (!matches!(
+            operation.kind,
+            LeafOwnerOperationKind::UnresolvedCallback | LeafOwnerOperationKind::UnmodelledSlot
+        ) || operation.call_site_gate.is_some())
     {
         message.push_str(
             "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",

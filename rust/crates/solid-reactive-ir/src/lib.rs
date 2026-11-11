@@ -847,6 +847,10 @@ pub enum LeafOwnerOperationKind {
     /// available. It may contain any of the forbidden operations above, so
     /// the leaf scope is a proof obligation rather than a clean result.
     UnresolvedCallback,
+    /// A call written in a callback of a primitive the slot climb cannot cross: the callback takes a parameter, is
+    /// async or is a generator, so whether the primitive runs it in place on the leaf scope's stack is not modelled
+    /// (ADR 0959). The call may be any of the forbidden operations: a proof obligation, never silence.
+    UnmodelledSlot,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
