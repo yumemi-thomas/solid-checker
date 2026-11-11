@@ -923,8 +923,16 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // holds one (the ADR 0284 drop reports a dropped finding there), and the references no
     // exact call or tag decides.
     if let Some(view) = &owner_view {
-        (program.package_entries, program.package_references) =
-            crate::owners::package_entry_table(facts, semantic_lookup, view, &program);
+        let claims;
+        (program.package_entries, program.package_references, claims) =
+            crate::owners::package_entry_table(
+                facts,
+                semantic_lookup,
+                view,
+                &program,
+                &source_discovery.setters,
+            );
+        program.static_violations.extend(claims);
     }
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =

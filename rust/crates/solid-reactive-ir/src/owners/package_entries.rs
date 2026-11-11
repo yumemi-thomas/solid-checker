@@ -57,6 +57,9 @@ type AliasTags = HashMap<(String, Span), Vec<(String, Span)>>;
 struct Entry {
     path: String,
     span: Span,
+    /// Where the entry's reference is written, before it is anchored at its call or element
+    /// (`span`): the reference itself for a reference, the same as `span` for the rest.
+    reference: Span,
     kind: crate::DependencyEntry,
 }
 
@@ -132,6 +135,11 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
         self.facts.dependency_source_root(path).is_some()
     }
 
+    /// The facts of the file at `path`: the one read of another file the passes below make by path.
+    fn file(&self, path: &str) -> Option<&'a solid_facts::FileFacts> {
+        self.lookup.file_by_path(path)
+    }
+
     /// The innermost function whose body is written around `span`.
     fn node_at(&self, path: &str, span: Span) -> Option<usize> {
         self.nodes_by_path
@@ -160,8 +168,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
     /// proof silences an entry; a function or a file the facts do not name is none.
     fn may_run(&self, node: usize) -> bool {
         let never_runs = self
-            .lookup
-            .file_by_path(self.nodes[node].path.as_str())
+            .file(self.nodes[node].path.as_str())
             .and_then(|file| {
                 file.ast
                     .function_at(self.nodes[node].span)
@@ -169,6 +176,30 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
             })
             .is_some_and(|never| never);
         self.contexts[node] != 0 || !never_runs
+    }
+
+    /// Whether the reference at `entry` runs the function where it is written (a call, `new`, a tag,
+    /// `f.call`), in a project function that holds an owner on every run: the owner an effect or a
+    /// cleanup needs is current there. A value handed on (`setTimeout(f)`, `onClick={f}`, a holder's
+    /// member) runs where something else runs it, whatever owner this function holds.
+    fn runs_owned_here(&self, entry: &Entry) -> bool {
+        let Some(file) = self.file(&entry.path) else {
+            return false;
+        };
+        matches!(
+            crate::local_access::hand_off_at(file, entry.reference, self.lookup),
+            crate::local_access::HandOff::Call | crate::local_access::HandOff::Inline(_)
+        ) && self
+            .node_at(&entry.path, entry.reference)
+            .is_some_and(|node| {
+                let context = self.contexts[node];
+                context != 0
+                    && context
+                        & (OWNER_CONTEXT_UNOWNED
+                            | OWNER_CONTEXT_PROVEN_UNOWNED
+                            | OWNER_CONTEXT_LEAVES_REGION)
+                        == 0
+            })
     }
 
     /// The project sites that enter the package function `seed`: a walk back through the
@@ -268,6 +299,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
                 found.push(Entry {
                     path,
                     span: site,
+                    reference: site,
                     kind: crate::DependencyEntry::Render,
                 });
             }
@@ -280,7 +312,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
         if !self.may_run(caller) {
             return;
         }
-        let Some(caller_file) = self.lookup.file_by_path(self.nodes[caller].path.as_str()) else {
+        let Some(caller_file) = self.file(self.nodes[caller].path.as_str()) else {
             return;
         };
         for call in &caller_file.ast.calls {
@@ -291,6 +323,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
                 found.push(Entry {
                     path: caller_file.path.to_string(),
                     span: call.span,
+                    reference: call.span,
                     kind: crate::DependencyEntry::Call,
                 });
             }
@@ -324,7 +357,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
                 ) else {
                     continue;
                 };
-                let Some(file) = self.lookup.file_by_path(path) else {
+                let Some(file) = self.file(path) else {
                     continue;
                 };
                 let span = Span::new(start, end);
@@ -342,6 +375,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
                     Entry {
                         path: path.to_owned(),
                         span: entry_anchor(file, span),
+                        reference: span,
                         kind: crate::DependencyEntry::Reference,
                     },
                 ));
@@ -368,8 +402,9 @@ pub(super) fn attribute_package_entries(
     walked: &HashSet<usize>,
     provider_free: &HashMap<Location, ContextVerdict>,
     reads: &[PackageRead],
+    owner_needing: &[PackageRequirement],
 ) {
-    if reads.is_empty() || facts.dependency_source_roots.is_empty() {
+    if (reads.is_empty() && owner_needing.is_empty()) || facts.dependency_source_roots.is_empty() {
         return;
     }
     let mut reads = reads.to_vec();
@@ -430,6 +465,79 @@ pub(super) fn attribute_package_entries(
             .map(|(root, entry)| (entry, first_read_of_root[root.as_str()])),
     );
 
+    // Operations that need an owner, in a package function no owner edge reaches (ADR 0949): the
+    // call walk follows owner edges, and none reaches it, so no project site was asked. A render
+    // runs the component under an owner of its own; a call or a reference may run it with none.
+    let mut owner_sites: Vec<(Entry, &PackageRequirement)> = Vec::new();
+    let mut first_of_root = std::collections::BTreeMap::<String, &PackageRequirement>::new();
+    for seed in owner_needing {
+        let Some(node) = walk.seed_of(seed.location.path.as_ref(), seed.function) else {
+            continue;
+        };
+        if let Some(root) = facts.dependency_source_root(seed.location.path.as_ref()) {
+            first_of_root.entry(root.to_owned()).or_insert(seed);
+        }
+        owner_sites.extend(
+            walk.entries_of(node, CallMode::Every)
+                .into_iter()
+                .filter(|entry| entry.kind != crate::DependencyEntry::Render)
+                .map(|entry| (entry, seed)),
+        );
+    }
+    let owner_roots = first_of_root.keys().map(String::as_str).collect::<Vec<_>>();
+    owner_sites.extend(
+        walk.references_to(&owner_roots, provider_free)
+            .into_iter()
+            .filter(|(_, entry)| !walk.runs_owned_here(entry))
+            .map(|(root, entry)| (entry, first_of_root[root.as_str()])),
+    );
+    owner_sites.sort_by(|(left, _), (right, _)| {
+        (&left.path, left.span.start, left.span.end).cmp(&(
+            &right.path,
+            right.span.start,
+            right.span.end,
+        ))
+    });
+    for (entry, seed) in owner_sites {
+        let Some(file) = walk.file(&entry.path) else {
+            continue;
+        };
+        let before = requirements.len();
+        push_owner_requirement(
+            requirements,
+            &mut seen,
+            seed.operation,
+            file,
+            entry.span,
+            OwnerRequirementStatus {
+                flight_error_unobserved: false,
+                uncertain: true,
+                runtime_uncertain: false,
+                caller_uncertain: false,
+                // Whoever enters the function from here is not followed: no owner is proven current.
+                unplaced_callback: true,
+                conditional_owner: false,
+                owner_varies_by_caller: false,
+                later_run_unowned: false,
+                component_uncertain: false,
+                provider_open: false,
+                default_unproven: false,
+                owned_run_throws: false,
+                after_await: false,
+                after_yield: false,
+                context_unaccounted: false,
+                report: true,
+            },
+            lookup,
+        );
+        if requirements.len() > before
+            && let Some(pushed) = requirements.last_mut()
+        {
+            pushed.through_dependency = Some(seed.location.clone());
+            pushed.through_dependency_entry = entry.kind;
+        }
+    }
+
     // The requirements, in path and span order.
     sites.sort_by(|(left, _), (right, _)| {
         (&left.path, left.span.start, left.span.end).cmp(&(
@@ -439,7 +547,7 @@ pub(super) fn attribute_package_entries(
         ))
     });
     for (entry, read) in sites {
-        let Some(file) = lookup.file_by_path(&entry.path) else {
+        let Some(file) = walk.file(&entry.path) else {
             continue;
         };
         let before = requirements.len();
@@ -482,12 +590,30 @@ pub(super) fn attribute_package_entries(
 /// of the final program, the project sites that may run it (`PackageEntries`), and per package the
 /// project references no exact call or tag decides (`PackageReferences`). A finding the drop pass
 /// discards in a package is reported at those sites, never silent.
+///
+/// It also returns SC2001's obligations: where a project hands a signal's setter to a package
+/// function that calls a member of its own parameter (an SC9012 dispatch obligation inside it), the
+/// call may be the setter ([`crate::blockers::SETTER_HANDED_TO_PACKAGE_DISPATCH`]), and the owned
+/// scope that runs the package code may not write a signal.
 pub(crate) fn package_entry_table(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     view: &OwnerView,
     program: &crate::Program,
-) -> (Vec<crate::PackageEntries>, Vec<crate::PackageReferences>) {
+    setters: &HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            crate::ReactiveSourceKind,
+        ),
+    >,
+) -> (
+    Vec<crate::PackageEntries>,
+    Vec<crate::PackageReferences>,
+    Vec<crate::StaticViolation>,
+) {
     // Every row of the program located in a package.
     let mut rows = Vec::<&Location>::new();
     rows.extend(program.reads.iter().map(|row| &row.location));
@@ -505,7 +631,7 @@ pub(crate) fn package_entry_table(
             .is_some()
     });
     if rows.is_empty() {
-        return (Vec::new(), Vec::new());
+        return (Vec::new(), Vec::new(), Vec::new());
     }
     let walk = WalkCtx::new(facts, lookup, &view.nodes, &view.contexts, &view.outgoing);
     let mut functions = std::collections::BTreeMap::<(String, u32, u32), usize>::new();
@@ -529,20 +655,41 @@ pub(crate) fn package_entry_table(
     }
     let site = |entry: Entry| crate::PackageEntrySite {
         location: crate::location(
-            lookup
-                .file_by_path(&entry.path)
+            walk.file(&entry.path)
                 .map_or_else(|| entry.path.as_str().into(), |file| file.path.shared()),
             entry.span,
         ),
         kind: entry.kind,
     };
     let mut entries = Vec::new();
+    let mut claims = Vec::<crate::StaticViolation>::new();
     for ((path, start, end), node) in functions {
-        let mut sites = walk
-            .entries_of(node, CallMode::Every)
-            .into_iter()
-            .map(site)
-            .collect::<Vec<_>>();
+        let function = Span::new(start, end);
+        let dispatches = program.static_defects.iter().any(|defect| {
+            defect.location.path.as_ref() == path
+                && matches!(
+                    defect.analysis_context.as_str(),
+                    crate::EXPORTED_PARAMETER_MEMBER_DISPATCH
+                        | crate::local_access::UNRESOLVED_HANDED_MEMBER
+                )
+                && match (
+                    u32::try_from(defect.location.start_byte),
+                    u32::try_from(defect.location.end_byte),
+                ) {
+                    (Ok(from), Ok(to)) => function.contains(Span::new(from, to)),
+                    _ => false,
+                }
+        });
+        let found = walk.entries_of(node, CallMode::Every);
+        if dispatches {
+            claims.extend(
+                found
+                    .iter()
+                    .filter(|entry| hands_setter(&walk, setters, entry))
+                    .filter_map(|entry| setter_claim(&walk, entry)),
+            );
+        }
+        let mut sites = found.into_iter().map(site).collect::<Vec<_>>();
         sites.sort_by(|left, right| crate::location_order(&left.location, &right.location));
         sites.dedup_by(|left, right| left.location == right.location);
         entries.push(crate::PackageEntries {
@@ -563,7 +710,85 @@ pub(crate) fn package_entry_table(
             crate::PackageReferences { root, sites }
         })
         .collect();
-    (entries, references)
+    claims.sort_by(|left, right| crate::location_order(&left.location, &right.location));
+    claims.dedup_by(|left, right| left.location == right.location);
+    (entries, references, claims)
+}
+
+/// Whether the render or the call at `entry` hands a signal's setter, as an attribute's expression or
+/// an argument, to the package function it enters.
+fn hands_setter(
+    walk: &WalkCtx<'_, '_>,
+    setters: &HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            crate::ReactiveSourceKind,
+        ),
+    >,
+    entry: &Entry,
+) -> bool {
+    let Some(file) = walk.file(&entry.path) else {
+        return false;
+    };
+    let ast = &file.ast;
+    let values: Vec<Span> = match entry.kind {
+        crate::DependencyEntry::Render => ast
+            .jsx_elements
+            .iter()
+            .find(|element| element_site(element) == entry.span)
+            .map(|element| {
+                element
+                    .attributes
+                    .iter()
+                    .filter_map(|attribute| attribute.expression)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        crate::DependencyEntry::Call => ast
+            .calls
+            .iter()
+            .find(|call| call.span == entry.span)
+            .map(|call| {
+                call.arguments
+                    .iter()
+                    .filter(|argument| !argument.spread)
+                    .map(|argument| argument.span)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        crate::DependencyEntry::Reference => Vec::new(),
+    };
+    values.into_iter().any(|value| {
+        walk.lookup
+            .entities()
+            .at(file.path.as_str(), ast.peel_ts_sugar_span(value))
+            .is_some_and(|symbol| setters.contains_key(symbol))
+    })
+}
+
+/// SC2001's uncertifiable row at a site that hands a setter to package code that dispatches through a
+/// member of its own parameter.
+fn setter_claim(walk: &WalkCtx<'_, '_>, entry: &Entry) -> Option<crate::StaticViolation> {
+    let file = walk.file(&entry.path)?;
+    Some(crate::StaticViolation {
+        id: "SC2001".into(),
+        rule: "no-write-in-pure-computation".into(),
+        message: "this hands a signal's setter to code in a package analyzed as source that calls a \
+                  member of its own parameter; the call may be this setter, and a write in an owned \
+                  scope (a component body, a computation) throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in \
+                  the dev build; whether the package's call runs in one cannot be proven here"
+            .into(),
+        hint: "Call the setter in an event handler or an effect's apply function, or hand the package \
+               a callback that does."
+            .into(),
+        location: crate::location(file.path.shared(), entry.span),
+        analysis_context: crate::blockers::SETTER_HANDED_TO_PACKAGE_DISPATCH.to_owned(),
+        fixes: Vec::new(),
+        uncertain: true,
+    })
 }
 
 /// The span a render is reported at: the element's opening tag.

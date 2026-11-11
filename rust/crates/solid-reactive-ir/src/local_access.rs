@@ -9742,7 +9742,11 @@ pub(crate) fn foreign_reference_hand_offs<'s, 'f: 's>(
     };
     let accounted = lookup.function_call_site_references(file.path.as_str(), function.span);
     let mut out = Vec::new();
-    for reference in lookup.symbol_references(symbol.as_str()).iter() {
+    // ADR 0949: through the runtime redirects: a package function's project uses name its `.d.ts` symbol.
+    for reference in lookup
+        .symbol_references_through_redirects(symbol.as_str())
+        .iter()
+    {
         if reference.path.as_ref() == file.path.as_str() {
             continue;
         }

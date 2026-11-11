@@ -11,7 +11,8 @@
 //! every project site the program says may run the function that holds it
 //! ([`solid_reactive_ir::PackageEntries`]) and at every project reference no exact call or tag decides
 //! ([`solid_reactive_ir::PackageReferences`]); where no site is proven it stands at the project's
-//! import of the package, and where there is no import, at the project's first file. Never a violation
+//! import of the package, where there is no import at the project's first file, and where there is no
+//! file at the project's configuration. Never a violation
 //! (the package's own execution is not proven by a path that is not followed), never silence. A site
 //! that already holds a finding of the rule (a violation or an obligation the call walk or the read
 //! transport attributed) is that finding's: nothing is added beside it.
@@ -160,7 +161,8 @@ fn entries_by_path(program: &Program) -> HashMap<&str, Vec<&solid_reactive_ir::P
     by_path
 }
 
-/// The project's imports of the package at `root`, or, with none, its first project file.
+/// The project's imports of the package at `root`, or, with none, its first project file, or, with
+/// no project file, its configuration: never empty.
 fn import_sites(facts: &ProjectFacts, root: &str) -> Vec<Location> {
     let mut sites = BTreeSet::new();
     if let Some(imports) = &facts.resolved_imports {
@@ -184,14 +186,19 @@ fn import_sites(facts: &ProjectFacts, root: &str) -> Vec<Location> {
             end_byte,
         })
         .collect::<Vec<_>>();
-    if locations.is_empty()
-        && let Some(file) = facts
+    if locations.is_empty() {
+        // No project file loads the package (a transitive dependency no project file names): the
+        // project's first file, else its configuration, so that a drop always leaves a project row.
+        let path = facts
             .files
             .iter()
             .find(|file| facts.dependency_source_root(file.path.as_str()).is_none())
-    {
+            .map_or_else(
+                || facts.project_id.as_str().into(),
+                |file| file.path.shared(),
+            );
         locations.push(Location {
-            path: file.path.shared(),
+            path,
             start_byte: 0,
             end_byte: 0,
         });
@@ -392,10 +399,41 @@ mod tests {
         let report = hand_off(&mut findings, &facts(), &program(Vec::new(), Vec::new()));
         assert_eq!(report.dropped, 1);
         assert_eq!(report.at_import, 1);
-        // The facts of this test hold no project file, no import: the finding stays rather than vanish.
+        assert!(report.every_drop_attributed());
+        // The facts of this test hold no project file and no import: the project's configuration stands for it.
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].kind, "uncertifiable");
+        assert_eq!(
+            findings[0].primary_location.path.as_ref(),
+            "/p/tsconfig.json"
+        );
+        assert_eq!(
+            findings[0].analysis_context,
+            format!("{PACKAGE_FINDING_AT_ENTRY}:SC4001")
+        );
+    }
+
+    #[test]
+    fn a_drop_with_no_replacement_is_not_attributed() {
+        let report = DropReport {
+            dropped: 1,
+            at_import: 1,
+            attributed: vec![(at("/p/node_modules/pkg/index.js", 1, 2), Vec::new())],
+            ..DropReport::default()
+        };
+        assert!(!report.every_drop_attributed());
+        let counted_without_a_row = DropReport {
+            dropped: 2,
+            at_import: 1,
+            attributed: vec![(
+                at("/p/node_modules/pkg/index.js", 1, 2),
+                vec![at("/p/a.tsx", 0, 0)],
+            )],
+            ..DropReport::default()
+        };
         assert!(
-            findings.is_empty() || findings.iter().all(|row| row.kind == "uncertifiable"),
-            "{findings:?}"
+            !counted_without_a_row.every_drop_attributed(),
+            "a dropped finding the report never saw is a drop with no attribution"
         );
     }
 

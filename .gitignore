@@ -1327,3 +1327,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/context-package-lazy/node_modules/**
 !fixtures/reactive-ir/context-package-selected-wrap/node_modules/
 !fixtures/reactive-ir/context-package-selected-wrap/node_modules/**
+!fixtures/reactive-ir/package-write-entries/node_modules/
+!fixtures/reactive-ir/package-write-entries/node_modules/**
+!fixtures/reactive-ir/package-read-entries/node_modules/
+!fixtures/reactive-ir/package-read-entries/node_modules/**
+!fixtures/reactive-ir/package-owner-entries/node_modules/
+!fixtures/reactive-ir/package-owner-entries/node_modules/**
+!fixtures/reactive-ir/context-package-hop/node_modules/
+!fixtures/reactive-ir/context-package-hop/node_modules/**

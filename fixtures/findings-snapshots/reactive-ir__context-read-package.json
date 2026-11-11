@@ -30,6 +30,32 @@
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 386,
+      "end": 404,
+      "fixes": 0,
+      "message": "this read runs under an owner, and nothing proves a default for its context or a provider above every render of the function reading it; Solid throws `ContextNotFoundError` where a context with no default has no provider above; this finding is in a package analyzed as source and is reported at this call because the package code that holds it may run from here, which is not proven either way",
+      "hint": "Render a provider above every use of this component, or give the context a default."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 501,
+      "end": 519,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this finding is in a package analyzed as source and is reported at this call because the package code that holds it may run from here, which is not proven either way",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
       "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-read-package/App.tsx",
@@ -51,6 +77,19 @@
       "fixes": 0,
       "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context, which solid-checker cannot prove provides an owner on every path to it",
       "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner. The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 808,
+      "end": 826,
+      "fixes": 0,
+      "message": "this read runs under an owner, and nothing proves a default for its context or a provider above every render of the function reading it; Solid throws `ContextNotFoundError` where a context with no default has no provider above; this finding is in a package analyzed as source and is reported at this call because the package code that holds it may run from here, which is not proven either way",
+      "hint": "Render a provider above every use of this component, or give the context a default."
     }
   ]
 }

@@ -868,6 +868,9 @@ pub(super) struct SemanticLookup<'a> {
     bounded_walks_exhausted: std::sync::atomic::AtomicU64,
     /// The functions of every file, counted once (ADR 0546).
     function_count: OnceLock<usize>,
+    /// ADR 0949: the runtime redirects as an undirected graph (a declaration symbol and the runtime
+    /// symbol it implements), so a function's references through its `.d.ts` are asked once.
+    redirect_neighbors: OnceLock<std::collections::BTreeMap<&'a str, Vec<&'a str>>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0435: every dispatch call with the receiver and caller its own
@@ -1266,6 +1269,7 @@ impl<'a> SemanticLookup<'a> {
             reach_evaluations: std::sync::atomic::AtomicU64::new(0),
             bounded_walk_peak: std::sync::atomic::AtomicU64::new(0),
             bounded_walks_exhausted: std::sync::atomic::AtomicU64::new(0),
+            redirect_neighbors: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
@@ -2965,6 +2969,47 @@ impl<'a> SemanticLookup<'a> {
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
             .unwrap_or_default()
+    }
+
+    /// ADR 0949: the references of `symbol` and of every symbol a runtime redirect ties to it,
+    /// transitively. A project's use of a package's function names the declaration's symbol (its
+    /// `.d.ts`), not the runtime function the package's source declares, so the runtime symbol's own
+    /// list holds none of them: a census of "who references this function" asks both. Without
+    /// redirects this is [`Self::symbol_references`]. Only the census `function_nothing_enters` rests
+    /// on asks it: moving every consumer of `symbol_references` to the closure moved two fixtures
+    /// (four SC1001 obligations fewer) and has no corpus delta yet (docs/open-work.md).
+    pub(super) fn symbol_references_through_redirects(&self, symbol: &str) -> Vec<Location> {
+        let mut references = self.symbol_references(symbol);
+        if self.facts.runtime_symbol_redirects.is_empty() {
+            return references;
+        }
+        let neighbors = self.redirect_neighbors.get_or_init(|| {
+            // Sorted, so the census answers in one order whatever the map's insertion history.
+            let mut redirects = self
+                .facts
+                .runtime_symbol_redirects
+                .iter()
+                .map(|(declaration, runtime)| (declaration.as_str(), runtime.as_str()))
+                .collect::<Vec<_>>();
+            redirects.sort_unstable();
+            let mut neighbors = std::collections::BTreeMap::<&str, Vec<&str>>::new();
+            for (declaration, runtime) in redirects {
+                neighbors.entry(declaration).or_default().push(runtime);
+                neighbors.entry(runtime).or_default().push(declaration);
+            }
+            neighbors
+        });
+        let mut seen = HashSet::<&str>::default();
+        let mut queue = vec![symbol];
+        while let Some(current) = queue.pop() {
+            for &tied in neighbors.get(current).into_iter().flatten() {
+                if tied != symbol && seen.insert(tied) {
+                    references.extend(self.symbol_references(tied));
+                    queue.push(tied);
+                }
+            }
+        }
+        references
     }
 
     /// The binding declaration named by an exact canonical symbol reference.

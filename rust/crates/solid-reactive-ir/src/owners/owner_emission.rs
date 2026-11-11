@@ -42,6 +42,20 @@ pub(crate) struct Emission {
     /// ADR 0949: the reads in package source of a context with no default
     /// that nothing proves provided, whatever context their function holds.
     pub(super) package_reads: Vec<PackageRead>,
+    /// ADR 0949: the operations in package source that need an owner, in a function no owner edge reaches.
+    pub(super) package_requirements: Vec<PackageRequirement>,
+}
+
+/// ADR 0949: an operation that needs an owner (an effect, a cleanup, a boundary, a context read) written in
+/// a package function that holds no owner context: no owner edge reaches it, because the project enters it
+/// where no call stands (a tagged template, `new`, a getter's holder, a value handed on). The emission
+/// skips it as a function that never runs from syntax, and a project site can still run it with no owner.
+#[derive(Clone, Debug)]
+pub(crate) struct PackageRequirement {
+    pub(super) operation: &'static str,
+    pub(super) location: Location,
+    /// The innermost function around the operation (its owner node).
+    pub(super) function: Span,
 }
 
 /// ADR 0949: a read of a context with no default in package source (ADR 0943)
@@ -256,6 +270,29 @@ pub(super) fn emit_file(
         let owner = candidate
             .owner
             .and_then(|span| graph.node_context(pid, span));
+        // ADR 0949: an owner-needing operation in a package function no owner edge reaches.
+        if matches!(
+            candidate.operation,
+            "effect"
+                | "jsx-effect"
+                | "cleanup"
+                | "boundary-call"
+                | "settled-cleanup"
+                | "context-read"
+        ) && !candidate.in_parameter_list
+            && inputs
+                .facts
+                .dependency_source_root(file.path.as_str())
+                .is_some()
+            && owner.is_some_and(|(_, context)| context == 0)
+            && let Some(function) = candidate.owner
+        {
+            emission.package_requirements.push(PackageRequirement {
+                operation: candidate.operation,
+                location: location(file.path.shared(), candidate.operation_span),
+                function,
+            });
+        }
         let mut context = owner.map_or(OWNER_CONTEXT_UNOWNED, |(_, context)| context);
         // ADR 0347's closed-program export census is stronger than SiteReach,
         // which deliberately treats module-scope declarations as possible entries.

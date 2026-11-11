@@ -4,7 +4,29 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-default-include/App.tsx",
+      "start": 66,
+      "end": 77,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-default-include/App.tsx",
+      "start": 234,
+      "end": 248,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-default-include/App.tsx",
       "start": 234,
