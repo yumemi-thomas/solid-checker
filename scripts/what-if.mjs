@@ -111,8 +111,11 @@ const compact = (finding, root) => {
 /**
  * What became of each uncertifiable row of the shipped checker's report in the what-if report: matched by its span. `toV` the same code is now a violation at the span, `toVOther`
  * another code is; `stillU` the same code is still an obligation there with the same blocker, `blockedChanged` with another (the veto lifted, another cause stands), `toUOther` another
- * code is an obligation there; `toClean` nothing is left at the span. Findings of the what-if report at spans the shipped report has none at are `new`. Returns `{ rows: [{ group,
- * outcome, file, line, id, kind, rule, now }], new: [{ file, line, id, kind, rule }] }`, `now` the findings at the row's span in the what-if report; `root` is the program's directory.
+ * code is an obligation there; `besideV` the obligation is gone and the only findings left are violations the shipped report held at the span already; `toClean` nothing is left at the
+ * span. A violation counts as a move only when the shipped report had no violation of that code at the span: a site that was a violation stays one (as `transitions` reads a site by its
+ * kind), so an obligation beside a violation of the shipped checker is not a `toV` row, whatever the assumption. Findings of the what-if report at spans the shipped report has none at are
+ * `new`. Returns `{ rows: [{ group, outcome, file, line, id, kind, rule, now, fresh }], new: [{ file, line, id, kind, rule }] }`, `now` the findings at the row's span in the what-if
+ * report and `fresh` the violations among them the shipped report did not hold there (what a verdict on the row is about); `root` is the program's directory.
  */
 export function rowOutcomes(base, whatIf, root = "") {
   const at = new Map();
@@ -120,6 +123,12 @@ export function rowOutcomes(base, whatIf, root = "") {
     if (/\/main\.tsx$/.test(finding.primaryLocation?.path ?? "")) continue;
     const span = spanOf(finding);
     at.set(span, [...(at.get(span) ?? []), finding]);
+  }
+  const held = new Map();
+  for (const finding of base.findings ?? []) {
+    if (/\/main\.tsx$/.test(finding.primaryLocation?.path ?? "") || finding.kind !== "violation") continue;
+    const span = spanOf(finding);
+    held.set(span, new Set([...(held.get(span) ?? []), finding.id]));
   }
   const rows = [];
   const baseSpans = new Set();
@@ -129,14 +138,16 @@ export function rowOutcomes(base, whatIf, root = "") {
     baseSpans.add(span);
     if (finding.kind !== "uncertifiable") continue;
     const here = at.get(span) ?? [];
-    const same = here.filter((candidate) => candidate.id === finding.id);
+    const fresh = here.filter((candidate) => candidate.kind === "violation" && !held.get(span)?.has(candidate.id));
+    const same = here.filter((candidate) => candidate.id === finding.id && candidate.kind !== "violation");
     let outcome;
-    if (same.some((candidate) => candidate.kind === "violation")) outcome = "toV";
-    else if (here.some((candidate) => candidate.kind === "violation")) outcome = "toVOther";
+    if (fresh.some((candidate) => candidate.id === finding.id)) outcome = "toV";
+    else if (fresh.length) outcome = "toVOther";
     else if (same.length) outcome = same.some((candidate) => groupOf(candidate) === groupOf(finding)) ? "stillU" : "blockedChanged";
-    else if (here.length) outcome = "toUOther";
+    else if (here.some((candidate) => candidate.kind !== "violation")) outcome = "toUOther";
+    else if (here.length) outcome = "besideV";
     else outcome = "toClean";
-    rows.push({ group: groupOf(finding), outcome, ...compact(finding, root), now: here.map((candidate) => compact(candidate, root)) });
+    rows.push({ group: groupOf(finding), outcome, ...compact(finding, root), now: here.map((candidate) => compact(candidate, root)), fresh: fresh.map((candidate) => compact(candidate, root)) });
   }
   const added = [];
   for (const [span, findings] of at) if (!baseSpans.has(span)) added.push(...findings.map((finding) => compact(finding, root)));
@@ -146,10 +157,10 @@ export function rowOutcomes(base, whatIf, root = "") {
 /** The outcomes that make a row a U→V and a U→clean prediction. */
 export const TO_V = new Set(["toV", "toVOther"]);
 
-/** Adds `outcomes` (a program's `rowOutcomes`) to a group tally: `{ rows, toV, toVOther, stillU, blockedChanged, toUOther, toClean, programs }`. */
+/** Adds `outcomes` (a program's `rowOutcomes`) to a group tally: `{ rows, toV, toVOther, stillU, blockedChanged, toUOther, besideV, toClean }`. */
 export function addOutcomes(tally, outcomes, key = (row) => row.group) {
   for (const row of outcomes.rows) {
-    const entry = (tally[key(row)] ??= { rows: 0, toV: 0, toVOther: 0, stillU: 0, blockedChanged: 0, toUOther: 0, toClean: 0 });
+    const entry = (tally[key(row)] ??= { rows: 0, toV: 0, toVOther: 0, stillU: 0, blockedChanged: 0, toUOther: 0, besideV: 0, toClean: 0 });
     entry.rows += 1;
     entry[row.outcome] += 1;
   }
@@ -280,12 +291,13 @@ export function foldOne(state, result) {
     const changed = Object.values(entry.transitions).some((list) => list.length > 0);
     state.harness.push({ fixture: result.program, arm: name, changed, transitions: changed ? entry.transitions : NO_MOVES });
     addOutcomes(state.groups[name], entry.outcomes);
-    const project = (state.projects[name][result.project ?? result.program] ??= { programs: 1, rows: 0, toV: 0, toClean: 0, stillU: 0, other: 0, newV: 0, newU: 0 });
+    const project = (state.projects[name][result.project ?? result.program] ??= { programs: 1, rows: 0, toV: 0, toClean: 0, stillU: 0, other: 0, besideV: 0, newV: 0, newU: 0 });
     for (const row of entry.outcomes.rows) {
       project.rows += 1;
       if (TO_V.has(row.outcome)) project.toV += 1;
       else if (row.outcome === "toClean") project.toClean += 1;
       else if (row.outcome === "stillU") project.stillU += 1;
+      else if (row.outcome === "besideV") project.besideV += 1;
       else project.other += 1;
     }
     project.newV += entry.outcomes.new.filter((one) => one.kind === "violation").length;
@@ -647,8 +659,8 @@ const violationVerdict = (violation, diagnostics) => {
 /**
  * A moved program under one set, against Chrome's record of it (`oracle`, a runtime-oracle row): one verdict per row that moved and per new violation.
  * `toClean`: `clean-silent` (Chrome reported nothing the row covered), `clean-covered-elsewhere` (what it covered is still covered by what the what-if build reports) or `FALSE-CLEAN`.
- * `toV`/`toVOther`: for each violation now at the row's span, `violation-confirmed`, `WRONG-RULE` (Chrome reports another code there), `FALSE-POSITIVE` (Chrome reports nothing there) or
- * `violation-unjudgeable` (a rule no runtime diagnostic answers). A new violation, at a span the shipped checker had no finding at, is judged the same way.
+ * `toV`/`toVOther`: for each violation the what-if build added at the row's span (`fresh`), `violation-confirmed`, `WRONG-RULE` (Chrome reports another code there), `FALSE-POSITIVE` (Chrome
+ * reports nothing there) or `violation-unjudgeable` (a rule no runtime diagnostic answers). A new violation, at a span the shipped checker had no finding at, is judged the same way.
  * @param {{ moved?: object[], new?: object[], now?: object[] }} entry a stored (slim) entry
  */
 export function judgeMoves(entry, oracle) {
@@ -660,7 +672,9 @@ export function judgeMoves(entry, oracle) {
       const lost = covered.filter((diagnostic) => !coveredBy(diagnostic, entry.now ?? []));
       verdicts.push({ group: row.group, row: label(row), verdict: covered.length === 0 ? "clean-silent" : lost.length ? "FALSE-CLEAN" : "clean-covered-elsewhere", codes: [...new Set((lost.length ? lost : covered).map((diagnostic) => diagnostic.code))] });
     } else if (row.outcome === "toV" || row.outcome === "toVOther") {
-      for (const violation of row.now.filter((finding) => finding.kind === "violation")) verdicts.push({ group: row.group, row: label(row), now: label(violation), verdict: violationVerdict(violation, diagnostics) });
+      // The violations the what-if build added at the span: a violation the shipped checker held there already is its own, judged by the grid run's own comparison, not a move of the assumption
+      // (a line stored before `fresh` existed has every violation at the span).
+      for (const violation of row.fresh ?? row.now.filter((finding) => finding.kind === "violation")) verdicts.push({ group: row.group, row: label(row), now: label(violation), verdict: violationVerdict(violation, diagnostics) });
     }
   }
   for (const finding of entry.new ?? []) if (finding.kind === "violation") verdicts.push({ group: "new", now: label(finding), verdict: violationVerdict(finding, diagnostics) });
@@ -727,7 +741,7 @@ export function summaryText(report, sets) {
     const counts = report.arms[name]?.counts ?? {};
     lines.push(`${name} = ${ids.join(" + ")}: ${Object.entries(counts).filter(([, count]) => count).map(([kind, count]) => `${kind} ${count}`).join(", ") || "nothing moves"} (${report.arms[name]?.witnesses.length ?? 0} program(s) move)`);
     for (const [group, entry] of Object.entries(report.groups[name]).filter(([, entry]) => entry.toV + entry.toVOther + entry.toClean > 0).sort((a, b) => b[1].rows - a[1].rows).slice(0, 12)) {
-      lines.push(`    ${String(entry.rows).padStart(7)} rows: toV ${entry.toV + entry.toVOther}, toClean ${entry.toClean}, stillU ${entry.stillU + entry.blockedChanged}, other ${entry.toUOther}  ${group}`);
+      lines.push(`    ${String(entry.rows).padStart(7)} rows: toV ${entry.toV + entry.toVOther}, toClean ${entry.toClean}, stillU ${entry.stillU + entry.blockedChanged}, other ${entry.toUOther}${entry.besideV ? `, besideV ${entry.besideV}` : ""}  ${group}`);
     }
   }
   return `${lines.join("\n")}\n`;

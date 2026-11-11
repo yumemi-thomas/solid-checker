@@ -99,7 +99,39 @@ test("each uncertifiable row has one outcome by its span: violation, still an ob
   assert.deepEqual(rows[1].now.map((one) => one.id), ["SC1001"]);
   assert.deepEqual(added.map((one) => `${one.line}:${one.kind}`), ["9:violation", "10:uncertifiable"]);
   const tally = addOutcomes({}, { rows });
-  assert.deepEqual(tally["standard-member-impostor handed-root-patch [OpenMemberWrite(*), StandardRootHanded]"], { rows: 5, toV: 1, toVOther: 1, stillU: 1, blockedChanged: 1, toUOther: 0, toClean: 1 });
+  assert.deepEqual(tally["standard-member-impostor handed-root-patch [OpenMemberWrite(*), StandardRootHanded]"], { rows: 5, toV: 1, toVOther: 1, stillU: 1, blockedChanged: 1, toUOther: 0, besideV: 0, toClean: 1 });
+});
+
+test("a violation the shipped checker holds at a row's span already is no move of the row: the obligation beside it stays, or is gone beside it, and only an added violation is `fresh`", () => {
+  const prefer = (line) => finding({ line, id: "SC8015", kind: "violation", rule: "prefer-show" });
+  const owner = (line, extra = {}) => finding({ line, id: "SC4001", rule: "missing-owner", blockedBy: { kind: "function-run-unplaced" }, ...extra });
+  const base = { findings: [owner(1), prefer(1), owner(2), prefer(2), owner(3), prefer(3), owner(4), prefer(4)] };
+  const now = {
+    findings: [
+      // 1: nothing changed: the obligation stands beside the violation the shipped checker has
+      owner(1), prefer(1),
+      // 2: the obligation is gone, the violation it stood beside stands as before
+      prefer(2),
+      // 3: another violation is added beside the old one
+      owner(3), prefer(3), finding({ line: 3, id: "SC2001", kind: "violation", rule: "no-write-in-pure-computation", start: 30 }),
+      // 4: the obligation's own code is a violation now, beside the old one
+      finding({ line: 4, id: "SC4001", kind: "violation", rule: "missing-owner" }), prefer(4),
+    ],
+  };
+  const { rows, new: added } = rowOutcomes(base, now, HERE);
+  assert.deepEqual(rows.map((row) => row.outcome), ["stillU", "besideV", "toVOther", "toV"]);
+  assert.deepEqual(rows.map((row) => row.fresh.map((one) => one.id)), [[], [], ["SC2001"], ["SC4001"]]);
+  assert.deepEqual(rows[0].now.map((one) => one.id), ["SC4001", "SC8015"]);
+  assert.deepEqual(added, []);
+  const tally = addOutcomes({}, { rows });
+  assert.deepEqual(tally["function-run-unplaced"], { rows: 4, toV: 1, toVOther: 1, stillU: 1, blockedChanged: 0, toUOther: 0, besideV: 1, toClean: 0 });
+  // without the violation beside it the same obligation, gone, is a clean site
+  assert.equal(rowOutcomes({ findings: [owner(1)] }, { findings: [] }, HERE).rows[0].outcome, "toClean");
+  // and a project counts it apart from a clean site and from a move
+  const sets = [{ name: "a", ids: ["RootPatch"] }];
+  const idle = { flipped: [], transitions: { cleanToU: [], cleanToV: [], vToU: [], vLost: [], uToV: [], uLost: [] }, outcomes: rowOutcomes(base, now, HERE), status: "violation", now: [] };
+  const report = fold([{ program: "kui/x", project: "kui/x", bySet: { a: idle } }], sets);
+  assert.deepEqual(report.projects.a["kui/x"], { programs: 1, rows: 4, toV: 2, toClean: 0, stillU: 1, other: 0, besideV: 1, newV: 0, newU: 0 });
 });
 
 test("the fold is the harness's: transitions per set, groups per set, projects, and the control", () => {
@@ -137,7 +169,7 @@ test("a finding the shipped checker had no finding at is counted per project, a 
   const sets = [{ name: "a", ids: ["RootPatch"] }];
   const results = [{ program: "p", project: "demo/p", bySet: { a: entry } }, { program: "q", error: "exit 2" }];
   const whole = fold(results, sets);
-  assert.deepEqual(whole.projects.a["demo/p"], { programs: 1, rows: 1, toV: 1, toClean: 0, stillU: 0, other: 0, newV: 1, newU: 2 });
+  assert.deepEqual(whole.projects.a["demo/p"], { programs: 1, rows: 1, toV: 1, toClean: 0, stillU: 0, other: 0, besideV: 0, newV: 1, newU: 2 });
   const state = newFold(sets);
   for (const result of results) foldOne(state, result);
   assert.deepEqual(finishFold(state), whole);
@@ -197,6 +229,10 @@ test("a row that became a violation: confirmed where Chrome reports the rule's c
   assert.deepEqual(judgeMoves({ new: [at(40), at(12), at(7, "uncertifiable")] }, chrome).map((v) => [v.group, v.verdict]), [["new", "FALSE-POSITIVE"], ["new", "violation-confirmed"]]);
   // a row that is still an obligation, or another cause, is no verdict
   assert.deepEqual(judgeMoves({ moved: [row({ outcome: "blockedChanged" })] }, chrome), []);
+  // a violation the shipped checker held at the span already is not the assumption's: only the added one is judged (`fresh`); a row stored without `fresh` has every violation at the span
+  assert.deepEqual(judgeMoves({ moved: [row({ outcome: "toVOther", now: [at(40), at(12)], fresh: [at(12)] })] }, chrome).map((v) => [v.now, v.verdict]), [[label(at(12)), "violation-confirmed"]]);
+  assert.deepEqual(judgeMoves({ moved: [row({ outcome: "toVOther", now: [at(40), at(12)] })] }, chrome).map((v) => v.verdict), ["FALSE-POSITIVE", "violation-confirmed"]);
+  assert.deepEqual(judgeMoves({ moved: [row({ outcome: "besideV", now: [at(40)], fresh: [] })] }, chrome), []);
 });
 
 test("the comparison's reading of `covered` is held to the oracle's own on the shipped checker's findings", () => {
