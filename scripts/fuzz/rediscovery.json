@@ -18379,7 +18379,7 @@
  {
   "finding": "UNTRACKED_READ_AFTER_AWAIT's read (SC1002) in the body of a construct an async compute triggers after its `await`, was certified clean; Chrome reports the code at the site. False cleans: some of getter 2 of 8, iter-for 6 of 8, iter-from 6 of 8, iter-spread 6 of 8, setter 2 of 8, toprimitive 6 of 8. The other constructs are read or declined (agree, recall-gap or misplaced): ctor-implicit, ctor-new, ctor-super, field-direct, field-helper, field-iife, field-super, fn-new, next-for, next-from, next-spread, proxy-apply, proxy-construct, proxy-delete, proxy-get, proxy-has, proxy-keys, proxy-set, super-method, tagged, tojson, tostring, valueof. The twins that never trigger a construct are uncertifiable, but the getter, setter, ctor-* and field-helper twins carry a violation at the site that never runs (judge `unexecuted`, ADR 0458: wrong if it ran, ungated; the live program of each is Chrome-confirmed).",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the checker's walks enter the construct the host triggers, and the exported helper an apply calls); expected-failing until it lands",
+  "fixed": "ADR 0963 (6cc48e006): a read, a creation, a cleanup or a flush that a member route runs (a class element, an object literal's accessor or method, a tag function, a function a `new` runs) is an uncertifiable row of the rule that asks: SC1002 `reactive-read-after-await` (`function-run-unplaced`, `field-initializer-unplaced`) when the program holds a tracked async computation and a suspension, SC3001 `leaf-owner-forbidden-call` when it names a primitive that opens a leaf scope. The build that had it, the batch-10 head 647b0ccce (release, fast host): 28 of these ids are false-clean and `make fuzz-focus` exits 1 on the code's ob cells; the fix (release, the Chrome host, --runtime-diff all): 0 false clean, 0 false positive, 0 wrong rule on the code's ob cells, the twins 0 false positive, 0 behaviour, 0 attribution and 0 inconclusive differences with the fast host.",
   "grid": "mx-recall",
   "code": "UNTRACKED_READ_AFTER_AWAIT",
   "ids": [
@@ -18417,7 +18417,7 @@
  {
   "finding": "CLEANUP_IN_FORBIDDEN_SCOPE's `onCleanup` (SC3001) in the body of a construct an `onSettled` or `createTrackedEffect` callback triggers, was certified clean; Chrome reports the code at the site. False cleans: every program of ctor-implicit, ctor-new, ctor-super, getter, iter-for, iter-spread, next-for, next-spread, proxy-construct, proxy-delete, proxy-get, proxy-has, proxy-keys, proxy-set, setter, toprimitive, tostring, valueof; some of fn-new 2 of 8. The other constructs are read or declined (agree, recall-gap or misplaced): field-direct, field-helper, field-iife, field-super, iter-from, next-from, proxy-apply, super-method, tagged, tojson. The twins that never trigger a construct are clean or uncertifiable.",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the checker's walks enter the construct the host triggers, and the exported helper an apply calls); expected-failing until it lands",
+  "fixed": "ADR 0963 (6cc48e006): a read, a creation, a cleanup or a flush that a member route runs (a class element, an object literal's accessor or method, a tag function, a function a `new` runs) is an uncertifiable row of the rule that asks: SC1002 `reactive-read-after-await` (`function-run-unplaced`, `field-initializer-unplaced`) when the program holds a tracked async computation and a suspension, SC3001 `leaf-owner-forbidden-call` when it names a primitive that opens a leaf scope. The build that had it, the batch-10 head 647b0ccce (release, fast host): 112 of these ids are false-clean and `make fuzz-focus` exits 1 on the code's ob cells; the fix (release, the Chrome host, --runtime-diff all): 0 false clean, 0 false positive, 0 wrong rule on the code's ob cells, the twins 0 false positive, 0 behaviour, 0 attribution and 0 inconclusive differences with the fast host.",
   "grid": "mx-recall",
   "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -18573,7 +18573,7 @@
  {
   "finding": "PRIMITIVE_IN_FORBIDDEN_SCOPE's primitive (SC3001) in the body of a construct an `onSettled` or `createTrackedEffect` callback triggers, was certified clean; Chrome reports the code at the site. False cleans: every program of ctor-implicit, ctor-new, ctor-super, getter, iter-for, iter-spread, next-for, next-spread, proxy-construct, proxy-delete, proxy-get, proxy-has, proxy-keys, proxy-set, setter, toprimitive, tostring, valueof; some of fn-new 6 of 24. The other constructs are read or declined (agree, recall-gap or misplaced): field-direct, field-helper, field-iife, field-super, iter-from, next-from, proxy-apply, super-method, tagged, tojson. The twins that never trigger a construct are clean or uncertifiable.",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the checker's walks enter the construct the host triggers, and the exported helper an apply calls); expected-failing until it lands",
+  "fixed": "ADR 0963 (6cc48e006): a read, a creation, a cleanup or a flush that a member route runs (a class element, an object literal's accessor or method, a tag function, a function a `new` runs) is an uncertifiable row of the rule that asks: SC1002 `reactive-read-after-await` (`function-run-unplaced`, `field-initializer-unplaced`) when the program holds a tracked async computation and a suspension, SC3001 `leaf-owner-forbidden-call` when it names a primitive that opens a leaf scope. The build that had it, the batch-10 head 647b0ccce (release, fast host): 336 of these ids are false-clean and `make fuzz-focus` exits 1 on the code's ob cells; the fix (release, the Chrome host, --runtime-diff all): 0 false clean, 0 false positive, 0 wrong rule on the code's ob cells, the twins 0 false positive, 0 behaviour, 0 attribution and 0 inconclusive differences with the fast host.",
   "grid": "mx-recall",
   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -19021,7 +19021,7 @@
  {
   "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's `flush()` (SC3001) in the body of a construct an `onSettled` or `createTrackedEffect` callback triggers, was certified clean; Chrome reports the code at the site. False cleans: every program of ctor-implicit, ctor-new, ctor-super, getter, iter-for, iter-spread, next-for, next-spread, proxy-construct, proxy-delete, proxy-get, proxy-has, proxy-keys, proxy-set, setter, toprimitive, tostring, valueof; some of fn-new 2 of 8. The other constructs are read or declined (agree, recall-gap or misplaced): field-direct, field-helper, field-iife, field-super, iter-from, next-from, proxy-apply, super-method, tagged, tojson. The twins that never trigger a construct are clean or uncertifiable.",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the checker's walks enter the construct the host triggers, and the exported helper an apply calls); expected-failing until it lands",
+  "fixed": "ADR 0963 (6cc48e006): a read, a creation, a cleanup or a flush that a member route runs (a class element, an object literal's accessor or method, a tag function, a function a `new` runs) is an uncertifiable row of the rule that asks: SC1002 `reactive-read-after-await` (`function-run-unplaced`, `field-initializer-unplaced`) when the program holds a tracked async computation and a suspension, SC3001 `leaf-owner-forbidden-call` when it names a primitive that opens a leaf scope. The build that had it, the batch-10 head 647b0ccce (release, fast host): 112 of these ids are false-clean and `make fuzz-focus` exits 1 on the code's ob cells; the fix (release, the Chrome host, --runtime-diff all): 0 false clean, 0 false positive, 0 wrong rule on the code's ob cells, the twins 0 false positive, 0 behaviour, 0 attribution and 0 inconclusive differences with the fast host.",
   "grid": "mx-recall",
   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
   "ids": [
@@ -19177,16 +19177,10 @@
  {
   "finding": "FLUSH_IN_EFFECT_CALLBACK's `flush()` (SC2008) in the body of an exported helper an effect's apply calls (`export function` or `export const`, called in the file, through an alias of a self-import, through a second module that re-exports it, or imported by name after `export { x as y }` for `const`), was certified clean; Chrome reports the code at the site. False cleans: every program of exp-const-alias, exp-const-import, exp-const-reexport, exp-const-same, exp-fn-alias, exp-fn-reexport, exp-fn-same. The other constructs are read or declined (agree, recall-gap or misplaced): exp-fn-import, local. The twins that never call the helper are uncertifiable.",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the checker's walks enter the construct the host triggers, and the exported helper an apply calls); expected-failing until it lands",
+  "fixed": "ADR 0963 (6cc48e006): an exported function keeps the effect-phase walk (`effect_phase::named_layer`) and its origin is `mixed` (ADR 0516), so the helper an apply calls is an uncertifiable row of the rule that asks (SC2008, `handler-dispatch-unproven`), not silence; its unexported twin stays a violation. The build that had it, the batch-10 head 647b0ccce (release, fast host): all 8 of these ids are false-clean; the fix (release, the Chrome host): 0 false clean among them. The 6 programs of the const-arrow forms reached through a self-import are in the entry that follows.",
   "grid": "mx-recall",
   "code": "FLUSH_IN_EFFECT_CALLBACK",
   "ids": [
-   "mx-flush-in-effect-callback-ob-exp-const-alias-apply-x-direct-iife",
-   "mx-flush-in-effect-callback-ob-exp-const-alias-apply-x-direct-none",
-   "mx-flush-in-effect-callback-ob-exp-const-import-apply-x-direct-iife",
-   "mx-flush-in-effect-callback-ob-exp-const-import-apply-x-direct-none",
-   "mx-flush-in-effect-callback-ob-exp-const-reexport-apply-x-direct-iife",
-   "mx-flush-in-effect-callback-ob-exp-const-reexport-apply-x-direct-none",
    "mx-flush-in-effect-callback-ob-exp-const-same-apply-x-direct-iife",
    "mx-flush-in-effect-callback-ob-exp-const-same-apply-x-direct-none",
    "mx-flush-in-effect-callback-ob-exp-fn-alias-apply-x-direct-iife",
@@ -19197,11 +19191,28 @@
    "mx-flush-in-effect-callback-ob-exp-fn-same-apply-x-direct-none"
   ],
   "rediscovered": "main 29b3f9312 (release; checker sha256 7f5a78f05b36…, producer 998ad2d92a37…; --runtime-diff all, no cache): 14 programs false-clean (7 contexts); the code's 18 ob programs: agree 4, false-clean 14. Chrome (the real oracle, no cache) and the fast host agree on all 2,928 programs of the family: 0 behaviour, 0 attribution and 0 inconclusive differences."
+
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's `flush()` (SC2008) in the body of an exported helper an effect's apply calls (`export function` or `export const`, called in the file, through an alias of a self-import, through a second module that re-exports it, or imported by name after `export { x as y }` for `const`), was certified clean; Chrome reports the code at the site. False cleans: every program of exp-const-alias, exp-const-import, exp-const-reexport, exp-const-same, exp-fn-alias, exp-fn-reexport, exp-fn-same. The other constructs are read or declined (agree, recall-gap or misplaced): exp-fn-import, local. The twins that never call the helper are uncertifiable.",
+  "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
+  "fixed": "pending (batch 10b, found by the fix): the generator reaches a helper in a second file through a self-import (`import { hn1 } from \"./App\"`) of a `const` arrow that `export { hx1 as hn1 }` exports, and the call graph does not link a self-imported `const` arrow to its function, so the apply walk finds no call site and the helper is certified clean; the same shape with `function` is a violation, and the two-file shape (`export { hx1 as hn1 }` in helper.ts, imported by App.tsx) is a violation on the batch-10 head and on the fix (probe exp-const-two-file); expected-failing until the call index resolves a self-import of a `const` arrow or the printer writes the helper in a second file",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ob-exp-const-alias-apply-x-direct-iife",
+   "mx-flush-in-effect-callback-ob-exp-const-alias-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ob-exp-const-import-apply-x-direct-iife",
+   "mx-flush-in-effect-callback-ob-exp-const-import-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ob-exp-const-reexport-apply-x-direct-iife",
+   "mx-flush-in-effect-callback-ob-exp-const-reexport-apply-x-direct-none"
+  ],
+  "rediscovered": "the batch-10 head 647b0ccce (release, fast host) and the fix (release, the Chrome host, --runtime-diff all, 0 behaviour differences): these 6 programs of the `ob-exp-const-{import,alias,reexport}-apply` cells (x direct, `none` and `iife`) are false-clean: Chrome reports the code at the helper, the walk finds no call site."
  },
  {
   "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's primitive (SC6002) in the body of an exported helper an effect's apply calls (`export function` or `export const`, called in the file, through an alias of a self-import, through a second module that re-exports it, or imported by name after `export { x as y }` for `const`), was certified clean; Chrome reports the code at the site. False cleans: every program of exp-const-alias, exp-const-import, exp-const-reexport, exp-const-same, exp-fn-alias, exp-fn-reexport, exp-fn-same. The other constructs are read or declined (agree, recall-gap or misplaced): exp-fn-import, local. The twins that never call the helper are uncertifiable.",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the checker's walks enter the construct the host triggers, and the exported helper an apply calls); expected-failing until it lands",
+  "fixed": "ADR 0963 (6cc48e006): an exported function keeps the effect-phase walk (`effect_phase::named_layer`) and its origin is `mixed` (ADR 0516), so the helper an apply calls is an uncertifiable row of the rule that asks (SC6002, `effect-owner-unproven`), not silence; its unexported twin stays a violation. The build that had it, the batch-10 head 647b0ccce (release, fast host): all 36 of these ids are false-clean; the fix (release, the Chrome host): 0 false clean among them. The 6 programs of the const-arrow forms reached through a self-import are in the entry that follows.",
   "grid": "mx-recall",
   "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
   "ids": [
@@ -19209,20 +19220,14 @@
    "mx-primitive-in-effect-callback-ob-exp-const-alias-apply-effect-direct-none",
    "mx-primitive-in-effect-callback-ob-exp-const-alias-apply-memo-direct-iife",
    "mx-primitive-in-effect-callback-ob-exp-const-alias-apply-memo-direct-none",
-   "mx-primitive-in-effect-callback-ob-exp-const-alias-apply-root-direct-iife",
-   "mx-primitive-in-effect-callback-ob-exp-const-alias-apply-root-direct-none",
    "mx-primitive-in-effect-callback-ob-exp-const-import-apply-effect-direct-iife",
    "mx-primitive-in-effect-callback-ob-exp-const-import-apply-effect-direct-none",
    "mx-primitive-in-effect-callback-ob-exp-const-import-apply-memo-direct-iife",
    "mx-primitive-in-effect-callback-ob-exp-const-import-apply-memo-direct-none",
-   "mx-primitive-in-effect-callback-ob-exp-const-import-apply-root-direct-iife",
-   "mx-primitive-in-effect-callback-ob-exp-const-import-apply-root-direct-none",
    "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-effect-direct-iife",
    "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-effect-direct-none",
    "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-memo-direct-iife",
    "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-memo-direct-none",
-   "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-root-direct-iife",
-   "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-root-direct-none",
    "mx-primitive-in-effect-callback-ob-exp-const-same-apply-effect-direct-iife",
    "mx-primitive-in-effect-callback-ob-exp-const-same-apply-effect-direct-none",
    "mx-primitive-in-effect-callback-ob-exp-const-same-apply-memo-direct-iife",
@@ -19249,11 +19254,28 @@
    "mx-primitive-in-effect-callback-ob-exp-fn-same-apply-root-direct-none"
   ],
   "rediscovered": "main 29b3f9312 (release; checker sha256 7f5a78f05b36…, producer 998ad2d92a37…; --runtime-diff all, no cache): 42 programs false-clean (7 contexts); the code's 54 ob programs: agree 12, false-clean 42. Chrome (the real oracle, no cache) and the fast host agree on all 2,928 programs of the family: 0 behaviour, 0 attribution and 0 inconclusive differences."
+
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's primitive (SC6002) in the body of an exported helper an effect's apply calls (`export function` or `export const`, called in the file, through an alias of a self-import, through a second module that re-exports it, or imported by name after `export { x as y }` for `const`), was certified clean; Chrome reports the code at the site. False cleans: every program of exp-const-alias, exp-const-import, exp-const-reexport, exp-const-same, exp-fn-alias, exp-fn-reexport, exp-fn-same. The other constructs are read or declined (agree, recall-gap or misplaced): exp-fn-import, local. The twins that never call the helper are uncertifiable.",
+  "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
+  "fixed": "pending (batch 10b, found by the fix): the generator reaches a helper in a second file through a self-import (`import { hn1 } from \"./App\"`) of a `const` arrow that `export { hx1 as hn1 }` exports, and the call graph does not link a self-imported `const` arrow to its function, so the apply walk finds no call site and the helper is certified clean; the same shape with `function` is a violation, and the two-file shape (`export { hx1 as hn1 }` in helper.ts, imported by App.tsx) is a violation on the batch-10 head and on the fix (probe exp-const-two-file); expected-failing until the call index resolves a self-import of a `const` arrow or the printer writes the helper in a second file",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-ob-exp-const-alias-apply-root-direct-iife",
+   "mx-primitive-in-effect-callback-ob-exp-const-alias-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-ob-exp-const-import-apply-root-direct-iife",
+   "mx-primitive-in-effect-callback-ob-exp-const-import-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-root-direct-iife",
+   "mx-primitive-in-effect-callback-ob-exp-const-reexport-apply-root-direct-none"
+  ],
+  "rediscovered": "the batch-10 head 647b0ccce (release, fast host) and the fix (release, the Chrome host, --runtime-diff all, 0 behaviour differences): these 6 programs of the `ob-exp-const-{import,alias,reexport}-apply` cells (x direct, `none` and `iife`) are false-clean: Chrome reports the code at the helper, the walk finds no call site."
  },
  {
   "finding": "CLEANUP_IN_FORBIDDEN_SCOPE's site in a function only ever called with `new` (`new (F1 as unknown as new () => object)()`) inside an `onSettled` or `createTrackedEffect` callback (SC3001, `ob-fn-new-settled`, `ob-fn-new-tracked`): the checker claims `leaf-owner-forbidden-call` at the call (the callee `F1` inside the parentheses, 8:10 in the direct shape), Chrome reports the code at the site inside `F1` (6:7), and the judge has no frame Chrome recorded at the claim, so the row is `misplaced`. Not attributed: the checker's anchor for a `new` expression, or the judge's recorded call position for one (V8's frame of a `new` call stands at the keyword). No false clean (the claim is made) and no false positive (Chrome reports the code).",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the anchor of a claim at a `new` expression, or the judge's call position for one); expected-failing until it lands",
+  "fixed": "ADR 0961 (3c1b1e865, batch 10): a `new` call's SC3001 and SC9012 rows stand at its `new` token, where V8 and the judge place a `new` frame; on the batch-10 head these programs are no longer misplaced (the fast host, release: none of the ob cells is `misplaced`).",
   "grid": "mx-recall",
   "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -19269,7 +19291,7 @@
  {
   "finding": "PRIMITIVE_IN_FORBIDDEN_SCOPE's site in a function only ever called with `new` (`new (F1 as unknown as new () => object)()`) inside an `onSettled` or `createTrackedEffect` callback (SC3001, `ob-fn-new-settled`, `ob-fn-new-tracked`): the checker claims `leaf-owner-forbidden-call` at the call (the callee `F1` inside the parentheses, 8:10 in the direct shape), Chrome reports the code at the site inside `F1` (6:7), and the judge has no frame Chrome recorded at the claim, so the row is `misplaced`. Not attributed: the checker's anchor for a `new` expression, or the judge's recorded call position for one (V8's frame of a `new` call stands at the keyword). No false clean (the claim is made) and no false positive (Chrome reports the code).",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the anchor of a claim at a `new` expression, or the judge's call position for one); expected-failing until it lands",
+  "fixed": "ADR 0961 (3c1b1e865, batch 10): a `new` call's SC3001 and SC9012 rows stand at its `new` token, where V8 and the judge place a `new` frame; on the batch-10 head these programs are no longer misplaced (the fast host, release: none of the ob cells is `misplaced`).",
   "grid": "mx-recall",
   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -19297,7 +19319,7 @@
  {
   "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site in a function only ever called with `new` (`new (F1 as unknown as new () => object)()`) inside an `onSettled` or `createTrackedEffect` callback (SC3001, `ob-fn-new-settled`, `ob-fn-new-tracked`): the checker claims `leaf-owner-forbidden-call` at the call (the callee `F1` inside the parentheses, 8:10 in the direct shape), Chrome reports the code at the site inside `F1` (6:7), and the judge has no frame Chrome recorded at the claim, so the row is `misplaced`. Not attributed: the checker's anchor for a `new` expression, or the judge's recorded call position for one (V8's frame of a `new` call stands at the keyword). No false clean (the claim is made) and no false positive (Chrome reports the code).",
   "found": "ADR 0963 (W agent w-b10-3, 2026-11-11): a researcher's 64 Chrome false cleans on main 9e5a45080 (a site run by a getter or setter, a coercion, an iterator step, a Proxy trap, a constructor, a class field initializer, a tag, and an exported helper an effect's apply calls), as the object-boundary shapes of `ob-shapes.mjs` (`ob-*`), each program through the Chrome host and the real oracle",
-  "fixed": "pending: batch 10b (the anchor of a claim at a `new` expression, or the judge's call position for one); expected-failing until it lands",
+  "fixed": "ADR 0961 (3c1b1e865, batch 10): a `new` call's SC3001 and SC9012 rows stand at its `new` token, where V8 and the judge place a `new` frame; on the batch-10 head these programs are no longer misplaced (the fast host, release: none of the ob cells is `misplaced`).",
   "grid": "mx-recall",
   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
   "ids": [

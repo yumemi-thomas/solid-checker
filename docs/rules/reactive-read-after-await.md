@@ -361,6 +361,20 @@ or a member access (a function literal's own invocation reads nothing), the call
 `undefined`, no argument at its index and a spread that may hide it run it; a destructuring pattern's defaults run whatever
 the argument is. A constructor of a class written in another file is not followed.
 
+## Members run without a call (ADR 0963)
+
+The continuation of an async computation runs a member without a call: a property access runs a getter, an assignment a
+setter, a coercion `toString`, `valueOf` or `[Symbol.toPrimitive]`, a `for...of` or a spread `[Symbol.iterator]` and the
+`next()` it returns, a Proxy access its trap, `new` a constructor and the class's field initializers, a tagged template its tag.
+The walk of the continuation follows calls and runs none of these. A reactive read written where such a member runs it (a
+class element, an object literal's accessor or method, a tag function, a function a `new` runs, a helper those call) is an
+uncertifiable row of this rule (`function-run-unplaced`; `field-initializer-unplaced` directly in a class field's
+initializer), never a violation, while the program holds a tracked async computation and a suspension (an `await`, an
+implicit suspension or a `then`, `catch`, `finally` call). Only reads the role engine could not place are asked. A function
+handed where nothing follows it is run by a call, and a parameter initializer is the call-site net's (above): not this net's.
+The row is coarse: a read in a member stands whatever the continuation touches and whatever the computation tracked before
+its first suspension.
+
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous variant
