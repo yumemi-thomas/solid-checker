@@ -1015,8 +1015,7 @@ impl Capabilities<'_> {
 /// (its callee, tag or tag function, or any argument, names a symbol a package declares or a binding that carries one)
 /// and hands an exact capability in an argument, a JSX attribute or a template substitution is an uncertifiable row
 /// of each rule that claims the runtime code the capability's use throws: a setter, `REACTIVE_WRITE_IN_OWNED_SCOPE`
-/// (SC2001); an accessor, `STRICT_READ_UNTRACKED` (SC1001), and for an async source `PENDING_ASYNC_UNTRACKED_READ`
-/// (SC5001); a store, `STORE_WRITE_OUTSIDE_SETTER` (SC2003) and SC1001; an action, `ACTION_CALLED_IN_OWNED_SCOPE`
+/// (SC2001); an accessor, `STRICT_READ_UNTRACKED` (SC1001); a store, `STORE_WRITE_OUTSIDE_SETTER` (SC2003) and SC1001; an action, `ACTION_CALLED_IN_OWNED_SCOPE`
 /// (SC2002). Never a violation: whether the package uses it, and where, is not proven here; a violation the call walk
 /// proves at the same site stands beside it.
 ///
@@ -1157,12 +1156,6 @@ fn handed_value_claims(
         "a reactive accessor",
         "a read where nothing tracks it (a component body, an owned setup) logs `STRICT_READ_UNTRACKED` in the dev build",
     );
-    const ASYNC: (&str, &str, &str, &str) = (
-        "SC5001",
-        "pending-async-unsuspendable-read",
-        "an async accessor",
-        "a read of a pending value where nothing can suspend it throws `PENDING_ASYNC_UNTRACKED_READ` in the dev build",
-    );
     const STORE_WRITE: (&str, &str, &str, &str) = (
         "SC2003",
         "no-store-mutation-outside-setter",
@@ -1186,10 +1179,12 @@ fn handed_value_claims(
         HandedValue::Accessor {
             asynchronous: false,
         } => (&[ACCESSOR], crate::blockers::ACCESSOR_HANDED_TO_PACKAGE),
-        HandedValue::Accessor { asynchronous: true } => (
-            &[ACCESSOR, ASYNC],
-            crate::blockers::ACCESSOR_HANDED_TO_PACKAGE,
-        ),
+        // An async source's untracked read is SC5001's (`PENDING_ASYNC_UNTRACKED_READ`), a rule the dialect emits only
+        // through the async-read channel, never as a static violation (`solve` panics on one): not claimed here yet
+        // (docs/open-work.md); the accessor's own claim stands.
+        HandedValue::Accessor { asynchronous: true } => {
+            (&[ACCESSOR], crate::blockers::ACCESSOR_HANDED_TO_PACKAGE)
+        }
         HandedValue::Store => (
             &[STORE_WRITE, STORE_READ],
             crate::blockers::STORE_HANDED_TO_PACKAGE,
