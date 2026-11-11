@@ -1893,6 +1893,22 @@
       }
      },
      {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1910,7 +1926,8 @@
      }
     ],
     "absent": []
-   }
+   },
+   "note": "ADR 0963: the gate runs this case in one program with another that holds an async computation, so the member-route net adds SC1002's uncertifiable row for the read in the object's method (`function-run-unplaced`)."
   },
   {
    "id": "no-write-in-pure-computation/positive/002",
@@ -3838,6 +3855,22 @@
       }
      },
      {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "s()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
       "rule": "prefer-show",
       "code": "SC8015",
       "kind": "uncertifiable",
@@ -3856,7 +3889,7 @@
     ],
     "absent": []
    },
-   "note": "Kept divergence, ADR 0671: a project method's call may read, and no row settles it, so the site stays open."
+   "note": "Kept divergence, ADR 0671: a project method's call may read, and no row settles it, so the site stays open. ADR 0963: the gate runs this case in one program with another that holds an async computation, so the member-route net adds SC1002's uncertifiable row for the read in the method (`function-run-unplaced`)."
   },
   {
    "id": "prefer-for/solid-v2/settled-literal-receiver/001",
