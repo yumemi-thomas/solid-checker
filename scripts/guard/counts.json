@@ -9,20 +9,20 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1335,
+  "SC1001 function-run-unplaced": 1336,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 130,
-  "SC1001 read-backing-unproven": 371,
+  "SC1001 read-backing-unproven": 372,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 3,
   "SC1001 summary-read-unplaced": 94,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 function-run-unplaced": 2,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 176,
+  "SC1002 handed-read-after-await": 177,
   "SC1002 package-finding-at-entry": 5,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
@@ -201,7 +201,7 @@
   "SC9012 forwarded-to-undescribed-callee": 28,
   "SC9012 function-call-target-unresolved": 8,
   "SC9012 function-prototype-callee-unresolved": 1,
-  "SC9012 handed-member-dispatch": 436,
+  "SC9012 handed-member-dispatch": 435,
   "SC9012 handed-member-read": 69,
   "SC9012 handed-read-after-await": 10,
   "SC9012 import-unresolved": 37,
@@ -226,9 +226,9 @@
   "SC9012 returned-callable-outside-source-universe": 47,
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
-  "SC9012 standard-member-impostor": 350,
+  "SC9012 standard-member-impostor": 336,
   "SC9012 store-key-undecided": 12,
-  "SC9012 tuple-iteration-written": 1380,
+  "SC9012 tuple-iteration-written": 1379,
   "SC9012 type-only-source": 86,
   "SC9012 value-as-parameter-default": 9,
   "SC9012 value-bound-held": 6,
@@ -2015,6 +2015,84 @@
    "kind": "relabel",
    "relabeledTo": "SC2003 store-operation-may-not-write",
    "note": "`Reflect.set(p, k, f)` keeps its SC2003 row at the same span: the withheld standard call is no proven container root"
+  },
+  {
+   "fixture": "reactive-ir/impostor-receivers",
+   "key": "SC9012 standard-member-impostor",
+   "from": 24,
+   "to": 16,
+   "adr": "ADR 0951",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::handed_root_patch",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-receivers",
+    "open": "reactive-ir/handed-root-patch-definer-key-same"
+   },
+   "note": "the program's one definer is `Object.defineProperty(Object.prototype, \"then\", …)`, a literal key: it withholds calls of `then`, not the 8 calls of other members (`queueMicrotask`, `forEach` on a project class, `Symbol.replace` …) the blanket definer spelling withheld; the 16 rows left stand on the open writes of `forEach` and `addEventListener` and the impostor census"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-premise-tripwire-define",
+   "key": "SC9012 standard-member-impostor",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 0951",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::handed_root_patch",
+   "fixtures": {
+    "proved": "reactive-ir/read-after-await-premise-tripwire-define",
+    "open": "reactive-ir/handed-root-patch-definer-key-same"
+   },
+   "note": "`Object.defineProperty(Promise, \"all\", …)` names `all`: the calls of other members (`setTimeout`, `then`, `defineProperty`) keep the proof; the Promise premise is still withdrawn by its own tripwire (the SC1002 `handed-read-after-await` row at the handler stands)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-premise-tripwire-define",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0951",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::handed_root_patch",
+   "fixtures": {
+    "proved": "reactive-ir/read-after-await-premise-tripwire-define",
+    "open": "reactive-ir/arrow-bound-helper-reachability"
+   },
+   "note": "the `.then` call is no longer a withheld standard call, so no dispatch row stands at it"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-premise-tripwire-define",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0951",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::handed_root_patch",
+   "fixtures": {
+    "proved": "reactive-ir/read-after-await-premise-tripwire-define",
+    "open": "reactive-ir/arrow-bound-helper-reachability-eval"
+   },
+   "note": "the same call, no longer withheld"
+  },
+  {
+   "fixture": "reactive-ir/standard-patches",
+   "key": "SC9012 standard-member-impostor",
+   "from": 8,
+   "to": 3,
+   "adr": "ADR 0951",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::handed_root_patch",
+   "fixtures": {
+    "proved": "reactive-ir/standard-patches",
+    "open": "reactive-ir/handed-root-patch-definer-key-same"
+   },
+   "note": "`Object.defineProperty(globalThis, \"requestAnimationFrame\", …)` is a write of that name only (the fixture's own claim, ADR 0781: a write of another name keeps the proof): the calls of `queueMicrotask`, `map`, `defineProperty` and `assign` are no longer withheld; the 3 left name the written members"
+  },
+  {
+   "fixture": "reactive-ir/standard-patches",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0951",
+   "proof": "rust/crates/solid-reactive-ir/src/base/contributions.rs::handed_root_patch",
+   "fixtures": {
+    "proved": "reactive-ir/standard-patches",
+    "open": "reactive-ir/accessor-provenance"
+   },
+   "note": "the read in `[1].map(() => w())` is placed once `map` is no longer withheld (it stands as `read-backing-unproven`)"
   }
  ],
  "renames": []

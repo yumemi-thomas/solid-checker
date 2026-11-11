@@ -71,17 +71,6 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "standard-member-impostor",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/standard-patches/App.tsx",
-      "start": 305,
-      "end": 319,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "warning",
       "path": "fixtures/reactive-ir/standard-patches/App.tsx",
@@ -90,21 +79,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "standard-member-impostor",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/standard-patches/App.tsx",
-      "start": 343,
-      "end": 350,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/standard-patches/App.tsx",
       "start": 357,
@@ -131,39 +109,6 @@
       "path": "fixtures/reactive-ir/standard-patches/App.tsx",
       "start": 357,
       "end": 358,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "standard-member-impostor",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/standard-patches/patches.ts",
-      "start": 234,
-      "end": 255,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "standard-member-impostor",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/standard-patches/patches.ts",
-      "start": 334,
-      "end": 347,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "standard-member-impostor",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/standard-patches/patches.ts",
-      "start": 437,
-      "end": 447,
       "fixes": 0
     }
   ]
