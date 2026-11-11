@@ -10137,7 +10137,7 @@
  {
   "finding": "CONTEXT_NOT_FOUND's site in a dependency package reached through an entry that is not an exact call of a resolved callee (package-site.mjs: dotcall, reflect, tagged, new, getter, callback, jsx, jsx-inner, hop, dynamic) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's exact call that runs it (ADRs 0290, 0943).",
   "found": "ADR 0957 (W agent w-b10-2, 2026-11-11): the package site, the generic twin of every site (`pk` axis of the recall grids), and a researcher's 25 Chrome false cleans on main 29b3f9312 (SC2001 writes via a call, a getter or JSX; SC1001 reads via JSX, .call, a tagged template, new; SC4001 after a click via a getter, .call, a tagged template, new; SC4002 through a createComponent hop); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the coordinator's ADR 0949 (the Mac agent's fix); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "CONTEXT_NOT_FOUND",
   "ids": [
@@ -10217,7 +10217,7 @@
  {
   "finding": "NO_OWNER_EFFECT's site in a dependency package reached through an entry that is not an exact call of a resolved callee (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's exact call that runs it (ADRs 0290, 0943).",
   "found": "ADR 0957 (W agent w-b10-2, 2026-11-11): the package site, the generic twin of every site (`pk` axis of the recall grids), and a researcher's 25 Chrome false cleans on main 29b3f9312 (SC2001 writes via a call, a getter or JSX; SC1001 reads via JSX, .call, a tagged template, new; SC4001 after a click via a getter, .call, a tagged template, new; SC4002 through a createComponent hop); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the coordinator's ADR 0949 (the Mac agent's fix); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "NO_OWNER_EFFECT",
   "ids": [
@@ -10299,7 +10299,7 @@
  {
   "finding": "REACTIVE_WRITE_IN_OWNED_SCOPE's site in a dependency package reached through an entry that is not an exact call of a resolved callee (package-site.mjs: call, call-inner, dotcall, reflect, tagged, new, getter, callback, jsx, jsx-inner, hop, dynamic) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's exact call that runs it (ADRs 0290, 0943).",
   "found": "ADR 0957 (W agent w-b10-2, 2026-11-11): the package site, the generic twin of every site (`pk` axis of the recall grids), and a researcher's 25 Chrome false cleans on main 29b3f9312 (SC2001 writes via a call, a getter or JSX; SC1001 reads via JSX, .call, a tagged template, new; SC4001 after a click via a getter, .call, a tagged template, new; SC4002 through a createComponent hop); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the coordinator's ADR 0949 (the Mac agent's fix); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
   "ids": [
@@ -10897,7 +10897,7 @@
  {
   "finding": "REACTIVE_WRITE_IN_OWNED_SCOPE's site in a dependency package reached through an exact call (`site1(...)`, or one more package call inside) was not reported: the package-side access is unresolved (an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. Not in the researcher's list of 25; named apart.",
   "found": "ADR 0957 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`), each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the coordinator's ADR 0949 (the Mac agent's fix); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
   "ids": [
@@ -10927,7 +10927,7 @@
  {
   "finding": "STRICT_READ_UNTRACKED's site in a dependency package reached through an entry that is not an exact call of a resolved callee (package-site.mjs: dotcall, reflect, tagged, new, getter, jsx, jsx-inner, hop) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's exact call that runs it (ADRs 0290, 0943).",
   "found": "ADR 0957 (W agent w-b10-2, 2026-11-11): the package site, the generic twin of every site (`pk` axis of the recall grids), and a researcher's 25 Chrome false cleans on main 29b3f9312 (SC2001 writes via a call, a getter or JSX; SC1001 reads via JSX, .call, a tagged template, new; SC4001 after a click via a getter, .call, a tagged template, new; SC4002 through a createComponent hop); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the coordinator's ADR 0949 (the Mac agent's fix); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "STRICT_READ_UNTRACKED",
   "ids": [
@@ -11021,7 +11021,7 @@
 {
   "finding": "CLEANUP_IN_FORBIDDEN_SCOPE's site behind a primitive layer whose callback takes an unused parameter (`untrack((p0?: number) => …)`) or is async (`untrack(async () => { … })`) was certified clean or declined by a rule that does not name the code: the slot climbs of the leaf-owner, flush and cleanup walks stop at such a callback, where the same layer with a plain callback is reported. Chrome reports the code at the site in both.",
   "found": "ADR 0960 (W agent w-b10-2, 2026-11-11): the callback forms `param` and `async` of the primitive-layer axis (`pl-<layer>-<form>-<host>`), and a researcher's 5 Chrome false cleans on main (FLUSH_IN_ACTION `untrack((x) => flush())`, `untrack(async () => { flush(); })`, `latest((x) => flush())`; FLUSH_IN_TRACKED_QUEUE_CALLBACK `untrack((x) => flush())`, `untrack(async () => { flush(); })`; onCleanup behind such a slot); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0959 (slot climbs cross a callback with a parameter and an async one); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -11047,7 +11047,7 @@
  {
   "finding": "FLUSH_IN_ACTION's site behind a primitive layer whose callback takes an unused parameter (`untrack((p0?: number) => …)`) or is async (`untrack(async () => { … })`) was certified clean or declined by a rule that does not name the code: the slot climbs of the leaf-owner, flush and cleanup walks stop at such a callback, where the same layer with a plain callback is reported. Chrome reports the code at the site in both.",
   "found": "ADR 0960 (W agent w-b10-2, 2026-11-11): the callback forms `param` and `async` of the primitive-layer axis (`pl-<layer>-<form>-<host>`), and a researcher's 5 Chrome false cleans on main (FLUSH_IN_ACTION `untrack((x) => flush())`, `untrack(async () => { flush(); })`, `latest((x) => flush())`; FLUSH_IN_TRACKED_QUEUE_CALLBACK `untrack((x) => flush())`, `untrack(async () => { flush(); })`; onCleanup behind such a slot); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0959 (slot climbs cross a callback with a parameter and an async one); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "FLUSH_IN_ACTION",
   "ids": [
@@ -11068,7 +11068,7 @@
  {
   "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site behind a primitive layer whose callback takes an unused parameter (`untrack((p0?: number) => …)`) or is async (`untrack(async () => { … })`) was certified clean or declined by a rule that does not name the code: the slot climbs of the leaf-owner, flush and cleanup walks stop at such a callback, where the same layer with a plain callback is reported. Chrome reports the code at the site in both.",
   "found": "ADR 0960 (W agent w-b10-2, 2026-11-11): the callback forms `param` and `async` of the primitive-layer axis (`pl-<layer>-<form>-<host>`), and a researcher's 5 Chrome false cleans on main (FLUSH_IN_ACTION `untrack((x) => flush())`, `untrack(async () => { flush(); })`, `latest((x) => flush())`; FLUSH_IN_TRACKED_QUEUE_CALLBACK `untrack((x) => flush())`, `untrack(async () => { flush(); })`; onCleanup behind such a slot); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0959 (slot climbs cross a callback with a parameter and an async one); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
   "ids": [
@@ -11096,7 +11096,7 @@
  {
   "finding": "PRIMITIVE_IN_FORBIDDEN_SCOPE's site behind a primitive layer whose callback takes an unused parameter (`untrack((p0?: number) => …)`) or is async (`untrack(async () => { … })`) was certified clean or declined by a rule that does not name the code: the slot climbs of the leaf-owner, flush and cleanup walks stop at such a callback, where the same layer with a plain callback is reported. Chrome reports the code at the site in both.",
   "found": "ADR 0960 (W agent w-b10-2, 2026-11-11): the callback forms `param` and `async` of the primitive-layer axis (`pl-<layer>-<form>-<host>`), and a researcher's 5 Chrome false cleans on main (FLUSH_IN_ACTION `untrack((x) => flush())`, `untrack(async () => { flush(); })`, `latest((x) => flush())`; FLUSH_IN_TRACKED_QUEUE_CALLBACK `untrack((x) => flush())`, `untrack(async () => { flush(); })`; onCleanup behind such a slot); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0959 (slot climbs cross a callback with a parameter and an async one); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -11178,7 +11178,7 @@
  {
   "finding": "RESOLVE_IN_REACTIVE_SCOPE's site behind a primitive layer whose callback takes an unused parameter (`untrack((p0?: number) => …)`) or is async (`untrack(async () => { … })`) was certified clean or declined by a rule that does not name the code: the slot climbs of the leaf-owner, flush and cleanup walks stop at such a callback, where the same layer with a plain callback is reported. Chrome reports the code at the site in both.",
   "found": "ADR 0960 (W agent w-b10-2, 2026-11-11): the callback forms `param` and `async` of the primitive-layer axis (`pl-<layer>-<form>-<host>`), and a researcher's 5 Chrome false cleans on main (FLUSH_IN_ACTION `untrack((x) => flush())`, `untrack(async () => { flush(); })`, `latest((x) => flush())`; FLUSH_IN_TRACKED_QUEUE_CALLBACK `untrack((x) => flush())`, `untrack(async () => { flush(); })`; onCleanup behind such a slot); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0959 (slot climbs cross a callback with a parameter and an async one); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "RESOLVE_IN_REACTIVE_SCOPE",
   "ids": [
@@ -11189,7 +11189,7 @@
  {
   "finding": "UNTIL_IN_REACTIVE_SCOPE's site behind a primitive layer whose callback takes an unused parameter (`untrack((p0?: number) => …)`) or is async (`untrack(async () => { … })`) was certified clean or declined by a rule that does not name the code: the slot climbs of the leaf-owner, flush and cleanup walks stop at such a callback, where the same layer with a plain callback is reported. Chrome reports the code at the site in both.",
   "found": "ADR 0960 (W agent w-b10-2, 2026-11-11): the callback forms `param` and `async` of the primitive-layer axis (`pl-<layer>-<form>-<host>`), and a researcher's 5 Chrome false cleans on main (FLUSH_IN_ACTION `untrack((x) => flush())`, `untrack(async () => { flush(); })`, `latest((x) => flush())`; FLUSH_IN_TRACKED_QUEUE_CALLBACK `untrack((x) => flush())`, `untrack(async () => { flush(); })`; onCleanup behind such a slot); each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0959 (slot climbs cross a callback with a parameter and an async one); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "UNTIL_IN_REACTIVE_SCOPE",
   "ids": [
@@ -11200,7 +11200,7 @@
 {
   "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: reflect, new, getter, jsx, jsx-inner, hop, dynamic, dotcall, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "ACTION_CALLED_IN_OWNED_SCOPE",
   "ids": [
@@ -11283,7 +11283,7 @@
  {
   "finding": "CLEANUP_IN_FORBIDDEN_SCOPE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: new, getter) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 0 of this entry's 4 ids; 4 remain false-clean: a package constructor or getter run in a leaf scope (settled, tracked) is not followed by the call walk and holds no row. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -11297,7 +11297,7 @@
  {
   "finding": "DYNAMIC_STATIC_PROMISE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback, jsx, jsx-inner, hop, dynamic) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "DYNAMIC_STATIC_PROMISE",
   "ids": [
@@ -11347,7 +11347,7 @@
  {
   "finding": "DYNAMIC_STATIC_PROMISE's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "DYNAMIC_STATIC_PROMISE",
   "ids": [
@@ -11365,7 +11365,7 @@
  {
   "finding": "FLUSH_IN_ACTION's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "FLUSH_IN_ACTION",
   "ids": [
@@ -11381,7 +11381,7 @@
  {
   "finding": "FLUSH_IN_ACTION's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "FLUSH_IN_ACTION",
   "ids": [
@@ -11393,7 +11393,7 @@
  {
   "finding": "FLUSH_IN_EFFECT_CALLBACK's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "FLUSH_IN_EFFECT_CALLBACK",
   "ids": [
@@ -11409,7 +11409,7 @@
  {
   "finding": "FLUSH_IN_EFFECT_CALLBACK's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 0 of this entry's 2 ids; 2 remain false-clean: a package operation run from an effect callback through an exact call holds no package-side row. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "FLUSH_IN_EFFECT_CALLBACK",
   "ids": [
@@ -11421,7 +11421,7 @@
  {
   "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: new, getter) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 0 of this entry's 4 ids; 4 remain false-clean: a package constructor or getter run in a leaf scope (settled, tracked) is not followed by the call walk and holds no row. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
   "ids": [
@@ -11435,7 +11435,7 @@
  {
   "finding": "NO_OWNER_BOUNDARY's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "NO_OWNER_BOUNDARY",
   "ids": [
@@ -11517,7 +11517,7 @@
  {
   "finding": "NO_OWNER_CLEANUP's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "NO_OWNER_CLEANUP",
   "ids": [
@@ -11563,7 +11563,7 @@
  {
   "finding": "NO_OWNER_CONTEXT's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "NO_OWNER_CONTEXT",
   "ids": [
@@ -11609,7 +11609,7 @@
  {
   "finding": "PENDING_ASYNC_FORBIDDEN_SCOPE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: new, getter) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 0 of this entry's 4 ids; 4 remain false-clean: an async accessor handed to package code is SC5001, a rule the dialect emits only through the async-read channel, so it is not claimable as a static violation. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
   "ids": [
@@ -11623,7 +11623,7 @@
  {
   "finding": "PENDING_ASYNC_UNTRACKED_READ's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: new, getter, jsx, jsx-inner, hop) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 8 of this entry's 21 ids; 13 remain false-clean: an async accessor handed to package code is SC5001, a rule the dialect emits only through the async-read channel, so it is not claimable as a static violation. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "PENDING_ASYNC_UNTRACKED_READ",
   "ids": [
@@ -11654,7 +11654,7 @@
  {
   "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
   "ids": [
@@ -11682,7 +11682,7 @@
  {
   "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 2 of this entry's 6 ids; 4 remain false-clean: a package operation run from an effect callback through an exact call holds no package-side row. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
   "ids": [
@@ -11698,7 +11698,7 @@
  {
   "finding": "PRIMITIVE_IN_FORBIDDEN_SCOPE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: new, getter) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 4 of this entry's 12 ids; 8 remain false-clean: a package constructor or getter run in a leaf scope (settled, tracked) is not followed by the call walk and holds no row. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "ids": [
@@ -11720,7 +11720,7 @@
  {
   "finding": "RESOLVE_IN_REACTIVE_SCOPE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "RESOLVE_IN_REACTIVE_SCOPE",
   "ids": [
@@ -11742,7 +11742,7 @@
  {
   "finding": "RESOLVE_IN_REACTIVE_SCOPE's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "RESOLVE_IN_REACTIVE_SCOPE",
   "ids": [
@@ -11756,7 +11756,7 @@
  {
   "finding": "SETTLED_CLEANUP_UNOWNED's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "SETTLED_CLEANUP_UNOWNED",
   "ids": [
@@ -11808,7 +11808,7 @@
  {
   "finding": "STORE_WRITE_OUTSIDE_SETTER's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: call, call-inner, dotcall, reflect, tagged, new, getter, callback, jsx, jsx-inner, hop, dynamic) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "STORE_WRITE_OUTSIDE_SETTER",
   "ids": [
@@ -12306,7 +12306,7 @@
  {
   "finding": "STORE_WRITE_OUTSIDE_SETTER's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "STORE_WRITE_OUTSIDE_SETTER",
   "ids": [
@@ -12420,7 +12420,7 @@
  {
   "finding": "SYNC_NODE_RECEIVED_ASYNC's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback, jsx, jsx-inner, hop, dynamic) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "SYNC_NODE_RECEIVED_ASYNC",
   "ids": [
@@ -12530,7 +12530,7 @@
  {
   "finding": "SYNC_NODE_RECEIVED_ASYNC's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "SYNC_NODE_RECEIVED_ASYNC",
   "ids": [
@@ -12560,7 +12560,7 @@
  {
   "finding": "UNTIL_IN_REACTIVE_SCOPE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "UNTIL_IN_REACTIVE_SCOPE",
   "ids": [
@@ -12582,7 +12582,7 @@
  {
   "finding": "UNTIL_IN_REACTIVE_SCOPE's site in a dependency package reached through an exact call with handed values (`site1(...)`, or one more package call inside) was not reported: ADR 0290's attribution re-reports owner requirements at the project's call, and no rule re-reports this code's finding from package source (or the access is an uncertifiable no rule of the code declines) where the project twin of the same shape is reported. The same package class as the first four codes' (ADR 0957), found by the widened grid.",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the exact-call entries of the package site (`call`, `call-inner`) of the widened grid, each program through the Chrome host and the real oracle (0 behaviour differences)",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
   "grid": "mx-recall",
   "code": "UNTIL_IN_REACTIVE_SCOPE",
   "ids": [
@@ -12596,7 +12596,7 @@
  {
   "finding": "UNTRACKED_READ_AFTER_AWAIT's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: call, call-inner, dotcall, reflect, tagged, new, getter, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
-  "fixed": "pending: the Mac agent's ADR 0949 (the hand-off of package findings to the project call); expected-failing until it lands",
+  "fixed": "partly: ADR 0949 at 0d472d4e4 (release) closes 10 of this entry's 20 ids; 10 remain false-clean: a read after an await in package code reached through a constructor, a getter or a tagged template is not placed. Expected-failing for those, listed in docs/open-work.md",
   "grid": "mx-recall",
   "code": "UNTRACKED_READ_AFTER_AWAIT",
   "ids": [
