@@ -144,6 +144,9 @@ pub(crate) fn hand_off(
             }
             report.at_entry += 1;
         }
+        if proof_log {
+            solid_reactive_ir::record_attributed(&finding.id, &finding.primary_location, &at);
+        }
         report
             .attributed
             .push((finding.primary_location.clone(), at));

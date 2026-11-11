@@ -105,7 +105,7 @@ export function readProofLog(path) {
   return { lines, malformed: counter.malformed, missing: false };
 }
 
-const TABLES = ["decision", "owner", "pending", "row", "finding", "verdict", "drop", "reclass", "site", "silent"];
+const TABLES = ["decision", "owner", "pending", "row", "finding", "verdict", "drop", "reclass", "attributed", "site", "silent"];
 
 /** The lines of one file, by kind. */
 function tablesOf() {
@@ -163,6 +163,16 @@ export function proofHits(lines) {
       return [...starts].flatMap((start) => decisionsAt.get(`${kind}@${start}`) ?? []);
     };
     const hit = (check, kind, at, table, detail) => hits.push({ check, kind, file, s: at.s, e: at.e, table, detail });
+
+    // C2(c) (ADR 0958): a finding the dependency-source drop discarded stands again at a project site: its `attributed` line, written
+    // beside the `drop` by the one function that drops it (`package_drop::hand_off`), lists at least one. A drop with none is a package
+    // finding that left the report with no project row: a false clean (a style rule's finding is dropped under its own named pass).
+    const attributedAt = groupBy(t.attributed, spanKey);
+    for (const drop of t.drop) {
+      if (drop.pass !== "DependencySource") continue;
+      const stands = (attributedAt.get(spanKey(drop)) ?? []).some((line) => Array.isArray(line.to) && line.to.length > 0);
+      if (!stands) hit("C2", "package-drop-unattributed", drop, "drop", { code: drop.code, pass: drop.pass });
+    }
 
     // C2(a): a row projection reports has a finding, and a finding ends as a verdict or in a typed drop; a drop alone is a
     // finding the projection itself removed (ADR 0659's client-runtime rules).

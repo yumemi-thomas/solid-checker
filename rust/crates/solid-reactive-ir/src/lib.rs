@@ -91,7 +91,7 @@ mod site_accounting;
 pub use execution_role::{WALK_STEP_BOUND, bound_walks, follow_every_path};
 pub use proof_log::{
     DropPass, ProofLogTarget, ProofStage, configure as configure_proof_log, flush_proof_log,
-    record_verdicts,
+    record_attributed, record_verdicts,
 };
 pub use role_log::{RoleLogTarget, configure as configure_role_log};
 pub mod route_components;

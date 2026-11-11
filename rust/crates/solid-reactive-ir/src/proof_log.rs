@@ -10,7 +10,8 @@
 //!   [`crate::site_accounting`] writes it, so the log and the runtime agree);
 //! - the projection of rows to findings (`row`, with its typed reason, and
 //!   `finding`), and the passes inside it that drop or demote one;
-//! - the backend passes over the findings (`drop`, `reclass`, `verdict`);
+//! - the backend passes over the findings (`drop`, `reclass`, `verdict`, and `attributed`: the project sites a dropped
+//!   package finding stands at again, ADR 0949);
 //! - the accounting passes of SC4001 (ADR 0886) and the pending rules (ADR
 //!   0838), whose endings are already typed (`silent`, `owner`, `pending`).
 //!
@@ -670,6 +671,29 @@ impl ProofStage {
             );
         }
     }
+}
+
+/// ADR 0949, ADR 0958: the project sites a finding the dependency-source drop discarded stands at again, written beside its
+/// `drop` line (same file and span, kind `attributed`). The proof gate fails a `DependencySource` drop whose `attributed`
+/// line is missing or lists no site (C2, `package-drop-unattributed`): a package finding that left the report with no
+/// project row is the false clean ADR 0949 closes.
+pub fn record_attributed(code: &str, from: &Location, to: &[Location]) {
+    if !enabled() {
+        return;
+    }
+    emit(
+        from.path.as_ref(),
+        Some(location_pair(from)),
+        object(json!({
+            "k": "attributed",
+            "code": code,
+            "pass": DropPass::DependencySource.name(),
+            "to": to
+                .iter()
+                .map(|site| json!([site.path.as_ref(), site.start_byte, site.end_byte]))
+                .collect::<Vec<_>>(),
+        })),
+    );
 }
 
 /// The rows of a draft table before a pass that may remove some (ADR 0933):

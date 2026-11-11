@@ -17,7 +17,29 @@ const finding = (s, extra = {}) => ({ k: "finding", ...at(s), code: "SC1001", ki
 const verdict = (s, extra = {}) => ({ ...finding(s, extra), k: "verdict" });
 const drop = (s, extra = {}) => ({ k: "drop", ...at(s), code: "SC1001", from: "violation", ctx: "", pass: "ExecutionPaths", premises: [], ...extra });
 const silent = (s, extra = {}) => ({ k: "silent", ...at(s), rule: "row:reads", proof: "ApplyExecution::Absent", premises: [], ...extra });
+const attributed = (s, to, extra = {}) => ({ k: "attributed", ...at(s), code: "SC1001", pass: "DependencySource", to, ...extra });
 const kinds = (lines) => proofHits(lines).map((hit) => `${hit.check}/${hit.kind}`);
+
+describe("C2(c): a package finding the dependency-source drop discarded stands again at a project site (ADR 0958)", () => {
+  const dropped = (s, extra = {}) => drop(s, { pass: "DependencySource", from: "uncertifiable", premises: [{ kind: "DependencySourceRoot", at: [s, s + 3] }], ...extra });
+  test("a drop with no attributed line is a package finding that left the report with no project row", () => {
+    assert.deepEqual(kinds([dropped(10)]), ["C2/package-drop-unattributed"]);
+  });
+
+  test("an attributed line that lists no site is no attribution", () => {
+    assert.deepEqual(kinds([dropped(10), attributed(10, [])]), ["C2/package-drop-unattributed"]);
+  });
+
+  test("an attributed line with a project site ends the drop; one at another span does not", () => {
+    assert.deepEqual(kinds([dropped(10), attributed(10, [["/p/App.tsx", 100, 110]])]), []);
+    assert.deepEqual(kinds([dropped(10), attributed(20, [["/p/App.tsx", 100, 110]])]), ["C2/package-drop-unattributed"]);
+  });
+
+  test("a style rule's drop rests on its own named pass and needs no attribution; another pass is not this check's", () => {
+    assert.deepEqual(kinds([dropped(10, { pass: "PackageStyleNotProject", code: "SC8003" })]), []);
+    assert.deepEqual(kinds([drop(10)]), []);
+  });
+});
 
 describe("C2: a reporting decision with nothing ending the site", () => {
   test("audit candidate S1: the classifier says the read reports, the producer left no row, no finding and no proof", () => {
