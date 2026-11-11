@@ -1303,6 +1303,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-root-patch-unhanded/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-fresh/node_modules/
 !fixtures/reactive-ir/handed-root-patch-fresh/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-key-same/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-key-same/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-key-other/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-key-other/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-key-any/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-key-any/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-shadowed/node_modules/
 !fixtures/reactive-ir/handed-root-patch-shadowed/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/

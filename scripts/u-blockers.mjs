@@ -48,7 +48,7 @@ const bump = (map, key, by = 1) => map.set(key, (map.get(key) ?? 0) + by);
 
 // The veto formulas over their atoms, restated from the checker (`base/contributions/blocked_by.rs`). A formula the report does not
 // know lifts only when every fired atom goes.
-const WRITTEN = /^(?:OpenMemberWrite\((?!<symbol>)|ReflectiveDefinitionSpelling$)/;
+const WRITTEN = /^(?:OpenMemberWrite\((?!<symbol>)|ReflectiveDefinition(?:Spelling$|\())/;
 const SYMBOL_OPEN = ["StandardPatch(.Symbol)", "StandardPatch(.*)", "StandardImpostorWrite(Symbol)"];
 const ITERATED_OPEN = /^(?:StandardImpostor\(|StandardOverride\(Array\.)/;
 

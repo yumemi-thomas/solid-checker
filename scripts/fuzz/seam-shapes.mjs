@@ -13,17 +13,22 @@
 //   bseam-isfinite-<form>          misuse  the member is replaced; the function runs at once, in the window of the call
 //   bseam-isfinite-<form>-other    legal   the replacement goes to another member; the declared one is called
 //
-// forms: assign, reflect, index, define (the ways a helper writes its parameter). Only a member the runtime does not itself call can be replaced in a program
+// forms: assign, reflect, index, define (the ways a helper writes its parameter), and definelit, reflectlit (a definer put to a literal key, ADR 0951). Only a member the runtime does not itself call can be replaced in a program
 // the Chrome host runs: the replacement does not read the original (a program that does is already uncertifiable, SC9012 `standard-member-impostor`), so it would
 // break Solid and the host if it were `Set.add`, `setTimeout`, `Promise.prototype.then` or `addEventListener`. Those were scanned by the checker alone and are
 // reported, not shaped. Recall contexts, base shapes (misuse.mjs BASE_ONLY_CONTEXTS), on the three codes the hand-off roles decide.
 import { decl, domExpr, expr, fn } from "./model.mjs";
 
+// A form is the helper's body, or a function of the key for a form that spells the key as a literal (ADR 0951: a reflective definer put to a
+// literal key defines that key and no other, so the checker's veto reads the literal, not the parameter): `definelit` is the member's own key in
+// the misuse context and another member's in the twin, the declared one left alone.
 const FORMS = {
   assign: "Object.assign(target, { [key]: impl });",
   reflect: "Reflect.set(target, key, impl);",
   index: "target[key] = impl;",
   define: "Object.defineProperty(target, key, { value: impl, configurable: true, writable: true });",
+  definelit: (key) => `Object.defineProperty(target, "${key}", { value: impl, configurable: true, writable: true });`,
+  reflectlit: (key) => `Reflect.defineProperty(target, "${key}", { value: impl, configurable: true, writable: true });`,
 };
 
 /**
@@ -84,7 +89,7 @@ export function seamContext(context, stmts, kit) {
   const orig = member.prelude.length ? kit.name("orig") : undefined;
   return {
     body: [
-      decl(helper, domExpr(`(target: any, key: string, impl: unknown) => { ${FORMS[spec.form]} }`)),
+      decl(helper, domExpr(`(target: any, key: string, impl: unknown) => { ${typeof FORMS[spec.form] === "function" ? FORMS[spec.form](key) : FORMS[spec.form]} }`)),
       ...member.prelude(orig, key),
       expr(domExpr(`${helper}(${member.root}, "${key}", ${member.impl(f, orig)})`)),
       decl(f, fn(stmts)),

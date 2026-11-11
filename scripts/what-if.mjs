@@ -359,7 +359,7 @@ const header = (binaries, extra) => ({
 });
 
 /** The hazard ids the what-if build can name (ADR 0947's atoms): a lifting set with another atom (the array-slots formula's) is not asked of it. */
-const KNOWN_ATOM = /^(OpenMemberWrite\(.+\)|StandardImpostor(Write)?\(.+\)|StandardOverride\(.+\)|StandardPatch\(.+\)|ReflectiveDefinitionSpelling|StandardRoot(Handed|Received|Iterated)|RootPatch|AnyStandardPatch)$/;
+const KNOWN_ATOM = /^(OpenMemberWrite\(.+\)|StandardImpostor(Write)?\(.+\)|StandardOverride\(.+\)|StandardPatch\(.+\)|ReflectiveDefinitionSpelling|ReflectiveDefinition\(.+\)|StandardRoot(Handed|Received|Iterated)|RootPatch|AnyStandardPatch)$/;
 
 /**
  * The lifting sets (`liftingSets`) of every veto group the shipped checker's reports of the corpus hold, that the build can name, that at least `minRows` rows stand in and that `existing`

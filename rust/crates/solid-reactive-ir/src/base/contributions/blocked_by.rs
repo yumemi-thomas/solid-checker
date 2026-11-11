@@ -48,8 +48,8 @@ fn key_of(name: &str) -> &str {
 
 /// The hazards [`handed_root_patch`] can read for `qualified_name`. Its formula: `written && (StandardRootHanded ||
 /// ((StandardRootReceived || StandardRootIterated) && RootPatch) || (StandardRootIterated && iterated_open))`, `written`
-/// being an open write of the member (or of any key), a reflective definer spelled, or an open write under a symbol with
-/// `Symbol` replaceable.
+/// being an open write of the member (or of any key), a reflective definer that may define any key or this member (ADR 0951: a
+/// definer put to another literal key is no atom), or an open write under a symbol with `Symbol` replaceable.
 pub(crate) fn handed_root_atoms(qualified_name: &str) -> Vec<HazardAtom> {
     let member = qualified_name
         .rsplit_once('.')
@@ -64,8 +64,12 @@ pub(crate) fn handed_root_atoms(qualified_name: &str) -> Vec<HazardAtom> {
             open_member_write(member),
         ),
         atom(
-            "ReflectiveDefinitionSpelling",
-            Hazard::ReflectiveDefinitionSpelling,
+            format!("ReflectiveDefinition({})", key_name(ANY_MEMBER)),
+            Hazard::ReflectiveDefinitionAny,
+        ),
+        atom(
+            format!("ReflectiveDefinition({})", key_name(member)),
+            reflective_definition_sole(member),
         ),
         atom(
             format!("OpenMemberWrite({})", key_name(SYMBOL_SITE)),
@@ -140,6 +144,8 @@ pub(crate) fn hazard_of_id(id: &str) -> Option<Hazard> {
     };
     Some(match (head, argument) {
         ("ReflectiveDefinitionSpelling", None) => Hazard::ReflectiveDefinitionSpelling,
+        ("ReflectiveDefinition", Some("*")) => Hazard::ReflectiveDefinitionAny,
+        ("ReflectiveDefinition", Some(key)) => reflective_definition_sole(key_of(key)),
         ("StandardRootHanded", None) => Hazard::StandardRootHanded,
         ("StandardRootReceived", None) => Hazard::StandardRootReceived,
         ("StandardRootIterated", None) => Hazard::StandardRootIterated,
@@ -376,6 +382,50 @@ mod tests {
         assert_eq!(
             impostor_cause("Array.map", &impostor),
             ["StandardImpostor(map)"]
+        );
+    }
+
+    /// ADR 0951: a reflective definer put to a literal key defines that key and no other, so it withholds that member only; a definer that
+    /// names no literal key (`Any`) withholds every member, as the blanket spelling did.
+    #[test]
+    fn a_definer_put_to_a_literal_key_withholds_that_key_only() {
+        let with = |extra: Hazard| {
+            let present = [extra, Hazard::StandardRootHanded];
+            move |hazard: Hazard| present.contains(&hazard)
+        };
+        assert!(!handed_root_patch(
+            "Number.isFinite",
+            &with(reflective_definition_sole("isNaN"))
+        ));
+        assert!(handed_root_patch(
+            "Number.isFinite",
+            &with(reflective_definition_sole("isFinite"))
+        ));
+        assert!(handed_root_patch(
+            "Number.isFinite",
+            &with(Hazard::ReflectiveDefinitionAny)
+        ));
+        // The spelling's own presence holds nothing now: what it may define decides.
+        assert!(!handed_root_patch(
+            "Number.isFinite",
+            &with(Hazard::ReflectiveDefinitionSpelling)
+        ));
+        assert_eq!(
+            handed_root_cause(
+                "Number.isFinite",
+                &with(reflective_definition_sole("isFinite"))
+            ),
+            Some(vec![
+                "ReflectiveDefinition(isFinite)".to_owned(),
+                "StandardRootHanded".to_owned(),
+            ])
+        );
+        assert_eq!(
+            handed_root_cause("Number.isFinite", &with(Hazard::ReflectiveDefinitionAny)),
+            Some(vec![
+                "ReflectiveDefinition(*)".to_owned(),
+                "StandardRootHanded".to_owned(),
+            ])
         );
     }
 
