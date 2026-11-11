@@ -703,7 +703,7 @@ impl StaticApiContext<'_> {
                     },
                     hint: "Remove the flush(): writes made in an effect are processed by the flush that is already running. To force a drain afterwards, defer it (`queueMicrotask(() => flush())`) or call it from an event handler or other code that runs outside the effect.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: origin.undecided.unwrap_or_default().into(),
+                    analysis_context: effect_phase_context(&origin, file, call.span),
                     fixes: vec![],
                     uncertain: origin.mixed,
                 });
@@ -922,7 +922,7 @@ impl StaticApiContext<'_> {
                     },
                     hint: "Create the computation in the effect's compute function or the component body, where an owner holds it, or parent it explicitly: capture `const owner = getOwner()` outside and wrap the creation in `runWithOwner(owner, () => …)`.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: origin.undecided.unwrap_or_default().into(),
+                    analysis_context: effect_phase_context(&origin, file, call.span),
                     fixes: vec![],
                     // ADR 0613: the effect phase is the queue's drain, which
                     // a synchronous `flush()` runs under its caller's owner.
@@ -1274,7 +1274,7 @@ impl StaticApiContext<'_> {
                 ),
                 hint: "Build the JSX in the effect's compute function or the component body, where an owner is set; an apply should only touch what already exists.".into(),
                 location: location(file.path.shared(), site.span),
-                analysis_context: origin.undecided.unwrap_or_default().into(),
+                analysis_context: effect_phase_context(&origin, file, site.span),
                 fixes: vec![],
                 uncertain,
             });
@@ -1308,6 +1308,27 @@ fn resolve_tracked_scope(
 
 /// ADR 0857 (reviews R13, R16): the row's blocker when the walk over entries
 /// stopped before reading them all.
+/// The context of a row built on an effect-phase origin: the bound that stopped the walk, or, for an origin the walk reached
+/// through a generator it follows only to the call that steps it (ADR 0961, F2), the premise that the stepping is not
+/// followed.
+fn effect_phase_context(
+    origin: &crate::effect_phase::EffectPhaseOrigin,
+    file: &FileFacts,
+    site: Span,
+) -> String {
+    if let Some(blocker) = origin.undecided {
+        return blocker.to_owned();
+    }
+    if origin.mixed
+        && crate::execution_role::functions_around(file, site)
+            .into_iter()
+            .any(|function| function.generator && function.body.contains(site))
+    {
+        return crate::blockers::GENERATOR_STEP_UNPLACED.to_owned();
+    }
+    String::new()
+}
+
 /// ADR 0961: whether the code at `site` is written in a generator and the program steps an action's body: no walk proves
 /// the generator to be, or not to be, an action's step body (a generator literal handed to a helper that makes the action,
 /// a project or a dependency one; `yield*` into another generator; a generator a handler steps), so what runs in it may run
@@ -1319,8 +1340,8 @@ fn in_generator_step(file: &FileFacts, site: Span, context: &StaticApiContext<'_
             .any(|function| {
                 function.generator
                     && function.body.contains(site)
-                    && !is_action_step_argument(file, function, context)
-                    && generator_may_be_stepped(file, function, context)
+                    && !is_action_step_argument(file, function, context.lookup)
+                    && generator_may_be_stepped(file, function, context.lookup)
             })
 }
 
@@ -1331,7 +1352,7 @@ fn in_generator_step(file: &FileFacts, site: Span, context: &StaticApiContext<'_
 fn generator_may_be_stepped(
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
-    context: &StaticApiContext<'_>,
+    lookup: &SemanticLookup<'_>,
 ) -> bool {
     let ast = &file.ast;
     if ast
@@ -1341,11 +1362,7 @@ fn generator_may_be_stepped(
     {
         return true;
     }
-    let by_name = match crate::local_access::function_reference_hand_offs(
-        file,
-        function,
-        context.lookup,
-    ) {
+    let by_name = match crate::local_access::function_reference_hand_offs(file, function, lookup) {
         Some(references) => references
             .iter()
             .any(|(_, hand_off)| *hand_off != crate::local_access::HandOff::Call),
@@ -1353,8 +1370,7 @@ fn generator_may_be_stepped(
         None => false,
     };
     by_name
-        || context
-            .lookup
+        || lookup
             .function_call_sites(file.path.as_str(), function.span)
             .into_iter()
             .any(|(caller, callee)| {
@@ -1371,18 +1387,16 @@ fn generator_may_be_stepped(
 fn is_action_step_argument(
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
-    context: &StaticApiContext<'_>,
+    lookup: &SemanticLookup<'_>,
 ) -> bool {
     file.ast
         .arguments_containing(function.span)
         .any(|(call, index)| {
             file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
-                && context
-                    .lookup
+                && lookup
                     .primitive_at_call(file, call.span)
                     .is_some_and(|primitive| {
-                        context
-                            .lookup
+                        lookup
                             .dialect
                             .callback_runs_as_action_steps(primitive, index)
                     })
@@ -2035,7 +2049,15 @@ fn action_step_body_unplaced(
         None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
-        .filter(|function| function.body.contains(at) && !function.generator)?;
+        .filter(|function| function.body.contains(at))?;
+    // ADR 0961: a generator that is no action's own step body and may be stepped is the step body of an action no
+    // walk names (`in_generator_step` asks the same of every generator around the site): an obligation.
+    if function.generator {
+        return (context.lookup.project_steps_action_callbacks()
+            && !is_action_step_argument(file, function, context.lookup)
+            && generator_may_be_stepped(file, function, context.lookup))
+        .then_some("generator");
+    }
     let anchor = if function.method_name.is_some() {
         file.ast
             .classes
@@ -2376,7 +2398,15 @@ fn runs_unplaced_once(
         Some(_) | None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
-        .filter(|function| function.body.contains(at) && !function.generator)?;
+        .filter(|function| function.body.contains(at))?;
+    // ADR 0961: a generator's body runs where an iterator of it is stepped, which no call edge places: when it may be
+    // stepped (handed on, or a call of it creates an iterator the program uses) the run is unplaced, an obligation,
+    // not "placed". A generator nothing steps runs none of its body.
+    if function.generator {
+        return (!is_action_step_argument(file, function, lookup)
+            && generator_may_be_stepped(file, function, lookup))
+        .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
+    }
     crate::owners::function_binding_name(file, function)?;
     let calls = lookup
         .function_call_sites(file.path.as_str(), function.span)

@@ -22,9 +22,16 @@
 //                  of cleanup.rs) never enters it a second time, so the second entry is what the checker misses there, in this place only: the entries in the host's own text it reads apart.
 //     tw-<layer>-<spelling>-both-<host>    legal twin: both entries tolerant, so Chrome reports nothing and no entry is forbidden
 //
+//   a generator STEPPED inside a host callback (ADR 0961, F2: Chrome fires FLUSH_IN_EFFECT_CALLBACK and PRIMITIVE_IN_EFFECT_CALLBACK at the site of a generator an
+//   effect's apply iterates; main 29b3f9312 certified it clean)
+//     ge-<step>-<host>   the site is the body of `g`, a generator the component declares, and the host's callback steps it
+//       step   forof   `for (const s of g()) void s`       spread  `void [...g()]`      next  `const it = g(); it.next()`      yield  `for (const s of o()) …` with `function* o() { yield* g(); }`
+//       host   apply   an effect's apply (the codes of the effect phase)    memo   a memo's compute     effect   an effect's compute (the write code)
+//     ge-idle-<host>     legal twin: the host's callback calls `g();` and discards the iterator (none of the body runs there) and a button's handler steps it with a `for…of`, where the site is legal
+//
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is how the site is entered, not the spelling of the site. The census does not cross them
 // with other codes (matrix.mjs CENSUS_SKIPS): they are the cells of the codes that name them, as the `pl-*` ones.
-import { bareParam, button, call, ctl, decl, domExpr, expr, fn, prim, ref } from "./model.mjs";
+import { bareParam, button, call, child, ctl, decl, domExpr, expr, fn, num, prim, ref, ret } from "./model.mjs";
 
 /** The helper `ae-helper` hands the generator to (a project's `run`): it makes the action. */
 const RUN_ACTION = "(g: () => Generator<unknown, void, any>) => action(g)";
@@ -58,14 +65,25 @@ const TW_PATTERN = new RegExp(`^tw-(${LAYER_NAMES.join("|")})-(${TW_SPELLINGS.jo
 /** `{ layer, spelling, order, host, place }` of a `tw-*` context name (`place` "" for the entries in the host's own text), or null. */
 export const twParts = (context) => { const match = TW_PATTERN.exec(context); return match ? { layer: match[1], spelling: match[2], order: match[3], host: match[4], place: match[5] ?? "" } : null; };
 
+/** ADR 0961 (F2): the generator-stepped family. The effect phase's codes in an apply, the write code in a compute (a memo's or an effect's). */
+export const GE_STEPS = ["forof", "spread", "next", "yield"];
+export const GE_APPLY_CODES = ["FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"];
+export const GE_COMPUTE_CODES = ["REACTIVE_WRITE_IN_OWNED_SCOPE"];
+const GE_APPLY_NAMES = [...GE_STEPS.map((step) => `ge-${step}-apply`), "ge-idle-apply"];
+const GE_COMPUTE_NAMES = [...["memo", "effect"].flatMap((host) => GE_STEPS.map((step) => `ge-${step}-${host}`)), "ge-idle-memo"];
+const GE_PATTERN = /^ge-(forof|spread|next|yield|idle)-(apply|memo|effect)$/;
+export const GE_CONTEXTS = Object.fromEntries([...GE_APPLY_NAMES, ...GE_COMPUTE_NAMES].map((name) => [name, name.startsWith("ge-idle-") ? "legal" : "misuse"]));
+
 /** `{ [context]: "misuse" | "legal" }`: the side a context is on for the codes it is placed for. */
-export const ENTRY_CONTEXTS = { ...ENTRY_ACTION_CONTEXTS, ...Object.fromEntries(TW_NAMES.map((name) => [name, twParts(name).order === "both" ? "legal" : "misuse"])) };
+export const ENTRY_CONTEXTS = { ...ENTRY_ACTION_CONTEXTS, ...Object.fromEntries(TW_NAMES.map((name) => [name, twParts(name).order === "both" ? "legal" : "misuse"])), ...GE_CONTEXTS };
 export const ENTRY_CONTEXT_NAMES = Object.keys(ENTRY_CONTEXTS);
 
 /** The contexts each code is placed for: the action family on FLUSH_IN_ACTION, a code's twice-entered shapes in its own tolerant layer. */
 export const ENTRY_CODES = {
   FLUSH_IN_ACTION: Object.keys(ENTRY_ACTION_CONTEXTS),
   ...Object.fromEntries(Object.entries(TW_LAYERS).map(([code, layer]) => [code, TW_NAMES.filter((name) => twParts(name).layer === layer)])),
+  ...Object.fromEntries(GE_APPLY_CODES.map((code) => [code, GE_APPLY_NAMES])),
+  ...Object.fromEntries(GE_COMPUTE_CODES.map((code) => [code, GE_COMPUTE_NAMES])),
 };
 
 /** The variants a code's cells of these contexts do not take: under `runWithOwner(null, …)` an effect has no owner and reports NO_OWNER_EFFECT, a code of its own (PL_MEASURED `without`). */
@@ -134,9 +152,37 @@ function twiceContext(context, stmts, kit) {
   return place === "in" ? { body: [expr(prim(host, fn([...declared, helper, run])))], view: [] } : { body: [...declared, helper, expr(prim(host, fn([run])))], view: [] };
 }
 
+/** ADR 0961 (F2): the site in a generator the host's callback steps (`ge-<step>-<host>`), or discards (`ge-idle-<host>`). */
+function steppedContext(context, stmts, kit) {
+  const [, step, host] = GE_PATTERN.exec(context);
+  const g = kit.name("g");
+  const s = kit.name("s");
+  const declared = [generator(g, stmts)];
+  let steps;
+  switch (step) {
+    case "forof": steps = [expr(domExpr(`for (const ${s} of ${g}()) void ${s}`))]; break;
+    case "spread": steps = [expr(domExpr(`void [...${g}()]`))]; break;
+    case "next": { const it = kit.name("it"); steps = [decl(it, domExpr(`${g}()`)), expr(domExpr(`${it}.next()`))]; break; }
+    case "yield": { const o = kit.name("o"); declared.push(expr(domExpr(`function* ${o}() { yield* ${g}(); }`))); steps = [expr(domExpr(`for (const ${s} of ${o}()) void ${s}`))]; break; }
+    default: steps = [expr(domExpr(`${g}()`))];
+  }
+  // The legal twin steps the generator where the site is legal: a button's handler (the host only discards the iterator).
+  let idle = [];
+  if (step === "idle") {
+    const h = kit.name("s");
+    idle = [button(kit.name("b"), [expr(domExpr(`for (const ${h} of ${g}()) void ${h}`))])];
+  }
+  switch (host) {
+    case "apply": return { body: [...declared, expr(prim("effect", fn([ret(num(1))]), { apply: fn(steps) }))], view: idle };
+    case "effect": return { body: [...declared, expr(prim("effect", fn([...steps, ret(num(1))]), { apply: fn([]) }))], view: idle };
+    default: { const m = kit.name("m"); return { body: [...declared, decl(m, prim("memo", fn([...steps, ret(num(1))])))], view: [child(kit.name("v"), call(ref(m))), ...idle] }; }
+  }
+}
+
 /** The placement of `stmts` for an entry context (`{ body, view }`), or undefined for any other. */
 export function entryContext(context, stmts, kit) {
   if (!ENTRY_CONTEXTS[context]) return undefined;
+  if (GE_PATTERN.test(context)) return steppedContext(context, stmts, kit);
   return twParts(context) ? twiceContext(context, stmts, kit) : actionContext(context, stmts, kit);
 }
 

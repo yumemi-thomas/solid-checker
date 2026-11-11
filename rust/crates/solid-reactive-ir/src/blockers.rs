@@ -63,6 +63,9 @@ pub(crate) const PACKAGE_OPERATION_AFTER_AWAIT: &str = "package-operation-after-
 /// ADR 0959: the callback of a primitive that catches what its callback throws (`isPending`) is async, so its synchronous
 /// throw is a rejection the primitive does not catch: what the observer guard does there is an obligation.
 pub(crate) const ASYNC_SLOT_UNMODELLED: &str = "async-slot-unmodelled";
+/// ADR 0961: the call is written in a generator that an effect's apply (or an action's step) may step, and the walk follows
+/// the stepping only to the call that creates the iterator: whether the apply runs this body, and how far, is not proven.
+pub(crate) const GENERATOR_STEP_UNPLACED: &str = "generator-step-unplaced";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 

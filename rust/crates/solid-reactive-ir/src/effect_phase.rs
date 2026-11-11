@@ -327,13 +327,26 @@ impl<'l, 'a> Walk<'l, 'a> {
             return self.unplaced_layer(file, anchor, helper_calls);
         }
         if literal.generator {
-            if literal.r#async || argument_position(file, literal).is_some() {
+            if literal.r#async {
                 return None;
             }
-            let call = crate::owners::generator_iterator_used(file, literal)?;
-            self.stepped = true;
-            self.from = Some(literal.span);
-            return self.layer(file, call.span, helper_calls);
+            // ADR 0961 (F2): a generator literal handed to a call that is no primitive runs its body where the
+            // callee steps it (`consume(function* () { flush(); })`): the path continues from that call, never as a
+            // proof. A primitive's argument is the primitive's (`action(function* () …)` creates, steps nothing).
+            if let Some((call, _)) = argument_position(file, literal) {
+                if self.lookup.primitive_at_call(file, call.span).is_some() {
+                    return None;
+                }
+                self.stepped = true;
+                self.from = Some(literal.span);
+                return self.layer(file, call.span, helper_calls + 1);
+            }
+            if let Some(call) = crate::owners::generator_iterator_used(file, literal) {
+                self.stepped = true;
+                self.from = Some(literal.span);
+                return self.layer(file, call.span, helper_calls);
+            }
+            return self.named_generator_layer(file, literal, helper_calls);
         }
         if literal.r#async && !runs_before_first_suspension(file, literal, span) {
             return None;
@@ -924,6 +937,67 @@ impl<'l, 'a> Walk<'l, 'a> {
             })?;
         let origin = self.argument_layer(file, call, 1, helper_calls)?;
         Some(EffectPhaseOrigin {
+            mixed: true,
+            ..origin
+        })
+    }
+
+    /// ADR 0961 (F2): a generator declared by name runs its body where an iterator of it is stepped (a `for…of`, a
+    /// spread, a `yield*`, a variable's `.next()`): the walk continues from each exact call of it whose result the
+    /// program uses (a call a statement discards runs none of the body, ADR 0516). What it finds is an obligation:
+    /// how far the iterator is stepped, and whether every run reaches the site, is not followed.
+    fn named_generator_layer(
+        &mut self,
+        file: &FileFacts,
+        literal: &FunctionFact,
+        helper_calls: usize,
+    ) -> Option<EffectPhaseOrigin> {
+        let key = (file.path.to_string(), literal.span);
+        if !self.visiting.insert(key.clone()) {
+            return None;
+        }
+        let mut found: Option<EffectPhaseOrigin> = None;
+        for (caller, callee) in self
+            .lookup
+            .function_call_sites(file.path.as_str(), literal.span)
+        {
+            if self.budget == 0 {
+                self.limited
+                    .set(Some(crate::blockers::SEARCH_BUDGET_EXHAUSTED));
+                break;
+            }
+            self.budget -= 1;
+            let Some(call) = caller.ast.calls.iter().find(|call| {
+                !call.construct
+                    && !call.result_discarded
+                    && caller.ast.peel_ts_sugar_span(call.callee) == callee
+            }) else {
+                continue;
+            };
+            let exact = project_callee_at_parameter(caller, call, 0, self.lookup).is_some_and(
+                |(callee_file, function, exact)| {
+                    exact
+                        && callee_file.path.as_str() == file.path.as_str()
+                        && function.span == literal.span
+                },
+            );
+            if !exact {
+                continue;
+            }
+            self.stepped = true;
+            self.from = Some(literal.span);
+            if let Some(origin) = self.layer(caller, call.span, helper_calls + 1) {
+                let nearer = match &found {
+                    Some(known) => origin.helper_calls < known.helper_calls,
+                    None => true,
+                };
+                if nearer {
+                    found = Some(origin);
+                }
+            }
+        }
+        self.visiting.remove(&key);
+        found.map(|origin| EffectPhaseOrigin {
             mixed: true,
             ..origin
         })

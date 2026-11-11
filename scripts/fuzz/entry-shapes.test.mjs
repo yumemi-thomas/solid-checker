@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { runtimeEvents } from "./classify.mjs";
 import { policyOf } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
-import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, TW_LAYERS, entryNotVariants, entryPlacement, twParts } from "./entry-shapes.mjs";
+import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, GE_APPLY_CODES, GE_COMPUTE_CODES, GE_STEPS, TW_LAYERS, entryNotVariants, entryPlacement, twParts } from "./entry-shapes.mjs";
 import { DEFAULT_FAST_INSTALL, runFast } from "./fast.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
@@ -25,9 +25,10 @@ const lines = (text) => text.split("\n").map((line) => line.trim());
 const at = (all, wanted, from = 0) => all.findIndex((line, index) => index >= from && line === wanted);
 
 describe("the entry contexts", () => {
-  it("are the action family's eight and the twice-entered family's 72, each name parsed back", () => {
-    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3);
+  it("are the action family's eight, the twice-entered family's 72 and the generator-stepped family's 14, each name parsed back", () => {
+    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3 + 14);
     expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ae-"))).toHaveLength(8);
+    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ge-"))).toHaveLength(14);
     for (const name of ENTRY_CONTEXT_NAMES.filter((one) => one.startsWith("tw-"))) {
       const parts = twParts(name);
       expect(parts, name).not.toBeNull();
@@ -38,7 +39,9 @@ describe("the entry contexts", () => {
   });
   it("are placed for the codes whose tolerant layer they use, and for no other", () => {
     const placement = entryPlacement();
-    expect(Object.keys(placement).sort()).toEqual(["FLUSH_IN_ACTION", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE"]);
+    expect(Object.keys(placement).sort()).toEqual(["FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "REACTIVE_WRITE_IN_OWNED_SCOPE"]);
+    for (const code of GE_APPLY_CODES) expect(placement[code]).toEqual({ misuse: GE_STEPS.map((step) => `ge-${step}-apply`), legal: ["ge-idle-apply"] });
+    for (const code of GE_COMPUTE_CODES) expect(placement[code]).toEqual({ misuse: ["memo", "effect"].flatMap((host) => GE_STEPS.map((step) => `ge-${step}-${host}`)), legal: ["ge-idle-memo"] });
     expect(placement.FLUSH_IN_ACTION).toEqual({ misuse: ["ae-helper", "ae-helper-named", "ae-package", "ae-delegate"], legal: ["ae-helper-plain", "ae-helper-named-plain", "ae-package-plain", "ae-delegate-plain"] });
     for (const [code, layer] of Object.entries(TW_LAYERS)) {
       expect(placement[code].misuse.every((name) => twParts(name).layer === layer && twParts(name).order !== "both")).toBe(true);
@@ -112,6 +115,37 @@ describe("the action family's programs", () => {
   });
 });
 
+describe("the generator-stepped programs (ADR 0961, F2)", () => {
+  it("step the generator that holds the site by the way the name says, in the host the name says", () => {
+    const forof = lines(textOf("FLUSH_IN_EFFECT_CALLBACK", "ge-forof-apply").built.text);
+    expect(forof).toContain("function* g1() {");
+    expect(forof).toContain("for (const s1 of g1()) void s1;");
+    expect(at(forof, "flush();")).toBeLessThan(at(forof, "yield 1;"));
+    expect(forof).toContain("createEffect(() => {");
+    const spread = lines(textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "ge-spread-apply").built.text);
+    expect(spread).toContain("void [...g1()];");
+    const next = lines(textOf("FLUSH_IN_EFFECT_CALLBACK", "ge-next-apply").built.text);
+    expect(next).toContain("const it1 = g1();");
+    expect(next).toContain("it1.next();");
+    const chain = lines(textOf("FLUSH_IN_EFFECT_CALLBACK", "ge-yield-apply").built.text);
+    expect(chain).toContain("function* o1() { yield* g1(); };");
+    expect(chain).toContain("for (const s1 of o1()) void s1;");
+    const memo = lines(textOf("REACTIVE_WRITE_IN_OWNED_SCOPE", "ge-forof-memo").built.text);
+    expect(at(memo, "const m1 = createMemo(() => {")).toBeGreaterThan(0);
+    expect(memo).toContain("for (const s1 of g1()) void s1;");
+    const compute = lines(textOf("REACTIVE_WRITE_IN_OWNED_SCOPE", "ge-spread-effect").built.text);
+    expect(compute).toContain("void [...g1()];");
+    expect(compute.join("\n")).toContain("}, (v) => {");
+  });
+  it("discard the iterator in the host and step it in a handler in the legal twin", () => {
+    const idle = lines(textOf("FLUSH_IN_EFFECT_CALLBACK", "ge-idle-apply").built.text);
+    expect(idle).toContain("g1();");
+    expect(idle).toContain("for (const s2 of g1()) void s2;");
+    expect(idle.join("\n")).not.toContain("void [...");
+    expect(at(idle, "g1();")).toBeLessThan(at(idle, "for (const s2 of g1()) void s2;"));
+  });
+});
+
 describe("the twice-entered programs", () => {
   const entered = (code, context) => {
     const { program, built } = textOf(code, context);
@@ -176,7 +210,7 @@ describe("the entry cells on the fast runtime", () => {
         const shape = (kind === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none");
         return { code, context, kind, variant: shape.variant ?? null };
       }));
-      expect(plans).toHaveLength(8 + 36 + 36);
+      expect(plans).toHaveLength(8 + 36 + 36 + 5 + 5 + 9);
       const entries = plans.map((plan, index) => {
         const program = generateProgram(6000 + index, { profile: "misuse", misusePlan: { code: plan.code, context: plan.context, variant: plan.variant, binding: "direct", layer: "none", legal: plan.kind === "legal" } });
         return { plan, built: buildCase(program, { id: `entry-${index}` }) };

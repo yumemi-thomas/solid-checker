@@ -1,0 +1,70 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "generator-step-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 129,
+      "end": 134,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "generator-step-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 173,
+      "end": 183,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 432,
+      "end": 437,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 469,
+      "end": 479,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 1251,
+      "end": 1261,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "generator-step-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 1390,
+      "end": 1395,
+      "fixes": 0
+    }
+  ]
+}

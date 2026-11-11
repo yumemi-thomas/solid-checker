@@ -13,11 +13,33 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-in-action-generator/App.tsx",
+      "start": 292,
+      "end": 297,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-generator/App.tsx",
+      "start": 404,
+      "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/flush-in-action-generator/App.tsx",
       "start": 404,
       "end": 409,
