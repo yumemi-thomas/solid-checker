@@ -189,6 +189,16 @@ effect.
 - **`createReaction`.** On rc.17 its callback is a deferred user effect's apply
   and runs only from the draining flush: claimed as an apply is (ADR 0541).
 
+## Generators and parameter initializers (ADR 0961)
+
+- **A generator stepped from an effect's apply.** The origin walk continues through a generator literal handed to a call
+  and through a named generator whose exact project call stepping it sits in the apply; a flush in its body is an
+  uncertifiable row (`generator-step-unplaced`) where the stepping is not followed, and a violation where the body is
+  visible and stepped in place. A call a statement discards runs none of the body.
+- **A parameter initializer.** A `flush` written in a default value, a destructuring default, an IIFE or closure in one,
+  or in a helper the default calls, of a function the program calls or references, is an uncertifiable row
+  (`parameter-initializer-unplaced`): it runs when a call omits the argument, and no walk reads which calls do.
+
 ## Premises
 
 - **Universal claim.** Dead code is reported on purpose; there is no

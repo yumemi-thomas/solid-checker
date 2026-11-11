@@ -393,7 +393,7 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-onsettled-new.tsx",
-      "start": 414,
+      "start": 410,
       "end": 421,
       "fixes": 0
     },

@@ -84,7 +84,7 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
-      "start": 2049,
+      "start": 2045,
       "end": 2056,
       "fixes": 0
     },
@@ -95,7 +95,7 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
-      "start": 2049,
+      "start": 2045,
       "end": 2056,
       "fixes": 0
     },

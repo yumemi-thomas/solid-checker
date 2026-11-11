@@ -1755,6 +1755,15 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             FindingSeed::LeafOperation(_) if finding.id == "SC9012" => {
                 Some(crate::blockers::LEAF_CALLBACK_OPAQUE)
             }
+            // ADR 0961: a generator's body runs where its iterator is stepped, which no walk follows.
+            FindingSeed::LeafOperation(operation)
+                if matches!(
+                    operation.kind,
+                    crate::LeafOwnerOperationKind::GeneratorStepped
+                ) =>
+            {
+                Some(crate::blockers::GENERATOR_STEPPED)
+            }
             FindingSeed::LeafOperation(_) => Some(crate::blockers::LEAF_OWNER_UNPROVEN),
             FindingSeed::DirectiveCreation(_) => Some(crate::blockers::DIRECTIVE_OWNER_UNPROVEN),
             FindingSeed::OwnerRequirement(requirement) => {

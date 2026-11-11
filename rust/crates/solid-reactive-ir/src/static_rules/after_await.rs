@@ -609,6 +609,71 @@ fn ast_function<'f>(
         .then_some((file, found))
 }
 
+/// ADR 0961 (PD): the constructor of the class a `new` call names, when the class is written in the same file.
+fn constructed_constructor<'f>(file: &'f FileFacts, call: &CallFact) -> Option<&'f FunctionFact> {
+    let declaration = file
+        .ast
+        .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))?;
+    let class = file.ast.classes.iter().find(|class| {
+        class
+            .name
+            .as_ref()
+            .is_some_and(|name| name.span == declaration)
+    })?;
+    let constructor = class
+        .elements
+        .iter()
+        .find(|element| element.kind == solid_facts::ast::ClassElementKind::Constructor)?;
+    file.ast.function_at(constructor.value?)
+}
+
+/// ADR 0961 (PD): whether `call` runs a parameter initializer of `function` that holds code that may read a source (a call, a
+/// member access, a function: an IIFE or a closure), when it omits the argument. A default is evaluated when the call passes no
+/// argument at its index, passes `undefined`, or may have it spread away; a destructuring pattern's defaults are evaluated
+/// whatever the argument is (a property it lacks), so such a parameter counts whenever its pattern holds that code. A constant
+/// default reads nothing, and an argument the call passes keeps the default from running.
+fn parameter_initializer_runs(
+    target: &FileFacts,
+    function: &FunctionFact,
+    call: &CallFact,
+) -> bool {
+    // The invocation of a function literal reads nothing itself (what the literal's body calls is counted where it is written).
+    let may_read = |region: Span| {
+        target.ast.calls.iter().any(|inner| {
+            region.contains(inner.span)
+                && target
+                    .ast
+                    .function_at(target.ast.peel_ts_sugar_span(inner.callee))
+                    .is_none()
+        }) || target
+            .ast
+            .members
+            .iter()
+            .any(|member| region.contains(member.span))
+    };
+    function
+        .parameters
+        .iter()
+        .enumerate()
+        .any(|(index, parameter)| {
+            if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+                return may_read(parameter.declaration);
+            }
+            let Some(initializer) = parameter.initializer else {
+                return false;
+            };
+            let omitted = call
+                .arguments
+                .iter()
+                .take(index + 1)
+                .any(|argument| argument.spread)
+                || call.arguments.get(index).is_none_or(|argument| {
+                    argument.value == solid_facts::ast::ArgumentValueKind::Undefined
+                });
+            omitted && may_read(initializer)
+        })
+}
+
 /// Whole-argument hand-ons followed from a call: past it, an obligation.
 const MAX_FORWARDS: usize = 32;
 
@@ -1494,6 +1559,67 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                     analysis_context: member.context.clone(),
                     fixes: vec![],
                     uncertain: !exact || tracking == Tracking::Possible,
+                });
+            }
+        }
+        // ADR 0961 (PD): a call written in the function's own body after one of its awaits runs the parameter initializers of the
+        // function it calls (or of the constructor it constructs) when it omits the argument, on the continuation. The walk reads
+        // an accessor call in a default, and no IIFE, closure, destructuring default or constructor's: where such an initializer
+        // holds code that may read a source and no row stands at the call yet, the call is an obligation, never silence.
+        if let Some((file, ast_function)) = ast_function(self.files, function) {
+            for candidate in &file.ast.calls {
+                if !ast_function.body.contains(candidate.span)
+                    || crate::owners::containing_ast_function(&file.ast, candidate.span)
+                        .is_none_or(|owner| owner.span != ast_function.span)
+                {
+                    continue;
+                }
+                let after_await =
+                    crate::execution_role::follows_unconditional_await(file, candidate.span)
+                        || crate::execution_role::follows_dominating_await(file, candidate.span)
+                        || crate::execution_role::follows_any_suspension(file, candidate.span)
+                        || crate::execution_role::may_follow_own_await(file, candidate.span);
+                if !after_await {
+                    continue;
+                }
+                let callee_span = file.ast.peel_ts_sugar_span(candidate.callee);
+                let target = if candidate.construct {
+                    constructed_constructor(file, candidate).map(|constructor| (file, constructor))
+                } else {
+                    ctx.semantic_lookup
+                        .function_called_at(file.path.as_str(), callee_span)
+                };
+                let Some((target_file, target)) = target else {
+                    continue;
+                };
+                if !parameter_initializer_runs(target_file, target, candidate) {
+                    continue;
+                }
+                let callee = location(file.path.shared(), candidate.callee);
+                if !walk.reported.insert((
+                    callee.path.to_string(),
+                    callee.start_byte,
+                    callee.end_byte,
+                )) {
+                    continue;
+                }
+                draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ReactiveReadAfterAwait {
+                        accessor: callee_text(file, candidate.callee),
+                        obligation: Some(AfterAwaitObligation::ParameterInitializerUnplaced),
+                    },
+                    // The call expression's start: a `new` call's frame is at its `new` token (V8 places the frame at the
+                    // callee, the judge reads it as the expression's start), a plain call's at its callee.
+                    location: location(
+                        file.path.shared(),
+                        Span::new(candidate.span.start, candidate.callee.end),
+                    ),
+                    analysis_context: crate::blockers::with_detail(
+                        crate::blockers::PARAMETER_INITIALIZER_UNPLACED,
+                        &member.context,
+                    ),
+                    fixes: vec![],
+                    uncertain: true,
                 });
             }
         }

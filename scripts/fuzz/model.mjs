@@ -152,6 +152,8 @@ export const CONTAINER_KINDS = [
 /** Containers only an effect apply holds (the misuse profile's `-guarded` contexts): `guard-return` puts its statements behind
  * `if (v === 1) return;`, skipped on the first run, whose `v` is the compute's 1 (ADR 0504 review). */
 export const APPLY_CONTAINER_KINDS = ["guard-return"];
+/** Containers only a shape holds (entry-shapes.mjs `pd-ctor-*`, ADR 0961 PD): `class-ctor-default` writes its one expression as the default of the parameter of a class's constructor and constructs the class. */
+export const PARAMETER_CONTAINER_KINDS = ["class-ctor-default"];
 /** Kinds whose body is the body of a function of its own (an `await` needs `async`). The rest run inside the parent function. */
 export const FUNCTION_KINDS = new Set([
   "comp-never", "comp-rendered", "comp-slot", "comp-prop", "comp-returned", "class-method", "class-ctor", "class-static", "class-sblock",
@@ -160,7 +162,7 @@ export const FUNCTION_KINDS = new Set([
 /** Kinds that can be async (the others cannot hold an `await`: a field initializer, a constructor, a static block, a rendered component). */
 export const ASYNC_KINDS = new Set(["comp-never", "comp-slot", "comp-prop", "comp-returned", "class-method", "dead-after-return", "dead-fn"]);
 export const USES = {
-  "comp-returned": ["discard", "call"], "class-field": ["new", "never"], "class-ctor": ["new", "never"], "class-method": ["call", "new", "never"],
+  "comp-returned": ["discard", "call"], "class-field": ["new", "never"], "class-ctor": ["new", "never"], "class-method": ["call", "new", "never"], "class-ctor-default": ["new"],
 };
 export const contain = (kind, id, body, extra = {}) => ({ k: "contain", kind, id, async: false, use: null, body, ...extra });
 
@@ -507,7 +509,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
     }
 
     function checkContain(stmt, scope) {
-      if (!CONTAINER_KINDS.includes(stmt.kind) && !APPLY_CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
+      if (!CONTAINER_KINDS.includes(stmt.kind) && !APPLY_CONTAINER_KINDS.includes(stmt.kind) && !PARAMETER_CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
       const own = FUNCTION_KINDS.has(stmt.kind);
       if (stmt.async && !ASYNC_KINDS.has(stmt.kind)) fail(`${where}: a ${stmt.kind} cannot be async`);
       if (stmt.kind === "comp-rendered" && stmt.body.at(-1)?.k !== "return") fail(`${where}: a rendered component returns`);

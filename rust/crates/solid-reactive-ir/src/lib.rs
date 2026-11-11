@@ -851,6 +851,11 @@ pub enum LeafOwnerOperationKind {
     /// async or is a generator, so whether the primitive runs it in place on the leaf scope's stack is not modelled
     /// (ADR 0959). The call may be any of the forbidden operations: a proof obligation, never silence.
     UnmodelledSlot,
+    /// A call of a generator whose iterator the leaf callback keeps (the call's result is no statement's discard): the
+    /// generator's body runs where the iterator is stepped (`.next()`, `for…of`, a spread, `Array.from`, a stored loop,
+    /// `yield*`), which no call edge here follows, so its operations may run in this leaf scope (ADR 0961): a proof
+    /// obligation, never silence.
+    GeneratorStepped,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1015,6 +1020,10 @@ pub enum AfterAwaitObligation {
     /// A prop read whose signal backing is not proven: the component's call
     /// sites cannot be enumerated, or the prop's use is unknown.
     PropBackingUnproven { callers_unenumerable: bool },
+    /// ADR 0961 (PD): the call after the await runs a parameter initializer (a default value, a destructuring default, an
+    /// IIFE, a closure, a constructor's) of the function it calls when it omits the argument, and the walk does not read which
+    /// calls do: what the initializer reads runs on the continuation, with no observer.
+    ParameterInitializerUnplaced,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

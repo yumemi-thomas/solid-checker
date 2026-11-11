@@ -378,6 +378,8 @@ function render(program, instrument) {
       case "class-sblock": return `class ${name} {\n${ind(depth + 1)}static ${block(c.body, depth + 1, open())}\n${ind(depth)}}`;
       case "class-method": return `class ${name} {\n${ind(depth + 1)}${asyncKw}m() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "call" ? line(`new ${name}().m();`) : c.use === "new" ? line(`new ${name}();`) : ""}`;
       case "class-ctor": return `class ${name} {\n${ind(depth + 1)}constructor() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "new" ? line(`new ${name}();`) : ""}`;
+      // entry-shapes.mjs `pd-ctor-*`: the one expression is the default of the constructor's parameter.
+      case "class-ctor-default": return `class ${name} {\n${ind(depth + 1)}constructor(p0: unknown = ${expr(c.body[0].e, depth + 1)}) {}\n${ind(depth)}}${line(`new ${name}();`)}`;
       case "dead-if": return `if (false) ${block(c.body, depth, open())}`;
       case "dead-after-return": return `(${asyncKw}() => ${block(c.body, depth, open(), ["return;"])})();`;
       case "dead-fn": return funcDecl(depth);
@@ -445,7 +447,7 @@ function render(program, instrument) {
       case "gen-sync-each": return `function* gen() {\n${ind(depth + 1)}yield 1;\n${ind(depth + 1)}[1].forEach(() => ${block(c.body, depth + 1)});\n${ind(depth)}}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
       case "gstep": {
         const body = c.mode === "first" ? block(c.body, depth, null, [], ["yield 1;"]) : block(c.body, depth, null, ["yield 1;"]);
-        return c.holder ? `const ${c.holder} = { *${c.name}() ${body} };` : `${c.exported ? "export " : ""}function* ${c.name}() ${body}`;
+        return c.holder ? `const ${c.holder} = { *${c.name}() ${body} };` : `${c.exported ? "export " : ""}${c.async ? "async " : ""}function* ${c.name}() ${body}`;
       }
       case "gen-drain": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) void _y;\n${ind(depth)}await Promise.resolve();`;
       default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); if (c.form.startsWith("chain-") || c.form.startsWith("forward-")) return chainText(c, depth); throw new Error(`cannot print control form ${c.form}`);

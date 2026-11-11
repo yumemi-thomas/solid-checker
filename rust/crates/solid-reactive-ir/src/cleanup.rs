@@ -110,7 +110,9 @@ fn through_slots_kind(
             }
         }
         // `flush()`'s guard reads the queue's own marker, whatever owner and observer the callback has.
-        Kind::Flush | Kind::UnresolvedCallback | Kind::UnmodelledSlot => Some((kind, false)),
+        Kind::Flush | Kind::UnresolvedCallback | Kind::UnmodelledSlot | Kind::GeneratorStepped => {
+            Some((kind, false))
+        }
     }
 }
 
@@ -262,8 +264,16 @@ fn push_reached(
     complete: bool,
     crossed: Option<&Crossed>,
     step_unproven: bool,
+    lookup: &SemanticLookup<'_>,
 ) {
     let via = file.source_text(call.callee).unwrap_or_default().to_owned();
+    // A `new` call's frame is at its `new` token (V8 places it at the callee, the judge reads it as the expression's start): the
+    // row stands at the call expression's start, as a plain call's does at its callee (ADR 0961, PD: the constructor's defaults).
+    let at = if call.construct {
+        Span::new(call.span.start, call.callee.end)
+    } else {
+        call.callee
+    };
     for (kind, guaranteed, identity_unproven, sites) in kinds {
         let (kind, owner_unproven, slot_identity_unproven) = match crossed {
             Some(crossed) => {
@@ -274,29 +284,44 @@ fn push_reached(
             }
             None => (kind, false, false),
         };
-        push_crossed(
-            operations,
-            LeafOwnerOperation {
-                kind,
-                owner: owner.to_owned(),
-                location: location(file.path.shared(), call.callee),
-                fix: None,
-                call_site_gate: call_site_gate.cloned(),
-                uncertain: owner_unproven || slot_identity_unproven,
-                possible: !guaranteed || step_unproven,
-                via: Some(via.clone()),
-                identity_unproven,
-                sites,
-                computation_error_unobserved: false,
-            },
-            crossed,
-        );
+        // ADR 0961 (B): the body of a generator runs where its iterator is stepped, and V8's frame for the creation inside it
+        // is the stepper's (`it.next()`, `Array.from(…)`, `new Set(…)`), not the call that made the iterator: the obligation
+        // stands at each place that steps it as well.
+        let steppers = if matches!(kind, crate::LeafOwnerOperationKind::GeneratorStepped) {
+            generator_steppers(file, call, lookup)
+        } else {
+            Vec::new()
+        };
+        let operation =
+            |kind: crate::LeafOwnerOperationKind, at: Span, sites: Vec<typefacts::Location>| {
+                LeafOwnerOperation {
+                    kind,
+                    owner: owner.to_owned(),
+                    location: location(file.path.shared(), at),
+                    fix: None,
+                    call_site_gate: call_site_gate.cloned(),
+                    uncertain: owner_unproven || slot_identity_unproven,
+                    possible: !guaranteed || step_unproven,
+                    via: Some(via.clone()),
+                    identity_unproven,
+                    sites,
+                    computation_error_unobserved: false,
+                }
+            };
+        for stepper in steppers.into_iter().filter(|stepper| *stepper != at) {
+            push_crossed(
+                operations,
+                operation(kind.clone(), stepper, Vec::new()),
+                crossed,
+            );
+        }
+        push_crossed(operations, operation(kind, at, sites), crossed);
     }
     if !complete {
         operations.push(LeafOwnerOperation {
             kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
             owner: owner.to_owned(),
-            location: location(file.path.shared(), call.callee),
+            location: location(file.path.shared(), at),
             fix: None,
             call_site_gate: call_site_gate.cloned(),
             uncertain: true,
@@ -307,6 +332,34 @@ fn push_reached(
             computation_error_unobserved: false,
         });
     }
+}
+
+/// ADR 0961 (B): where the iterator the generator call `call` returns is stepped, when the call itself is not the stepping position
+/// (a `for…of` operand, a spread, `g().next()` stand at the call): the call that takes it as an argument and drains it
+/// (`Array.from(g())`, `new Set(g())`), and the places that step or iterate the `const` that holds it.
+fn generator_steppers(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let mut at = Vec::new();
+    if let Some((container, _)) =
+        file.ast
+            .arguments_containing(call.span)
+            .find(|(container, index)| {
+                file.ast
+                    .peel_ts_sugar_span(container.arguments[*index].span)
+                    == call.span
+            })
+    {
+        at.push(Span::new(container.span.start, container.callee.end));
+    }
+    if let crate::owners::IteratorSteps::Held(steps) =
+        crate::owners::iterator_steps(file, call, lookup)
+    {
+        at.extend(steps);
+    }
+    at
 }
 
 /// Pushes `operation` found through `crossed` slots, unless it fails with a plain throw and a crossed slot takes
@@ -948,6 +1001,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     complete,
                     crossed.as_ref(),
                     step_unproven(call.span),
+                    lookup,
                 );
                 continue;
             };
@@ -978,6 +1032,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         named_complete,
                         crossed.as_ref(),
                         step_unproven(call.span),
+                        lookup,
                     );
                 }
             }
@@ -1760,6 +1815,7 @@ fn helper_forbidden_operations(
                 Some(values) if !values.is_empty() => Entry::CalledWith { guaranteed, values },
                 _ => Entry::Called { guaranteed },
             };
+            note_generator_stepped(kinds, call, helper_file, helper);
             return function_forbidden_operations(
                 resolution,
                 helper_file,
@@ -1869,6 +1925,7 @@ fn helper_forbidden_operations(
         Some(values) if !values.is_empty() => Entry::CalledWith { guaranteed, values },
         _ => Entry::Called { guaranteed },
     };
+    note_generator_stepped(kinds, call, helper_file, helper);
     function_forbidden_operations(
         resolution,
         helper_file,
@@ -1879,6 +1936,33 @@ fn helper_forbidden_operations(
         None,
         entry,
     )
+}
+
+/// ADR 0961: calling a generator runs none of its body, but a call whose result is kept hands the iterator on, and the body runs
+/// where it is stepped (`.next()`, `for…of`, a spread, `Array.from`, a stored loop, `yield*`), which no call edge here follows:
+/// when the body holds a call, the call is an obligation (`generator-stepped`), never silence. A call a statement discards runs
+/// none of the body, and a generator with no call in its body has nothing to run.
+fn note_generator_stepped(
+    kinds: &mut Reached,
+    call: &solid_facts::ast::CallFact,
+    helper_file: &FileFacts,
+    helper: &solid_facts::ast::FunctionFact,
+) {
+    if helper.generator
+        && !call.result_discarded
+        && helper_file
+            .ast
+            .calls
+            .iter()
+            .any(|inner| helper.body.contains(inner.span))
+    {
+        kinds.push((
+            crate::LeafOwnerOperationKind::GeneratorStepped,
+            false,
+            false,
+            Vec::new(),
+        ));
+    }
 }
 
 /// A member call that is not an exact instance's method (ADR 0210).
@@ -1906,6 +1990,7 @@ fn member_call_operations(
         && let Some((helper_file, helper)) =
             resolution.lookup.namespace_member_function(file, callee)
     {
+        note_generator_stepped(kinds, call, helper_file, helper);
         return function_forbidden_operations(
             resolution,
             helper_file,

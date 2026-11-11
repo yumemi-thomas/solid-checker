@@ -63,7 +63,7 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-operations/App.tsx",
-      "start": 430,
+      "start": 426,
       "end": 436,
       "fixes": 0
     },

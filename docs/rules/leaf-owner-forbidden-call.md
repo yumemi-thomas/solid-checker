@@ -119,6 +119,16 @@ rule (ADR 0959, the `UnmodelledSlot` operation, blocker `leaf-owner-unproven`): 
 callback, and what it runs is not read. A call that cannot operate is not claimed (a primitive the leaf owner never
 refuses, an accessor read, a setter call); any other call is, a helper or a member too. Never a violation.
 
+A call of a generator whose iterator the leaf callback keeps (`.next()`, a `for…of`, a spread, `Array.from`, a stored loop,
+`yield*` through another generator, an async generator's `.next()`) is an uncertifiable row of this rule (ADR 0961, the
+`GeneratorStepped` operation, blocker `generator-stepped`): a generator's body runs where its iterator is stepped, which no
+walk here follows, so a forbidden operation in a body that holds a call may run in this leaf scope. A call a statement
+discards runs none of the body, and a generator with no call in its body has nothing to run.
+
+A parameter initializer a leaf callback's call runs (a default, a destructuring default, an IIFE or closure in one, a
+constructor's) is covered by the withholding rows of the call (`leaf-callback-opaque`, `value-as-parameter-default`), as a
+function the walk cannot follow is; a `new` call's row stands at its `new` token, where V8 places the frame (ADR 0961).
+
 A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
 tracked-effect body whose every creation is inside an owned leaf body, where
 the creation itself throws first (`docs/open-work.md`).

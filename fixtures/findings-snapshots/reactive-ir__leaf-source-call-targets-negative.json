@@ -107,7 +107,7 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx",
-      "start": 1049,
+      "start": 1044,
       "end": 1102,
       "fixes": 0
     },

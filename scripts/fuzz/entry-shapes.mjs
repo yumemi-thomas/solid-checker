@@ -28,8 +28,10 @@
 //     ge-<step>-<host>   the site is the body of `g`, a generator the component declares, and the host's callback steps it
 //       step   forof   `for (const s of g()) void s`       spread  `void [...g()]`      next  `const it = g(); it.next()`      yield  `for (const s of o()) …` with `function* o() { yield* g(); }`
 //              from    `void Array.from(g())`              direct  `g().next()`          set   `void new Set(g())`            stored `const it = g(); for (const s of it) void s`
+//              anext   `void g().next()` of an async generator (its body runs up to the first await or yield at once)
 //       host   apply   an effect's apply (the codes of the effect phase)    memo   a memo's compute     effect   an effect's compute (the write code)
 //              action  an action's step body, a generator literal written as the action's argument (FLUSH_IN_ACTION)
+//              tracked / settled  a leaf scope's callback (`createTrackedEffect`, `onSettled`: the leaf codes, batch-10 addendum 12 group B)
 //     ge-idle-<host>     legal twin: the host's callback calls `g();` and discards the iterator (none of the body runs there) and a button's handler steps it with a `for…of`, where the site is legal
 //
 //   a site in a PARAMETER INITIALIZER of a function the host's callback calls (ADR 0961, PD: Chrome fires FLUSH_IN_ACTION at the flush of `function h(x = flush())` an
@@ -39,13 +41,16 @@
 //              iife     the default is an IIFE holding the site, `h(p0: unknown = (() => { flush(); return 1; })())`
 //              closure  the default is a closure holding the site, `h(p0: () => void = () => { flush(); }) { p0(); }`
 //              helper   the default calls a function that holds the site, `h(p0: unknown = g())`
+//              destructured  the default is inside a destructuring pattern, `h({ p0 = flush() }: { p0?: unknown } = {})`
+//              ctor     a class's constructor takes it, `class K8 { constructor(p0: unknown = flush()) {} }` and `new K8()`
 //       host   action  an action's step body (FLUSH_IN_ACTION)    apply  an effect's apply (the effect phase's codes)    tracked  `createTrackedEffect`    settled  `onSettled` (the leaf codes)
+//              await   an async memo's continuation, after its await (UNTRACKED_READ_AFTER_AWAIT)
 //     pd-passed-<host>   legal twin: the host calls `h(1)`: the argument is passed, so the default never runs
 //     pd-idle-<host>     legal twin: the host calls nothing, and a button's handler calls `h()`, where the site is legal
 //
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is how the site is entered, not the spelling of the site. The census does not cross them
 // with other codes (matrix.mjs CENSUS_SKIPS): they are the cells of the codes that name them, as the `pl-*` ones.
-import { bareParam, button, call, child, ctl, decl, domExpr, expr, fn, iife, num, param, prim, ref, ret } from "./model.mjs";
+import { awaitStmt, bareParam, button, call, child, contain, ctl, decl, domExpr, expr, fn, iife, num, param, prim, ref, ret } from "./model.mjs";
 
 /** The helper `ae-helper` hands the generator to (a project's `run`): it makes the action. */
 const RUN_ACTION = "(g: () => Generator<unknown, void, any>) => action(g)";
@@ -80,23 +85,29 @@ const TW_PATTERN = new RegExp(`^tw-(${LAYER_NAMES.join("|")})-(${TW_SPELLINGS.jo
 export const twParts = (context) => { const match = TW_PATTERN.exec(context); return match ? { layer: match[1], spelling: match[2], order: match[3], host: match[4], place: match[5] ?? "" } : null; };
 
 /** ADR 0961 (F2, R1): the generator-stepped family. The effect phase's codes in an apply, the write code in a compute (a memo's or an effect's), FLUSH_IN_ACTION in an action's step. */
-export const GE_STEPS = ["forof", "spread", "next", "yield", "from", "direct", "set", "stored"];
+export const GE_STEPS = ["forof", "spread", "next", "yield", "from", "direct", "set", "stored", "anext"];
 export const GE_APPLY_CODES = ["FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"];
 export const GE_COMPUTE_CODES = ["REACTIVE_WRITE_IN_OWNED_SCOPE"];
 export const GE_ACTION_CODES = ["FLUSH_IN_ACTION"];
+/** The leaf scopes (`createTrackedEffect`, `onSettled`) and the codes reported in them (batch-10 addendum 12, group B). */
+export const GE_LEAF_CODES = ["FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "CLEANUP_IN_FORBIDDEN_SCOPE"];
+export const GE_LEAF_HOSTS = ["tracked", "settled"];
 const GE_APPLY_NAMES = [...GE_STEPS.map((step) => `ge-${step}-apply`), "ge-idle-apply"];
 const GE_COMPUTE_NAMES = [...["memo", "effect"].flatMap((host) => GE_STEPS.map((step) => `ge-${step}-${host}`)), "ge-idle-memo"];
 const GE_ACTION_NAMES = [...GE_STEPS.map((step) => `ge-${step}-action`), "ge-idle-action"];
-const GE_PATTERN = new RegExp(`^ge-(${[...GE_STEPS, "idle"].join("|")})-(apply|memo|effect|action)$`);
-export const GE_CONTEXTS = Object.fromEntries([...GE_APPLY_NAMES, ...GE_COMPUTE_NAMES, ...GE_ACTION_NAMES].map((name) => [name, name.startsWith("ge-idle-") ? "legal" : "misuse"]));
+/** A leaf host's contexts: a step each, and the idle twin (not for CLEANUP_IN_FORBIDDEN_SCOPE: a cleanup has no legal handler, NO_OWNER_CLEANUP). */
+export const geLeafNames = (host, code = null) => [...GE_STEPS.map((step) => `ge-${step}-${host}`), ...(code === "CLEANUP_IN_FORBIDDEN_SCOPE" ? [] : [`ge-idle-${host}`])];
+const GE_PATTERN = new RegExp(`^ge-(${[...GE_STEPS, "idle"].join("|")})-(apply|memo|effect|action|${GE_LEAF_HOSTS.join("|")})$`);
+export const GE_CONTEXTS = Object.fromEntries([...GE_APPLY_NAMES, ...GE_COMPUTE_NAMES, ...GE_ACTION_NAMES, ...GE_LEAF_HOSTS.flatMap((host) => geLeafNames(host))].map((name) => [name, name.startsWith("ge-idle-") ? "legal" : "misuse"]));
 
 /** ADR 0961 (PD): the parameter-initializer family. A host's callback calls a function whose parameter's default holds the site. */
-export const PD_FORMS = ["value", "iife", "closure", "helper"];
+export const PD_FORMS = ["value", "iife", "closure", "helper", "destructured", "ctor"];
 export const PD_HOST_CODES = {
   action: ["FLUSH_IN_ACTION"],
   apply: ["FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"],
   tracked: ["FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "CLEANUP_IN_FORBIDDEN_SCOPE"],
   settled: ["FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "CLEANUP_IN_FORBIDDEN_SCOPE"],
+  await: ["UNTRACKED_READ_AFTER_AWAIT"],
 };
 export const PD_HOSTS = Object.keys(PD_HOST_CODES);
 /**
@@ -122,6 +133,7 @@ export const ENTRY_CODES = (() => {
   for (const [code, layer] of Object.entries(TW_LAYERS)) place(code, TW_NAMES.filter((name) => twParts(name).layer === layer));
   for (const code of GE_APPLY_CODES) place(code, GE_APPLY_NAMES);
   for (const code of GE_COMPUTE_CODES) place(code, GE_COMPUTE_NAMES);
+  for (const code of GE_LEAF_CODES) for (const host of GE_LEAF_HOSTS) place(code, geLeafNames(host, code));
   for (const [host, codes] of Object.entries(PD_HOST_CODES)) for (const code of codes) place(code, pdNames(host, code));
   return placed;
 })();
@@ -197,9 +209,11 @@ function steppedContext(context, stmts, kit) {
   const [, step, host] = GE_PATTERN.exec(context);
   const g = kit.name("g");
   const s = kit.name("s");
-  const declared = [generator(g, stmts)];
+  // `anext`: an async generator, whose `.next()` runs the body up to its first await or yield at once.
+  const declared = [step === "anext" ? { ...generator(g, stmts), async: true } : generator(g, stmts)];
   let steps;
   switch (step) {
+    case "anext": steps = [expr(domExpr(`void ${g}().next()`))]; break;
     case "forof": steps = [expr(domExpr(`for (const ${s} of ${g}()) void ${s}`))]; break;
     case "spread": steps = [expr(domExpr(`void [...${g}()]`))]; break;
     case "next": { const it = kit.name("it"); steps = [decl(it, domExpr(`${g}()`)), expr(domExpr(`${it}.next()`))]; break; }
@@ -220,6 +234,7 @@ function steppedContext(context, stmts, kit) {
     case "action": { const a = kit.name("a"); return { body: [...declared, decl(a, prim("action", fn(steps)))], view: [button(kit.name("b"), [expr(domExpr(`${a}()`))]), ...idle] }; }
     case "apply": return { body: [...declared, expr(prim("effect", fn([ret(num(1))]), { apply: fn(steps) }))], view: idle };
     case "effect": return { body: [...declared, expr(prim("effect", fn([...steps, ret(num(1))]), { apply: fn([]) }))], view: idle };
+    case "tracked": case "settled": return { body: [...declared, expr(prim(host, fn(steps)))], view: idle };
     default: { const m = kit.name("m"); return { body: [...declared, decl(m, prim("memo", fn([...steps, ret(num(1))])))], view: [child(kit.name("v"), call(ref(m))), ...idle] }; }
   }
 }
@@ -234,8 +249,11 @@ function parameterContext(context, stmts, kit) {
   const single = stmts.length === 1 && stmts[0].k === "expr" ? stmts[0].e : null;
   const declared = [];
   let helper;
+  let constructed = null;
   switch (form) {
     case "value": helper = fn([ret(ref("p0"))], { params: [withDefault(single ?? iife(fn([...stmts, ret(num(1))])), "unknown")] }); break;
+    case "destructured": helper = fn([ret(ref("p0"))], { params: [{ ...param(single ?? iife(fn([...stmts, ret(num(1))])), true), type: "unknown" }] }); break;
+    case "ctor": constructed = contain("class-ctor-default", 8, [expr(single ?? iife(fn([...stmts, ret(num(1))])))], { use: "new" }); break;
     case "iife": helper = fn([ret(ref("p0"))], { params: [withDefault(iife(fn([...stmts, ret(num(1))])), "unknown")] }); break;
     case "closure": helper = fn([expr(call(ref("p0")))], { params: [withDefault(fn(stmts), "() => void")] }); break;
     case "helper": {
@@ -247,14 +265,15 @@ function parameterContext(context, stmts, kit) {
     // The twins: the default holds the site as `value` writes it.
     default: helper = fn([ret(ref("p0"))], { params: [withDefault(single ?? iife(fn([...stmts, ret(num(1))])), "unknown")] });
   }
-  declared.push(decl(h, helper));
-  // What the host's callback does: calls `h()`, calls `h(1)` (the default is not evaluated), or nothing (a handler calls it).
+  if (helper) declared.push(decl(h, helper));
+  // What the host's callback does: calls `h()`, calls `h(1)` (the default is not evaluated), constructs the class, or nothing (a handler calls it).
   const idle = form === "idle";
-  const entering = idle ? [] : [expr(call(ref(h), form === "passed" ? [num(1)] : []))];
+  const entering = idle ? [] : constructed ? [constructed] : [expr(call(ref(h), form === "passed" ? [num(1)] : []))];
   const handler = idle ? [button(kit.name("b"), [expr(call(ref(h)))])] : [];
   switch (host) {
     case "action": { const a = kit.name("a"); return { body: [...declared, decl(a, prim("action", fn(entering)))], view: [button(kit.name("b"), [expr(domExpr(`${a}()`))]), ...handler] }; }
     case "apply": return { body: [...declared, expr(prim("effect", fn([ret(num(1))]), { apply: fn(entering) }))], view: handler };
+    case "await": { const m = kit.name("m"); return { body: [...declared, decl(m, prim("memo", fn([awaitStmt(), ...entering, ret(num(1))], { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: handler }; }
     default: return { body: [...declared, expr(prim(host, fn(entering)))], view: handler };
   }
 }

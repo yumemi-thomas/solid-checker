@@ -162,6 +162,18 @@ the result, read after the action resolves (`await save(); …`).
   steps whatever `wrap` returns, so no violation is claimed inside; the flush is an uncertifiable row (ADR 0961: a
   generator handed on that no walk places), since `wrap` may return the generator itself.
 
+- **A generator whose iterator the program keeps (ADR 0961, R1).** A named generator's call whose result a statement does
+  not discard may be stepped anywhere (`Array.from(g())`, `new Set(g())`, `g().next()`, `const it = g(); it.next()`, a
+  loop over a stored iterator, `yield*`): a `flush` in its body is an uncertifiable row (`function-run-unplaced`) when the
+  program names `action`, never silence. Chrome throws FLUSH_IN_ACTION at each when the generator is stepped in a step. A
+  call a statement discards runs none of the body, and a generator nothing calls or steps has no site.
+- **A parameter initializer (ADR 0961, PD).** A `flush` written in a default value, a destructuring default, an IIFE or a
+  closure in one, or in a helper the default calls, of a function the program calls or references
+  (`function h(x = flush())` and `action(function* () { h(); })`) runs when a call omits the argument, which no walk
+  reads: an uncertifiable row (`parameter-initializer-unplaced`), never a violation. The default of the action's own step
+  generator is evaluated when the action creates the generator, before the first step (ADR 0454): no row. A method's
+  default is the same row.
+
 ## Related
 
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the other

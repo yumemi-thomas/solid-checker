@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { runtimeEvents } from "./classify.mjs";
 import { policyOf } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
-import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, GE_ACTION_CODES, GE_APPLY_CODES, GE_COMPUTE_CODES, GE_STEPS, PD_FORMS, PD_HOSTS, PD_HOST_CODES, PD_NEVER_RUN, TW_LAYERS, entryNotVariants, entryPlacement, pdNames, twParts } from "./entry-shapes.mjs";
+import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, GE_ACTION_CODES, GE_APPLY_CODES, GE_COMPUTE_CODES, GE_LEAF_CODES, GE_LEAF_HOSTS, GE_STEPS, PD_FORMS, PD_HOSTS, PD_HOST_CODES, PD_NEVER_RUN, TW_LAYERS, entryNotVariants, entryPlacement, geLeafNames, pdNames, twParts } from "./entry-shapes.mjs";
 import { DEFAULT_FAST_INSTALL, runFast } from "./fast.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
@@ -25,13 +25,13 @@ const lines = (text) => text.split("\n").map((line) => line.trim());
 const at = (all, wanted, from = 0) => all.findIndex((line, index) => index >= from && line === wanted);
 
 describe("the entry contexts", () => {
-  it("are the action family's eight, the twice-entered family's 72, the generator-stepped family's 35 and the parameter-initializer family's 24, each name parsed back", () => {
-    // eight steps in each of four hosts (an effect's apply, a memo's compute, an effect's compute, an action's step), and the legal twin of the apply, of the memo and of the action
-    // four forms, a twin that passes the argument and a twin that leaves the call to a handler, in each of four hosts
-    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3 + (8 * 4 + 3) + 4 * 6);
+  it("are the action family's eight, the twice-entered family's 72, the generator-stepped family's 59 and the parameter-initializer family's 40, each name parsed back", () => {
+    // nine steps in each of six hosts (an effect's apply, a memo's compute, an effect's compute, an action's step, a tracked effect, an onSettled), and the legal twin of the apply, of the memo, of the action and of the two leaf hosts
+    // six forms, a twin that passes the argument and a twin that leaves the call to a handler, in each of five hosts
+    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3 + (9 * 6 + 5) + 5 * 8);
     expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ae-"))).toHaveLength(8);
-    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ge-"))).toHaveLength(35);
-    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("pd-"))).toHaveLength(24);
+    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ge-"))).toHaveLength(59);
+    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("pd-"))).toHaveLength(40);
     for (const name of ENTRY_CONTEXT_NAMES.filter((one) => one.startsWith("tw-"))) {
       const parts = twParts(name);
       expect(parts, name).not.toBeNull();
@@ -42,18 +42,32 @@ describe("the entry contexts", () => {
   });
   it("are placed for the codes whose tolerant layer they use, and for no other", () => {
     const placement = entryPlacement();
-    expect(Object.keys(placement).sort()).toEqual(["CLEANUP_IN_FORBIDDEN_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "REACTIVE_WRITE_IN_OWNED_SCOPE"]);
+    expect(Object.keys(placement).sort()).toEqual(["CLEANUP_IN_FORBIDDEN_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "REACTIVE_WRITE_IN_OWNED_SCOPE", "UNTRACKED_READ_AFTER_AWAIT"]);
     const pd = (host, code = null) => ({ misuse: PD_FORMS.map((form) => `pd-${form}-${host}`), legal: pdNames(host, code).filter((name) => /^pd-(passed|idle)-/.test(name)) });
     for (const code of GE_APPLY_CODES) expect(placement[code]).toEqual({ misuse: [...GE_STEPS.map((step) => `ge-${step}-apply`), ...pd("apply", code).misuse], legal: ["ge-idle-apply", ...pd("apply", code).legal] });
     for (const code of GE_COMPUTE_CODES) expect(placement[code]).toEqual({ misuse: ["memo", "effect"].flatMap((host) => GE_STEPS.map((step) => `ge-${step}-${host}`)), legal: ["ge-idle-memo"] });
     for (const code of GE_ACTION_CODES) expect(placement[code]).toEqual({ misuse: ["ae-helper", "ae-helper-named", "ae-package", "ae-delegate", ...GE_STEPS.map((step) => `ge-${step}-action`), ...pd("action", code).misuse], legal: ["ae-helper-plain", "ae-helper-named-plain", "ae-package-plain", "ae-delegate-plain", "ge-idle-action", ...pd("action", code).legal] });
     // the parameter-initializer family: the hosts name the codes it is placed for
-    expect(PD_HOSTS).toEqual(["action", "apply", "tracked", "settled"]);
+    expect(PD_HOSTS).toEqual(["action", "apply", "tracked", "settled", "await"]);
+    expect(PD_FORMS).toEqual(["value", "iife", "closure", "helper", "destructured", "ctor"]);
+    expect(placement.UNTRACKED_READ_AFTER_AWAIT).toEqual(pd("await"));
     for (const [host, codes] of Object.entries(PD_HOST_CODES)) for (const code of codes) expect(pdNames(host, code).every((name) => placement[code].misuse.includes(name) || placement[code].legal.includes(name)), `${code}/${host}`).toBe(true);
     // a cleanup has no legal handler (NO_OWNER_CLEANUP): its legal twin is the one that passes the argument
-    expect(placement.CLEANUP_IN_FORBIDDEN_SCOPE).toEqual({ misuse: [...pd("tracked").misuse, ...pd("settled").misuse], legal: ["pd-passed-tracked", "pd-passed-settled"] });
-    expect(PD_NEVER_RUN).toEqual(["pd-passed-action", "pd-passed-apply", "pd-passed-tracked", "pd-passed-settled"]);
-    expect(GE_STEPS).toEqual(["forof", "spread", "next", "yield", "from", "direct", "set", "stored"]);
+    const geLeaf = (host, code) => ({ misuse: GE_STEPS.map((step) => `ge-${step}-${host}`), legal: geLeafNames(host, code) });
+    expect(placement.CLEANUP_IN_FORBIDDEN_SCOPE).toEqual({
+      misuse: [...geLeaf("tracked").misuse, ...geLeaf("settled").misuse, ...pd("tracked").misuse, ...pd("settled").misuse],
+      legal: ["pd-passed-tracked", "pd-passed-settled"],
+    });
+    // the leaf codes: the generator-stepped steps in both leaf hosts (the idle twin too, but not for a cleanup)
+    for (const code of ["FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE"]) {
+      for (const host of GE_LEAF_HOSTS) {
+        for (const name of geLeaf(host, code).misuse) expect(placement[code].misuse, `${code}/${name}`).toContain(name);
+        expect(placement[code].legal, `${code}/idle ${host}`).toContain(`ge-idle-${host}`);
+      }
+    }
+    expect(PD_NEVER_RUN).toEqual(["pd-passed-action", "pd-passed-apply", "pd-passed-tracked", "pd-passed-settled", "pd-passed-await"]);
+    expect(GE_STEPS).toEqual(["forof", "spread", "next", "yield", "from", "direct", "set", "stored", "anext"]);
+    expect(GE_LEAF_CODES).toEqual(["FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "CLEANUP_IN_FORBIDDEN_SCOPE"]);
     for (const [code, layer] of Object.entries(TW_LAYERS)) {
       const twice = (names) => names.filter((name) => twParts(name));
       expect(twice(placement[code].misuse).every((name) => twParts(name).layer === layer && twParts(name).order !== "both")).toBe(true);
@@ -162,7 +176,7 @@ describe("the generator-stepped programs (ADR 0961, F2)", () => {
     // the action's body is a generator literal that steps `g`; a button starts the action
     for (const step of GE_STEPS) {
       const action = lines(textOf("FLUSH_IN_ACTION", `ge-${step}-action`).built.text);
-      expect(action, step).toContain("function* g1() {");
+      expect(action.some((line) => /^(async )?function\* g1\(\) \{$/.test(line)), step).toBe(true);
       expect(action, step).toContain("const a1 = action(function* () {");
       expect(action, step).toContain("a1();");
       expect(at(action, "flush();"), step).toBeLessThan(at(action, "yield 1;"));
@@ -202,6 +216,19 @@ describe("the parameter-initializer programs (ADR 0961, PD)", () => {
     expect(helper).toContain("const pdg1 = () => {");
     expect(helper).toContain("const pdf1 = (p0: unknown = pdg1()) => {");
     expect(helper).toContain("onSettled(() => {");
+  });
+  it("put the site in a destructuring default and a constructor's, and read after an await in the await host", () => {
+    const destructured = lines(textOf("FLUSH_IN_ACTION", "pd-destructured-action").built.text);
+    expect(destructured.some((line) => /^const pdf1 = \(\{ p0 = flush\(\) \}: \{ p0\?: unknown \} = \{\}\) => \{$/.test(line)), destructured.join("\n")).toBe(true);
+    expect(destructured).toContain("pdf1();");
+    const ctor = lines(textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "pd-ctor-apply").built.text);
+    expect(ctor.some((line) => /^constructor\(p0: unknown = createMemo\(/.test(line)), ctor.join("\n")).toBe(true);
+    expect(ctor).toContain("new K8();");
+    const awaited = lines(textOf("UNTRACKED_READ_AFTER_AWAIT", "pd-value-await").built.text);
+    const memo = awaited.findIndex((line) => /^const m1 = createMemo\(async \(\) => \{$/.test(line));
+    expect(memo, awaited.join("\n")).toBeGreaterThan(-1);
+    expect(awaited[memo + 1]).toBe("await Promise.resolve();");
+    expect(awaited[memo + 2]).toBe("pdf1();");
   });
   it("pass the argument in one legal twin and leave the call to a handler in the other", () => {
     const passed = lines(textOf("FLUSH_IN_ACTION", "pd-passed-action").built.text);
@@ -278,7 +305,7 @@ describe("the entry cells on the fast runtime", () => {
         const shape = (kind === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none");
         return { code, context, kind, variant: shape.variant ?? null };
       }));
-      expect(plans).toHaveLength(8 + 9 + 6 + 36 + 12 + 36 + 12 + 10 + 9 + 6 + 9 + 6 + 17);
+      expect(plans).toHaveLength(Object.values(ENTRY_CODES).reduce((total, names) => total + names.length, 0));
       const entries = plans.map((plan, index) => {
         const program = generateProgram(6000 + index, { profile: "misuse", misusePlan: { code: plan.code, context: plan.context, variant: plan.variant, binding: "direct", layer: "none", legal: plan.kind === "legal" } });
         return { plan, built: buildCase(program, { id: `entry-${index}` }) };

@@ -1361,3 +1361,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-visited-entry-namespace/node_modules/**
 !fixtures/reactive-ir/parameter-initializer-unplaced/node_modules/
 !fixtures/reactive-ir/parameter-initializer-unplaced/node_modules/**
+!fixtures/reactive-ir/leaf-generator-stepped/node_modules/
+!fixtures/reactive-ir/leaf-generator-stepped/node_modules/**
+!fixtures/reactive-ir/parameter-initializer-after-await/node_modules/
+!fixtures/reactive-ir/parameter-initializer-after-await/node_modules/**
