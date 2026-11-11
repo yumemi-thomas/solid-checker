@@ -969,6 +969,39 @@ pub(crate) fn site(record: &SiteRecord<'_>) {
     );
 }
 
+/// One candidate site of a rule that has no site universe (`proof_candidates.rs`, batch 11 slice 0): where the first test of the rule's producer holds, whatever the
+/// producer then did. Measurement only: nothing reads it back, and it is written only when `SOLID_CHECKER_IR_PROOF_CANDIDATES` asks.
+pub(crate) struct CandidateRecord<'a> {
+    /// The rule's id (`SC2004`), or `flush` for the flush census's own sites.
+    pub(crate) rule: &'a str,
+    /// What the candidate is, by the first test of the producer (`resolve`, `sync-option`, `loading-on`, ...).
+    pub(crate) table: &'a str,
+    pub(crate) path: &'a str,
+    /// The span the rule's finding stands at when it reports here (a call's callee, an `on` attribute).
+    pub(crate) at: Span,
+    /// The other spans a finding or a silence for the site may stand at (the whole call).
+    pub(crate) alternates: &'a [Span],
+    /// What the producer's own first facts say of the site, as `(name, value)`: the state of a `sync` option, whether a flush call is the callee of a census row.
+    pub(crate) facts: &'a [(&'a str, &'a str)],
+}
+
+pub(crate) fn candidate(record: &CandidateRecord<'_>) {
+    if !enabled() {
+        return;
+    }
+    emit(
+        record.path,
+        Some(span_pair(record.at)),
+        object(json!({
+            "k": "candidate",
+            "rule": record.rule,
+            "t": record.table,
+            "alt": record.alternates.iter().map(|span| [span.start, span.end]).collect::<Vec<_>>(),
+            "facts": record.facts.iter().map(|(name, value)| ((*name).to_owned(), json!(value))).collect::<Fields>(),
+        })),
+    );
+}
+
 /// A silent end a rule's account names: `proof` is the typed proof's name
 /// (an enum variant, `ContextProof::OwnedContext`), `premises` the typed facts
 /// it rests on. The accounting passes of ADRs 0886 and 0838 and

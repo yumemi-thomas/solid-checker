@@ -82,6 +82,7 @@ pub mod package_boundary;
 mod pending_accounting;
 mod pipeline;
 mod projection;
+mod proof_candidates;
 mod proof_log;
 mod proof_universe;
 mod reachability;
