@@ -53,6 +53,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
+import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
 import { fixtureProjects, runtimeArguments } from "./lib/fixture-projects.mjs";
 import { mapPoolSettled } from "./lib/pool.mjs";
 import { proofLogLines } from "./lib/proof-log.mjs";
@@ -183,7 +184,8 @@ async function checkProject(project, { checker, typefacts }, ablate) {
     maxBuffer: 256 * 1024 * 1024,
     env,
   }).catch((error) => ({ stdout: error.stdout ?? "" }));
-  return findingSites(JSON.parse(stdout || "{}"));
+  // ADR 0950: a what-if report is a prediction; a transition between two runs of the shipped checker is a measurement. Refused.
+  return findingSites(refuseAssumed(JSON.parse(stdout || "{}"), "scripts/proof-ablation.mjs"));
 }
 
 /**
@@ -213,7 +215,8 @@ export async function gridPairs(logPath, { arms, maxPerArm } = {}) {
   return pairs;
 }
 
-async function main(argv) {
+/** The whole run, exported for its test; the file runs it only as the entry (below). Rejects with an `AssumedReportError` when a checker prints a what-if report (ADR 0950). */
+export async function main(argv) {
   const gridDir = option(argv, "--grid");
   const logs = option(argv, "--logs");
   if (!gridDir && (!logs || !existsSync(logs))) {
@@ -296,6 +299,10 @@ async function main(argv) {
     },
     { concurrency: Number(option(argv, "--concurrency") ?? 4) },
   );
+  // ADR 0950: `mapPoolSettled` keeps a pair's error unread, and an unread one is counted as an "unrun" pair: a refused (what-if) report would
+  // end as "N left". It is thrown here instead, and no report is written.
+  const refused = settled.find((result) => result.error instanceof AssumedReportError);
+  if (refused) throw refused.error;
   const results = [...done.values(), ...settled.flatMap((result) => (result.value ? [result.value] : []))];
   const unrun = todo.filter((_, at) => !settled[at].value).map(({ program, arm }) => ({ fixture: program, arm }));
   const summary = summarize(results);

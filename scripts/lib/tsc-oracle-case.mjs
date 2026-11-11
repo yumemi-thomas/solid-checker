@@ -26,6 +26,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadDialectManifests } from "../dialect-manifests.mjs";
+import { refuseAssumed } from "./assumed.mjs";
 import {
   oracleCompilerOptions,
   oracleProject,
@@ -162,6 +163,16 @@ export const prepareDialectBases = (dialects = DIALECTS) => {
 };
 
 /**
+ * The findings of what the checker printed for one case (`--format json`).
+ *
+ * A what-if report (ADR 0950: a top-level `assumed`, or an `assumed` premise on
+ * a finding) is refused, never read as the case's answer: a case is a claim
+ * about the shipped checker, and that report is a prediction.
+ */
+export const reportRows = (output) =>
+  refuseAssumed(JSON.parse(output), "scripts/lib/tsc-oracle-case.mjs").findings ?? [];
+
+/**
  * Run the checker over one case, in its own project.
  *
  * The compiler options mirror the oracle's `strict` pass so both halves of a
@@ -221,8 +232,7 @@ const runChecker = (testCase, index, strict, { checker, typefacts }) => {
       env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: typefacts },
     },
   );
-  const snapshot = JSON.parse(output);
-  const rows = snapshot.findings ?? [];
+  const rows = reportRows(output);
   const subjects = oracleSubjectSpans(
     code,
     rows.map((finding) => [finding.primaryLocation.startByte, finding.primaryLocation.endByte]),

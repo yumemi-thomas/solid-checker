@@ -44,6 +44,8 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { refuseAssumed } from "./lib/assumed.mjs";
+
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ts = createRequire(join(repo, "packages/cli/package.json"))("typescript");
 
@@ -3579,7 +3581,8 @@ export function sweepSet(directory, checker, typefacts, boundary = null) {
       env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: typefacts },
     });
     if (run.status !== 0) throw new Error(`${project}: checker exited ${run.status}\n${run.stderr.slice(-2000)}`);
-    const payload = JSON.parse(run.stdout);
+    // ADR 0950: the classifier reads the shipped checker's causes; a what-if report is a prediction, refused.
+    const payload = refuseAssumed(JSON.parse(run.stdout), "scripts/uncertifiable-causes.mjs");
     results.push({ app: project, root, project: "tsconfig.json", premises: payload.premises, findings: payload.findings });
   }
   return { results };

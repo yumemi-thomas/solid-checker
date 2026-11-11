@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "vitest";
 
 import { countRows } from "./guard/count.mjs";
-import { analyze, handedRootHolds, liftingSets, render } from "./u-blockers.mjs";
+import { AssumedReportError } from "./lib/assumed.mjs";
+import { TAINTED } from "./lib/assumed-fixtures.mjs";
+import { analyze, handedRootHolds, liftingSets, readReports, render } from "./u-blockers.mjs";
 
 // ADR 0947: the blocker report, on in-memory checker reports.
 const row = (blockedBy) => ({ kind: "uncertifiable", id: "SC9012", blockedBy });
@@ -141,4 +144,28 @@ test("the snapshot blocker string is produced by coverage.mjs from analysisConte
     countRows([{ findings: [{ code: "SC9012", kind: "uncertifiable", blocker: "standard-member-impostor", blockedBy: { kind: "standard-member-impostor" } }] }]),
     { "SC9012 standard-member-impostor": 1 },
   );
+});
+
+// ADR 0950: the alternatives this ranks are what the shipped checker derives. A what-if report has already assumed some of its hazards away,
+// so a saved one is refused by name, and the reports beside it are not read past it.
+test("a saved what-if report is refused, naming its file, and default builds' reports are read as before", () => {
+  const root = mkdtempSync(join(tmpdir(), "u-blockers-what-if-"));
+  try {
+    writeFileSync(join(root, "a.json"), JSON.stringify(reportA));
+    writeFileSync(join(root, "b.json"), JSON.stringify(reportB));
+    assert.deepEqual(readReports([root]), [reportA, reportB]);
+    assert.deepEqual(analyze(readReports([root])), analyze([reportA, reportB]));
+    for (const [name, make] of Object.entries(TAINTED)) {
+      const file = join(root, `c-${name}.json`);
+      writeFileSync(file, JSON.stringify({ ...reportA, ...make() }));
+      assert.throws(
+        () => readReports([root]),
+        (error) => error instanceof AssumedReportError && error.message.startsWith(`scripts/u-blockers.mjs (${file}) refuses this checker report: it is tainted by a what-if assumption`),
+        name,
+      );
+      rmSync(file);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

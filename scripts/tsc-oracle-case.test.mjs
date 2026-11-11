@@ -26,7 +26,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
 
-import { ensureDirectoryLink } from "./lib/tsc-oracle-case.mjs";
+import { AssumedReportError } from "./lib/assumed.mjs";
+import { TAINTED, cleanReport } from "./lib/assumed-fixtures.mjs";
+import { ensureDirectoryLink, reportRows } from "./lib/tsc-oracle-case.mjs";
 
 /** A throwaway root holding two candidate install trees and a base directory. */
 const withBase = (body) => {
@@ -116,4 +118,23 @@ test("two callers racing on a cold base agree on the result", () => {
     ensureDirectoryLink(link, audited);
     assert.equal(readlinkSync(link), audited);
   });
+});
+
+// ADR 0950: a case is a claim about the shipped checker, and a what-if report is a prediction. `reportRows` is what the case runner reads the
+// checker's printed report through.
+test("a what-if report is refused as a case's answer, in every shape it has", () => {
+  for (const [name, make] of Object.entries(TAINTED)) {
+    assert.throws(
+      () => reportRows(JSON.stringify(make())),
+      (error) => error instanceof AssumedReportError && /^scripts\/lib\/tsc-oracle-case\.mjs refuses this checker report: it is tainted by a what-if assumption/.test(error.message),
+      name,
+    );
+  }
+});
+
+test("a default build's report is read as before: its findings, or none", () => {
+  const report = cleanReport();
+  assert.deepEqual(reportRows(JSON.stringify(report)), report.findings);
+  assert.deepEqual(reportRows(JSON.stringify({ status: "certified" })), []);
+  assert.throws(() => reportRows("not json"), SyntaxError);
 });

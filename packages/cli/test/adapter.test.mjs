@@ -1459,3 +1459,83 @@ test("the adapter's native option table is native's argv parser", () => {
   assert.deepEqual([...plugin._testing.nativeValueOptions].sort(), [...values].sort());
   assert.deepEqual([...plugin._testing.nativeFlags].sort(), [...flags].sort());
 });
+
+// ADR 0950: a report from the what-if build (`solid-checker-what-if --assume`: a top-level `assumed` key, or a finding premise of kind `assumed`) is
+// a prediction of what proving a hazard away would lift, never a fact about the checker. The adapter refuses it at each place it takes a report
+// from: the native checker's output, a snapshot file (before it is cached), and a snapshot handed in through the settings.
+const whatIfHazard = "OpenMemberWrite(*)";
+const whatIfFinding = extra => ({
+  id: "SC1001", rule: "strict-read-untracked", kind: "violation", severity: "error", message: "a read outside a tracked scope",
+  primaryLocation: { path: "/project/App.tsx", startByte: 10, endByte: 20, line: 4, column: 3, endLine: 4 }, ...extra
+});
+const whatIfPremise = { kind: "assumed", hazards: [whatIfHazard] };
+const whatIfReports = {
+  "a top-level assumed key": { status: "violation", findings: [whatIfFinding()], assumed: { hazards: [whatIfHazard], flipped: [] } },
+  "a finding premise of kind assumed": { status: "violation", findings: [whatIfFinding({ premises: [whatIfPremise] })] },
+  "both, as the what-if build writes them": { status: "violation", findings: [whatIfFinding({ premises: [whatIfPremise] })], assumed: { hazards: [whatIfHazard], flipped: [whatIfHazard] } }
+};
+const defaultReport = { status: "violation", findings: [whatIfFinding({ premises: [{ kind: "SiteReachAbsentProp" }] })] };
+const whatIfRefusal = /^solid-checker adapter refuses this checker report \((.+)\): it is tainted by a what-if assumption, .* Only scripts\/what-if\.mjs reads one\.$/;
+
+function whatIfProject(body) {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-what-if-"));
+  try {
+    writeFileSync(join(root, "tsconfig.json"), "{}\n");
+    const filename = join(root, "App.tsx");
+    writeFileSync(filename, "export {};\n");
+    plugin._testing.snapshotCache.clear();
+    return body({ root, filename });
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("a what-if report from the native checker is refused for its pass, and a default build's report is the snapshot", () => whatIfProject(({ root, filename }) => {
+  // The fake checker prints the report text it is given as its first argument.
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(analyzer, "process.stdout.write(process.argv[2]);\n");
+  const context = report => ({
+    filename, physicalFilename: filename, sourceCode: sourceCode("export {};\n"), options: [],
+    settings: { solidChecker: { command: process.execPath, commandArgs: [analyzer, JSON.stringify(report)] } }
+  });
+  for (const [name, report] of Object.entries(whatIfReports)) {
+    assert.throws(() => plugin._testing.loadSnapshot(context(report)), error => {
+      assert.match(error.message, whatIfRefusal, name);
+      assert.match(error.message, /\(the native checker's output\)/, name);
+      return true;
+    }, name);
+  }
+  assert.deepEqual(plugin._testing.loadSnapshot(context(defaultReport)), defaultReport);
+}));
+
+test("a what-if report in a snapshot file is refused before it is cached, and a default build's is read and cached as before", () => whatIfProject(({ root, filename }) => {
+  const path = join(root, "snapshot.json");
+  const context = { filename, physicalFilename: filename, options: [], settings: { solidChecker: { snapshotPath: path } } };
+  for (const [name, report] of Object.entries(whatIfReports)) {
+    writeFileSync(path, JSON.stringify(report));
+    assert.throws(() => plugin._testing.loadSnapshot(context), error => {
+      assert.match(error.message, whatIfRefusal, name);
+      assert.match(error.message, new RegExp(`snapshotPath ${path.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), name);
+      return true;
+    }, name);
+    assert.equal(plugin._testing.snapshotCache.size, 0, `${name}: nothing tainted is cached`);
+  }
+  // The file was fixed: it is read again, not remembered as refused.
+  writeFileSync(path, JSON.stringify(defaultReport));
+  assert.deepEqual(plugin._testing.loadSnapshot(context), defaultReport);
+  assert.equal(plugin._testing.snapshotCache.size, 1);
+}));
+
+test("a what-if report handed in through the settings is refused by the rule, and a default build's is certified as before", () => whatIfProject(({ filename }) => {
+  for (const [name, report] of Object.entries(whatIfReports)) {
+    assert.throws(() => run(report, filename, "export {};\n"), error => {
+      assert.match(error.message, whatIfRefusal, name);
+      assert.match(error.message, /\(settings\.solidChecker\.snapshot\)/, name);
+      return true;
+    }, name);
+  }
+  const context = { filename, physicalFilename: filename, options: [], settings: { solidChecker: { snapshot: defaultReport } } };
+  assert.equal(plugin._testing.loadSnapshot(context), defaultReport);
+  assert.doesNotThrow(() => run(defaultReport, filename, "export {};\n"));
+}));

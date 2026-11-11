@@ -22,9 +22,28 @@ function freezeRequest(request) {
   return text;
 }
 
+/**
+ * ADR 0950: a report from the what-if build (`solid-checker-what-if --assume`) is a prediction of what proving a hazard away would lift, never a
+ * fact about the checker, and every reader of the checker's JSON report refuses it. It is tainted when it has a top-level `assumed` key (whatever
+ * its value) or a finding with a premise of kind `assumed`. This is the package's copy of scripts/lib/assumed.mjs: a published package cannot
+ * import from the repository's scripts (test/owned-client.test.mjs holds it to it).
+ */
+function isAssumedReport(report) {
+  if (report === null || typeof report !== "object") return false;
+  if (Object.prototype.hasOwnProperty.call(report, "assumed")) return true;
+  const findings = report.findings;
+  return Array.isArray(findings) && findings.some(finding => Array.isArray(finding?.premises) && finding.premises.some(premise => premise?.kind === "assumed"));
+}
+
 function answer(status, output, transport) {
   const value = JSON.parse(output);
   if (status === 0 && value && typeof value === "object" && "snapshot" in value && Array.isArray(value.notes)) {
+    if (isAssumedReport(value.snapshot)) {
+      throw new OwnedCheckerError(
+        "the owned checker answered a report tainted by a what-if assumption, a prediction of what proving a hazard away would lift " +
+          "and no fact about the checker. Only scripts/what-if.mjs reads one.",
+      );
+    }
     return { ok: true, snapshot: value.snapshot, notes: value.notes, json: output, transport };
   }
   if (status === 1 && value && typeof value.error === "string") {
@@ -109,8 +128,9 @@ export function attach(worker, { checker, producer, mount, directory, transfer }
           result = answer(message.status, message.output, message.transport);
         } catch (error) {
           // `current` is still the active check here, so the poison settles it
-          // with the queued ones.
-          poison(new OwnedCheckerError(`the owned checker answered malformed output: ${error.message}`));
+          // with the queued ones. A refused (what-if) report is not malformed:
+          // `answer` names it itself.
+          poison(error instanceof OwnedCheckerError ? error : new OwnedCheckerError(`the owned checker answered malformed output: ${error.message}`));
           return;
         }
         const pending = current;

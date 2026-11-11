@@ -19,6 +19,7 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { refuseAssumed } from "./lib/assumed.mjs";
 import * as pathSemantics from "./wasm-parity/path-semantics.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -322,7 +323,8 @@ function runNative(tree, argv, label = tree.name) {
   return {
     status: result.status,
     stdout: result.stdout.toString("utf8"),
-    snapshot: result.status === 0 ? JSON.parse(result.stdout.toString("utf8")) : undefined,
+    // ADR 0950: the native reference is the shipped checker's; a what-if report (a prediction) is refused, never compared.
+    snapshot: result.status === 0 ? refuseAssumed(JSON.parse(result.stdout.toString("utf8")), "scripts/wasm-parity.mjs") : undefined,
     notes: stderr === "" ? [] : stderr.replace(/\n$/, "").split("\n"),
   };
 }
@@ -453,7 +455,7 @@ function runNativeRaw(label, argv) {
   const stderr = result.stderr.toString("utf8");
   return {
     status: result.status,
-    snapshot: result.status === 0 ? JSON.parse(result.stdout.toString("utf8")) : undefined,
+    snapshot: result.status === 0 ? refuseAssumed(JSON.parse(result.stdout.toString("utf8")), "scripts/wasm-parity.mjs") : undefined,
     notes: stderr === "" ? [] : stderr.replace(/\n$/, "").split("\n"),
   };
 }

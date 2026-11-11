@@ -342,6 +342,19 @@ function nativeFailure(project, snapshot, native, context) {
   return new FeedbackNativeError(failure.message, failure);
 }
 
+/**
+ * ADR 0950: a report from the what-if build (`solid-checker-what-if --assume`) is a prediction of what proving a hazard away would lift, never a
+ * fact about the checker, and every reader of the checker's JSON report refuses it. It is tainted when it has a top-level `assumed` key (whatever
+ * its value) or a finding with a premise of kind `assumed`. This is the package's copy of scripts/lib/assumed.mjs: a published package cannot
+ * import from the repository's scripts (test/development-feedback.test.mjs holds it to it).
+ */
+function isAssumedReport(report) {
+  if (report === null || typeof report !== "object") return false;
+  if (Object.prototype.hasOwnProperty.call(report, "assumed")) return true;
+  const findings = report.findings;
+  return Array.isArray(findings) && findings.some(finding => Array.isArray(finding?.premises) && finding.premises.some(premise => premise?.kind === "assumed"));
+}
+
 export function inspectDevelopmentFeedback(project, { capture = null, analyze, feedbackFacts = false, snapshot: retainedSnapshot, nativeTimeoutMs: timeout, runtime = null } = {}) {
   const started = performance.now(), snapshot = retainedSnapshot ?? feedbackSnapshot(project);
   assert.equal(snapshot.manifest.project, realpathSync(resolve(project)), "Retained snapshot belongs to another project");
@@ -369,6 +382,12 @@ export function inspectDevelopmentFeedback(project, { capture = null, analyze, f
     throw new FeedbackNativeError(`Native analysis produced malformed JSON (${cause.message})`,
       { ...failure, kind: "malformed-output", message: `Native analysis produced malformed JSON (${cause.message})`,
         stdoutHead: String(native.stdout).slice(0, 200) });
+  }
+  if (isAssumedReport(analysis)) {
+    const failure = nativeFailure(snapshot.manifest.project, snapshot, { ...native, status: native.status }, context).failure;
+    const message = "Native analysis produced a report tainted by a what-if assumption, a prediction of what proving a hazard away would lift "
+      + "and no fact about the checker. Only scripts/what-if.mjs reads one.";
+    throw new FeedbackNativeError(message, { ...failure, kind: "assumed-report", message });
   }
   assert(Array.isArray(analysis.findings), "Native response has no findings");
   validateFeedbackInputs(snapshot.manifest);

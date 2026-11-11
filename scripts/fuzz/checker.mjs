@@ -11,6 +11,7 @@ import { randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { AssumedReportError, refuseAssumed } from "../lib/assumed.mjs";
 import { ignoredRules, isProgramModule } from "./codes.mjs";
 import { tsconfigFor } from "./typecheck.mjs";
 
@@ -136,10 +137,11 @@ export const checkerEnv = ({ typefacts, env = process.env } = {}) => ({
  * Runs the native checker on a materialized directory.
  * `bin` and `typefacts` set SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN (the same variables the oracle needs).
  * `ordinary` runs as a user does (ORDINARY_ARGS), so the dependency packages of the project are read from source.
- * @returns {Promise<{ ok: boolean, findings: object[], wallMs: number, error?: string, exitStatus?: number }>}
+ * @returns {Promise<{ ok: boolean, findings: object[], wallMs: number, error?: string, exitStatus?: number }>} It rejects with an
+ * `AssumedReportError` when the checker printed a what-if report (ADR 0950; see `checkerResult`).
  */
 export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = process.env, ordinary = false } = {}) {
-  return new Promise((done) => {
+  return new Promise((done, refuse) => {
     const executable = bin ?? env.SOLID_CHECKER_NATIVE_BIN;
     if (!executable || !existsSync(executable)) { done({ ok: false, findings: [], wallMs: 0, error: `checker binary not found: ${executable}` }); return; }
     const started = Date.now();
@@ -156,7 +158,7 @@ export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = proc
     child.on("error", (error) => { clearTimeout(timer); done({ ok: false, findings: [], wallMs: Date.now() - started, error: error.message }); });
     child.on("close", (status) => {
       clearTimeout(timer);
-      done(checkerResult({ status, stdout, stderr, wallMs: Date.now() - started }, dir));
+      try { done(checkerResult({ status, stdout, stderr, wallMs: Date.now() - started }, dir)); } catch (error) { if (error instanceof AssumedReportError) refuse(error); else throw error; }
     });
   });
 }
@@ -164,6 +166,11 @@ export function runChecker(dir, { bin, typefacts, timeoutMs = 180000, env = proc
 /**
  * A checker run's result from what it printed (`runChecker`, and the Rust executor's raw answers, exec.mjs): exit 0 and 1 carry one
  * JSON document; anything else, or findings that map to no program file, is a failed run.
+ *
+ * A what-if report (ADR 0950: a top-level `assumed`, or a finding with an `assumed` premise) is none of those: it is a prediction, so it
+ * THROWS an `AssumedReportError` instead of returning `ok: false`. A failed run is one program's harness row, and a caller that does not
+ * read `ok` (or counts the row and moves on) would turn the refusal into "no findings"; nothing a tainted run says about any program is a
+ * fact about the shipped checker, so the whole run stops.
  */
 export function checkerResult({ status, stdout, stderr = "", wallMs = 0, spawnError, warm }, dir) {
   if (spawnError) return { ok: false, findings: [], wallMs, error: spawnError };
@@ -172,11 +179,12 @@ export function checkerResult({ status, stdout, stderr = "", wallMs = 0, spawnEr
   // The oracle reads the native child's stdout as one JSON document; exit 0 and 1 both carry one.
   if (status !== 0 && status !== 1) return { ok: false, findings: [], wallMs, exitStatus: status, error: stderr.slice(-800) || `exit ${status}` };
   try {
-    const analysis = JSON.parse(stdout);
+    const analysis = refuseAssumed(JSON.parse(stdout), "the fuzz judge (scripts/fuzz/checker.mjs)");
     const veto = entryVeto(analysis, dir);
     const moduleFindings = parseModuleFindings(analysis, dir);
     return { ok: true, findings: parseFindings(analysis, dir), ...(moduleFindings.length ? { moduleFindings } : {}), wallMs, exitStatus: status, ...(veto ? { entryVeto: veto } : {}) };
   } catch (error) {
+    if (error instanceof AssumedReportError) throw error;
     if (error instanceof UnmappedFindingsError) unmapped.push(error.message);
     return { ok: false, findings: [], wallMs, exitStatus: status, error: error instanceof UnmappedFindingsError ? error.message : `malformed checker output: ${error.message}` };
   }

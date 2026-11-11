@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { AssumedReportError, refuseAssumed } from "../lib/assumed.mjs";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
 import { besideCode, codeOfLogged, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack } from "./codes.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
@@ -152,7 +153,7 @@ import("/cases/" + id + "/entry.tsx").catch((e) => { window.__rec = { errors: ["
 
 const TSCONFIG = JSON.stringify({ compilerOptions: { jsx: "preserve", jsxImportSource: "@solidjs/web", module: "ESNext", moduleResolution: "Bundler", strict: true, target: "ES2022", lib: ["ES2022", "DOM", "DOM.Iterable"], skipLibCheck: true, noEmit: true }, include: ["*.ts", "*.tsx"] });
 
-/** The checker's findings of each case. */
+/** The checker's findings of each case. Rejects with an `AssumedReportError` when the checker printed a what-if report (ADR 0950): a lane judged on predictions is no lane. */
 export async function runChecker(cases, root, { checker, typefacts }) {
   const results = new Map();
   let next = 0;
@@ -171,8 +172,16 @@ export async function runChecker(cases, root, { checker, typefacts }) {
         child.stdout.on("data", (chunk) => chunks.push(chunk));
         child.on("close", () => done(Buffer.concat(chunks).toString()));
       });
-      try { const report = JSON.parse(stdout); results.set(id, (report.analysis?.findings ?? report.findings ?? []).filter((finding) => !finding.primaryLocation?.path?.endsWith("main.tsx"))); }
-      catch { results.set(id, null); }
+      try {
+        const report = JSON.parse(stdout);
+        // The findings are read from `analysis` when the report has one, so that object is held to the same rule.
+        refuseAssumed(report, "scripts/fuzz/patterns.mjs");
+        refuseAssumed(report?.analysis, "scripts/fuzz/patterns.mjs");
+        results.set(id, (report.analysis?.findings ?? report.findings ?? []).filter((finding) => !finding.primaryLocation?.path?.endsWith("main.tsx")));
+      } catch (error) {
+        if (error instanceof AssumedReportError) throw error;
+        results.set(id, null);
+      }
     }
   }));
   return results;
