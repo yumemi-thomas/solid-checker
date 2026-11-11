@@ -1,7 +1,7 @@
 {
  "about": "One-way uncertifiable count (endstage-report.md 1b; scripts/guard/count.mjs). A clean needs a proof: a count that falls, or a key that goes, needs a drops row naming an ADR, a proof (file::symbol) and a fixture on each side; a rise is recorded with --update. drops and renames are append-only.",
  "inRepo": {
-  "SC1001 accessor-handed-to-package": 5,
+  "SC1001 accessor-handed-to-package": 9,
   "SC1001 binding-before-initialization": 7,
   "SC1001 build-constant-arm": 3,
   "SC1001 callback-invocation-unproven": 3,
@@ -96,7 +96,7 @@
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
   "SC4001 owner-varies-by-caller": 84,
-  "SC4001 package-finding-at-entry": 38,
+  "SC4001 package-finding-at-entry": 39,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 1,
   "SC4002 computation-error-unobserved": 14,

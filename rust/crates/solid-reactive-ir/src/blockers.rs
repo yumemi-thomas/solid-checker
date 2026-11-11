@@ -381,6 +381,19 @@ pub(crate) const HOST_INPUT_UNREADABLE: &str = "host-input-unreadable";
 /// object of its own.
 pub(crate) const STANDARD_MEMBER_IMPOSTOR: &str = "standard-member-impostor";
 
+/// Whether `analysis_context` names one of ADR 0949's handed-value claims (`*-handed-to-package`): an uncertifiable row
+/// the backend drops where a violation of the same rule stands at the same site.
+#[must_use]
+pub fn is_package_handed_claim(analysis_context: &str) -> bool {
+    matches!(
+        analysis_context,
+        SETTER_HANDED_TO_PACKAGE
+            | ACCESSOR_HANDED_TO_PACKAGE
+            | STORE_HANDED_TO_PACKAGE
+            | ACTION_HANDED_TO_PACKAGE
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::named;

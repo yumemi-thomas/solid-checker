@@ -13,7 +13,11 @@ import { validate, walk } from "./model.mjs";
  * Sources with no package variant, each with its reason. None now: `package-export` and `package-hook`, which looked like candidates (the site already reads a
  * dependency's context, or is in a package), take the generic twin (the project keeps its import of `fz-ctx` and hands the context or the hook to `fz-site`).
  */
-export const PACKAGE_SITE_EXEMPT_SOURCES = {};
+export const PACKAGE_SITE_EXEMPT_SOURCES = {
+  // ADR 0949, slice 1: this source is the package program itself (the project renders a dependency's component that holds the read); the generic twin would
+  // move the site into `fz-site` a second time, and the package-site grids already cross every entry. `package-handed` and `package-holder` take the generic twin.
+  "package-component": "the site is already in a package: the project renders the dependency's component (ADR 0949); the generic twin crosses the same entries",
+};
 /** Contexts with no package variant, each with its reason (filled from what building them showed). */
 export const PACKAGE_SITE_EXEMPT_CONTEXTS = {};
 

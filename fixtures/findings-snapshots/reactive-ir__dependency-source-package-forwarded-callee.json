@@ -178,6 +178,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "accessor-handed-to-package",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 440,
+      "end": 452,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

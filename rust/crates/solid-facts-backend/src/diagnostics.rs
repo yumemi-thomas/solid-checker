@@ -437,6 +437,7 @@ impl DiagnosticSession {
                 withheld.attributed
             );
         }
+        crate::package_drop::supersede_claims(&mut findings, true);
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
         // After enablement, like the refusal: the notice is about the installed
         // runtime, not a site, so there is nothing to suppress it at.

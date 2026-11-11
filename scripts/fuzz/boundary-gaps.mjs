@@ -11,6 +11,7 @@ export const KIND_GAPS = {
   CreateMutableProxy: "No fixture and no generated shape: `createMutable` appears in no fixture and in no template. A pair needs a project that writes through a mutable proxy (the legal side) and one that writes to a store it merely reads (the misuse side).",
   LogicalAssignmentSkipsWrite: "No dedicated fixture or shape for ADR 0718's logical assignment that provably does not write (`a ||= b` over a truthy literal). The fixtures that use logical assignment (handed-net-guards, summary-completion-read) are about reads.",
   DormantCallbackArgument: "No dedicated fixture or shape: lazy-default-consumer is the nearest. The stored-value positions and discarded lazy adapters (`createReaction`, `lazy`) have no pair of a program that runs the function and one that only names it.",
+  PackageStyleNotProject: "No generated shape: the fuzz grids compare Chrome's dev diagnostics with the checker, and a style rule (SC80xx: duplicate JSX props, prefer-for, prefer-show) has no runtime code, so no cell can place or judge one in a package. Fixture package-style-rule pins it (the project's own SC8003 is a violation; the package's own leaves no row), ADR 0949 addendum 4.",
 };
 
 /** Named ends whose kind has no pair (the rest are covered through their premise). */

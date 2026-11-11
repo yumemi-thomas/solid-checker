@@ -518,6 +518,9 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
                     .jsx_elements
                     .iter()
                     .find(|element| element.name.span.contains(*at));
+                if element.is_none() {
+                    continue;
+                }
                 for root in wanted {
                     found.push((
                         root.to_owned(),
@@ -643,7 +646,9 @@ pub(super) fn attribute_package_entries(
     owner_sites.extend(
         walk.references_to(&owner_roots, provider_free, mentions)
             .into_iter()
-            .filter(|(_, entry)| !walk.runs_owned_here(entry))
+            .filter(|(_, entry)| {
+                entry.kind != crate::DependencyEntry::Render && !walk.runs_owned_here(entry)
+            })
             .map(|(root, entry)| (entry, first_of_root[root.as_str()])),
     );
     owner_sites.sort_by(|(left, _), (right, _)| {
@@ -835,10 +840,10 @@ pub(crate) struct PackageMentions {
     /// The package roots, by index.
     roots: Vec<String>,
     /// Per project path, the spans of the references to a symbol a package declares, with the package's root, sorted.
-    refs: HashMap<String, Vec<(Span, usize)>>,
+    refs: std::collections::BTreeMap<String, Vec<(Span, usize)>>,
     /// Per project path, the declaration (name) span of each immutable binding whose initializer mentions a package,
     /// directly or through another such binding, with the roots it mentions.
-    carriers: HashMap<String, HashMap<Span, Vec<usize>>>,
+    carriers: std::collections::BTreeMap<String, std::collections::BTreeMap<Span, Vec<usize>>>,
 }
 
 impl PackageMentions {
@@ -851,7 +856,7 @@ impl PackageMentions {
             .collect();
         // The root a declaration's path is under: its longest directory prefix that is a root.
         let mut by_path = HashMap::<&str, Option<usize>>::default();
-        let mut refs = HashMap::<String, Vec<(Span, usize)>>::default();
+        let mut refs = std::collections::BTreeMap::<String, Vec<(Span, usize)>>::new();
         for symbol in facts.typescript.symbols() {
             let Some(root) = symbol.declarations().iter().find_map(|declaration| {
                 *by_path
@@ -893,7 +898,7 @@ impl PackageMentions {
         let mut mentions = Self {
             roots,
             refs,
-            carriers: HashMap::default(),
+            carriers: std::collections::BTreeMap::new(),
         };
         // A binding whose initializer mentions a package carries it: three rounds follow `const B = A`.
         for _ in 0..3 {
@@ -913,13 +918,15 @@ impl PackageMentions {
                     else {
                         continue;
                     };
-                    let roots = mentions.roots_in(file, initializer);
-                    if !roots.is_empty()
-                        && mentions
-                            .carriers
-                            .get(file.path.as_str())
-                            .is_none_or(|known| known.get(&name.span) != Some(&roots))
-                    {
+                    // A package symbol the initializer holds as a value (an argument, a returned closure's result), not
+                    // one it calls: `const Lazy = dynamic(() => Panel)` carries `Panel`; `const location = useLocation()`
+                    // holds a result.
+                    let roots = mentions.roots_in(file, initializer, true);
+                    let known = mentions
+                        .carriers
+                        .get(file.path.as_str())
+                        .and_then(|known| known.get(&name.span));
+                    if !roots.is_empty() && known != Some(&roots) {
                         found.push((file.path.to_string(), name.span, roots));
                     }
                 }
@@ -940,7 +947,9 @@ impl PackageMentions {
 
     /// The package roots (indexes) mentioned within `span` of `file`: a reference to a symbol a package declares, or a
     /// use of a binding that carries one.
-    fn roots_in(&self, file: &solid_facts::FileFacts, span: Span) -> Vec<usize> {
+    /// With `values_only`, a reference that is the callee of a call is not counted (the call's result is not the
+    /// package's function).
+    fn roots_in(&self, file: &solid_facts::FileFacts, span: Span, values_only: bool) -> Vec<usize> {
         let path = file.path.as_str();
         let mut found = Vec::new();
         if let Some(list) = self.refs.get(path) {
@@ -949,7 +958,9 @@ impl PackageMentions {
                 if at.start >= span.end {
                     break;
                 }
-                if span.contains(*at) {
+                if span.contains(*at)
+                    && !(values_only && file.ast.calls_with_callee_containing(*at).next().is_some())
+                {
                     found.push(*root);
                 }
             }
@@ -961,8 +972,14 @@ impl PackageMentions {
                 if at.start >= span.end {
                     break;
                 }
+                // A carrier is a component (`dynamic`, `lazy`, an alias of one): it runs where it is rendered.
                 if span.contains(*at)
                     && let Some(roots) = carriers.get(declaration)
+                    && file
+                        .ast
+                        .jsx_elements
+                        .iter()
+                        .any(|element| element.name.span.contains(*at))
                 {
                     found.extend(roots.iter().copied());
                 }
@@ -1062,7 +1079,7 @@ pub(crate) fn package_handed_value_claims(
             continue;
         }
         let ast = &file.ast;
-        let mut hand = |at: Span, callee: Span, values: &[Span]| {
+        let mut hand = |at: Span, callee: Span, values: &[(Span, bool)]| {
             // A site no execution reaches hands nothing (`may_run`: only a proof of that says no).
             if walk
                 .node_at(file.path.as_str(), at)
@@ -1070,15 +1087,19 @@ pub(crate) fn package_handed_value_claims(
             {
                 return;
             }
-            if mentions.roots_in(file, callee).is_empty()
+            if mentions.roots_in(file, callee, false).is_empty()
                 && values
                     .iter()
-                    .all(|value| mentions.roots_in(file, *value).is_empty())
+                    .all(|(value, _)| mentions.roots_in(file, *value, false).is_empty())
             {
                 return;
             }
-            for &value in values {
+            for &(value, bare_is_read) in values {
                 for (reference, declaration, shorthand) in value_references(ast, value) {
+                    // A bare argument the call walk reads is that walk's (it proves what the callee does with it).
+                    if bare_is_read && ast.peel_ts_sugar_span(value) == reference {
+                        continue;
+                    }
                     // The reference's own entity where the facts demanded one (an argument, a property
                     // value), else the entity of the declaration it names (`[setN]`, `c ? setN : off`);
                     // a shorthand's is the declaration's alone.
@@ -1103,6 +1124,7 @@ pub(crate) fn package_handed_value_claims(
                 .iter()
                 .filter_map(|attribute| attribute.expression)
                 .chain(element.spreads.iter().map(|spread| spread.argument))
+                .map(|value| (value, false))
                 .collect::<Vec<_>>();
             hand(element_site(element), element.name.span, &values);
         }
@@ -1110,12 +1132,23 @@ pub(crate) fn package_handed_value_claims(
             let values = call
                 .arguments
                 .iter()
-                .map(|argument| argument.span)
+                .enumerate()
+                .map(|(index, argument)| {
+                    (
+                        argument.span,
+                        walk_reads_argument(lookup, file, call, index),
+                    )
+                })
                 .collect::<Vec<_>>();
             hand(call.span, call.callee, &values);
         }
         for template in &ast.tagged_templates {
-            hand(template.span, template.tag, &template.substitutions);
+            let values = template
+                .substitutions
+                .iter()
+                .map(|value| (*value, false))
+                .collect::<Vec<_>>();
+            hand(template.span, template.tag, &values);
         }
     }
     claims.sort_by(|left, right| {
@@ -1123,6 +1156,52 @@ pub(crate) fn package_handed_value_claims(
     });
     claims.dedup_by(|left, right| left.location == right.location && left.id == right.id);
     claims
+}
+
+/// Whether the call walk reads the bare argument `index` of `call`: an exact call (not `new`, not `.call`) of a function
+/// whose parameter there is a plain identifier no nested function (a closure, a getter, a method) captures, so the
+/// callee's own body and the walk's summary of it say all there is to say about the argument (`wr-memo-pkg-handed-setter`
+/// is a violation; `access(store)` is proven clean). A captured parameter may run later, where no walk follows.
+fn walk_reads_argument(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> bool {
+    let Some(argument) = call.arguments.get(index) else {
+        return false;
+    };
+    if call.construct || argument.spread {
+        return false;
+    }
+    let Some((callee_file, callee, true)) =
+        crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
+    else {
+        return false;
+    };
+    let Some(parameter) = callee.parameters.get(index) else {
+        return false;
+    };
+    let Some(name) = parameter
+        .names
+        .first()
+        .filter(|_| parameter.shape == solid_facts::ast::BindingShape::Identifier)
+    else {
+        return false;
+    };
+    let ast = &callee_file.ast;
+    let from = ast
+        .reference_declarations
+        .partition_point(|(reference, _)| reference.start < callee.span.start);
+    !ast.reference_declarations[from..]
+        .iter()
+        .take_while(|(reference, _)| reference.start < callee.span.end)
+        .any(|(reference, declaration)| {
+            // Every reference within the callee's span lies in a function, the callee itself or one written in it.
+            *declaration == name.span
+                && crate::owners::containing_ast_function(ast, *reference)
+                    .is_some_and(|function| function.span != callee.span)
+        })
 }
 
 /// The references inside `value` that are values the project hands on: not a callee (`setN(1)` is a call, and a

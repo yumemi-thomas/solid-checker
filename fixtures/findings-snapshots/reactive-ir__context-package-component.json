@@ -134,6 +134,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-component/App.tsx",
+      "start": 521,
+      "end": 533,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",

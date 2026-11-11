@@ -27,7 +27,7 @@
 //! the tests in this module and the proof log (`attributed` lines, checked by the proof gate) count
 //! drops against attributions and fail on any drop with none.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
@@ -154,6 +154,58 @@ pub(crate) fn hand_off(
         stage.end(DropPass::DependencySource, findings);
     }
     report
+}
+
+/// A handed-value claim (an uncertifiable row of `*-handed-to-package`, ADR 0949) is redundant where a violation of
+/// the same rule stands at the same site: the violation says what the claim only suspects. Dropped under
+/// `DropPass::SupersededByViolation` (premise: the violation at the site), logged with the findings.
+pub(crate) fn supersede_claims(findings: &mut Vec<Finding>, proof_log: bool) -> usize {
+    // The violations by rule and file, as (start, end).
+    let mut violations = BTreeMap::<(String, String), Vec<(u64, u64)>>::new();
+    for finding in findings
+        .iter()
+        .filter(|finding| finding.kind == "violation")
+    {
+        violations
+            .entry((
+                finding.id.clone(),
+                finding.primary_location.path.to_string(),
+            ))
+            .or_default()
+            .push((
+                finding.primary_location.start_byte,
+                finding.primary_location.end_byte,
+            ));
+    }
+    if violations.is_empty() {
+        return 0;
+    }
+    // A violation inside the claim's own span (the read or the write the call hands the value to) stands for it.
+    let redundant = |finding: &Finding| {
+        finding.kind == "uncertifiable"
+            && solid_reactive_ir::is_package_handed_claim(&finding.analysis_context)
+            && violations
+                .get(&(
+                    finding.id.clone(),
+                    finding.primary_location.path.to_string(),
+                ))
+                .is_some_and(|spans| {
+                    spans.iter().any(|(start, end)| {
+                        finding.primary_location.start_byte <= *start
+                            && *end <= finding.primary_location.end_byte
+                    })
+                })
+    };
+    if !findings.iter().any(redundant) {
+        return 0;
+    }
+    let stage = proof_log.then(|| ProofStage::begin(findings)).flatten();
+    let before = findings.len();
+    findings.retain(|finding| !redundant(finding));
+    if let Some(stage) = stage {
+        stage.end(DropPass::SupersededByViolation, findings);
+    }
+    before - findings.len()
 }
 
 /// Where a package finding stands again: the project sites that may run the innermost package function

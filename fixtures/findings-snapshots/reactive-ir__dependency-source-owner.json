@@ -45,6 +45,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "accessor-handed-to-package",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
+      "start": 787,
+      "end": 813,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
