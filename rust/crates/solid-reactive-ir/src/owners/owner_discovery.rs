@@ -1165,6 +1165,7 @@ pub(crate) fn find_missing_owners_incremental(
             .filter_map(|pid| emissions.get(pid))
             .flat_map(|emission| emission.package_requirements.iter().cloned())
             .collect::<Vec<_>>();
+        let mentions = PackageMentions::build(facts);
         attribute_package_entries(
             &mut requirements,
             facts,
@@ -1176,6 +1177,7 @@ pub(crate) fn find_missing_owners_incremental(
             &provider_free,
             &package_reads,
             &package_requirements,
+            &mentions,
         );
         // ADR 0949: kept for the package entry table over the final rows.
         owner_view = Some(OwnerView {
@@ -1183,6 +1185,7 @@ pub(crate) fn find_missing_owners_incremental(
             contexts,
             outgoing,
             provider_free: provider_free.clone(),
+            mentions,
         });
     }
     let requirement_emission = requirements_started.elapsed();

@@ -75,6 +75,8 @@ pub(crate) struct OwnerView {
     pub(super) outgoing: Vec<Vec<(usize, OwnerEdgeKind)>>,
     /// The census verdict of each context, for the references that name a context binding.
     pub(super) provider_free: HashMap<Location, ContextVerdict>,
+    /// Where the project mentions a package analyzed as source (built once, with the owner stage).
+    pub(crate) mentions: PackageMentions,
 }
 
 /// Which project calls the walk takes as entries into a package function it reaches.
@@ -432,6 +434,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
         &self,
         roots: &[&str],
         provider_free: &HashMap<Location, ContextVerdict>,
+        mentions: &PackageMentions,
     ) -> Vec<(String, Entry)> {
         let mut found = Vec::new();
         for symbol in self.facts.typescript.symbols() {
@@ -485,6 +488,53 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
                 );
             }
         }
+        // A use of a binding that carries a package (`const Lazy = dynamic(() => Panel)`; `<Lazy />`) runs its code
+        // wherever it is used, whatever the call graph resolves of the wrapper.
+        for (path, carriers) in &mentions.carriers {
+            let Some(file) = self.file(path) else {
+                continue;
+            };
+            for (at, declaration) in &file.ast.reference_declarations {
+                let Some(carried) = carriers.get(declaration) else {
+                    continue;
+                };
+                let wanted = carried
+                    .iter()
+                    .map(|root| mentions.roots[*root].as_str())
+                    .filter(|root| roots.contains(root))
+                    .collect::<Vec<_>>();
+                if wanted.is_empty()
+                    || reference_is_not_an_entry(self.lookup, file, *at, provider_free, false)
+                    || self
+                        .node_at(path, *at)
+                        .is_some_and(|node| !self.may_run(node))
+                {
+                    continue;
+                }
+                // The tag of an element is entered at the element's opening tag (where a render's frame stands),
+                // any other use at the call or element it is an argument or attribute of.
+                let element = file
+                    .ast
+                    .jsx_elements
+                    .iter()
+                    .find(|element| element.name.span.contains(*at));
+                for root in wanted {
+                    found.push((
+                        root.to_owned(),
+                        Entry {
+                            path: path.clone(),
+                            span: element.map_or_else(|| entry_anchor(file, *at), element_site),
+                            reference: *at,
+                            kind: if element.is_some() {
+                                crate::DependencyEntry::Render
+                            } else {
+                                crate::DependencyEntry::Reference
+                            },
+                        },
+                    ));
+                }
+            }
+        }
         found
     }
 }
@@ -507,6 +557,7 @@ pub(super) fn attribute_package_entries(
     provider_free: &HashMap<Location, ContextVerdict>,
     reads: &[PackageRead],
     owner_needing: &[PackageRequirement],
+    mentions: &PackageMentions,
 ) {
     if (reads.is_empty() && owner_needing.is_empty()) || facts.dependency_source_roots.is_empty() {
         return;
@@ -564,7 +615,7 @@ pub(super) fn attribute_package_entries(
         .collect::<Vec<_>>();
     roots.sort_unstable();
     sites.extend(
-        walk.references_to(&roots, provider_free)
+        walk.references_to(&roots, provider_free, mentions)
             .into_iter()
             .map(|(root, entry)| (entry, first_read_of_root[root.as_str()])),
     );
@@ -590,7 +641,7 @@ pub(super) fn attribute_package_entries(
     }
     let owner_roots = first_of_root.keys().map(String::as_str).collect::<Vec<_>>();
     owner_sites.extend(
-        walk.references_to(&owner_roots, provider_free)
+        walk.references_to(&owner_roots, provider_free, mentions)
             .into_iter()
             .filter(|(_, entry)| !walk.runs_owned_here(entry))
             .map(|(root, entry)| (entry, first_of_root[root.as_str()])),
@@ -699,7 +750,6 @@ pub(crate) fn package_entry_table(
     lookup: &SemanticLookup<'_>,
     view: &OwnerView,
     program: &crate::Program,
-    mentions: &PackageMentions,
 ) -> (Vec<crate::PackageEntries>, Vec<crate::PackageReferences>) {
     // Every row of the program located in a package.
     let mut rows = Vec::<&Location>::new();
@@ -764,46 +814,8 @@ pub(crate) fn package_entry_table(
     }
     let root_list = roots.iter().map(String::as_str).collect::<Vec<_>>();
     let mut by_root = std::collections::BTreeMap::<String, Vec<crate::PackageEntrySite>>::new();
-    for (root, entry) in walk.references_to(&root_list, &view.provider_free) {
+    for (root, entry) in walk.references_to(&root_list, &view.provider_free, &view.mentions) {
         by_root.entry(root).or_default().push(site(entry));
-    }
-    // A use of a binding that carries a package (`const Lazy = dynamic(() => Panel)`; `<Lazy />`) runs its code
-    // wherever it is used: a site of every finding of the package it mentions.
-    for (path, carriers) in &mentions.carriers {
-        let Some(file) = walk.file(path) else {
-            continue;
-        };
-        for (at, declaration) in &file.ast.reference_declarations {
-            let Some(carried) = carriers.get(declaration) else {
-                continue;
-            };
-            if reference_is_not_an_entry(lookup, file, *at, &view.provider_free, false)
-                || walk
-                    .node_at(path, *at)
-                    .is_some_and(|node| !walk.may_run(node))
-            {
-                continue;
-            }
-            // The tag of an element is entered at the element's opening tag (where a render's frame stands), any
-            // other use at the call or element it is an argument or attribute of.
-            let anchor = file
-                .ast
-                .jsx_elements
-                .iter()
-                .find(|element| element.name.span.contains(*at))
-                .map_or_else(|| entry_anchor(file, *at), element_site);
-            for &root in carried {
-                by_root
-                    .entry(mentions.roots[root].clone())
-                    .or_default()
-                    .push(site(Entry {
-                        path: path.clone(),
-                        span: anchor,
-                        reference: *at,
-                        kind: crate::DependencyEntry::Render,
-                    }));
-            }
-        }
     }
     let references = by_root
         .into_iter()
