@@ -1371,3 +1371,17 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-generator-stepped/node_modules/**
 !fixtures/reactive-ir/parameter-initializer-after-await/node_modules/
 !fixtures/reactive-ir/parameter-initializer-after-await/node_modules/**
+!fixtures/reactive-ir/member-routes-after-await/node_modules/
+!fixtures/reactive-ir/member-routes-after-await/node_modules/**
+!fixtures/reactive-ir/member-routes-after-await-none/node_modules/
+!fixtures/reactive-ir/member-routes-after-await-none/node_modules/**
+!fixtures/reactive-ir/member-routes-leaf/node_modules/
+!fixtures/reactive-ir/member-routes-leaf/node_modules/**
+!fixtures/reactive-ir/member-routes-leaf-none/node_modules/
+!fixtures/reactive-ir/member-routes-leaf-none/node_modules/**
+!fixtures/reactive-ir/exported-helper-in-apply/node_modules/
+!fixtures/reactive-ir/exported-helper-in-apply/node_modules/**
+!fixtures/reactive-ir/stored-function-after-await/node_modules/
+!fixtures/reactive-ir/stored-function-after-await/node_modules/**
+!fixtures/reactive-ir/stored-function-after-await-none/node_modules/
+!fixtures/reactive-ir/stored-function-after-await-none/node_modules/**

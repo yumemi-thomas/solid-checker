@@ -43,6 +43,17 @@
       "start": 878,
       "end": 880,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-arrow-receiver-this/App.tsx",
+      "start": 1245,
+      "end": 1249,
+      "fixes": 0
     }
   ]
 }

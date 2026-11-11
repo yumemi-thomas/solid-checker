@@ -361,6 +361,20 @@ or a member access (a function literal's own invocation reads nothing), the call
 `undefined`, no argument at its index and a spread that may hide it run it; a destructuring pattern's defaults run whatever
 the argument is. A constructor of a class written in another file is not followed.
 
+## Members run without a call (ADR 0963)
+
+The continuation of an async computation runs a member without a call: a property access runs a getter, an assignment a
+setter, a coercion `toString`, `valueOf` or `[Symbol.toPrimitive]`, a `for...of` or a spread `[Symbol.iterator]` and the
+`next()` it returns, a Proxy access its trap, `new` a constructor and the class's field initializers, a tagged template its tag.
+The walk of the continuation follows calls and runs none of these. A reactive read written where such a member runs it (a
+class element, an object literal's accessor or method, a tag function, a function a `new` runs, a helper those call) is an
+uncertifiable row of this rule (`function-run-unplaced`; `field-initializer-unplaced` directly in a class field's
+initializer), never a violation, while the program holds a tracked async computation and a suspension (an `await`, an
+implicit suspension or a `then`, `catch`, `finally` call). Only reads the role engine could not place are asked. A function
+handed where nothing follows it is run by a call, and a parameter initializer is the call-site net's (above): not this net's.
+The row is coarse: a read in a member stands whatever the continuation touches and whatever the computation tracked before
+its first suspension.
+
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous variant
@@ -371,3 +385,18 @@ The async computation may be named exactly (a named function expression's bindin
 A `.then` handler handed by name is followed as a literal is. A parameter called after an await is uncertifiable, blocker `handed-read-after-await` (ADR 0669).
 
 An exact forwarding wrapper chain runs a callback on the continuation only when each whole-argument hand-on and the final parameter call occur directly in the wrapper’s synchronous prefix on every completion (ADR 0895). A deferred, conditional, reassigned or unresolved hand-on keeps `handed-read-after-await` at the reads. Closed literal members holding a function by name are followed too.
+
+## Calls to a function nothing resolves (ADR 0964)
+
+A function the program stored where nothing follows it (an array, a map, an object's list, a variable) and invoked through the
+name it was stored under runs on the continuation when the call stands behind the `await`: `callbacks.forEach((c) => c())`,
+`const f = list[0]; f()`, `registry.get(k)!()`, `Promise.all(tasks.map((t) => t()))`, `bus.emit()` over the listeners an
+object's method iterates. The call resolves to no function the walk knows, so a source read in the stored function is untracked.
+The call is an uncertifiable row of this rule (`unresolved-invocation`; `function-run-unplaced` in a handed async function), never
+a violation: nothing here proves what was stored or that it reads a source. The callee is a parameter, a variable, or the result of
+a call that is no primitive; a `function` declaration, a `const` bound to a function literal, an accessor, a setter, an action, a typed
+candidate (ADR 0294, its own SC9012 row) and a primitive are not this. A method a member route runs holds the invocation
+inside it, so the row stands at that invocation, under the same region premise as members (a tracked async computation and a
+suspension). A parameter whose caller hands a function the walk follows stays a violation (ADR 0669), and the row at the parameter's
+call stands beside it. The row is coarse: it stands whatever the stored value is (a clock a caller injects, a testing library's
+destructured query). A call before the `await` is a dependency of the computation, and an event handler is no continuation: no row.

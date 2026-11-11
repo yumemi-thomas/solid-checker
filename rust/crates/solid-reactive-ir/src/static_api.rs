@@ -53,13 +53,21 @@ pub(crate) fn check_project(
     };
     let mut inputs = crate::late_chunks::ChunkInputs::of(ctx);
     inputs.discovery = checker.tables;
+    // ADR 0963: the leaf walk's rows (it runs before this stage) account for the code they reach.
+    let accounted = LeafRowsAccount::of(&draft.leaf_operations);
     for result in
         crate::late_chunks::FileChunks::run(chunks, &inputs, |file| checker.check_file(file))
     {
         draft.static_defects.extend(result.defects.iter().cloned());
-        draft
-            .static_violations
-            .extend(result.violations.iter().cloned());
+        draft.static_violations.extend(
+            result
+                .violations
+                .iter()
+                .filter(|violation| {
+                    !(violation.id == "SC3001" && accounted.covers(&violation.location))
+                })
+                .cloned(),
+        );
         draft.writes.extend(result.writes.iter().cloned());
         draft
             .write_action_obligations
@@ -68,6 +76,50 @@ pub(crate) fn check_project(
             .jsx_phase_sites
             .extend(result.jsx_phase_sites.iter().cloned());
         draft.site_ends.extend(&result.ends);
+    }
+}
+
+/// ADR 0963: where the leaf walk's rows already stand, so the net for code no call shows adds none beside them: the sites an
+/// operation reached through a helper is written at (or its own location when it stands at its own call). A net row inside one
+/// is one obligation twice: the walk's row stands at the helper call, a frame of the stack the operation throws on. A leaf scope
+/// whose callback could not be resolved (`UnresolvedCallback`, SC9012 `leaf-callback-opaque`) stands at the call and answers for
+/// no site inside its arguments (as for [`crate::site_accounting::delegate_row`]): what the call runs may be run later, at a
+/// place the row's line is no frame of (`new Proxy(target, { get() { onCleanup(f); } })` runs the trap where the proxy is read).
+struct LeafRowsAccount {
+    spans: rustc_hash::FxHashMap<String, Vec<(u64, u64)>>,
+}
+
+impl LeafRowsAccount {
+    fn of(operations: &[crate::LeafOwnerOperation]) -> Self {
+        let mut spans = rustc_hash::FxHashMap::<String, Vec<(u64, u64)>>::default();
+        let mut add = |location: &typefacts::Location| {
+            spans
+                .entry(location.path.to_string())
+                .or_default()
+                .push((location.start_byte, location.end_byte));
+        };
+        for operation in operations {
+            if matches!(
+                operation.kind,
+                crate::LeafOwnerOperationKind::UnresolvedCallback
+            ) {
+                continue;
+            }
+            if operation.sites.is_empty() {
+                add(&operation.location);
+            } else {
+                operation.sites.iter().for_each(&mut add);
+            }
+        }
+        Self { spans }
+    }
+
+    fn covers(&self, location: &typefacts::Location) -> bool {
+        self.spans.get(location.path.as_ref()).is_some_and(|spans| {
+            spans
+                .iter()
+                .any(|(start, end)| *start <= location.start_byte && location.end_byte <= *end)
+        })
     }
 }
 
@@ -975,6 +1027,49 @@ impl StaticApiContext<'_> {
                         }
                     ),
                     hint: "Create the computation in the component body or an effect's compute function, where an owner holds it, or parent it explicitly with `runWithOwner(owner, () => …)`.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: blocker.into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+            // ADR 0963: the leaf scope's net. A call a leaf owner's callback forbids (a creation, `onCleanup`,
+            // `flush`) written where a route no call shows runs it (a getter or setter, a coercion method, an
+            // iterator-protocol method, a Proxy trap, a constructor, a class field's initializer, a tag function, a
+            // function a `new` runs) may run on the stack of a leaf callback: the leaf walk follows calls and runs no
+            // member, so it reads none of those. An obligation of SC3001, never a violation (no walk here proves the
+            // member is reached from a leaf), never silence. A function handed where nothing follows it is run by a call,
+            // and the leaf walk answers a call it cannot follow itself (SC9012, `leaf-callback-opaque`).
+            if let Some(kind) = kind
+                && crate::cleanup::leaf_forbids(dialect, file, call, kind)
+                && self.lookup.project_opens_leaf_scope()
+                && !result.violations.iter().any(|violation| {
+                    violation.id == "SC3001"
+                        && violation.location == location(file.path.shared(), call.callee)
+                })
+                && let Some(blocker) = unplaced_member_blocker(file, call.span, self.lookup)
+            {
+                let blocker = if blocker == crate::blockers::FUNCTION_RUN_UNPLACED
+                    && crate::execution_role::in_field_initializer(file, call.span)
+                {
+                    crate::blockers::FIELD_INITIALIZER_UNPLACED
+                } else {
+                    blocker
+                };
+                result.violations.push(StaticViolation {
+                    id: "SC3001".into(),
+                    rule: "leaf-owner-forbidden-call".into(),
+                    message: format!(
+                        "{primitive}() is called {}; if the callback of a leaf owner (onSettled, createTrackedEffect) runs it, the leaf owner refuses it and Solid throws in dev, and whether one does is not proven",
+                        if blocker == crate::blockers::FUNCTION_RUN_UNPLACED {
+                            "in code no call shows (a getter or setter, a coercion or iterator-protocol method, a Proxy trap, a constructor, a tag function, a function a `new` runs) that a leaf callback may run"
+                        } else if blocker == crate::blockers::FIELD_INITIALIZER_UNPLACED {
+                            "in a class field's initializer, which runs wherever an instance is constructed"
+                        } else {
+                            unplaced_clause(blocker)
+                        }
+                    ),
+                    hint: "Create the primitive in the component body (or another owning scope) and read its accessor inside the leaf callback; call cleanup and flush from an event handler or other code that runs outside every leaf callback.".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: blocker.into(),
                     fixes: vec![],
@@ -2338,10 +2433,114 @@ fn unplaced_blocker(
     ownerless: bool,
 ) -> Option<&'static str> {
     let mut memo = rustc_hash::FxHashMap::default();
-    runs_unplaced_through_callers(file, site, lookup, 4, ownerless, &mut memo).or_else(|| {
-        runs_unplaced_exhaustive(file, site, lookup, ownerless)
-            .then_some(crate::blockers::FUNCTION_RUN_UNPLACED)
-    })
+    runs_unplaced_through_callers(file, site, lookup, 4, ownerless, Routes::Every, &mut memo)
+        .or_else(|| {
+            runs_unplaced_exhaustive(file, site, lookup, ownerless)
+                .then_some(crate::blockers::FUNCTION_RUN_UNPLACED)
+        })
+}
+
+/// Which runs [`runs_unplaced_through_callers`] counts as unplaced.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Routes {
+    /// Every run no call edge places, a function handed where nothing follows it included (ADR 0708).
+    Every,
+    /// ADR 0963: only a run no call can show and no walk that follows calls can name ([`crate::execution_role::runs_implicitly`]):
+    /// a class element, an object accessor or method, a tag function, a function a `new` runs. A function handed on is run by a
+    /// call, which the walk of the rule that asks follows or answers itself; a parameter initializer is the call-site net's.
+    Members,
+}
+
+/// ADR 0963: [`unplaced_blocker`] for a rule whose sites are everywhere (a reactive read), so a hand-off is not counted: the
+/// climb from `site` through the exact calls above it ends at a member route ([`Routes::Members`]) or places the site.
+/// Only the walk to depth 4 asks: the exhaustive walk is the hand-off census's, and a site it would add is a hand-off.
+pub(crate) fn unplaced_member_blocker(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'static str> {
+    let mut memo = rustc_hash::FxHashMap::default();
+    match runs_unplaced_through_callers(file, site, lookup, 4, false, Routes::Members, &mut memo) {
+        // A climb the bound stopped is asked again without the bound: a site many helpers below a placed root is placed, and a
+        // chain that ends in a member route (or the budget) keeps the row, named by the bound.
+        Some(crate::blockers::SEARCH_DEPTH_LIMIT) => {
+            runs_unplaced_exhaustive_members(file, site, lookup)
+                .then_some(crate::blockers::SEARCH_DEPTH_LIMIT)
+        }
+        answer => answer,
+    }
+}
+
+/// ADR 0963: [`runs_unplaced_exhaustive`] for [`Routes::Members`]: the sites above `site`, through every exact call and every layer
+/// that runs in place, each function once, until a member route runs one (or the budget ends the search, which answers true).
+fn runs_unplaced_exhaustive_members(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut visited = HashSet::default();
+    search_fails_closed(
+        (file, site),
+        UNPLACED_WALK_BUDGET,
+        |(file, site), pending| unplaced_member_step(file, site, lookup, &mut visited, pending),
+    )
+}
+
+/// One site of [`runs_unplaced_exhaustive_members`]: true when a member route runs it, else the sites above it go on `pending`.
+fn unplaced_member_step<'s, 'f: 's>(
+    file: &'s FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'f>,
+    visited: &mut HashSet<(String, Span)>,
+    pending: &mut Vec<(&'s FileFacts, Span)>,
+) -> bool {
+    if crate::execution_role::runs_implicitly(file, site, lookup) {
+        return true;
+    }
+    // A climb the layer bound stopped (`exhausted`) answers where it stopped, and the walk asks from there: a chain of named
+    // closures runs in place one call after another, however long.
+    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
+        Some(climb) if climb.at != site => {
+            pending.push((file, climb.at));
+            return false;
+        }
+        Some(_) | None => site,
+    };
+    let Some(function) = crate::owners::owning_function(&file.ast, at) else {
+        return false;
+    };
+    if !visited.insert((file.path.to_string(), function.span)) {
+        return false;
+    }
+    if let Some(name) = crate::owners::function_binding_name(file, function) {
+        let name = name.span;
+        pending.extend(
+            file.ast
+                .calls
+                .iter()
+                .filter(|call| {
+                    !call.construct
+                        && file
+                            .ast
+                            .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
+                            == Some(name)
+                })
+                .map(|call| (file, call.span)),
+        );
+    }
+    for (caller, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        pending.extend(
+            caller
+                .ast
+                .calls
+                .iter()
+                .filter(|call| {
+                    !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
+                })
+                .map(|call| (caller, call.span)),
+        );
+    }
+    false
 }
 
 /// ADR 0708: [`crate::execution_role::unplaced_run`] at `site`, or at an
@@ -2360,10 +2559,11 @@ fn runs_unplaced_through_callers(
     lookup: &SemanticLookup<'_>,
     depth: usize,
     ownerless: bool,
+    routes: Routes,
     memo: &mut UnplacedMemo,
 ) -> Option<&'static str> {
     crate::walk_memo::memoized(memo, (file.path.to_string(), site, depth), |memo| {
-        runs_unplaced_once(file, site, lookup, depth, ownerless, memo)
+        runs_unplaced_once(file, site, lookup, depth, ownerless, routes, memo)
     })
 }
 
@@ -2376,6 +2576,7 @@ fn runs_unplaced_once(
     lookup: &SemanticLookup<'_>,
     depth: usize,
     ownerless: bool,
+    routes: Routes,
     memo: &mut UnplacedMemo,
 ) -> Option<&'static str> {
     // ADR 0710: with `ownerless`, a site a primitive's synchronous callback
@@ -2394,10 +2595,13 @@ fn runs_unplaced_once(
     // ADR 0961 (PD): a site written in a parameter initializer, or in a layer that runs in place in one, runs when a call
     // of its function omits the argument, which no call edge below places: an obligation while that function is called or
     // referenced anywhere.
-    if parameter_initializer_on_the_way(file, site, lookup) {
+    if routes == Routes::Every && parameter_initializer_on_the_way(file, site, lookup) {
         return Some(crate::blockers::PARAMETER_INITIALIZER_UNPLACED);
     }
-    if crate::execution_role::unplaced_run(file, site, lookup) {
+    if match routes {
+        Routes::Every => crate::execution_role::unplaced_run(file, site, lookup),
+        Routes::Members => crate::execution_role::runs_implicitly(file, site, lookup),
+    } {
         return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }
     let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
@@ -2409,7 +2613,9 @@ fn runs_unplaced_once(
             let Some(depth) = depth.checked_sub(1) else {
                 return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
             };
-            return runs_unplaced_through_callers(file, climb.at, lookup, depth, ownerless, memo);
+            return runs_unplaced_through_callers(
+                file, climb.at, lookup, depth, ownerless, routes, memo,
+            );
         }
         Some(_) | None => site,
     };
@@ -2419,7 +2625,8 @@ fn runs_unplaced_once(
     // stepped (handed on, or a call of it creates an iterator the program uses) the run is unplaced, an obligation,
     // not "placed". A generator nothing steps runs none of its body.
     if function.generator {
-        return (!is_action_step_argument(file, function, lookup)
+        return (routes == Routes::Every
+            && !is_action_step_argument(file, function, lookup)
             && generator_may_be_stepped(file, function, lookup))
         .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }
@@ -2446,7 +2653,9 @@ fn runs_unplaced_once(
     };
     let mut answer = None;
     for (caller, call) in calls {
-        match runs_unplaced_through_callers(caller, call.span, lookup, depth, ownerless, memo) {
+        match runs_unplaced_through_callers(
+            caller, call.span, lookup, depth, ownerless, routes, memo,
+        ) {
             Some(crate::blockers::FUNCTION_RUN_UNPLACED) => {
                 return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
             }

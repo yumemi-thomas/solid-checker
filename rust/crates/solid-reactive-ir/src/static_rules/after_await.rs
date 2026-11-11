@@ -288,6 +288,11 @@ pub(super) fn run<'a>(
         .flatten()
         .collect::<Vec<_>>()
     };
+    // ADR 0963: the region of the net for reads no call edge places: a tracked async computation, and a suspension in the program
+    // for a continuation to follow (an `await` or an implicit suspension, or a promise handler: `then`, `catch`, `finally`).
+    computations
+        .holds_suspending
+        .set(!starts.is_empty() && program_suspends(ctx));
     // ADR 0909: a member's walk is a function of the member and the build;
     // only the rows' span dedup reads the draft (`ProgramDraft::spans_agree`)
     // and only the queue's bound reads the walks so far
@@ -304,6 +309,104 @@ pub(super) fn run<'a>(
         }
     }
     unlisted_async_computations(ctx, &reach, draft);
+}
+
+/// ADR 0963: whether the program holds a suspension a continuation follows: an `await`, an implicit suspension (`for await`,
+/// `await using`), or a call of a promise handler (`then`, `catch`, `finally`: named, as a premise only, never as proof). An async
+/// function with none (`async () => 1`) has no code after a suspension.
+fn program_suspends(ctx: &AnalysisContext<'_>) -> bool {
+    crate::base::reads::all_files(ctx.facts).iter().any(|file| {
+        let ast = &file.ast;
+        !ast.awaits.is_empty()
+            || !ast.implicit_suspensions.is_empty()
+            || ast.calls.iter().any(|call| {
+                ast.member_at(ast.peel_ts_sugar_span(call.callee))
+                    .and_then(|member| file.source_text(member.property))
+                    .is_some_and(|name| matches!(name, "then" | "catch" | "finally"))
+            })
+    })
+}
+
+/// ADR 0963: a reactive read the continuation of an async computation may run by a route no call shows is an obligation of
+/// SC1002 when the program holds a tracked async computation with something after a suspension: the read is written in a class
+/// element (a constructor, a method, an accessor, a field's initializer), in an object literal's accessor or method (a getter
+/// or setter, a coercion or iterator-protocol method, a Proxy trap), in a tag function, in a function a `new` runs, or in a
+/// helper the exact calls of which end in one of those ([`crate::static_api::unplaced_member_blocker`]); the continuation runs
+/// them without a call (a property access, a `new`, a coercion, a spread or a destructuring, a tag, a trap), the walk of the
+/// continuation follows calls, and the read is untracked there. Only reads the role engine could not place are asked (a read
+/// in code a call edge places has its role). The same reads stand in SC1001's uncertifiable rows; the claiming rule of a read
+/// after an await is SC1002, so the row is its own (a row of another rule at the site covers nothing of it). Never a
+/// violation: nothing here proves a continuation runs the member. A read directly in a class field's initializer says so
+/// ([`crate::blockers::FIELD_INITIALIZER_UNPLACED`]): the construction that runs it is the missing witness. A function handed
+/// where nothing follows it is run by a call; its reads are not this net's.
+pub(super) fn reads_run_unplaced(
+    ctx: &AnalysisContext<'_>,
+    computations: &SharedAsyncComputations<'_>,
+    files_by_path: &std::collections::HashMap<&str, &FileFacts>,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    draft: &mut ProgramDraft,
+) {
+    if !computations.holds_suspending.get() {
+        return;
+    }
+    // ADR 0964: a call that invokes a function value the walk cannot resolve ([`unresolved_invocation`]) written in code a member
+    // route runs (a class method that iterates stored listeners, an object method that calls a stored callback) is an obligation
+    // too: the continuation reaches it through the member's access, not through a call the walk follows.
+    let mut invocations = Vec::new();
+    for file in crate::base::reads::all_files(ctx.facts) {
+        for call in &file.ast.calls {
+            if unresolved_invocation(ctx, file, call)
+                && crate::static_api::unplaced_member_blocker(file, call.span, lookup).is_some()
+            {
+                invocations.push(unresolved_invocation_obligation(
+                    file,
+                    call,
+                    crate::blockers::UNRESOLVED_INVOCATION,
+                ));
+            }
+        }
+    }
+    for defect in invocations {
+        draft.push_defect(defect);
+    }
+    let defects = draft
+        .reads
+        .iter()
+        .filter(|read| {
+            matches!(
+                read.execution,
+                crate::ExecutionRole::Unknown | crate::ExecutionRole::Unreported
+            )
+        })
+        .filter_map(|read| {
+            let file = files_by_path.get(read.location.path.as_ref())?;
+            let span = Span::new(
+                u32::try_from(read.location.start_byte).ok()?,
+                u32::try_from(read.location.end_byte).ok()?,
+            );
+            let blocker = crate::static_api::unplaced_member_blocker(file, span, lookup)?;
+            Some(StaticDefect {
+                kind: StaticDefectKind::ReactiveReadAfterAwait {
+                    accessor: read.accessor.to_string(),
+                    obligation: Some(AfterAwaitObligation::RunUnplaced),
+                },
+                location: read.location.clone(),
+                analysis_context: if blocker == crate::blockers::FUNCTION_RUN_UNPLACED
+                    && crate::execution_role::in_field_initializer(file, span)
+                {
+                    crate::blockers::FIELD_INITIALIZER_UNPLACED
+                } else {
+                    blocker
+                }
+                .into(),
+                fixes: vec![],
+                uncertain: true,
+            })
+        })
+        .collect::<Vec<_>>();
+    for defect in defects {
+        draft.push_defect(defect);
+    }
 }
 
 /// The walks done ahead of the driver, by member ([`speculate_waves`]).
@@ -398,6 +501,79 @@ struct Speculated {
     queued: Vec<Member>,
     spans: crate::HashSet<crate::pipeline::SpanKey>,
     span_log: Vec<(crate::pipeline::SpanKey, bool)>,
+}
+
+/// ADR 0964: whether `call` invokes a function value the walk cannot resolve: a callback stored in a parameter, a variable, an array, a
+/// map or an object, called through that name (`callbacks.forEach((c) => c())`, `const fn = list[0]; fn()`, `registry.get(k)!()`).
+/// Whatever function the program put there runs on the call's stack, so on the continuation it may read a reactive source untracked:
+/// an obligation at the call, never silence. Three facts decide it, all of the call's own syntax and bindings (a resolved-call fact is
+/// demanded for few calls, so its absence says nothing): the callee is an identifier declared as a parameter, or as a variable whose
+/// value is not a function the walk resolves; or it is the result of a call (`get(k)!()`, `f()()`) that is no primitive's accessor.
+/// A callee that is an accessor, a setter, an action, a typed candidate (ADR 0294), a primitive, a project function or a function literal is read elsewhere.
+fn unresolved_invocation(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact) -> bool {
+    let lookup = ctx.semantic_lookup;
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if call.construct || file.ast.function_at(callee).is_some() {
+        return false;
+    }
+    // What the callee names, from the call's own syntax and bindings first (cheap), then what reads it elsewhere.
+    let stored = if crate::owners::is_identifier_span(file, callee) {
+        file.ast
+            .reference_declaration(callee)
+            .is_some_and(|declaration| {
+                // A `function` declaration or a `const` bound to a function literal is that function, called or thrown (a call
+                // before its declarator): the layer walk reads the body or no function runs. Nothing was stored there.
+                super::same_file_function(file, declaration).is_none()
+                    && (super::declared_as_parameter(file, declaration)
+                        || file.ast.bindings.iter().any(|binding| {
+                            binding.names.iter().any(|name| name.span == declaration)
+                        }))
+            })
+    } else {
+        // The callee is a call's result: the value that call returns is called (`registry.get(k)!()`), unless that call is a
+        // primitive (`createMemo(f)()` reads the accessor it made).
+        file.ast
+            .call_at(callee)
+            .is_some_and(|inner| lookup.primitive_at_call(file, inner.span).is_none())
+    };
+    stored
+        && lookup.primitive_at_call(file, call.span).is_none()
+        && !(crate::owners::is_identifier_span(file, callee)
+            && lookup
+                .function_called_at(file.path.as_str(), callee)
+                .is_some())
+        && !call_accessor_symbol(ctx, file, call).is_some_and(|symbol| {
+            ctx.accessors.contains_key(symbol)
+                || ctx.setters.contains_key(symbol)
+                || ctx.actions.contains_key(symbol)
+                // ADR 0294: a typed candidate whose implementation is not visible (a parameter typed `Accessor<T>`) has its own row, SC9012
+                // `type-only-source`: its declared type says what it may be, which a stored function's is not.
+                || typed_unknown(ctx, symbol)
+        })
+}
+
+/// The obligation row at a call that invokes a function value the walk cannot resolve ([`unresolved_invocation`]).
+fn unresolved_invocation_obligation(
+    file: &FileFacts,
+    call: &CallFact,
+    context: &str,
+) -> StaticDefect {
+    let _ = context;
+    StaticDefect {
+        kind: StaticDefectKind::ReactiveReadAfterAwait {
+            accessor: file
+                .source_text(file.ast.peel_ts_sugar_span(call.callee))
+                .map_or_else(
+                    || "a stored function".to_owned(),
+                    |text| text.chars().take(80).collect(),
+                ),
+            obligation: Some(AfterAwaitObligation::UnresolvedInvocation),
+        },
+        location: location(file.path.shared(), call.callee),
+        analysis_context: crate::blockers::UNRESOLVED_INVOCATION.to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    }
 }
 
 /// ADR 0879 (B5): a callee that names no exact symbol (`fns[0]()`,
@@ -1579,6 +1755,38 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                     fixes: vec![],
                     uncertain: !exact || tracking == Tracking::Possible,
                 });
+            }
+        }
+        // ADR 0964: a call written in the function's own body after one of its awaits that invokes a function value the walk cannot
+        // resolve (`fn()` for a `const fn = list[0]`, a stored callback) runs whatever function the program stored there on the
+        // continuation: an obligation at the call, where no row stands yet.
+        if let Some((file, ast_function)) = ast_function(self.files, function) {
+            for candidate in &file.ast.calls {
+                let written_here = ast_function.body.contains(candidate.span)
+                    && crate::owners::containing_ast_function(&file.ast, candidate.span)
+                        .is_some_and(|owner| owner.span == ast_function.span);
+                if !written_here
+                    || !(crate::execution_role::follows_unconditional_await(file, candidate.span)
+                        || crate::execution_role::follows_dominating_await(file, candidate.span)
+                        || crate::execution_role::follows_any_suspension(file, candidate.span)
+                        || crate::execution_role::may_follow_own_await(file, candidate.span))
+                {
+                    continue;
+                }
+                let callee = location(file.path.shared(), candidate.callee);
+                if unresolved_invocation(ctx, file, candidate)
+                    && walk.reported.insert((
+                        callee.path.to_string(),
+                        callee.start_byte,
+                        callee.end_byte,
+                    ))
+                {
+                    draft.push_defect(unresolved_invocation_obligation(
+                        file,
+                        candidate,
+                        &member.context,
+                    ));
+                }
             }
         }
         // ADR 0961 (PD): a call written in the function's own body after one of its awaits runs the parameter initializers of the
@@ -3140,8 +3348,14 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         }
         let Some(symbol) = symbol else {
             handed(walk, draft);
-            if inexact_callee(ctx, file, call) && walk.reported.insert(key) {
+            if inexact_callee(ctx, file, call) && walk.reported.insert(key.clone()) {
                 draft.push_defect(inexact_callee_obligation(file, call, &walk.member.context));
+            } else if unresolved_invocation(ctx, file, call) && walk.reported.insert(key) {
+                draft.push_defect(unresolved_invocation_obligation(
+                    file,
+                    call,
+                    &walk.member.context,
+                ));
             }
             return;
         };
@@ -3150,6 +3364,13 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                 draft.push_defect(typed_after_await_obligation(file, call.callee));
             } else {
                 handed(walk, draft);
+                if unresolved_invocation(ctx, file, call) && walk.reported.insert(key) {
+                    draft.push_defect(unresolved_invocation_obligation(
+                        file,
+                        call,
+                        &walk.member.context,
+                    ));
+                }
             }
             return;
         };

@@ -760,6 +760,10 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::MissingContextProvider => {
             "the read runs under an owner, and neither a default for its context nor a provider above every render of its function is proven"
         }
+        // ADR 0963: the leaf walk's own rows are leaf operations; this is the net for a call written where no call edge places it.
+        Rule::LeafOwnerForbiddenCall => {
+            "the call is a creation, a cleanup or a flush that a leaf owner's callback forbids, written in a function no call edge places, so a leaf callback may run it and nothing here proves one does"
+        }
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
         Rule::ReactiveReadAfterAwait
@@ -768,7 +772,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
-        | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
         | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
@@ -901,6 +904,8 @@ fn after_await_obligation(reason: Option<&solid_reactive_ir::AfterAwaitObligatio
         Some(Why::PropBackingUnproven { callers_unenumerable: true }) => "this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out".to_owned(),
         Some(Why::PropBackingUnproven { callers_unenumerable: false }) => "whether this prop is signal-backed is not proven from its uses".to_owned(),
         Some(Why::ParameterInitializerUnplaced) => "the call after the await runs a parameter initializer of the function it calls (the default of an argument it omits, a destructuring default, an IIFE or closure in one, a constructor's) that holds code that may read a source, and the checker does not follow what that code reads, so whether a read there runs untracked on this computation's continuation is not proven".to_owned(),
+        Some(Why::RunUnplaced) => "this read is written in code no call edge places (a getter or setter, a coercion or iterator-protocol method, a Proxy trap, a constructor, a class field's initializer, a tag function, or a function handed where nothing follows it), and the continuation of an async computation in this program may run it (a property access, a `new`, a coercion, a spread, a destructuring or a tag runs it without a call), so whether this read runs untracked after an await is not proven".to_owned(),
+        Some(Why::UnresolvedInvocation) => "this call invokes a function value the checker cannot resolve (a parameter, a callback stored in an array, a map or an object, a member of a local value that names no function body), and whatever function the program stored there runs on this continuation's stack and may read a reactive source, untracked after the await, so whether a read there warns is not proven".to_owned(),
         None => "whether this read runs untracked after the await on this computation's run is not proven".to_owned(),
     };
     format!("{why}{TAIL}")

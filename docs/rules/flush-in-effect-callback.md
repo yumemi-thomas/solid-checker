@@ -131,8 +131,9 @@ effect.
   function is not), with at least one call, whose every reference is an exact
   call that is itself such a layer. A helper that is also called from an event
   handler, a timer, the module body or another non-effect function, aliased,
-  passed as an argument or exported is not claimed: the flush may run outside
-  the effect. Unresolved callees, generators (calling one runs none of its
+  passed as an argument or exported is not claimed as a violation: the flush may
+  run outside the effect (an exported one an apply calls is an uncertifiable row,
+  ADR 0963). Unresolved callees, generators (calling one runs none of its
   body), methods, parameter initializers, a `let` helper, a callback handed to
   a timer, listener or promise, and an async function's code after its first
   `await` are not claimed. A named function handed to an inline carrier
@@ -198,6 +199,15 @@ effect.
 - **A parameter initializer.** A `flush` written in a default value, a destructuring default, an IIFE or closure in one,
   or in a helper the default calls, of a function the program calls or references, is an uncertifiable row
   (`parameter-initializer-unplaced`): it runs when a call omits the argument, and no walk reads which calls do.
+
+## Exported helpers (ADR 0963)
+
+An exported function is entered by calls outside the project as well, so the claim that its flush only ever runs in an
+effect's apply is not made; the calls the walk sees are proven runs there. For an exported function the origin is `mixed`
+(ADR 0516): a `flush()` in a helper an apply calls is an uncertifiable row, never a violation and never silence; the
+unexported twin stays a violation.
+A call the call graph withheld (ADR 0339: a `const` arrow is not hoisted, and a call through an import cycle, a self-import
+included, may run before the binding's declarator) is followed the same way, as a run the walk does not prove.
 
 ## Premises
 

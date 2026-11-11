@@ -186,6 +186,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 471,
+      "end": 480,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -208,6 +219,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 735,
+      "end": 744,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -216,6 +238,17 @@
       "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
       "start": 735,
       "end": 744,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 1000,
+      "end": 1009,
       "fixes": 0
     },
     {
@@ -285,6 +318,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
+      "start": 1829,
+      "end": 1838,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -293,6 +337,17 @@
       "path": "fixtures/reactive-ir/value-flow-review/Leaf.tsx",
       "start": 1829,
       "end": 1838,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 196,
+      "end": 205,
       "fixes": 0
     },
     {
@@ -362,6 +417,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 1047,
+      "end": 1056,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -370,6 +436,17 @@
       "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
       "start": 1047,
       "end": 1056,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 1135,
+      "end": 1144,
       "fixes": 0
     },
     {
@@ -403,6 +480,17 @@
       "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
       "start": 1448,
       "end": 1463,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-flow-review/Leaf2.tsx",
+      "start": 1606,
+      "end": 1615,
       "fixes": 0
     },
     {

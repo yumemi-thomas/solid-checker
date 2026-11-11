@@ -1,0 +1,7 @@
+# member-routes-leaf
+
+**Claim (ADR 0963, batch 10b group A).** Code run by a route no call shows (a getter, a coercion method, an iterator-protocol method, a Proxy trap, a constructor, a class field's initializer, a tag function) may run on the stack of a leaf owner's callback: the access that runs it is no call, and the leaf walk follows calls. A creation, `onCleanup` or `flush` there throws in dev (Chrome, rc.21: `PRIMITIVE_IN_FORBIDDEN_SCOPE`, `CLEANUP_IN_FORBIDDEN_SCOPE`, `FLUSH_IN_TRACKED_QUEUE_CALLBACK`) and the program was certified clean for SC3001 (SC6002's row beside it covers nothing of the claim). Each such call is an uncertifiable row of SC3001 (`function-run-unplaced`; `field-initializer-unplaced` for the creation directly in `WithField`'s initializer) while the program holds a primitive that opens a leaf scope. Never a violation, never silence.
+
+`App.tsx`: `ObjectAccessor`, `Coercion` (`onCleanup`), `Iteration`, `Trap` (`flush`), `Constructed` (a constructor, a field's initializer, a function only `new` runs), `Tagged`. Unchanged: `Direct` (the leaf walk's violation), `PlainHelper` (the violation at the call of the helper), `Placed` (a call places the function, no leaf runs it: no row). `member-routes-leaf-none` is the same members with no leaf owner in the program: no row.
+
+A function handed where nothing follows it is run by a call, and the leaf walk answers a call it cannot follow itself (SC9012, `leaf-callback-opaque`): not this net's.

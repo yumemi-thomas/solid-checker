@@ -1424,7 +1424,7 @@ pub(crate) fn primitive_identity_proven_at(
 }
 
 /// Whether the dialect forbids this primitive call under a leaf owner.
-fn leaf_forbids(
+pub(crate) fn leaf_forbids(
     dialect: &dyn solid_dialect::Dialect,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,

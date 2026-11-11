@@ -162,6 +162,17 @@ function Widget() {
 }
 ```
 
+## Code run without a call (ADR 0963)
+
+A leaf callback runs a member without a call: a property access runs a getter, a coercion `toString`, `valueOf` or
+`[Symbol.toPrimitive]`, a `for...of` or a spread `[Symbol.iterator]`, a Proxy access its trap, `new` a constructor and the
+class's field initializers, a tagged template its tag. The walk follows calls and runs none of these. A creation, `onCleanup`
+or `flush()` written where such a member runs it (a class element, an object literal's accessor or method, a tag function, a
+function a `new` runs, a helper those call) is an uncertifiable row of this rule (`function-run-unplaced`;
+`field-initializer-unplaced` directly in a class field's initializer), never a violation, while the program names a
+primitive that opens a leaf scope. A function handed where nothing follows it is run by a call, which the walk answers
+itself (SC9012, `leaf-callback-opaque`): not this net's. The net adds no row where the walk's own operation stands (a helper's creation is reported at the helper call), and an opaque call's SC9012 row answers for no accessor or method written in its arguments.
+
 ## How to fix
 
 Return cleanup from the leaf callback; a trailing `onCleanup(fn)` has a safe

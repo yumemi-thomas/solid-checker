@@ -23,7 +23,10 @@
 //!   exported, with at least one call and *every* reference to it one of its
 //!   exact calls, each of which is itself proven by this walk. A caller
 //!   outside the effect phase, an alias, a handler, an argument or an export
-//!   would let the flush run elsewhere.
+//!   would let the flush run elsewhere. An exported function is such a layer
+//!   too, with `mixed` set (ADR 0963): its calls the walk sees are proven runs
+//!   in the phase, and the calls outside the project it cannot see are the
+//!   runs it does not prove (ADR 0516).
 //!
 //! The file holding the `flush` call and the file holding the `createEffect`
 //! call must load the same installed `solid-js` at runtime
@@ -1006,15 +1009,18 @@ impl<'l, 'a> Walk<'l, 'a> {
     /// `f.call(…)`, a template tag) is a run at that carrier, proven by the
     /// walk from there; one handing it to code the walk does not follow
     /// leaves it unplaced ([`Self::unplaced_layer`]).
+    /// ADR 0963: an exported function is entered by calls outside the project
+    /// as well, so no run is *every* run: the walk still follows the calls it
+    /// can see, and a run it proves in the phase is an origin with `mixed` set
+    /// (ADR 0516, an obligation). It was `None`, which made a helper that an
+    /// apply calls silent for the one reason that it is exported.
     fn named_layer(
         &mut self,
         file: &FileFacts,
         literal: &FunctionFact,
         helper_calls: usize,
     ) -> Option<EffectPhaseOrigin> {
-        if exported(self.lookup, file, literal) {
-            return None;
-        }
+        let entered_elsewhere = exported(self.lookup, file, literal);
         // ADR 0538: a member's value (`o.m = () => …`, `this.m = …`) runs
         // wherever that member is called.
         if crate::local_access::member_assigned(file, literal) {
@@ -1060,7 +1066,10 @@ impl<'l, 'a> Walk<'l, 'a> {
                 .collect()
         };
         let mut positions = Vec::new();
-        let mut escapes = false;
+        // ADR 0963: the calls of the function the call graph withheld (ADR 0339), each with its file.
+        let mut withheld: Vec<(&FileFacts, Span)> = Vec::new();
+        // ADR 0963: an exported function's other callers are runs elsewhere.
+        let mut escapes = entered_elsewhere;
         // ADR 0538: a reference the walk follows to no run and no proof of a
         // run elsewhere: the function is unplaced.
         let mut unplaced = false;
@@ -1208,7 +1217,20 @@ impl<'l, 'a> Walk<'l, 'a> {
                     continue;
                 }
                 // A call site the call graph enumerates is followed below.
-                if primary && accounted.contains(&(reference_path, at.start, at.end)) {
+                if primary && accounted.contains(&(reference_path.clone(), at.start, at.end)) {
+                    continue;
+                }
+                // ADR 0963: a call of the function whose edge the call graph withheld (ADR 0339: it may run before the binding's
+                // declarator, as a call through a self-import of a `const` does) still runs the function once the binding is
+                // initialized. It is followed as a run the walk does not prove (`mixed`), never as no run: the finding it rests on
+                // is uncertifiable, not clean.
+                if primary
+                    && let Some(caller) = self.analyzed(&reference_path)
+                    && let Some(call) = caller.ast.calls.iter().find(|call| {
+                        !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == at
+                    })
+                {
+                    withheld.push((caller, call.span));
                     continue;
                 }
                 if !same_file {
@@ -1236,7 +1258,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                 }
             }
         }
-        if sites.is_empty() && positions.is_empty() {
+        if sites.is_empty() && positions.is_empty() && withheld.is_empty() {
             return unplaced
                 .then(|| self.unplaced_layer(file, literal.span, helper_calls))
                 .flatten();
@@ -1295,6 +1317,24 @@ impl<'l, 'a> Walk<'l, 'a> {
                 }
             }
         }
+        // ADR 0963: the calls the call graph withheld are runs the walk does not prove, so an origin one reaches is `mixed`.
+        let mut withheld_run = false;
+        for (caller, call) in withheld {
+            if self.budget == 0 {
+                self.limited
+                    .set(Some(crate::blockers::SEARCH_BUDGET_EXHAUSTED));
+                every = false;
+                break;
+            }
+            self.budget -= 1;
+            match self.layer(caller, call, helper_calls + 1) {
+                Some(origin) => {
+                    withheld_run = true;
+                    keep_nearest(&mut found, origin);
+                }
+                None => every = false,
+            }
+        }
         self.visiting.remove(&key);
         // ADR 0516: one proven effect-phase run with other runs the walk did
         // not prove is an obligation; no proven run at all stays silent.
@@ -1304,9 +1344,17 @@ impl<'l, 'a> Walk<'l, 'a> {
             return Some(origin);
         }
         found.map(|origin| EffectPhaseOrigin {
-            mixed: origin.mixed || !every || unplaced,
+            mixed: origin.mixed || !every || unplaced || withheld_run,
             ..origin
         })
+    }
+}
+
+/// Keeps the origin with the fewest helper calls between it and the apply; of equals, the first found.
+fn keep_nearest(found: &mut Option<EffectPhaseOrigin>, origin: EffectPhaseOrigin) {
+    match found {
+        Some(known) if origin.helper_calls >= known.helper_calls => {}
+        _ => *found = Some(origin),
     }
 }
 

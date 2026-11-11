@@ -175,6 +175,26 @@ pub(crate) fn inside_instance_field(file: &solid_facts::FileFacts, span: Span) -
     })
 }
 
+/// ADR 0963: whether `span` is written directly in the initializer of a class field (an instance field, a static one, an
+/// auto-accessor) or in a static block, and not in a function written there: the code runs where an instance is constructed
+/// or the class is evaluated, with no call edge to show that run.
+pub(crate) fn in_field_initializer(file: &solid_facts::FileFacts, span: Span) -> bool {
+    use solid_facts::ast::ClassElementKind as Kind;
+    file.ast.classes.iter().any(|class| {
+        class.span.contains(span)
+            && class.elements.iter().any(|element| {
+                matches!(element.kind, Kind::Field | Kind::StaticBlock)
+                    && element.value.is_some_and(|value| {
+                        value.contains(span)
+                            && !file
+                                .ast
+                                .functions_within(value)
+                                .any(|function| function.span.contains(span))
+                    })
+            })
+    })
+}
+
 /// Whether `span` sits in a class written inside `function`: its field
 /// initializers and static blocks run at construction or class evaluation,
 /// not where the function's own flow places them.

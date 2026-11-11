@@ -100,6 +100,17 @@ createEffect(() => count(), (value) => {
   (`parameter-initializer-unplaced`), never silence: the component that merely declares the function does not run its
   defaults, and the role veto (`runs off every apply`) cannot clear a default, which no role places.
 
+## Exported helpers (ADR 0963)
+
+An exported function is entered by calls outside the project as well, so the claim that its code only ever runs in an
+effect's apply is not made; the calls the walk sees are proven runs there. A helper an apply calls creates a computation
+with no owner (Chrome: `PRIMITIVE_IN_EFFECT_CALLBACK`), exported or not. For an exported function the origin is `mixed`
+(ADR 0516): the creation is an uncertifiable row, never a violation and never silence; the unexported twin stays a
+violation, and an exported helper only an event handler calls stays silent.
+A call the call graph withheld (ADR 0339: a `const` arrow is not hoisted, and a call through an import cycle, a self-import included,
+may run before the binding's declarator) is followed as a run the walk does not prove: the origin it reaches is `mixed`, an
+uncertifiable row, where the helper was certified clean for want of a call edge.
+
 ## How to fix
 
 Create the computation in the effect's compute function or in the component
