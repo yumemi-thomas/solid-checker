@@ -15,7 +15,8 @@
 //   node scripts/what-if.mjs grid --what-if-bin ... --checker-bin ... --typefacts ... --scan <blocker-scan rows.jsonl> --set name=ids ... [--sets-file f] [--jobs 12]
 //        [--programs-from all] [--control N] [--every K] [--limit N] --out report.json [--movers-out ids.json]
 //        ADR 0965: a `Premise(<kind>)` set runs the scan's programs that carry a row of that cause (the scan's `u.kinds`), not only the ones with a formula row.
-//   node scripts/what-if.mjs rank --report corpus.json [--top 40]            ADR 0965: the sets of a corpus report ranked by the rows and sites they lift
+//   node scripts/what-if.mjs rank --report corpus.json [--judged judged.json] [--top 40]   ADR 0965: the sets of a corpus report ranked by the rows and sites they lift, with what Chrome said of
+//        the same sets on the grids (`judge`'s report) beside each
 //   node scripts/what-if.mjs sets --scan <blocker-scan rows.jsonl> [--top 30]      the lifting sets of the scan's formula groups, with their rows and programs
 //   node scripts/what-if.mjs movers --report grid.json --out <manifest dir> [--run-out dir] [--checker-bin ... --typefacts ...]   the programs that moved, as the commands that run them in Chrome
 //   node scripts/what-if.mjs judge --report grid.json --chrome <dir of chrome-*.json> --out judged.json    each moved row against Chrome's record: false clean, false positive, confirmed
@@ -784,30 +785,45 @@ export async function* resultLines(report, reportPath) {
  * (`uLost`, and the ones that become a violation, `uToV`), `rows` the uncertifiable rows that leave or become a violation in the groups that moved, `programs` the projects it moved. A count,
  * never safety: the rows leave as clean, and the corpus has no runtime to say a site must not.
  */
-export function rankSets(report) {
+export function rankSets(report, judged = null) {
   const total = (report.baselines ?? []).reduce((sum, base) => sum + (base.rows?.u ?? 0), 0);
   return report.sets.map(({ name, ids }) => {
     const counts = report.arms[name]?.counts ?? {};
     const groups = Object.values(report.groups[name] ?? {});
     const rows = groups.reduce((sum, entry) => sum + entry.toClean + entry.toV + entry.toVOther, 0);
-    return { name, ids, sites: (counts.uLost ?? 0) + (counts.uToV ?? 0), rows, toV: groups.reduce((sum, entry) => sum + entry.toV + entry.toVOther, 0), programs: report.moved?.[name]?.length ?? 0, share: total ? rows / total : 0 };
+    return { name, ids, sites: (counts.uLost ?? 0) + (counts.uToV ?? 0), rows, toV: groups.reduce((sum, entry) => sum + entry.toV + entry.toVOther, 0), programs: report.moved?.[name]?.length ?? 0, share: total ? rows / total : 0, chrome: chromeOf(judged, name) };
   }).sort((a, b) => b.rows - a.rows || b.sites - a.sites || (a.name < b.name ? -1 : 1));
 }
 
-/** The ranking as text: one line a set, with the share of the corpus's uncertifiable rows. */
-export function rankText(report, top = 40) {
+/**
+ * ADR 0965: what Chrome said of the programs a set moved (`judge`'s report, `sets[name]`): the programs with a record, those where the lifted site is silent or covered by another row, and the
+ * false cleans (a diagnostic of Chrome's at a site the set would leave clean). `null` where the judged report holds no such set.
+ */
+export function chromeOf(judged, name) {
+  const tally = judged?.sets?.[name];
+  if (!tally) return null;
+  const verdicts = tally.verdicts ?? {};
+  return { judged: tally.programs - tally.noRecord, silent: verdicts["clean-silent"] ?? 0, covered: verdicts["clean-covered-elsewhere"] ?? 0, falseClean: verdicts["FALSE-CLEAN"] ?? 0, other: Object.entries(verdicts).filter(([verdict]) => !["clean-silent", "clean-covered-elsewhere", "FALSE-CLEAN"].includes(verdict)).reduce((sum, [, count]) => sum + count, 0) };
+}
+
+/** The ranking as text: one line a set, with the share of the corpus's uncertifiable rows and, with a judged grid report, what Chrome said. */
+export function rankText(report, top = 40, judged = null) {
   const total = (report.baselines ?? []).reduce((sum, base) => sum + (base.rows?.u ?? 0), 0);
-  const lines = [`what-if ranking (${report.source}): ${report.programs} program(s), ${total} uncertifiable rows under the shipped checker; control ${report.control.same} of ${report.control.programs} identical`];
-  for (const entry of rankSets(report).slice(0, top)) lines.push(`${String(entry.rows).padStart(8)} rows (${(100 * entry.share).toFixed(1).padStart(5)}%) ${String(entry.sites).padStart(7)} sites ${String(entry.programs).padStart(3)} program(s) ${entry.toV ? `toV ${entry.toV} ` : ""}${entry.ids.join(" + ")}`);
+  const lines = [`what-if ranking (${report.source}): ${report.programs} program(s), ${total} uncertifiable rows under the shipped checker; control ${report.control.same} of ${report.control.programs} identical${judged ? `; Chrome: ${judged.chromeRecords} record(s)` : ""}`];
+  for (const entry of rankSets(report, judged).slice(0, top)) {
+    const chrome = judged ? (entry.chrome ? ` | chrome ${String(entry.chrome.judged).padStart(5)} judged, false clean ${String(entry.chrome.falseClean).padStart(4)}, silent ${entry.chrome.silent}, covered elsewhere ${entry.chrome.covered}` : " | chrome: no program of the grid") : "";
+    lines.push(`${String(entry.rows).padStart(8)} rows (${(100 * entry.share).toFixed(1).padStart(5)}%) ${String(entry.sites).padStart(7)} sites ${String(entry.programs).padStart(3)} program(s) ${entry.toV ? `toV ${entry.toV} ` : ""}${entry.ids.join(" + ")}${chrome}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 
 async function rankCommand(argv) {
-  const found = options(argv, ["report", "top"]);
+  const found = options(argv, ["report", "top", "judged"]);
   if (!found.report) throw new Error("--report <corpus report.json> is required");
   const report = JSON.parse(readFileSync(resolve(found.report), "utf8"));
   if (report.kind !== "what-if" || report.source !== "corpus") throw new Error("rank reads a corpus what-if report");
-  process.stdout.write(rankText(report, Number(found.top ?? 40)));
+  const judged = found.judged ? JSON.parse(readFileSync(resolve(found.judged), "utf8")) : null;
+  process.stdout.write(rankText(report, Number(found.top ?? 40), judged));
 }
 
 /** The summary printed after a run: per set, the harness's counts and the groups that moved. */

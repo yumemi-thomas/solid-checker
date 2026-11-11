@@ -10,7 +10,7 @@ import { AssumedReportError } from "./lib/assumed.mjs";
 import { cleanReport, flippedReport } from "./lib/assumed-fixtures.mjs";
 import {
   addOutcomes, calibration, canonical, chromeRecords, finishFold, finishJudge, fold, foldOne, groupOf, judgeMoves, judgeOne, judgeReport, label, liftingSetsOf, newFold, newJudge, parseSet,
-  premiseOf, premiseSetsFromBaselines, programOutcomes, programWantsSet, rankSets, rankText, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
+  chromeOf, premiseOf, premiseSetsFromBaselines, programOutcomes, programWantsSet, rankSets, rankText, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
 } from "./what-if.mjs";
 
 const HERE = "/p";
@@ -439,4 +439,21 @@ test("a grid program is run under a set when a formula row fires one of its haza
   // a program kept by its causes alone has no formula row, and one the scan read without `kinds` has no list
   assert.equal(programWantsSet({ formulas: [], kinds: ["unresolved-invocation"] }, set("Premise(unresolved-invocation)")), true);
   assert.equal(programWantsSet({ formulas: [] }, set("Premise(unresolved-invocation)")), false);
+});
+
+test("the ranking with a judged grid report: Chrome's tally of each set beside its corpus payoff", () => {
+  const group = (toClean) => ({ rows: toClean, toClean, toV: 0, toVOther: 0, stillU: 0, blockedChanged: 0, toUOther: 0, besideV: 0 });
+  const report = {
+    kind: "what-if", source: "corpus", programs: 1, control: { programs: 1, same: 1, flipped: 0 }, baselines: [{ rows: { u: 100 } }],
+    sets: [{ name: "a", ids: ["Premise(a-b)"] }, { name: "b", ids: ["Premise(c-d)"] }], arms: { a: { counts: { uLost: 10 } }, b: { counts: { uLost: 5 } } }, groups: { a: { "a-b": group(10) }, b: { "c-d": group(5) } }, moved: { a: ["p"], b: ["p"] },
+  };
+  const judged = { chromeRecords: 7, sets: { a: { programs: 30, noRecord: 10, verdicts: { "clean-silent": 12, "clean-covered-elsewhere": 5, "FALSE-CLEAN": 3 } }, other: { programs: 1, noRecord: 0, verdicts: {} } } };
+  assert.deepEqual(chromeOf(judged, "a"), { judged: 20, silent: 12, covered: 5, falseClean: 3, other: 0 });
+  assert.equal(chromeOf(judged, "b"), null);
+  assert.equal(chromeOf(null, "a"), null);
+  const text = rankText(report, 5, judged);
+  assert.match(text, /Chrome: 7 record\(s\)/);
+  assert.match(text, /10 rows \( 10\.0%\).*Premise\(a-b\) \| chrome\s+20 judged, false clean\s+3, silent 12, covered elsewhere 5/);
+  assert.match(text, /Premise\(c-d\) \| chrome: no program of the grid/);
+  assert.equal(rankText(report, 5).includes("chrome"), false, "no judged report, no Chrome column");
 });
