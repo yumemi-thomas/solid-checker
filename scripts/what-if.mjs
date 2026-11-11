@@ -230,12 +230,13 @@ async function whatIfRun({ program, baseline, name, ids, binaries, env = checker
 }
 
 /** What a stored result keeps of a run: what moved (rows that did not stay as they were, findings that are new, the whole list of findings now), not every row. */
-export function slim(entry) {
+export function slim(entry, { keepNow = true } = {}) {
   if (!entry.transitions) return entry;
   const moves = Object.values(entry.transitions).some((list) => list.length > 0);
   const counts = {};
   for (const row of entry.outcomes.rows) counts[row.outcome] = (counts[row.outcome] ?? 0) + 1;
-  return { flipped: entry.flipped, status: entry.status, rows: counts, ...(moves ? { transitions: entry.transitions, moved: entry.outcomes.rows.filter((row) => row.outcome !== "stillU"), new: entry.outcomes.new, now: entry.now } : {}) };
+  // `keepNow: false` (the corpus, whose rows no Chrome record judges) leaves out the findings now and the new ones: the moved rows and the counts are what a project's report keeps.
+  return { flipped: entry.flipped, status: entry.status, rows: counts, ...(moves ? { transitions: entry.transitions, moved: entry.outcomes.rows.filter((row) => row.outcome !== "stillU").map(({ now, ...row }) => (keepNow ? { ...row, now } : row)), ...(keepNow ? { new: entry.outcomes.new, now: entry.now } : {}) } : {}) };
 }
 
 /** One program under the shipped checker and under each of `sets` with the what-if build, one after the other; the program's result. */
@@ -400,22 +401,20 @@ async function corpus(argv) {
   const state = newFold(sets);
   programs.forEach((program, at) => { if (bases[at].error) foldOne(state, { program: program.id, error: bases[at].error }); });
   const jobsList = programs.flatMap((program, at) => (bases[at].error ? [] : asked.map(({ name, ids }) => ({ program, at, name, ids }))));
-  const entries = await pool(jobsList.map(({ program, at, name, ids }) => async () => {
+  const resultsFile = `${basename(resolve(found.out), ".json")}.results.jsonl`;
+  const resultsPath = join(dirname(resolve(found.out)), resultsFile);
+  mkdirSync(dirname(resolve(found.out)), { recursive: true });
+  writeFileSync(resultsPath, "");
+  await pool(jobsList.map(({ program, name, ids, at }) => async () => {
     const entry = await whatIfRun({ program, baseline: bases[at].baseline, name, ids, binaries });
     process.stderr.write(`${program.id} ${name}: ${entry.error ?? (entry.transitions ? `${entry.transitions.uToV.length} U->V, ${entry.transitions.uLost.length} U->clean` : "same")}\n`);
     foldOne(state, { program: program.id, project: program.id, bySet: { [name]: entry } });
-    return slim(entry);
+    // One line a (project, set), written as it ends and not kept: a project's sets together are too long for one string.
+    appendFileSync(resultsPath, `${JSON.stringify({ program: program.id, project: program.id, app: program.row.app, set: name, entry: slim(entry, { keepNow: false }) })}\n`);
+    return null;
   }), jobs);
-  const results = programs.map((program, at) => {
-    if (bases[at].error) return { program: program.id, error: bases[at].error, app: program.row.app, project: program.id };
-    const bySet = {};
-    jobsList.forEach((job, index) => { if (job.at === at) bySet[job.name] = entries[index]; });
-    return { program: program.id, ...bases[at].summary, bySet, app: program.row.app, project: program.id };
-  });
-  const resultsFile = `${basename(resolve(found.out), ".json")}.results.jsonl`;
-  const report = { ...header(binaries, { source: "corpus", manifest: { path: manifestPath, sha256: sha256(manifestPath) }, configuration, sets, programs: results.length }), ...finishFold(state), resultsFile };
-  mkdirSync(dirname(resolve(found.out)), { recursive: true });
-  writeFileSync(join(dirname(resolve(found.out)), resultsFile), results.map((result) => `${JSON.stringify(result)}\n`).join(""));
+  const baselines = programs.map((program, at) => (bases[at].error ? { program: program.id, error: bases[at].error } : { program: program.id, ...bases[at].summary }));
+  const report = { ...header(binaries, { source: "corpus", manifest: { path: manifestPath, sha256: sha256(manifestPath) }, configuration, sets, programs: programs.length }), ...finishFold(state), baselines, resultsFile };
   writeFileSync(resolve(found.out), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(summaryText(report, sets));
 }

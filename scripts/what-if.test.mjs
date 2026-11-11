@@ -312,8 +312,10 @@ test("the corpus command runs the shipped checker and the what-if build, and sto
     assert.equal(report.kind, "what-if");
     assert.equal(report.resultsFile, "report.results.jsonl");
     const lines = (await import("node:fs")).readFileSync(join(root, report.resultsFile), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
-    assert.deepEqual(lines.map((line) => line.program), ["demo/tsconfig.json"]);
-    assert.equal(lines[0].bySet.omw.moved.length, 1);
+    assert.deepEqual(lines.map((line) => `${line.program} ${line.set}`).sort(), ["demo/tsconfig.json control", "demo/tsconfig.json omw", "demo/tsconfig.json patch"]);
+    assert.equal(lines.find((line) => line.set === "omw").entry.moved.length, 1);
+    assert.equal(lines.find((line) => line.set === "omw").entry.now, undefined, "the corpus keeps no list of findings now");
+    assert.deepEqual(report.baselines.map((one) => [one.program, one.status]), [["demo/tsconfig.json", "uncertifiable"]]);
     assert.deepEqual(report.control, { programs: 1, same: 1, flipped: 0 });
     assert.equal(report.arms.omw.counts.uLost, 1);
     assert.equal(report.arms.patch.witnesses.length, 0);
