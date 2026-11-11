@@ -368,6 +368,12 @@ function render(program, instrument) {
       case "class-sblock": return `class ${name} {\n${ind(depth + 1)}static ${block(c.body, depth + 1, open())}\n${ind(depth)}}`;
       case "class-method": return `class ${name} {\n${ind(depth + 1)}${asyncKw}m() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "call" ? line(`new ${name}().m();`) : c.use === "new" ? line(`new ${name}();`) : ""}`;
       case "class-ctor": return `class ${name} {\n${ind(depth + 1)}constructor() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "new" ? line(`new ${name}();`) : ""}`;
+      // ADR 0963 (ob-shapes.mjs): the construct is the text around the body, which is a function body of its own (or one expression, `mode: "expr"`).
+      case "frame": {
+        const at = (text) => text.split("\n").join(`\n${ind(depth)}`);
+        const inner = c.mode === "expr" ? expr(c.body[0].e, depth + 1) : block(c.body, depth + (c.nest ?? 0), open(), [], c.after ?? []);
+        return `${at(c.head)}${inner}${at(c.close)}${(c.then ?? []).map(line).join("")}`;
+      }
       case "dead-if": return `if (false) ${block(c.body, depth, open())}`;
       case "dead-after-return": return `(${asyncKw}() => ${block(c.body, depth, open(), ["return;"])})();`;
       case "dead-fn": return funcDecl(depth);
