@@ -15,7 +15,42 @@
       "repository": "https://github.com/djalmajr/ai-memory-ui",
       "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58",
       "installDir": ".",
-      "packageManager": "npm"
+      "packageManager": "npm",
+      "additions": [
+        {
+          "id": "paraglide",
+          "kind": "paraglide",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/paraglide-js compile --project <copy of project.inlang> --outdir ./src/paraglide --emit-ts-declarations (the app's `i18n` script)"
+          ],
+          "tools": [
+            {
+              "name": "@inlang/paraglide-js",
+              "version": "2.18.1",
+              "from": "the app's node_modules"
+            },
+            {
+              "name": "@inlang/plugin-message-format",
+              "version": "4.6.0",
+              "integrity": "sha512-DK2GZvypDygLchnUaFK/RdCIm2baiRlQftOiesGNKDtjNqioqWHnnu0zg6NKNlo3kD42h5xlRCke7zEjBFzZrg==",
+              "distIndexSha256": "e075989468c5ce0820ac0030044a645a3c979987348b1657b8af6d716b6ad704",
+              "note": "the checkout's project.inlang/settings.json names it by CDN URL (@latest), which resolves to 4.6.0 (npm latest and the highest 4.x on 2026-11-09); the compile ran against a copy of that settings file whose module is the local dist/index.js of the exact package (npm pack @inlang/plugin-message-format@4.6.0), messages/ read through a symlink: the checkout's own project.inlang is untouched"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11"
+          },
+          "output": "src/paraglide",
+          "files": 1517,
+          "sha256": "4e0cb02e55602baa155f4cbef64d1c23863b918044c35547e3aabf085a40215f",
+          "result": {
+            "exit": 0
+          }
+        }
+      ]
     },
     "app-game": {
       "repository": "https://github.com/SonyStone/app-game",
@@ -69,7 +104,35 @@
       "repository": "https://github.com/khmm12/hoxxes-briefing",
       "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa",
       "installDir": ".",
-      "packageManager": "pnpm@12.3.4"
+      "packageManager": "pnpm@12.3.4",
+      "additions": [
+        {
+          "id": "panda-codegen",
+          "kind": "panda",
+          "cwd": "apps/web",
+          "commands": [
+            "node_modules/.bin/panda codegen --clean (the app's `prepare` script)"
+          ],
+          "tools": [
+            {
+              "name": "@pandacss/dev",
+              "version": "1.12.1",
+              "from": "the app's node_modules"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11"
+          },
+          "output": "apps/web/styled-system",
+          "files": 120,
+          "sha256": "47ab2e16a4c137dcc822b9061adf81636b8e1ff9a5921a5848ed7e5f10c30d6b",
+          "result": {
+            "exit": 0
+          }
+        }
+      ]
     },
     "inferay": {
       "repository": "https://github.com/raymondreaming/inferay",
@@ -111,7 +174,42 @@
       "repository": "https://github.com/sinhong2011/probus-hk",
       "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6",
       "installDir": ".",
-      "packageManager": "bun@1.4.0"
+      "packageManager": "bun@1.4.0",
+      "additions": [
+        {
+          "id": "paraglide",
+          "kind": "paraglide",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/paraglide-js compile --project <copy of project.inlang> --outdir ./src/paraglide (the app's `messages` script)"
+          ],
+          "tools": [
+            {
+              "name": "@inlang/paraglide-js",
+              "version": "2.25.0",
+              "from": "the app's node_modules"
+            },
+            {
+              "name": "@inlang/plugin-message-format",
+              "version": "4.6.0",
+              "integrity": "sha512-DK2GZvypDygLchnUaFK/RdCIm2baiRlQftOiesGNKDtjNqioqWHnnu0zg6NKNlo3kD42h5xlRCke7zEjBFzZrg==",
+              "distIndexSha256": "e075989468c5ce0820ac0030044a645a3c979987348b1657b8af6d716b6ad704",
+              "note": "the checkout's project.inlang/settings.json names it by CDN URL (@4), which resolves to 4.6.0 (npm latest and the highest 4.x on 2026-11-09); the compile ran against a copy of that settings file whose module is the local dist/index.js of the exact package (npm pack @inlang/plugin-message-format@4.6.0), messages/ read through a symlink: the checkout's own project.inlang is untouched"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11"
+          },
+          "output": "src/paraglide",
+          "files": 442,
+          "sha256": "27b17f902354913161f72a93129c1144d648f5958fd363b01bb5fad3f3554926",
+          "result": {
+            "exit": 0
+          }
+        }
+      ]
     },
     "sensor-sim": {
       "repository": "https://github.com/heinergrote/sensor-sim",
@@ -147,7 +245,272 @@
       "repository": "https://github.com/proyecto-viviana/ui",
       "commit": "b005c00acb61c07b60612430753d3a2400182bbd",
       "installDir": ".",
-      "packageManager": "pnpm@11.22.0"
+      "packageManager": "pnpm@11.22.0",
+      "additions": [
+        {
+          "id": "workspace-dist-solid-stately",
+          "kind": "workspace-dist",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/vp run --filter @proyecto-viviana/solid-stately build (the root's build:* script for the package, in the root `build` script's order)"
+          ],
+          "tools": [
+            {
+              "name": "vite-plus",
+              "version": "0.2.9",
+              "from": "the app's node_modules (`vp`)"
+            },
+            {
+              "name": "tsdown",
+              "version": "0.22.14",
+              "from": "vite-plus's `vp pack`"
+            },
+            {
+              "name": "typescript",
+              "version": "6.0.3",
+              "from": "the app's node_modules (`tsc -p tsconfig.build.json`)"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11",
+            "builtOn": "in the checkout (macOS arm64, case-insensitive APFS); built again on a case-sensitive APFS volume copy of the app with an identical digest"
+          },
+          "output": "packages/solid-stately/dist",
+          "files": 198,
+          "sha256": "1b654a21b3b09e1baa4448694c61b106baaf6d93b4314fe07b1d9d8636408ef2",
+          "result": {
+            "exit": 0
+          }
+        },
+        {
+          "id": "workspace-dist-solidaria",
+          "kind": "workspace-dist",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/vp run --filter @proyecto-viviana/solidaria build (the root's build:* script for the package, in the root `build` script's order)"
+          ],
+          "tools": [
+            {
+              "name": "vite-plus",
+              "version": "0.2.9",
+              "from": "the app's node_modules (`vp`)"
+            },
+            {
+              "name": "tsdown",
+              "version": "0.22.14",
+              "from": "vite-plus's `vp pack`"
+            },
+            {
+              "name": "typescript",
+              "version": "6.0.3",
+              "from": "the app's node_modules (`tsc -p tsconfig.build.json`)"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11",
+            "builtOn": "in the checkout (macOS arm64, case-insensitive APFS); built again on a case-sensitive APFS volume copy of the app with an identical digest"
+          },
+          "output": "packages/solidaria/dist",
+          "files": 970,
+          "sha256": "c1d571f9910f18ac2d78cc491ce2d7227c3887956ede53675dbc6b0a591da119",
+          "result": {
+            "exit": 1,
+            "tscErrors": 4,
+            "note": "`tsc -p tsconfig.build.json` reports 4 type errors against the pinned rc.21 declarations (TS2322 x3, TS2305 `sharedConfig` of solid-js); the JavaScript and the declarations are emitted; the script's last step (declaration attribution banners) is not reached"
+          }
+        },
+        {
+          "id": "workspace-dist-solidaria-components",
+          "kind": "workspace-dist",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/vp run --filter @proyecto-viviana/solidaria-components build (the root's build:* script for the package, in the root `build` script's order)"
+          ],
+          "tools": [
+            {
+              "name": "vite-plus",
+              "version": "0.2.9",
+              "from": "the app's node_modules (`vp`)"
+            },
+            {
+              "name": "tsdown",
+              "version": "0.22.14",
+              "from": "vite-plus's `vp pack`"
+            },
+            {
+              "name": "typescript",
+              "version": "6.0.3",
+              "from": "the app's node_modules (`tsc -p tsconfig.build.json`)"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11",
+            "builtOn": "in the checkout (macOS arm64, case-insensitive APFS); built again on a case-sensitive APFS volume copy of the app with an identical digest"
+          },
+          "output": "packages/solidaria-components/dist",
+          "files": 448,
+          "sha256": "aebe1dda40d96f8ecd026e11fa276c267e4ae2469938d24803106a04c37d077c",
+          "result": {
+            "exit": 1,
+            "tscErrors": 3,
+            "note": "`tsc -p tsconfig.build.json` reports 3 type errors against the pinned rc.21 declarations (TS2322, TS2305 `sharedConfig` of solid-js x2); the JavaScript and the declarations are emitted; the script's last step (declaration attribution banners) is not reached"
+          }
+        },
+        {
+          "id": "workspace-dist-kumo",
+          "kind": "workspace-dist",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/vp run --filter @proyecto-viviana/kumo build (the root's build:* script for the package, in the root `build` script's order)"
+          ],
+          "tools": [
+            {
+              "name": "vite-plus",
+              "version": "0.2.9",
+              "from": "the app's node_modules (`vp`)"
+            },
+            {
+              "name": "tsdown",
+              "version": "0.22.14",
+              "from": "vite-plus's `vp pack`"
+            },
+            {
+              "name": "typescript",
+              "version": "6.0.3",
+              "from": "the app's node_modules (`tsc -p tsconfig.build.json`)"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11",
+            "builtOn": "in the checkout (macOS arm64, case-insensitive APFS); built again on a case-sensitive APFS volume copy of the app with an identical digest"
+          },
+          "output": "packages/kumo/dist",
+          "files": 13,
+          "sha256": "e8cc59bf9a9d667106b151ea9a5c78844aae89b8198e32bb0c292f6bd7ca638f",
+          "result": {
+            "exit": 0
+          }
+        },
+        {
+          "id": "workspace-dist-geist",
+          "kind": "workspace-dist",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/vp run --filter @proyecto-viviana/geist build (the root's build:* script for the package, in the root `build` script's order)"
+          ],
+          "tools": [
+            {
+              "name": "vite-plus",
+              "version": "0.2.9",
+              "from": "the app's node_modules (`vp`)"
+            },
+            {
+              "name": "tsdown",
+              "version": "0.22.14",
+              "from": "vite-plus's `vp pack`"
+            },
+            {
+              "name": "typescript",
+              "version": "6.0.3",
+              "from": "the app's node_modules (`tsc -p tsconfig.build.json`)"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11",
+            "builtOn": "in the checkout (macOS arm64, case-insensitive APFS); built again on a case-sensitive APFS volume copy of the app with an identical digest"
+          },
+          "output": "packages/geist/dist",
+          "files": 13,
+          "sha256": "4d526b62f9098f663d22c6684a1df6656b807f7f92693d5f9c66cec7c4399668",
+          "result": {
+            "exit": 0
+          }
+        },
+        {
+          "id": "workspace-dist-solid-spectrum",
+          "kind": "workspace-dist",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/vp run --filter @proyecto-viviana/solid-spectrum build (the root's build:* script for the package, in the root `build` script's order)"
+          ],
+          "tools": [
+            {
+              "name": "vite-plus",
+              "version": "0.2.9",
+              "from": "the app's node_modules (`vp`)"
+            },
+            {
+              "name": "tsdown",
+              "version": "0.22.14",
+              "from": "vite-plus's `vp pack`"
+            },
+            {
+              "name": "typescript",
+              "version": "6.0.3",
+              "from": "the app's node_modules (`tsc -p tsconfig.build.json`)"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11",
+            "builtOn": "on a case-sensitive APFS volume copy of the app (rsync), the dist directory copied back unchanged: the package's `src/Provider.ts` and `src/provider/` collide on a case-insensitive volume, where the DOM pass fails with MISSING_EXPORT"
+          },
+          "output": "packages/solid-spectrum/dist",
+          "files": 1936,
+          "sha256": "e646f3ddc8fb258aca5f67f2dad6a3cd581e04d57da4f1d46fe44b2bd871650b",
+          "result": {
+            "exit": 0
+          }
+        },
+        {
+          "id": "workspace-dist-viviana-ui",
+          "kind": "workspace-dist",
+          "cwd": ".",
+          "commands": [
+            "node_modules/.bin/vp run --filter @proyecto-viviana/ui build (the root's build:* script for the package, in the root `build` script's order)"
+          ],
+          "tools": [
+            {
+              "name": "vite-plus",
+              "version": "0.2.9",
+              "from": "the app's node_modules (`vp`)"
+            },
+            {
+              "name": "tsdown",
+              "version": "0.22.14",
+              "from": "vite-plus's `vp pack`"
+            },
+            {
+              "name": "typescript",
+              "version": "6.0.3",
+              "from": "the app's node_modules (`tsc -p tsconfig.build.json`)"
+            }
+          ],
+          "environment": {
+            "offline": "macOS sandbox-exec with network denied (a command that needs the network fails)",
+            "node": "v24.22.1",
+            "date": "2026-11-11",
+            "builtOn": "on a case-sensitive APFS volume copy of the app (rsync), the dist directory copied back unchanged: the package's `src/Provider.ts` and `src/provider/` collide on a case-insensitive volume, where the DOM pass fails with MISSING_EXPORT"
+          },
+          "output": "packages/viviana-ui/dist",
+          "files": 1993,
+          "sha256": "b2985e3b919058f76a9523dbc0eca699694b8a8cd2e8ae578eff6f0702c03030",
+          "result": {
+            "exit": 0
+          }
+        }
+      ]
     }
   },
   "projects": [

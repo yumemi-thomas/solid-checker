@@ -1,6 +1,9 @@
 // A corpus manifest names each app's repository and commit (`apps`), so the
 // corpus can be rebuilt exactly; a sweep over a checkout nobody can rebuild is
-// not comparable with any other.
+// not comparable with any other. What the apps' own tools generated after the install
+// is recorded as `apps.<app>.additions` (scripts/lib/corpus-additions.mjs).
+
+import { assertManifestAdditions } from "./corpus-additions.mjs";
 
 const FIELDS = ["repository", "commit"];
 
@@ -23,4 +26,6 @@ export function assertManifestProvenance(manifest, manifestPath = "manifest") {
       `${manifestPath}: refusing a corpus that cannot be rebuilt at its commits: ${problems.join("; ")}`,
     );
   }
+  // What was added to a checkout after the install (a generated `dist`, Paraglide's messages, Panda's `styled-system`) is recorded in full or the corpus is refused.
+  assertManifestAdditions(manifest, manifestPath);
 }
