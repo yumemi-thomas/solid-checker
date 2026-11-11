@@ -183,6 +183,64 @@ pub(crate) fn call_may_run_code(
         .is_none_or(|primitive| !lookup.dialect.runs_no_user_code(primitive))
 }
 
+/// Why a climb through the slot layers around some code ended where it did (ADR 0959, batch-10 addendum 3). Every stop is
+/// either the dialect's (or the compiler's) proof that the code runs elsewhere than the walk's context, or an obligation of
+/// the rule that asked. The callers match a stop with no wildcard, so a stop nobody decided cannot become the silence "not
+/// this rule's site".
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ClimbStop {
+    /// The code is written in no function body the climb can read: module level, or a parameter list.
+    NoFunction,
+    /// The function around the code is no callback of a primitive: an ordinary function, whose calls the helper walks
+    /// and the in-place layers follow. The slot climb claims nothing about it.
+    NotSlot,
+    /// The path to the code a walk asked for crosses no slot: the code is written in it, or reached through IIFEs alone.
+    NoSlot,
+    /// A callback with a parameter, an async or a generator callback of a primitive that runs it in place: a parameter
+    /// the primitive may never pass, an async callback's code before its first await run in place, shapes no proof
+    /// reads. An obligation of the rule that asked.
+    UnmodelledInPlace,
+    /// The same callback of a primitive that does not run it in place (a timer, a computation of its own): the dialect
+    /// places it elsewhere.
+    UnmodelledElsewhere,
+    /// The slot call is written in a JSX expression: the compiler places it, not the code around the element.
+    JsxPlaced,
+    /// The slot runs its callback in a computation of its own, later, or in a way the dialect does not say.
+    RunsElsewhere,
+    /// The slot runs its callback in place and the walk's policy does not cross it (it takes what the callback throws,
+    /// gives it an owner of its own, throws before running it): the walk states why in its policy.
+    Declined,
+    /// The bound of sixteen layers: outer layers unread, no placement is proven. An obligation of the rule that asked.
+    Bound,
+}
+
+impl ClimbStop {
+    /// Whether a walk asking "is this code my own site?" owes an obligation at this stop: the stops that prove nothing
+    /// about where the code runs (a callback of a primitive that runs it in place that no proof reads; the bound), as
+    /// against the stops that are the dialect's or the compiler's proof that it runs elsewhere, or a layer another
+    /// walk owns. Matched with no wildcard: a new stop is decided here.
+    #[deny(clippy::wildcard_enum_match_arm)]
+    pub(crate) fn owes_obligation(self) -> bool {
+        match self {
+            ClimbStop::UnmodelledInPlace | ClimbStop::Bound => true,
+            ClimbStop::NoFunction
+            | ClimbStop::NotSlot
+            | ClimbStop::NoSlot
+            | ClimbStop::UnmodelledElsewhere
+            | ClimbStop::JsxPlaced
+            | ClimbStop::RunsElsewhere
+            | ClimbStop::Declined => false,
+        }
+    }
+}
+
+/// A climb through slot layers: where the code runs once the layers crossed are (the call of the outermost one, on whose
+/// stack it runs), and why the climb stopped there.
+pub(crate) struct SlotClimb {
+    pub(crate) climb: InPlaceClimb,
+    pub(crate) stop: ClimbStop,
+}
+
 /// [`super::climb_in_place_layers`] that also crosses the primitive slots `crosses` accepts: the climb from
 /// `span` alternates the layers code runs in place (an IIFE, a library carrier, a helper's callback) with the
 /// callbacks of primitives, up to the call that runs the outermost of them, which is where `at` ends. The flags
@@ -193,13 +251,14 @@ pub(crate) fn call_may_run_code(
 /// this does not know. A slot that is not accepted ends the climb at the call inside it. A callback with a
 /// parameter, an `async` or generator callback of a slot that runs it in place is crossed and marked `unmodelled` (ADR
 /// 0959: its placement is an obligation, never a proof); one of any other slot, and a slot call written in a JSX
-/// expression (the compiler places that, not the code around the element), end it, as they end an in-place layer.
+/// expression (the compiler places that, not the code around the element), end it, as they end an in-place layer. The
+/// climb says why it ended ([`ClimbStop`]); `None` where it crossed no layer at all.
 pub(crate) fn climb_through_slots(
     file: &FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
     mut crosses: impl FnMut(&SlotLayer<'_>) -> bool,
-) -> Option<InPlaceClimb> {
+) -> Option<SlotClimb> {
     let mut merged = InPlaceClimb {
         exhausted: false,
         at: span,
@@ -209,7 +268,8 @@ pub(crate) fn climb_through_slots(
         withheld: false,
         unmodelled: false,
     };
-    // Bounded: each step moves to the call that holds the previous function.
+    // Bounded: each step moves to the call that holds the previous function. A loop that runs out ends at the bound.
+    let mut stop = ClimbStop::Bound;
     for step in 0..16 {
         if let Some(next) = super::climb_in_place_layers(file, merged.at, lookup) {
             merged.in_list |= next.in_list;
@@ -223,16 +283,20 @@ pub(crate) fn climb_through_slots(
             merged.at = next.at;
             if next.exhausted {
                 merged.exhausted = true;
+                stop = ClimbStop::Bound;
                 break;
             }
         }
         let Some(function) = owning_function(&file.ast, merged.at) else {
+            stop = ClimbStop::NoFunction;
             break;
         };
         if !function.body.contains(merged.at) {
+            stop = ClimbStop::NoFunction;
             break;
         }
         let Some(layer) = slot_layer(file, function, lookup) else {
+            stop = ClimbStop::NotSlot;
             break;
         };
         // ADR 0959: a callback with a parameter, an async or a generator callback of a primitive that runs it in
@@ -243,14 +307,28 @@ pub(crate) fn climb_through_slots(
             || !function.parameters.is_empty()
             || function.rest_parameter;
         if unmodelled && !matches!(layer.run, SlotRun::InPlace(_)) {
+            stop = ClimbStop::UnmodelledElsewhere;
             break;
         }
-        if call_in_jsx_expression(file, layer.call.span) || !crosses(&layer) {
+        if call_in_jsx_expression(file, layer.call.span) {
+            stop = ClimbStop::JsxPlaced;
+            break;
+        }
+        if !crosses(&layer) {
+            stop = match layer.run {
+                SlotRun::InPlace(_) => ClimbStop::Declined,
+                SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => {
+                    ClimbStop::RunsElsewhere
+                }
+            };
             break;
         }
         merged.unmodelled |= unmodelled;
         merged.at = layer.call.span;
         merged.exhausted |= step == 15;
     }
-    (merged.at != span).then_some(merged)
+    (merged.at != span).then_some(SlotClimb {
+        climb: merged,
+        stop,
+    })
 }

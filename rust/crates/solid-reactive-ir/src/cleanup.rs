@@ -22,7 +22,7 @@ use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
 use super::{Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location};
-use crate::execution_role::direct_callback_runs;
+use crate::execution_role::{ClimbStop, direct_callback_runs};
 use crate::owners::{callback_owner_at_call, containing_ast_function};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 
@@ -578,11 +578,11 @@ pub(super) fn leaf_owner_operations_for_file(
         let step_unproven = |span: Span| climb(span).is_some_and(|(_, unproven)| unproven);
         // ADR 0944: the code at `span` runs in the leaf's own extent through callbacks of primitives (and
         // IIFEs between them) that the dialect says run in place, on the stack of their call: `untrack(() =>
-        // onCleanup(..))` is still the leaf owner's child. `Some` only where a primitive slot is crossed: a
+        // onCleanup(..))` is still the leaf owner's child. `Ok` only where a primitive slot is crossed: a
         // path of IIFE layers alone is `through_iife`'s, a direct site needs neither. A callback that has an
-        // owner of its own (`createRoot`), runs later or in a computation of its own is not crossed, and the
-        // path answers `None`: nothing is claimed through it.
-        let through_slots = |span: Span| -> Option<Crossed> {
+        // owner of its own (`createRoot`), runs later or in a computation of its own is not crossed: the
+        // path answers why it stopped ([`ClimbStop`], ADR 0959), and the caller decides what each stop means.
+        let through_slots = |span: Span| -> Result<Crossed, ClimbStop> {
             let ast = &callback_file.ast;
             let mut at = span;
             let mut slots = Vec::new();
@@ -590,23 +590,44 @@ pub(super) fn leaf_owner_operations_for_file(
                 if direct_callback_runs(callback_file, leaf_callback.span, at) {
                     break;
                 }
-                let function = crate::owners::owning_function(ast, at)?;
+                let Some(function) = crate::owners::owning_function(ast, at) else {
+                    return Err(ClimbStop::NoFunction);
+                };
+                if !function.body.contains(at) {
+                    return Err(ClimbStop::NoFunction);
+                }
+                // ADR 0959: a callback with a parameter, an async or a generator callback is no layer this path
+                // reads: of a primitive that runs it in place it may hold any forbidden operation (an
+                // obligation), of any other it runs where that primitive or no slot places it.
                 if function.r#async
                     || function.generator
                     || !function.parameters.is_empty()
                     || function.rest_parameter
-                    || !function.body.contains(at)
                 {
-                    return None;
+                    return Err(
+                        match crate::execution_role::slot_layer(callback_file, function, lookup) {
+                            Some(layer) => match layer.run {
+                                SlotRun::InPlace(_) => ClimbStop::UnmodelledInPlace,
+                                SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => {
+                                    ClimbStop::UnmodelledElsewhere
+                                }
+                            },
+                            None => ClimbStop::NotSlot,
+                        },
+                    );
                 }
                 if let Some(iife) = ast.calls_with_peeled_callee(function.span).next() {
                     at = iife.span;
                     continue;
                 }
-                let layer = crate::execution_role::slot_layer(callback_file, function, lookup)?;
+                let Some(layer) =
+                    crate::execution_role::slot_layer(callback_file, function, lookup)
+                else {
+                    return Err(ClimbStop::NotSlot);
+                };
                 // A slot written in a JSX expression runs where the compiler places that expression.
                 if crate::execution_role::call_in_jsx_expression(callback_file, layer.call.span) {
-                    return None;
+                    return Err(ClimbStop::JsxPlaced);
                 }
                 let identity_proven = crate::call_primitive_name_cached(
                     lookup,
@@ -619,11 +640,14 @@ pub(super) fn leaf_owner_operations_for_file(
                 .is_some_and(|name| {
                     primitive_identity_proven(dialect, callback_file, layer.call, &name)
                 });
+                at = layer.call.span;
                 slots.push((layer, identity_proven));
-                at = slots.last()?.0.call.span;
             }
-            if !direct_callback_runs(callback_file, leaf_callback.span, at) || slots.is_empty() {
-                return None;
+            if !direct_callback_runs(callback_file, leaf_callback.span, at) {
+                return Err(ClimbStop::Bound);
+            }
+            if slots.is_empty() {
+                return Err(ClimbStop::NoSlot);
             }
             let mut crossed = Crossed {
                 owner: CrossedOwner::Leaf,
@@ -642,50 +666,15 @@ pub(super) fn leaf_owner_operations_for_file(
                             lookup,
                             *identity_proven,
                             crossed,
-                        )?;
+                        )
+                        .ok_or(ClimbStop::Declined)?;
                     }
-                    SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => return None,
+                    SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => {
+                        return Err(ClimbStop::RunsElsewhere);
+                    }
                 }
             }
-            Some(crossed)
-        };
-        // ADR 0959: whether the code at `span` is written in a callback of a primitive that runs it in place
-        // (`untrack`, `latest`, `isPending`, `flush(fn)`, `runWithOwner`, `createRoot`) that takes a parameter, is
-        // async or is a generator: the climb of `through_slots` cannot cross it, and "not this walk's site" would
-        // be a silence there. Such a callback runs on the stack of its primitive's call (a parameter the primitive
-        // never passes, an async callback's code before its first await), so a call written in it may be any of
-        // the forbidden operations: an obligation, not a proof that nothing is claimed.
-        let unmodelled_slot = |span: Span| -> bool {
-            let ast = &callback_file.ast;
-            let mut at = span;
-            for _ in 0..16 {
-                if direct_callback_runs(callback_file, leaf_callback.span, at) {
-                    return false;
-                }
-                let Some(function) = crate::owners::owning_function(ast, at) else {
-                    return false;
-                };
-                if !function.body.contains(at) {
-                    return false;
-                }
-                let layer = crate::execution_role::slot_layer(callback_file, function, lookup);
-                if function.r#async
-                    || function.generator
-                    || !function.parameters.is_empty()
-                    || function.rest_parameter
-                {
-                    return layer.is_some_and(|layer| matches!(layer.run, SlotRun::InPlace(_)));
-                }
-                if let Some(iife) = ast.calls_with_peeled_callee(function.span).next() {
-                    at = iife.span;
-                    continue;
-                }
-                let Some(layer) = layer else {
-                    return false;
-                };
-                at = layer.call.span;
-            }
-            false
+            Ok(crossed)
         };
         // ADR 0883: JSX in the leaf's own text creates a computation or a root
         // with no call to name it. A creating call elsewhere is the helper
@@ -698,7 +687,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 continue;
             }
             // ADR 0944: JSX in the callback of a primitive that runs in place creates under the callback's owner.
-            let crossed = through_slots(site.span);
+            let crossed = through_slots(site.span).ok();
             if !(direct_callback_runs(callback_file, leaf_callback.span, site.span)
                 || through_iife(site.span) != Some(false)
                 || crossed.is_some())
@@ -864,16 +853,21 @@ pub(super) fn leaf_owner_operations_for_file(
                 continue;
             }
             // ADR 0944: through the callbacks of primitives that run in place.
-            let crossed = through_slots(call.span);
+            let path = through_slots(call.span);
+            let crossed = path.as_ref().ok().copied();
             if !own_list
                 && !direct_callback_runs(callback_file, leaf_callback.span, call.span)
                 && through_iife(call.span) != Some(true)
                 && !(handed() && in_place())
                 && crossed.is_none()
             {
-                // ADR 0959: a call under a slot callback the climb cannot cross is an obligation of this rule,
-                // unless it is a call no operation can come from (a primitive the leaf owner never refuses).
-                if unmodelled_slot(call.span) {
+                // ADR 0959: what the stop of the climb means. A callback of a primitive that runs it in place
+                // that the climb cannot read, and a climb that ran out of layers, are obligations of this rule,
+                // unless the call is one no operation can come from (a primitive the leaf owner never refuses);
+                // every other stop is the dialect's or the compiler's proof that the code runs elsewhere, or a
+                // layer other walks own (an ordinary function, an IIFE, a direct site).
+                let obligation = path.err().is_some_and(ClimbStop::owes_obligation);
+                if obligation {
                     // A call of a primitive the leaf owner never refuses cannot operate; a call that is no
                     // primitive (a helper, a member) may, which is the polarity of an obligation.
                     // An accessor or a setter opens no leaf scope of its own (the helper walk's `safe_call`).

@@ -10,7 +10,9 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 use crate::effect_api::{ProofStatus, classify_effect_call};
-use crate::execution_role::{RootBodyGuard, allowed_callback_spans, semantic_write_execution_role};
+use crate::execution_role::{
+    ClimbStop, RootBodyGuard, SlotClimb, allowed_callback_spans, semantic_write_execution_role,
+};
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
 use crate::owners::{analysis_context, computation_is_async};
@@ -2527,6 +2529,7 @@ fn owner_set_around(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -
     false
 }
 
+#[deny(clippy::wildcard_enum_match_arm)]
 fn action_step_body_at(
     file: &FileFacts,
     site: Span,
@@ -2558,11 +2561,31 @@ fn action_step_body_at(
             SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => false,
         }
     }) {
-        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => {
-            unmodelled = climb.unmodelled;
-            climb.at
+        Some(SlotClimb { climb, stop }) => {
+            // A site in a parameter list, or one after an await in its layer, is not claimed.
+            if climb.in_list || climb.suspended.is_some() {
+                return None;
+            }
+            match stop {
+                // Outer layers unread: no step is proven here (the unplaced net asks again from `climb.at`).
+                ClimbStop::Bound => return None,
+                // Every other stop ends the climb at the call inside the layer it stopped at: the dialect, the
+                // compiler or this walk's policy (the closure above) says the code does not run on a step's stack
+                // beyond it, so that call is where the step proof asks. `UnmodelledInPlace` and `NoSlot` are
+                // stops of the leaf-owner walk's path; this climb crosses the first and never reports the second.
+                ClimbStop::NoFunction
+                | ClimbStop::NotSlot
+                | ClimbStop::NoSlot
+                | ClimbStop::UnmodelledInPlace
+                | ClimbStop::UnmodelledElsewhere
+                | ClimbStop::JsxPlaced
+                | ClimbStop::RunsElsewhere
+                | ClimbStop::Declined => {
+                    unmodelled = climb.unmodelled;
+                    climb.at
+                }
+            }
         }
-        Some(_) => return None,
         None => site,
     };
     let (container, index) = file
