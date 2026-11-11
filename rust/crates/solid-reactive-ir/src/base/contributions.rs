@@ -753,6 +753,11 @@ pub(crate) enum Hazard {
     /// (the hash of the key, [`member_hash`] with no container) and defines no
     /// other ([`DefinerKey::Sole`]; value 0).
     ReflectiveDefinitionSole(u32),
+    /// ADR 0965 (batch 11; the what-if build only): a typed cause of uncertifiable rows, the `blockedBy.kind` of the rows it blocks (`function-run-unplaced`,
+    /// `unresolved-invocation`, ...), as a premise a proof would discharge for all of them. No census holds it and no file has it: the seam answers it present
+    /// wherever it is asked, so only an assumption makes it absent, and what that removes is every uncertifiable finding of that kind from the report.
+    #[cfg(feature = "what-if")]
+    Premise(&'static str),
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];

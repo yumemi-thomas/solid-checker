@@ -10,7 +10,7 @@ import { AssumedReportError } from "./lib/assumed.mjs";
 import { cleanReport, flippedReport } from "./lib/assumed-fixtures.mjs";
 import {
   addOutcomes, calibration, canonical, chromeRecords, finishFold, finishJudge, fold, foldOne, groupOf, judgeMoves, judgeOne, judgeReport, label, liftingSetsOf, newFold, newJudge, parseSet,
-  programOutcomes, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
+  premiseSetsFromBaselines, programOutcomes, rankSets, rankText, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
 } from "./what-if.mjs";
 
 const HERE = "/p";
@@ -383,4 +383,45 @@ test("the corpus command runs the shipped checker and the what-if build, and sto
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ADR 0965: a typed cause is a premise a set can assume away.
+test("premise sets: one per typed cause with enough uncertifiable rows, the biggest first, none twice, no violation and no row without a kind", () => {
+  const baseline = (...kinds) => ({ findings: kinds.map((kind, at) => finding({ line: at + 1, ...(kind === "V" ? { kind: "violation", id: "SC1002", rule: "reactive-read-after-await" } : { blockedBy: { kind } }) })) });
+  const baselines = [
+    baseline("function-run-unplaced", "function-run-unplaced", "unresolved-invocation", "V"),
+    baseline("function-run-unplaced", "unresolved-invocation", "search-depth-limit"),
+    { findings: [finding({ line: 9 })] },
+  ];
+  assert.deepEqual(premiseSetsFromBaselines(baselines, [], 2), [
+    { name: "premise:function-run-unplaced", ids: ["Premise(function-run-unplaced)"] },
+    { name: "premise:unresolved-invocation", ids: ["Premise(unresolved-invocation)"] },
+  ]);
+  assert.deepEqual(premiseSetsFromBaselines(baselines, [], 1).map(({ name }) => name), ["premise:function-run-unplaced", "premise:unresolved-invocation", "premise:search-depth-limit"]);
+  assert.deepEqual(premiseSetsFromBaselines(baselines, [{ name: "mine", ids: ["Premise(function-run-unplaced)"] }], 2).map(({ name }) => name), ["premise:unresolved-invocation"]);
+  assert.deepEqual(premiseSetsFromBaselines(baselines, [], 5), []);
+  // a kind is kebab-case or no cause: a row whose blocker names something else asks for no set
+  assert.deepEqual(premiseSetsFromBaselines([baseline("NotAKind", "NotAKind")], [], 1), []);
+});
+
+test("the ranking of a corpus report: the sets by the rows they lift, the share of the corpus's rows, a set that moves nothing last", () => {
+  const group = (toClean, toV = 0) => ({ rows: toClean + toV, toClean, toV, toVOther: 0, stillU: 0, blockedChanged: 0, toUOther: 0, besideV: 0 });
+  const report = {
+    kind: "what-if", source: "corpus", programs: 2, control: { programs: 2, same: 2, flipped: 0 },
+    baselines: [{ rows: { u: 60 } }, { rows: { u: 40 } }],
+    sets: [{ name: "a", ids: ["Premise(a-b)"] }, { name: "b", ids: ["Premise(c-d)"] }, { name: "c", ids: ["Premise(e-f)"] }],
+    arms: { a: { counts: { uLost: 10 } }, b: { counts: { uLost: 40, uToV: 2 } }, c: { counts: {} } },
+    groups: { a: { "a-b": group(12) }, b: { "c-d": group(30, 5), other: group(10) }, c: {} },
+    moved: { a: ["p"], b: ["p", "q"], c: [] },
+  };
+  assert.deepEqual(rankSets(report).map(({ name, sites, rows, toV, programs }) => ({ name, sites, rows, toV, programs })), [
+    { name: "b", sites: 42, rows: 45, toV: 5, programs: 2 },
+    { name: "a", sites: 10, rows: 12, toV: 0, programs: 1 },
+    { name: "c", sites: 0, rows: 0, toV: 0, programs: 0 },
+  ]);
+  assert.equal(rankSets(report)[0].share, 0.45);
+  const text = rankText(report, 2);
+  assert.match(text, /100 uncertifiable rows/);
+  assert.match(text, /45 rows \( 45\.0%\)\s+42 sites\s+2 program\(s\) toV 5 Premise\(c-d\)/);
+  assert.equal(text.split("\n").filter(Boolean).length, 3, "the header and the top two");
 });

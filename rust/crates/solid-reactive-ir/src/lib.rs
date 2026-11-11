@@ -1763,6 +1763,10 @@ pub struct Program {
     pub blocked_by: Vec<blocked_by::BlockedRow>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hazards: Vec<blocked_by::HazardSites>,
+    /// ADR 0965 (the what-if build only): the blocker kinds this run assumed away; the backend reports no uncertifiable finding of them. Never serialized.
+    #[cfg(feature = "what-if")]
+    #[serde(skip)]
+    pub assumed_premises: Vec<String>,
     /// ADR 0949: for each package function that holds a row, the project sites that may run it,
     /// sorted by function location. Not in the internal JSON: the backend reads it.
     #[serde(default, skip_serializing)]

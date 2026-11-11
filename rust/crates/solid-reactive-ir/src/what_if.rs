@@ -54,6 +54,19 @@ pub(crate) fn assumed_absent(hazard: Hazard) -> bool {
     true
 }
 
+/// ADR 0965: the kinds of the `Premise(kind)` ids the process assumed, in the order given.
+pub(crate) fn premises() -> Vec<&'static str> {
+    ASSUMED.get().map_or_else(Vec::new, |assumed| {
+        assumed
+            .iter()
+            .filter_map(|(_, hazard)| match hazard {
+                Hazard::Premise(kind) => Some(*kind),
+                _ => None,
+            })
+            .collect()
+    })
+}
+
 /// The ids the process assumed, in the order given.
 #[must_use]
 pub fn assumed_ids() -> Vec<String> {

@@ -200,3 +200,27 @@ test("the process boundary takes the feature as one thing: every use of the modu
   }
   assert.ok(checked >= 6, `the scan found ${checked} uses: it no longer looks where they are`);
 });
+
+// ADR 0965: a typed cause is a hazard too (`Premise(<blockedBy.kind>)`). What it adds stands behind the feature as well: the variant, the engine's list of the causes a run assumed and
+// the field that carries it, and the one module of the backend that takes findings out of the report for them.
+test("a premise assumption is compiled only with the feature: the Hazard variant, the assumed list, the Program field, and the one backend module that drops findings for it", () => {
+  const lib = read("rust/crates/solid-facts-backend/src/lib.rs").split("\n");
+  const declared = lib.flatMap((line, at) => (/^\s*(pub )?mod what_if_filter;/.test(line) ? [at] : []));
+  assert.equal(declared.length, 1, "the filter module is declared once");
+  assert.equal(lib[declared[0] - 1].trim(), '#[cfg(feature = "what-if")]', "the filter module is not behind the feature");
+  let checked = 0;
+  for (const path of RUST_SOURCES) {
+    if (path.endsWith("/what_if.rs") || path.endsWith("/what_if_filter.rs") || /\/tests?(\/|\.rs)/.test(path)) continue;
+    const lines = read(path).split("\n");
+    lines.forEach((line, at) => {
+      if (/^\s*\/\//.test(line) || !/what_if_filter::|assumed_premises|Hazard::Premise|Premise\(&'static str\)|what_if::premises\(/.test(line)) return;
+      checked += 1;
+      assert.ok(gated(lines, at), `${path}:${at + 1} reaches the premise assumption with no cfg(feature = "what-if") above it or its block: ${line.trim()}`);
+    });
+  }
+  assert.ok(checked >= 6, `the scan found ${checked} uses: it no longer looks where they are`);
+  // The filter is the only function of the backend that takes findings out for an assumption: it names the field and nothing of a default build's drops.
+  const filter = read("rust/crates/solid-facts-backend/src/what_if_filter.rs");
+  assert.match(filter, /assumed_premises/);
+  assert.equal([...filter.matchAll(/\.retain\(/g)].length, 1, "the filter takes findings out in one place");
+});
