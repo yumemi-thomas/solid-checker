@@ -45,6 +45,7 @@ import {
 import { COMPONENT_ENTRIES, parsePkg, pkgShapesOf } from "./package-site.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { PL_CONTEXT_NAMES } from "./primitive-layer-shapes.mjs";
+import { ENTRY_CONTEXT_NAMES } from "./entry-shapes.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
@@ -389,7 +390,7 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
 // await); `no-owner-context-aw-shared-*` keeps the shape.
 // ADR 0940: the `pl-*` contexts are the ten codes' cells, each measured (primitive-layer-shapes.mjs `PL_MEASURED`); a pair left out of them reports another code first,
 // never runs its site, or has a throw hidden by a later one, which the generic judge cannot score, so the census leaves them out for every code.
-const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];

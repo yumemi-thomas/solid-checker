@@ -28,6 +28,7 @@ import { ARM_CONTEXT_NAMES, armContext, armPlacement } from "./arm-shapes.mjs";
 import { SEAM_CONTEXT_NAMES, seamContext, seamPlacement } from "./seam-shapes.mjs";
 import { REF_LAYER_CONTEXT_NAMES, refLayerContext, refLayerPlacement } from "./ref-layer-shapes.mjs";
 import { PL_CONTEXT_NAMES, plContext, plNotVariants, plPlacement } from "./primitive-layer-shapes.mjs";
+import { ENTRY_CONTEXT_NAMES, entryContext, entryNotVariants, entryPlacement } from "./entry-shapes.mjs";
 import { CONTEXT_PACKAGE } from "./package.mjs";
 import { PKG_ENTRIES, packageSite, parsePkg } from "./package-site.mjs";
 
@@ -1075,6 +1076,8 @@ const SEAM_PLACEMENT = seamPlacement();
 const REF_LAYER_PLACEMENT = refLayerPlacement();
 /** ADR 0940 (primitive-layer-shapes.mjs): the site in the callback of a primitive that runs it in place, nested in a host; recall contexts, base shapes. */
 const PL_PLACEMENT = plPlacement();
+/** ADR 0962 (entry-shapes.mjs): the site reached through an indirect action step body, or in a function a leaf's callback enters twice; recall contexts, base shapes. */
+const ENTRY_PLACEMENT = entryPlacement();
 /**
  * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
  * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
@@ -1100,7 +1103,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
 const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
   ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
@@ -1212,13 +1215,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1227,6 +1230,12 @@ for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACE
 
 // ADR 0940: a `pl-*` legal cell the `effect` variant of a primitive code cannot take: with no owner at the site it reports NO_OWNER_EFFECT.
 for (const [code, byContext] of Object.entries(plNotVariants())) {
+  const spec = SPEC[code];
+  spec.recallVariantsNotIn ??= {};
+  for (const [context, variants] of Object.entries(byContext)) spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), ...variants])];
+}
+// ADR 0962: the variants an entry context's cells do not take (entry-shapes.mjs `ENTRY_NOT_VARIANTS`).
+for (const [code, byContext] of Object.entries(entryNotVariants())) {
   const spec = SPEC[code];
   spec.recallVariantsNotIn ??= {};
   for (const [context, variants] of Object.entries(byContext)) spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), ...variants])];
@@ -1700,7 +1709,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? plContext(context, stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
@@ -2263,6 +2272,8 @@ function buildOne(kit, plan = {}) {
     // ADR 0917: a context's `moduleTop` must run before the values; a module source creating them at its scope prints it there instead.
     ...(placed.moduleTop && moduleScoped(source) ? { moduleTop: placed.moduleTop } : placed.top ? { top: placed.top } : {}),
     ...(placed.files ? { files: placed.files, importLines: placed.importLines ?? [] } : {}),
+    // ADR 0962 (entry-shapes.mjs): a dependency the context ships beside its import line.
+    ...(placed.packages ? { packages: placed.packages, importLines: placed.importLines ?? [] } : {}),
     shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}${plan.pkg !== undefined ? `/pk:${plan.pkg}` : ""}`,
     misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}), ...(plan.pkg !== undefined ? { pkg: plan.pkg } : {}) },
   };

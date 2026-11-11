@@ -84,7 +84,9 @@ export function programPackages(program) {
     const seen = sourcedSignals(component, signals);
     for (const { node } of walk(component)) if (node.k === "use" && node.pkg) Object.assign(sites, describeUse(node, seen).pkgFiles ?? {});
   }
-  return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}), ...sites };
+  // ADR 0962: a dependency a context ships (entry-shapes.mjs: the helper that makes an action of the generator it is handed).
+  const shipped = Object.assign({}, ...program.components.map((component) => component.packages ?? {}));
+  return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}), ...sites, ...shipped };
 }
 
 /**
@@ -557,14 +559,15 @@ function render(program, instrument) {
       case "render": used.add("createRenderEffect"); return `createRenderEffect(${f}, ${applyText(e.apply, depth)})`;
       case "tracked": used.add("createTrackedEffect"); return `createTrackedEffect(${f})`;
       case "action": {
-        used.add("action");
+        // ADR 0962 (`via`, a `ref` node): the generator function is handed to a helper that makes the action (a project's `run`, or a dependency's), not to `action`.
+        const callee = e.via ? expr(e.via, depth) : (used.add("action"), "action");
         // `afterYield` (the recall contexts): the body runs after the action's first `yield`, in a later step of its transition.
-        if (e.afterYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield Promise.resolve();"])})`;
+        if (e.afterYield) return `${callee}(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield Promise.resolve();"])})`;
         // `plainYield` (`action-plain-yield-from-apply`): a plain-value `yield` first; the next step runs synchronously on the same
         // stack (`@solidjs/signals` dist/dev.js:1637), so the body is still in the caller's window.
-        if (e.plainYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield 1;"])})`;
+        if (e.plainYield) return `${callee}(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield 1;"])})`;
         const { head, body } = fnParts(e.fn, depth, "()");
-        return `action(function* ${head} ${body})`;
+        return `${callee}(function* ${head} ${body})`;
       }
       default: throw new Error(`cannot print prim ${e.name}`);
     }
