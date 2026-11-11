@@ -381,6 +381,12 @@ function render(program, instrument) {
       // entry-shapes.mjs `pd-ctor-*`: the one expression is the default of the constructor's parameter.
       // `c.args` (batch-10 addendum 13): the arguments of the `new` (an identifier or an expression that is `undefined` at run time runs the default).
       case "class-ctor-default": return `class ${name} {\n${ind(depth + 1)}constructor(p0: unknown = ${expr(c.body[0].e, depth + 1)}) {}\n${ind(depth)}}${line(`new ${name}(${(c.args ?? []).map((argument) => expr(argument, depth)).join(", ")});`)}`;
+      // ADR 0963 (ob-shapes.mjs): the construct is the text around the body, which is a function body of its own (or one expression, `mode: "expr"`).
+      case "frame": {
+        const at = (text) => text.split("\n").join(`\n${ind(depth)}`);
+        const inner = c.mode === "expr" ? expr(c.body[0].e, depth + 1) : block(c.body, depth + (c.nest ?? 0), open(), [], c.after ?? []);
+        return `${at(c.head)}${inner}${at(c.close)}${(c.then ?? []).map(line).join("")}`;
+      }
       case "dead-if": return `if (false) ${block(c.body, depth, open())}`;
       case "dead-after-return": return `(${asyncKw}() => ${block(c.body, depth, open(), ["return;"])})();`;
       case "dead-fn": return funcDecl(depth);

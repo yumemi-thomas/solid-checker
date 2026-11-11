@@ -25,6 +25,7 @@ import { ARM_CONTEXT_NAMES } from "./arm-shapes.mjs";
 import { SEAM_CONTEXT_NAMES } from "./seam-shapes.mjs";
 import { REF_LAYER_CONTEXT_NAMES } from "./ref-layer-shapes.mjs";
 import { ENTRY_CONTEXT_NAMES } from "./entry-shapes.mjs";
+import { OB_CONTEXT_NAMES } from "./ob-shapes.mjs";
 import { TABLE_CONTEXT_NAMES } from "./table-shapes.mjs";
 import { fnv } from "./rng.mjs";
 
@@ -37,7 +38,9 @@ export const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer", ...DEAD_CONT
 // callback, an observer's, a generator nothing steps): the Chrome host judges them (focus.mjs) and boundary-scan.mjs screens them, not this fast-runtime test.
 // ADR 0962: so are the entry shapes (a generator reached through a helper, a dependency or `yield*`; a function entered twice), whose twins are the Chrome host's to judge:
 // kept out, the plan stays what it was before them.
-const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context) && !TABLE_CONTEXT_NAMES.includes(context) && !WRAP_CONTEXT_NAMES.includes(context) && !ARM_CONTEXT_NAMES.includes(context) && !SEAM_CONTEXT_NAMES.includes(context) && !REF_LAYER_CONTEXT_NAMES.includes(context) && !ENTRY_CONTEXT_NAMES.includes(context)),
+// ADR 0963: so are the object-boundary shapes (a site run by a getter, a coercion, an iterator step, a trap, a constructor, a field, a tag or an exported helper, and the twin that
+// never runs it), judged by the Chrome host (focus.mjs): kept out, the plan stays what it was before them.
+const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context) && !TABLE_CONTEXT_NAMES.includes(context) && !WRAP_CONTEXT_NAMES.includes(context) && !ARM_CONTEXT_NAMES.includes(context) && !SEAM_CONTEXT_NAMES.includes(context) && !REF_LAYER_CONTEXT_NAMES.includes(context) && !ENTRY_CONTEXT_NAMES.includes(context) && !OB_CONTEXT_NAMES.includes(context)),
   ...CBP_CONTEXTS.filter((context) => context.startsWith("cbp-attached"))]);
 
 /** One program per (code, context, variant) the recall grids hold for the API variants and contexts, direct, no layer. */

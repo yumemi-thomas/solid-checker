@@ -154,6 +154,10 @@ export const CONTAINER_KINDS = [
 export const APPLY_CONTAINER_KINDS = ["guard-return"];
 /** Containers only a shape holds (entry-shapes.mjs `pd-ctor-*`, ADR 0961 PD): `class-ctor-default` writes its one expression as the default of the parameter of a class's constructor and constructs the class. */
 export const PARAMETER_CONTAINER_KINDS = ["class-ctor-default"];
+/** The frame (ob-shapes.mjs, ADR 0963): a construct written as raw text around the statements, never drawn at random. The body is the body of a function of its own
+ * (a getter, a trap, a constructor, a tag), or one expression (`mode: "expr"`, a class field's initializer); `head` precedes it, `close` follows it, `after` are the lines
+ * it ends with (a `return`), `then` are the statements that run the construct (none in a twin that never runs it), `nest` the levels the body sits deeper than the head. */
+export const FRAME_CONTAINER_KINDS = ["frame"];
 /** Kinds whose body is the body of a function of its own (an `await` needs `async`). The rest run inside the parent function. */
 export const FUNCTION_KINDS = new Set([
   "comp-never", "comp-rendered", "comp-slot", "comp-prop", "comp-returned", "class-method", "class-ctor", "class-static", "class-sblock",
@@ -509,8 +513,8 @@ export function validate(program, { maxNodes = 400 } = {}) {
     }
 
     function checkContain(stmt, scope) {
-      if (!CONTAINER_KINDS.includes(stmt.kind) && !APPLY_CONTAINER_KINDS.includes(stmt.kind) && !PARAMETER_CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
-      const own = FUNCTION_KINDS.has(stmt.kind);
+      if (!CONTAINER_KINDS.includes(stmt.kind) && !APPLY_CONTAINER_KINDS.includes(stmt.kind) && !PARAMETER_CONTAINER_KINDS.includes(stmt.kind) && !FRAME_CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
+      const own = FUNCTION_KINDS.has(stmt.kind) || FRAME_CONTAINER_KINDS.includes(stmt.kind);
       if (stmt.async && !ASYNC_KINDS.has(stmt.kind)) fail(`${where}: a ${stmt.kind} cannot be async`);
       if (stmt.kind === "comp-rendered" && stmt.body.at(-1)?.k !== "return") fail(`${where}: a rendered component returns`);
       if (USES[stmt.kind] && !USES[stmt.kind].includes(stmt.use)) fail(`${where}: a ${stmt.kind} is used "${stmt.use}"`);
