@@ -784,15 +784,23 @@ pub(crate) fn package_entry_table(
             {
                 continue;
             }
+            // The tag of an element is entered at the element's opening tag (where a render's frame stands), any
+            // other use at the call or element it is an argument or attribute of.
+            let anchor = file
+                .ast
+                .jsx_elements
+                .iter()
+                .find(|element| element.name.span.contains(*at))
+                .map_or_else(|| entry_anchor(file, *at), element_site);
             for &root in carried {
                 by_root
                     .entry(mentions.roots[root].clone())
                     .or_default()
                     .push(site(Entry {
                         path: path.clone(),
-                        span: entry_anchor(file, *at),
+                        span: anchor,
                         reference: *at,
-                        kind: crate::DependencyEntry::Reference,
+                        kind: crate::DependencyEntry::Render,
                     }));
             }
         }
