@@ -900,7 +900,7 @@ fn after_await_obligation(reason: Option<&solid_reactive_ir::AfterAwaitObligatio
         Some(Why::AsyncSourceMayBePending) => "the source is async: read while pending it throws before any warning, read settled it warns, and which of the two this read meets is not proven".to_owned(),
         Some(Why::PropBackingUnproven { callers_unenumerable: true }) => "this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out".to_owned(),
         Some(Why::PropBackingUnproven { callers_unenumerable: false }) => "whether this prop is signal-backed is not proven from its uses".to_owned(),
-        Some(Why::ParameterInitializerUnplaced) => "the call after the await runs the parameter initializers of the function it calls (a default value, a destructuring default, an IIFE or closure in one, a constructor's) when it omits the argument, and the checker does not read which calls omit it, so whether a read there runs untracked on this computation's continuation is not proven".to_owned(),
+        Some(Why::ParameterInitializerUnplaced) => "the call after the await runs a parameter initializer of the function it calls (the default of an argument it omits, a destructuring default, an IIFE or closure in one, a constructor's) that holds code that may read a source, and the checker does not follow what that code reads, so whether a read there runs untracked on this computation's continuation is not proven".to_owned(),
         None => "whether this read runs untracked after the await on this computation's run is not proven".to_owned(),
     };
     format!("{why}{TAIL}")
