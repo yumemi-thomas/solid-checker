@@ -956,7 +956,7 @@ impl<'l, 'a> Walk<'l, 'a> {
         if !self.visiting.insert(key.clone()) {
             return None;
         }
-        let mut found: Option<EffectPhaseOrigin> = None;
+        let mut origins: Vec<EffectPhaseOrigin> = Vec::new();
         for (caller, callee) in self
             .lookup
             .function_call_sites(file.path.as_str(), literal.span)
@@ -986,21 +986,17 @@ impl<'l, 'a> Walk<'l, 'a> {
             }
             self.stepped = true;
             self.from = Some(literal.span);
-            if let Some(origin) = self.layer(caller, call.span, helper_calls + 1) {
-                let nearer = match &found {
-                    Some(known) => origin.helper_calls < known.helper_calls,
-                    None => true,
-                };
-                if nearer {
-                    found = Some(origin);
-                }
-            }
+            origins.extend(self.layer(caller, call.span, helper_calls + 1));
         }
         self.visiting.remove(&key);
-        found.map(|origin| EffectPhaseOrigin {
-            mixed: true,
-            ..origin
-        })
+        // The nearest origin (fewest helper calls); of equals, the first found.
+        origins
+            .into_iter()
+            .min_by_key(|origin| origin.helper_calls)
+            .map(|origin| EffectPhaseOrigin {
+                mixed: true,
+                ..origin
+            })
     }
 
     /// `literal` is a function bound to a name: its flush runs only in the
