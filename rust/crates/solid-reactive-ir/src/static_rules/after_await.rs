@@ -627,11 +627,32 @@ fn constructed_constructor<'f>(file: &'f FileFacts, call: &CallFact) -> Option<&
     file.ast.function_at(constructor.value?)
 }
 
+/// ADR 0961 (PD, batch-10 addendum 13): whether the argument keeps the parameter's default from running. Only syntax proves a
+/// value defined (`argument_values.rs`: a type says nothing about runtime nullishness): a `null`, a function, a primitive, object
+/// or array literal. An identifier or any other expression may be `undefined` at run time (`h(maybe)`, `h(c ? 1 : undefined)`),
+/// and then the default runs; a spread may have the argument away.
+fn proves_defined(argument: &solid_facts::ast::ArgumentFact) -> bool {
+    use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+    !argument.spread
+        && (matches!(
+            argument.value,
+            ArgumentValueKind::Null
+                | ArgumentValueKind::Function
+                | ArgumentValueKind::AsyncFunction
+        ) || matches!(
+            argument.runtime_value_kind,
+            RuntimeValueKind::Primitive
+                | RuntimeValueKind::Function
+                | RuntimeValueKind::Object
+                | RuntimeValueKind::Array
+        ))
+}
+
 /// ADR 0961 (PD): whether `call` runs a parameter initializer of `function` that holds code that may read a source (a call, a
-/// member access, a function: an IIFE or a closure), when it omits the argument. A default is evaluated when the call passes no
-/// argument at its index, passes `undefined`, or may have it spread away; a destructuring pattern's defaults are evaluated
-/// whatever the argument is (a property it lacks), so such a parameter counts whenever its pattern holds that code. A constant
-/// default reads nothing, and an argument the call passes keeps the default from running.
+/// member access, a function: an IIFE or a closure). A default is evaluated unless the call proves a defined value at its index
+/// ([`proves_defined`]): no argument, `undefined`, a spread before it, and an identifier or an expression that may be
+/// `undefined` all run it; a destructuring pattern's defaults are evaluated whatever the argument is (a property it lacks), so
+/// such a parameter counts whenever its pattern holds that code. A constant default reads nothing.
 fn parameter_initializer_runs(
     target: &FileFacts,
     function: &FunctionFact,
@@ -662,15 +683,13 @@ fn parameter_initializer_runs(
             let Some(initializer) = parameter.initializer else {
                 return false;
             };
-            let omitted = call
+            let keeps_default = call
                 .arguments
                 .iter()
                 .take(index + 1)
-                .any(|argument| argument.spread)
-                || call.arguments.get(index).is_none_or(|argument| {
-                    argument.value == solid_facts::ast::ArgumentValueKind::Undefined
-                });
-            omitted && may_read(initializer)
+                .all(|argument| !argument.spread)
+                && call.arguments.get(index).is_some_and(proves_defined);
+            !keeps_default && may_read(initializer)
         })
 }
 
@@ -1568,10 +1587,12 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         // holds code that may read a source and no row stands at the call yet, the call is an obligation, never silence.
         if let Some((file, ast_function)) = ast_function(self.files, function) {
             for candidate in &file.ast.calls {
-                if !ast_function.body.contains(candidate.span)
-                    || crate::owners::containing_ast_function(&file.ast, candidate.span)
-                        .is_none_or(|owner| owner.span != ast_function.span)
-                {
+                // A call this function's own body writes: the innermost function around it is this one (a nested function's calls
+                // are its own member's).
+                let written_here = ast_function.body.contains(candidate.span)
+                    && crate::owners::containing_ast_function(&file.ast, candidate.span)
+                        .is_some_and(|owner| owner.span == ast_function.span);
+                if !written_here {
                     continue;
                 }
                 let after_await =

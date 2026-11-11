@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { runtimeEvents } from "./classify.mjs";
 import { policyOf } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
-import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, GE_ACTION_CODES, GE_APPLY_CODES, GE_COMPUTE_CODES, GE_LEAF_CODES, GE_LEAF_HOSTS, GE_STEPS, PD_FORMS, PD_HOSTS, PD_HOST_CODES, PD_NEVER_RUN, TW_LAYERS, entryNotVariants, entryPlacement, geLeafNames, pdNames, twParts } from "./entry-shapes.mjs";
+import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, GE_ACTION_CODES, GE_APPLY_CODES, GE_COMPUTE_CODES, GE_LEAF_CODES, GE_LEAF_HOSTS, GE_STEPS, PD_ARGS, PD_ARG_FORMS, PD_FORMS, PD_HOSTS, PD_HOST_CODES, PD_NEVER_RUN, TW_LAYERS, entryNotVariants, entryPlacement, geLeafNames, pdNames, twParts } from "./entry-shapes.mjs";
 import { DEFAULT_FAST_INSTALL, runFast } from "./fast.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
@@ -25,13 +25,14 @@ const lines = (text) => text.split("\n").map((line) => line.trim());
 const at = (all, wanted, from = 0) => all.findIndex((line, index) => index >= from && line === wanted);
 
 describe("the entry contexts", () => {
-  it("are the action family's eight, the twice-entered family's 72, the generator-stepped family's 59 and the parameter-initializer family's 40, each name parsed back", () => {
+  it("are the action family's eight, the twice-entered family's 72, the generator-stepped family's 59 and the parameter-initializer family's 90, each name parsed back", () => {
     // nine steps in each of six hosts (an effect's apply, a memo's compute, an effect's compute, an action's step, a tracked effect, an onSettled), and the legal twin of the apply, of the memo, of the action and of the two leaf hosts
-    // six forms, a twin that passes the argument and a twin that leaves the call to a handler, in each of five hosts
-    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3 + (9 * 6 + 5) + 5 * 8);
+    // six forms, ten more for the argument a call passes that is `undefined` at run time (five forms, two ways, batch-10 addendum 13), a twin that passes the argument
+    // and a twin that leaves the call to a handler, in each of five hosts
+    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3 + (9 * 6 + 5) + 5 * (6 + 5 * 2 + 2));
     expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ae-"))).toHaveLength(8);
     expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ge-"))).toHaveLength(59);
-    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("pd-"))).toHaveLength(40);
+    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("pd-"))).toHaveLength(90);
     for (const name of ENTRY_CONTEXT_NAMES.filter((one) => one.startsWith("tw-"))) {
       const parts = twParts(name);
       expect(parts, name).not.toBeNull();
@@ -43,13 +44,15 @@ describe("the entry contexts", () => {
   it("are placed for the codes whose tolerant layer they use, and for no other", () => {
     const placement = entryPlacement();
     expect(Object.keys(placement).sort()).toEqual(["CLEANUP_IN_FORBIDDEN_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "REACTIVE_WRITE_IN_OWNED_SCOPE", "UNTRACKED_READ_AFTER_AWAIT"]);
-    const pd = (host, code = null) => ({ misuse: PD_FORMS.map((form) => `pd-${form}-${host}`), legal: pdNames(host, code).filter((name) => /^pd-(passed|idle)-/.test(name)) });
+    const pd = (host, code = null) => ({ misuse: [...PD_FORMS.map((form) => `pd-${form}-${host}`), ...PD_ARG_FORMS.flatMap((form) => PD_ARGS.map((arg) => `pd-${form}-${host}-${arg}`))], legal: pdNames(host, code).filter((name) => /^pd-(passed|idle)-/.test(name)) });
     for (const code of GE_APPLY_CODES) expect(placement[code]).toEqual({ misuse: [...GE_STEPS.map((step) => `ge-${step}-apply`), ...pd("apply", code).misuse], legal: ["ge-idle-apply", ...pd("apply", code).legal] });
     for (const code of GE_COMPUTE_CODES) expect(placement[code]).toEqual({ misuse: ["memo", "effect"].flatMap((host) => GE_STEPS.map((step) => `ge-${step}-${host}`)), legal: ["ge-idle-memo"] });
     for (const code of GE_ACTION_CODES) expect(placement[code]).toEqual({ misuse: ["ae-helper", "ae-helper-named", "ae-package", "ae-delegate", ...GE_STEPS.map((step) => `ge-${step}-action`), ...pd("action", code).misuse], legal: ["ae-helper-plain", "ae-helper-named-plain", "ae-package-plain", "ae-delegate-plain", "ge-idle-action", ...pd("action", code).legal] });
     // the parameter-initializer family: the hosts name the codes it is placed for
     expect(PD_HOSTS).toEqual(["action", "apply", "tracked", "settled", "await"]);
     expect(PD_FORMS).toEqual(["value", "iife", "closure", "helper", "destructured", "ctor"]);
+    expect(PD_ARG_FORMS).toEqual(["value", "iife", "closure", "helper", "ctor"]);
+    expect(PD_ARGS).toEqual(["undef", "cond"]);
     expect(placement.UNTRACKED_READ_AFTER_AWAIT).toEqual(pd("await"));
     for (const [host, codes] of Object.entries(PD_HOST_CODES)) for (const code of codes) expect(pdNames(host, code).every((name) => placement[code].misuse.includes(name) || placement[code].legal.includes(name)), `${code}/${host}`).toBe(true);
     // a cleanup has no legal handler (NO_OWNER_CLEANUP): its legal twin is the one that passes the argument
@@ -229,6 +232,28 @@ describe("the parameter-initializer programs (ADR 0961, PD)", () => {
     expect(memo, awaited.join("\n")).toBeGreaterThan(-1);
     expect(awaited[memo + 1]).toBe("await Promise.resolve();");
     expect(awaited[memo + 2]).toBe("pdf1();");
+  });
+  it("pass an argument that is undefined at run time and that no syntax proves defined, as an identifier or as the expression (batch-10 addendum 13)", () => {
+    const undef = lines(textOf("UNTRACKED_READ_AFTER_AWAIT", "pd-value-await-undef").built.text);
+    const memo = undef.findIndex((line) => /^const m1 = createMemo\(async \(\) => \{$/.test(line));
+    expect(memo, undef.join("\n")).toBeGreaterThan(-1);
+    expect(undef[memo + 1]).toBe("await Promise.resolve();");
+    expect(undef[memo + 2]).toBe("const u1 = Math.random() > 2 ? 1 : undefined;");
+    expect(undef[memo + 3]).toBe("pdf1(u1);");
+    const cond = lines(textOf("FLUSH_IN_ACTION", "pd-helper-action-cond").built.text);
+    expect(cond).toContain("pdf1(Math.random() > 2 ? 1 : undefined);");
+    expect(cond).toContain("const pdf1 = (p0: unknown = pdg1()) => {");
+    // the closure form's parameter is a function: its argument is a function or undefined
+    const closure = lines(textOf("PRIMITIVE_IN_FORBIDDEN_SCOPE", "pd-closure-tracked-undef").built.text);
+    expect(closure).toContain("const u1 = Math.random() > 2 ? () => {} : undefined;");
+    expect(closure).toContain("pdf1(u1);");
+    const ctor = lines(textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "pd-ctor-apply-undef").built.text);
+    expect(ctor).toContain("new K8(u1);");
+    expect(ctor).toContain("const u1 = Math.random() > 2 ? 1 : undefined;");
+    // a destructuring pattern's defaults run whatever the argument is: no such form
+    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("pd-destructured-") && /-(undef|cond)$/.test(name))).toEqual([]);
+    // every one is a misuse cell: the default runs
+    for (const form of PD_ARG_FORMS) for (const arg of PD_ARGS) for (const host of PD_HOSTS) expect(ENTRY_CONTEXTS[`pd-${form}-${host}-${arg}`], `pd-${form}-${host}-${arg}`).toBe("misuse");
   });
   it("pass the argument in one legal twin and leave the call to a handler in the other", () => {
     const passed = lines(textOf("FLUSH_IN_ACTION", "pd-passed-action").built.text);

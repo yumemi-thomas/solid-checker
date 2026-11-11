@@ -25,7 +25,7 @@
   "SC1002 handed-read-after-await": 176,
   "SC1002 package-finding-at-entry": 5,
   "SC1002 package-operation-after-await": 3,
-  "SC1002 parameter-initializer-unplaced": 5,
+  "SC1002 parameter-initializer-unplaced": 8,
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 82,
   "SC1003 destructure-root-unproven": 29,

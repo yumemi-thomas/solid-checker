@@ -107,3 +107,53 @@ export function NothingToRead() {
   createEffect(() => m(), () => {});
   return <div />;
 }
+
+// Rows (batch-10 addendum 13): only syntax proves an argument defined. An identifier or an expression may be `undefined` at run time, and
+// then the default runs: Chrome (rc.21) warned UNTRACKED_READ_AFTER_AWAIT at `h(maybe)` where the checker was silent, because it read any
+// argument that is not the literal `undefined` as passed.
+export function IdentifierArgument() {
+  const m = createMemo(async () => {
+    await pause();
+    const maybe: number | undefined = Math.random() > 2 ? 1 : undefined;
+    iifeDefault(maybe);
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+export function ConditionalArgument() {
+  const m = createMemo(async () => {
+    await pause();
+    closureDefault(Math.random() > 2 ? () => 1 : undefined);
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+export function ConstructedArgument() {
+  const m = createMemo(async () => {
+    await pause();
+    new Box(Math.random() > 2 ? 1 : undefined);
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+// Silent: syntax proves each argument defined (`null`, a string, an object, an array, a template literal, a function expression).
+export function DefinedArguments() {
+  const m = createMemo(async () => {
+    await pause();
+    iifeDefault(null);
+    iifeDefault("x");
+    iifeDefault({});
+    iifeDefault([]);
+    iifeDefault(`t${1}`);
+    closureDefault(function () {
+      return 1;
+    });
+    new Box({});
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}

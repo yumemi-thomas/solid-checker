@@ -45,6 +45,11 @@
 //              ctor     a class's constructor takes it, `class K8 { constructor(p0: unknown = flush()) {} }` and `new K8()`
 //       host   action  an action's step body (FLUSH_IN_ACTION)    apply  an effect's apply (the effect phase's codes)    tracked  `createTrackedEffect`    settled  `onSettled` (the leaf codes)
 //              await   an async memo's continuation, after its await (UNTRACKED_READ_AFTER_AWAIT)
+//     pd-<form>-<host>-<arg>   the call passes an argument that is `undefined` at run time but that no syntax proves defined (batch-10 addendum 13: Chrome fires
+//                        UNTRACKED_READ_AFTER_AWAIT at the default of `h(maybe)` after an await; the after-await walk read any non-literal-`undefined` argument as
+//                        "passed" and stayed silent, as 588affbf3 did)
+//       arg    undef   an identifier, `const u1 = Math.random() > 2 ? 1 : undefined; h(u1)`      cond   the expression itself, `h(Math.random() > 2 ? 1 : undefined)`
+//       form   the forms an argument decides: value, iife, closure (the argument is `() => void` or undefined), helper, ctor (`new K8(u1)`); a destructuring pattern's defaults run whatever it is
 //     pd-passed-<host>   legal twin: the host calls `h(1)`: the argument is passed, so the default never runs
 //     pd-idle-<host>     legal twin: the host calls nothing, and a button's handler calls `h()`, where the site is legal
 //
@@ -110,12 +115,20 @@ export const PD_HOST_CODES = {
   await: ["UNTRACKED_READ_AFTER_AWAIT"],
 };
 export const PD_HOSTS = Object.keys(PD_HOST_CODES);
+/** The forms whose default an argument decides (a destructuring pattern's defaults run whatever it is), and how a call passes an argument no syntax proves defined. */
+export const PD_ARG_FORMS = ["value", "iife", "closure", "helper", "ctor"];
+export const PD_ARGS = ["undef", "cond"];
 /**
  * The contexts of one host: a misuse form each, then the two legal twins. `onCleanup` has no legal handler (NO_OWNER_CLEANUP: a cleanup with no owner is a
  * defect of its own), so CLEANUP_IN_FORBIDDEN_SCOPE has the twin that passes the argument only.
  */
-export const pdNames = (host, code = null) => [...PD_FORMS.map((form) => `pd-${form}-${host}`), `pd-passed-${host}`, ...(code === "CLEANUP_IN_FORBIDDEN_SCOPE" ? [] : [`pd-idle-${host}`])];
-const PD_PATTERN = new RegExp(`^pd-(${[...PD_FORMS, "passed", "idle"].join("|")})-(${PD_HOSTS.join("|")})$`);
+export const pdNames = (host, code = null) => [
+  ...PD_FORMS.map((form) => `pd-${form}-${host}`),
+  ...PD_ARG_FORMS.flatMap((form) => PD_ARGS.map((arg) => `pd-${form}-${host}-${arg}`)),
+  `pd-passed-${host}`,
+  ...(code === "CLEANUP_IN_FORBIDDEN_SCOPE" ? [] : [`pd-idle-${host}`]),
+];
+const PD_PATTERN = new RegExp(`^pd-(${[...PD_FORMS, "passed", "idle"].join("|")})-(${PD_HOSTS.join("|")})(?:-(${PD_ARGS.join("|")}))?$`);
 export const PD_CONTEXTS = Object.fromEntries(PD_HOSTS.flatMap((host) => pdNames(host)).map((name) => [name, /^pd-(passed|idle)-/.test(name) ? "legal" : "misuse"]));
 /** The twin that passes the argument never runs its site by construction: a legal cell whose site does not run, as the dead-site contexts (misuse.mjs DEAD_CONTEXTS). */
 export const PD_NEVER_RUN = PD_HOSTS.map((host) => `pd-passed-${host}`);
@@ -239,9 +252,9 @@ function steppedContext(context, stmts, kit) {
   }
 }
 
-/** ADR 0961 (PD): the site in a parameter initializer of `h`, which the host's callback calls (`pd-<form>-<host>`), calls with an argument (`pd-passed-<host>`) or leaves to a handler (`pd-idle-<host>`). */
+/** ADR 0961 (PD): the site in a parameter initializer of `h`, which the host's callback calls (`pd-<form>-<host>`), calls with an argument (`pd-passed-<host>`), calls with an argument that is `undefined` at run time (`pd-<form>-<host>-<arg>`) or leaves to a handler (`pd-idle-<host>`). */
 function parameterContext(context, stmts, kit) {
-  const [, form, host] = PD_PATTERN.exec(context);
+  const [, form, host, arg] = PD_PATTERN.exec(context);
   // Names of their own: the helper layers write `h1` and `f1`, and a `const h1 = (p0 = h1(…))` would call itself.
   const h = kit.name("pdf");
   // A parameter with a default, annotated `unknown` (or the closure's type) so that a call can pass an argument whatever the default's type is.
@@ -250,10 +263,17 @@ function parameterContext(context, stmts, kit) {
   const declared = [];
   let helper;
   let constructed = null;
+  // The argument the call passes (batch-10 addendum 13): `1` (the twin, the default never runs), or a value that is `undefined` at run time and that no syntax proves
+  // defined, so the default runs: an identifier declared in the callback (`undef`) or the conditional itself (`cond`). The closure form's parameter is a function.
+  const maybe = form === "closure" ? "Math.random() > 2 ? () => {} : undefined" : "Math.random() > 2 ? 1 : undefined";
+  const before = [];
+  let args = form === "passed" ? [num(1)] : [];
+  if (arg === "undef") { const u = kit.name("u"); before.push(decl(u, domExpr(maybe))); args = [ref(u)]; }
+  if (arg === "cond") args = [domExpr(maybe)];
   switch (form) {
     case "value": helper = fn([ret(ref("p0"))], { params: [withDefault(single ?? iife(fn([...stmts, ret(num(1))])), "unknown")] }); break;
     case "destructured": helper = fn([ret(ref("p0"))], { params: [{ ...param(single ?? iife(fn([...stmts, ret(num(1))])), true), type: "unknown" }] }); break;
-    case "ctor": constructed = contain("class-ctor-default", 8, [expr(single ?? iife(fn([...stmts, ret(num(1))])))], { use: "new" }); break;
+    case "ctor": constructed = contain("class-ctor-default", 8, [expr(single ?? iife(fn([...stmts, ret(num(1))])))], { use: "new", args }); break;
     case "iife": helper = fn([ret(ref("p0"))], { params: [withDefault(iife(fn([...stmts, ret(num(1))])), "unknown")] }); break;
     case "closure": helper = fn([expr(call(ref("p0")))], { params: [withDefault(fn(stmts), "() => void")] }); break;
     case "helper": {
@@ -268,7 +288,7 @@ function parameterContext(context, stmts, kit) {
   if (helper) declared.push(decl(h, helper));
   // What the host's callback does: calls `h()`, calls `h(1)` (the default is not evaluated), constructs the class, or nothing (a handler calls it).
   const idle = form === "idle";
-  const entering = idle ? [] : constructed ? [constructed] : [expr(call(ref(h), form === "passed" ? [num(1)] : []))];
+  const entering = idle ? [] : constructed ? [...before, constructed] : [...before, expr(call(ref(h), args))];
   const handler = idle ? [button(kit.name("b"), [expr(call(ref(h)))])] : [];
   switch (host) {
     case "action": { const a = kit.name("a"); return { body: [...declared, decl(a, prim("action", fn(entering)))], view: [button(kit.name("b"), [expr(domExpr(`${a}()`))]), ...handler] }; }

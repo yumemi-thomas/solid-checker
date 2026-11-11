@@ -379,7 +379,8 @@ function render(program, instrument) {
       case "class-method": return `class ${name} {\n${ind(depth + 1)}${asyncKw}m() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "call" ? line(`new ${name}().m();`) : c.use === "new" ? line(`new ${name}();`) : ""}`;
       case "class-ctor": return `class ${name} {\n${ind(depth + 1)}constructor() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "new" ? line(`new ${name}();`) : ""}`;
       // entry-shapes.mjs `pd-ctor-*`: the one expression is the default of the constructor's parameter.
-      case "class-ctor-default": return `class ${name} {\n${ind(depth + 1)}constructor(p0: unknown = ${expr(c.body[0].e, depth + 1)}) {}\n${ind(depth)}}${line(`new ${name}();`)}`;
+      // `c.args` (batch-10 addendum 13): the arguments of the `new` (an identifier or an expression that is `undefined` at run time runs the default).
+      case "class-ctor-default": return `class ${name} {\n${ind(depth + 1)}constructor(p0: unknown = ${expr(c.body[0].e, depth + 1)}) {}\n${ind(depth)}}${line(`new ${name}(${(c.args ?? []).map((argument) => expr(argument, depth)).join(", ")});`)}`;
       case "dead-if": return `if (false) ${block(c.body, depth, open())}`;
       case "dead-after-return": return `(${asyncKw}() => ${block(c.body, depth, open(), ["return;"])})();`;
       case "dead-fn": return funcDecl(depth);
