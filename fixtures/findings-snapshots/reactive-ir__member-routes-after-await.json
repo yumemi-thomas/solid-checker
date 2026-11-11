@@ -217,8 +217,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/member-routes-after-await/App.tsx",
-      "start": 2537,
-      "end": 2544,
+      "start": 2762,
+      "end": 2769,
       "fixes": 0
     },
     {
@@ -228,8 +228,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/member-routes-after-await/App.tsx",
-      "start": 2537,
-      "end": 2544,
+      "start": 2762,
+      "end": 2769,
       "fixes": 0
     },
     {
@@ -239,8 +239,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/member-routes-after-await/App.tsx",
-      "start": 2859,
-      "end": 2866,
+      "start": 3041,
+      "end": 3048,
       "fixes": 0
     },
     {
@@ -250,30 +250,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/member-routes-after-await/App.tsx",
-      "start": 2859,
-      "end": 2866,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/member-routes-after-await/App.tsx",
-      "start": 3138,
-      "end": 3145,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/member-routes-after-await/App.tsx",
-      "start": 3138,
-      "end": 3145,
+      "start": 3041,
+      "end": 3048,
       "fixes": 0
     },
     {

@@ -1,0 +1,213 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 1015,
+      "end": 1022,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 1144,
+      "end": 1152,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 1387,
+      "end": 1394,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "computed-call-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 1485,
+      "end": 1495,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 1672,
+      "end": 1679,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 1800,
+      "end": 1805,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 2004,
+      "end": 2011,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 2101,
+      "end": 2123,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 2361,
+      "end": 2368,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 2498,
+      "end": 2502,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 2823,
+      "end": 2831,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 2869,
+      "end": 2876,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 3202,
+      "end": 3210,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 3279,
+      "end": 3286,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 3636,
+      "end": 3644,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 3750,
+      "end": 3755,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 3986,
+      "end": 3993,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
+      "start": 4323,
+      "end": 4330,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-function-after-await/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

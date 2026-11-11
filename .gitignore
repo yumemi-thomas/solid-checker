@@ -1381,3 +1381,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/member-routes-leaf-none/node_modules/**
 !fixtures/reactive-ir/exported-helper-in-apply/node_modules/
 !fixtures/reactive-ir/exported-helper-in-apply/node_modules/**
+!fixtures/reactive-ir/stored-function-after-await/node_modules/
+!fixtures/reactive-ir/stored-function-after-await/node_modules/**
+!fixtures/reactive-ir/stored-function-after-await-none/node_modules/
+!fixtures/reactive-ir/stored-function-after-await-none/node_modules/**

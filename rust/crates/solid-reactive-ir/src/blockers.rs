@@ -74,6 +74,9 @@ pub(crate) const PARAMETER_INITIALIZER_UNPLACED: &str = "parameter-initializer-u
 /// constructed (or the class is evaluated), and no call edge shows that construction: the exact witness (a `new` of the class,
 /// of a subclass, or of an unresolved class) is a later proof target, so the site may run wherever one is.
 pub(crate) const FIELD_INITIALIZER_UNPLACED: &str = "field-initializer-unplaced";
+/// ADR 0964: the call invokes a function value the walk cannot resolve (a parameter, a stored callback, a member of a local value that
+/// names no function body): whatever function the program stored there runs on the stack of the call, and may read a source there.
+pub(crate) const UNRESOLVED_INVOCATION: &str = "unresolved-invocation";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 

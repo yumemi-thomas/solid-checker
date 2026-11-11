@@ -19331,5 +19331,25 @@
    "mx-flush-in-tracked-queue-callback-ob-fn-new-tracked-x-direct-none"
   ],
   "rediscovered": "main 29b3f9312 (release; checker sha256 7f5a78f05b36…, producer 998ad2d92a37…; --runtime-diff all, no cache): 6 programs misplaced (fn-new-settled, fn-new-tracked); the code's 232 ob programs: agree 6, false-clean 146, misplaced 6, recall-gap 74. Chrome (the real oracle, no cache) and the fast host agree on all 2,928 programs of the family: 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's site in a function the program stored where nothing follows it (an array, a map, an object's list, a variable) and invoked through the name it was stored under after the computation's `await` (`callbacks.forEach((c) => c())`, `const f = list[0]; f()`, `registry.get(k)!()`, `bus.emit()` over the listeners an object's method iterates, `Promise.all(tasks.map((t) => t()))`): Chrome (rc.21) warns at the read in the stored function; the checker has SC1001's uncertifiable row there and nothing of SC1002, so the program is certified clean for the claiming rule (a false clean). The `index` form (`list[0]()`) is SC9012's computed-call-target row and the `param` form (`run(stored)`) a violation: both already answered.",
+  "found": "batch 10b (mac-b10-4, 2026-11-12): the research-outside-body report's probe `handed-callback-R` and six more, listed open in ADR 0963; as the stored-function shapes of `sf-shapes.mjs` (`sf-*`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0964 (batch 10b): a call to a function the walk cannot resolve (a parameter, a variable, a call's result that is no primitive), behind the `await` of a tracked or handed async function or inside a method a member route runs, is SC1002's uncertifiable row (`unresolved-invocation`), never a violation; on the fix these programs are recall-gap, 0 false clean",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-sf-bus-effect-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-bus-memo-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-const-effect-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-const-memo-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-foreach-effect-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-foreach-memo-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-mapget-effect-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-mapget-memo-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-promise-effect-async-x-direct-none",
+   "mx-untracked-read-after-await-sf-promise-memo-async-x-direct-none"
+  ],
+  "rediscovered": "the batch-10 head 647b0ccce (release, checker sha256 2fb2a34fa91c\u2026, producer 76fe73f958ae\u2026; fast host): the cells' 14 programs: false-clean 10 (foreach, const, mapget, bus and promise on both hosts), recall-gap 2 (index), agree 2 (param). The fix (release, checker sha256 72ed699f4cb9\u2026; Chrome host and the real oracle, `--runtime-diff all`, no cache): recall-gap 12, agree 2, 0 false clean, and the 28 twins (`-never`, `-before`) 0 false positive; Chrome and the fast host agree on all 42 programs: 0 behaviour, 0 attribution and 0 inconclusive differences."
  }
 ]

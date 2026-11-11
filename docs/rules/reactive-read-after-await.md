@@ -385,3 +385,18 @@ The async computation may be named exactly (a named function expression's bindin
 A `.then` handler handed by name is followed as a literal is. A parameter called after an await is uncertifiable, blocker `handed-read-after-await` (ADR 0669).
 
 An exact forwarding wrapper chain runs a callback on the continuation only when each whole-argument hand-on and the final parameter call occur directly in the wrapper’s synchronous prefix on every completion (ADR 0895). A deferred, conditional, reassigned or unresolved hand-on keeps `handed-read-after-await` at the reads. Closed literal members holding a function by name are followed too.
+
+## Calls to a function nothing resolves (ADR 0964)
+
+A function the program stored where nothing follows it (an array, a map, an object's list, a variable) and invoked through the
+name it was stored under runs on the continuation when the call stands behind the `await`: `callbacks.forEach((c) => c())`,
+`const f = list[0]; f()`, `registry.get(k)!()`, `Promise.all(tasks.map((t) => t()))`, `bus.emit()` over the listeners an
+object's method iterates. The call resolves to no function the walk knows, so a source read in the stored function is untracked.
+The call is an uncertifiable row of this rule (`unresolved-invocation`; `function-run-unplaced` in a handed async function), never
+a violation: nothing here proves what was stored or that it reads a source. The callee is a parameter, a variable, or the result of
+a call that is no primitive; a `function` declaration, a `const` bound to a function literal, an accessor, a setter, an action and a
+primitive are not this. A method a member route runs holds the invocation
+inside it, so the row stands at that invocation, under the same region premise as members (a tracked async computation and a
+suspension). A parameter whose caller hands a function the walk follows stays a violation (ADR 0669), and the row at the parameter's
+call stands beside it. The row is coarse: it stands whatever the stored value is (a clock a caller injects, a testing library's
+destructured query). A call before the `await` is a dependency of the computation, and an event handler is no continuation: no row.

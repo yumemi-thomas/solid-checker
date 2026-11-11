@@ -1029,6 +1029,10 @@ pub enum AfterAwaitObligation {
     /// where nothing follows it), which the continuation of an async computation may run: the program holds one, and the
     /// walk follows calls and runs no member.
     RunUnplaced,
+    /// ADR 0964: the call after the await invokes a function value the walk cannot resolve (a parameter, a stored callback, a
+    /// member of a local value that names no function body): whatever function the program stored there runs on the call's
+    /// stack, and may read a source the continuation has not tracked.
+    UnresolvedInvocation,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

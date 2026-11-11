@@ -71,6 +71,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
+      "start": 1400,
+      "end": 1401,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "generator-stepped",
       "severity": "error",
       "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
@@ -104,6 +115,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
+      "start": 1971,
+      "end": 1972,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "generator-stepped",
       "severity": "error",
       "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
@@ -120,6 +142,17 @@
       "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
       "start": 2380,
       "end": 2383,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-hand-off/App.tsx",
+      "start": 2952,
+      "end": 2953,
       "fixes": 0
     },
     {

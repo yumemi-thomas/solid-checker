@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/attr-namespace.tsx",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -985,6 +996,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-rest.tsx",
       "start": 514,
       "end": 520,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
+      "start": 283,
+      "end": 313,
       "fixes": 0
     },
     {
@@ -2429,6 +2451,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
+      "start": 306,
+      "end": 335,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2506,6 +2539,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
+      "start": 304,
+      "end": 333,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2558,6 +2602,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
       "start": 487,
       "end": 494,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-pointer.tsx",
+      "start": 165,
+      "end": 192,
       "fixes": 0
     },
     {

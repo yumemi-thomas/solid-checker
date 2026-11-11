@@ -103,15 +103,11 @@ class Built {
 class WithField {
   value: unknown = count();
 }
-function Legacy(this: unknown) {
-  count();
-}
 export function Constructed() {
   const m = createMemo(async () => {
     await pause();
     new Built();
     new WithField();
-    new (Legacy as unknown as new () => object)();
     return 1;
   });
   createEffect(() => m(), () => {});

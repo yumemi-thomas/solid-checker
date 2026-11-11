@@ -68,10 +68,14 @@ class Built {
 class WithField {
   value: unknown = createMemo(() => 1);
 }
+function Legacy(this: unknown) {
+  createMemo(() => 1);
+}
 export function Constructed() {
   onSettled(() => {
     new Built();
     new WithField();
+    new (Legacy as unknown as new () => object)();
   });
   return <div />;
 }

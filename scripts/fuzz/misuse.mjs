@@ -30,6 +30,7 @@ import { REF_LAYER_CONTEXT_NAMES, refLayerContext, refLayerPlacement } from "./r
 import { PL_CONTEXT_NAMES, plContext, plNotVariants, plPlacement } from "./primitive-layer-shapes.mjs";
 import { ENTRY_CONTEXT_NAMES, entryContext, entryNotVariants, entryPlacement } from "./entry-shapes.mjs";
 import { OB_CONTEXT_NAMES, obContext, obPlacement } from "./ob-shapes.mjs";
+import { SF_CONTEXT_NAMES, sfContext, sfPlacement } from "./sf-shapes.mjs";
 import { CONTEXT_PACKAGE } from "./package.mjs";
 import { PKG_ENTRIES, packageSite, parsePkg } from "./package-site.mjs";
 
@@ -1089,6 +1090,8 @@ const PL_PLACEMENT = plPlacement();
 const ENTRY_PLACEMENT = entryPlacement();
 /** ADR 0963 (ob-shapes.mjs): the site run by a construct the host triggers (a getter, a coercion, an iterator step, a trap, a constructor, a field, a tag, an exported helper), and its twin that never runs it; recall contexts, a few base shapes. */
 const OB_PLACEMENT = obPlacement();
+/** ADR 0964 (sf-shapes.mjs): the site stored as a function and invoked through an unresolved call after the host's `await`, its twins (never invoked, invoked before the await); recall contexts, one base shape. */
+const SF_PLACEMENT = sfPlacement();
 /**
  * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
  * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
@@ -1114,7 +1117,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
 const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
   ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
@@ -1226,13 +1229,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1728,7 +1731,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit) ?? obContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit));
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit) ?? obContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? sfContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);

@@ -96,8 +96,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 1883,
-      "end": 1892,
+      "start": 1941,
+      "end": 1950,
       "fixes": 0
     },
     {
@@ -107,8 +107,18 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 1900,
-      "end": 1913,
+      "start": 1958,
+      "end": 1971,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
+      "start": 1979,
+      "end": 2021,
       "fixes": 0
     },
     {
@@ -118,8 +128,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 1993,
-      "end": 2003,
+      "start": 2102,
+      "end": 2112,
       "fixes": 0
     },
     {
@@ -129,8 +139,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 2084,
-      "end": 2087,
+      "start": 2193,
+      "end": 2196,
       "fixes": 0
     },
     {
@@ -139,8 +149,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 2400,
-      "end": 2410,
+      "start": 2509,
+      "end": 2519,
       "fixes": 0
     },
     {
@@ -149,8 +159,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 2546,
-      "end": 2550,
+      "start": 2655,
+      "end": 2659,
       "fixes": 0
     },
     {
