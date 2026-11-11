@@ -32,7 +32,8 @@ pub(crate) use missing_owners::*;
 mod package_entries;
 use package_entries::attribute_package_entries;
 pub(crate) use package_entries::{
-    Capabilities, OwnerView, PackageMentions, package_entry_table, package_handed_value_claims,
+    Capabilities, OperationRegions, OwnerView, PackageMentions, package_entry_table,
+    package_handed_value_claims, package_operation_claims, package_operations,
 };
 mod context_census;
 pub(crate) use context_census::*;

@@ -10,4 +10,4 @@
 - The call walk's own: `Walked` (`plain(setN)`): the parameter of an exact call is captured by no nested function, so the walk decides: an SC2001 violation, and no claim beside it.
 - Silent: `Plain` (`<Label />`: nothing handed).
 
-Not claimed (docs/open-work.md): children (`<Pkg>{setN}</Pkg>`); an async accessor's SC5001 (the dialect emits that rule only through the async-read channel); a callee that resolves to no function and names no package symbol.
+Not claimed (docs/open-work.md): children (`<Pkg>{setN}</Pkg>`); a callee that resolves to no function and names no package symbol. An async accessor's SC5001 (the async-read channel) is claimed too: fixture `package-operations` (`AsyncHanded`).

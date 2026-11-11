@@ -923,8 +923,13 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // holds one (the ADR 0284 drop reports a dropped finding there), and the references no
     // exact call or tag decides.
     if let Some(view) = &owner_view {
+        // ADR 0949, addendum 6: the contexts a project site may run package operations in, and the operations.
+        let regions =
+            crate::owners::OperationRegions::build(facts, semantic_lookup, &view.mentions);
+        let operations =
+            crate::owners::package_operations(facts, semantic_lookup, &regions, &program);
         (program.package_entries, program.package_references) =
-            crate::owners::package_entry_table(facts, semantic_lookup, view, &program);
+            crate::owners::package_entry_table(facts, semantic_lookup, view, &program, &operations);
         // Capabilities a project hands code in a package in any shape.
         let claims = crate::owners::package_handed_value_claims(
             facts,
@@ -938,8 +943,23 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
                 source_kinds: &source_discovery.source_kinds,
                 async_sources: &source_discovery.async_sources,
             },
+            &regions,
         );
-        program.static_violations.extend(claims);
+        program.static_violations.extend(claims.violations);
+        program.async_reads.extend(claims.async_reads);
+        let handed_defects = claims.defects.clone();
+        program.static_defects.extend(claims.defects);
+        let claims = crate::owners::package_operation_claims(
+            facts,
+            semantic_lookup,
+            &program,
+            &regions,
+            &operations,
+            &handed_defects,
+        );
+        program.leaf_operations.extend(claims.leaf_operations);
+        program.static_violations.extend(claims.violations);
+        program.static_defects.extend(claims.defects);
     }
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =

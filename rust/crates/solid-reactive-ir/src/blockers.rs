@@ -53,6 +53,13 @@ pub(crate) const STORE_HANDED_TO_PACKAGE: &str = "store-handed-to-package";
 /// ADR 0949: an action a project hands to a package function in a shape no walk reads: the package may call it in
 /// an owned scope (`ACTION_CALLED_IN_OWNED_SCOPE`, SC2002).
 pub(crate) const ACTION_HANDED_TO_PACKAGE: &str = "action-handed-to-package";
+/// ADR 0949, addendum 6: a project site in a leaf owner's callback that may run package code which does something a leaf
+/// owner refuses (`onCleanup`, a creating call, `flush`) in a shape the call walk does not follow (a `new`, a getter, a
+/// reference), or in an effect's apply callback that may run package code that flushes or creates a computation, or
+/// after an await of an async tracked computation that may run package code that reads a reactive source: the claiming
+/// rule's own obligation at the site.
+pub(crate) const PACKAGE_OPERATION_IN_EFFECT_APPLY: &str = "package-operation-in-effect-apply";
+pub(crate) const PACKAGE_OPERATION_AFTER_AWAIT: &str = "package-operation-after-await";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 

@@ -1339,3 +1339,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/package-style-rule/node_modules/**
 !fixtures/reactive-ir/package-handed-values/node_modules/
 !fixtures/reactive-ir/package-handed-values/node_modules/**
+!fixtures/reactive-ir/package-operations/node_modules/
+!fixtures/reactive-ir/package-operations/node_modules/**

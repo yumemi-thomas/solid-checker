@@ -46,6 +46,9 @@
 
 use super::*;
 
+mod operations;
+pub(crate) use operations::{OperationRegions, package_operation_claims, package_operations};
+
 use solid_facts::ast::JsxElementFact;
 use typefacts::Location;
 
@@ -755,9 +758,16 @@ pub(crate) fn package_entry_table(
     lookup: &SemanticLookup<'_>,
     view: &OwnerView,
     program: &crate::Program,
+    operations: &[operations::PackageOperation<'_>],
 ) -> (Vec<crate::PackageEntries>, Vec<crate::PackageReferences>) {
-    // Every row of the program located in a package.
+    // Every row of the program located in a package, and every package operation a project site may run in a
+    // context that makes it a claim ([`package_operations`]).
     let mut rows = Vec::<&Location>::new();
+    rows.extend(
+        operations
+            .iter()
+            .map(operations::PackageOperation::location),
+    );
     rows.extend(program.reads.iter().map(|row| &row.location));
     rows.extend(program.writes.iter().map(|row| &row.location));
     rows.extend(program.actions.iter().map(|row| &row.location));
@@ -1017,7 +1027,24 @@ enum HandedValue {
     Action,
 }
 
+/// What [`package_handed_value_claims`] adds to the program: the claiming rules' static rows, and the async-read
+/// rows of the one rule (SC5001) the dialect emits only through the async-read channel.
+#[derive(Default)]
+pub(crate) struct HandedClaims {
+    pub(crate) violations: Vec<crate::StaticViolation>,
+    pub(crate) async_reads: Vec<crate::AsyncRead>,
+    /// SC1002's rows: a reactive source handed to a package after an await of an async tracked computation.
+    pub(crate) defects: Vec<crate::StaticDefect>,
+}
+
 impl Capabilities<'_> {
+    /// Where the accessor's own source is declared.
+    fn declaration(&self, symbol: &SymbolId) -> Option<&Location> {
+        self.accessors
+            .get(symbol)
+            .map(|(_, declaration)| declaration)
+    }
+
     fn of(&self, symbol: &SymbolId) -> Option<HandedValue> {
         if self.setters.contains_key(symbol) {
             Some(HandedValue::Setter)
@@ -1065,12 +1092,15 @@ pub(crate) fn package_handed_value_claims(
     view: &OwnerView,
     mentions: &PackageMentions,
     capabilities: &Capabilities<'_>,
-) -> Vec<crate::StaticViolation> {
+    regions: &OperationRegions<'_>,
+) -> HandedClaims {
     if mentions.refs.is_empty() && mentions.carriers.is_empty() {
-        return Vec::new();
+        return HandedClaims::default();
     }
     let walk = WalkCtx::new(facts, lookup, &view.nodes, &view.contexts, &view.outgoing);
     let mut claims = Vec::<crate::StaticViolation>::new();
+    let mut async_claims = Vec::<crate::AsyncRead>::new();
+    let mut after_await = Vec::<crate::StaticDefect>::new();
     for file in crate::base::reads::all_files(facts) {
         if facts.dependency_source_root(file.path.as_str()).is_some()
             || !(mentions.refs.contains_key(file.path.as_str())
@@ -1108,13 +1138,29 @@ pub(crate) fn package_handed_value_claims(
                     } else {
                         lookup.entities().at(file.path.as_str(), reference)
                     };
-                    let Some(kind) = own
-                        .or_else(|| lookup.entities().at(file.path.as_str(), declaration))
-                        .and_then(|symbol| capabilities.of(symbol))
+                    let Some(symbol) =
+                        own.or_else(|| lookup.entities().at(file.path.as_str(), declaration))
                     else {
                         continue;
                     };
+                    let Some(kind) = capabilities.of(symbol) else {
+                        continue;
+                    };
                     claims.extend(handed_value_claims(file, at, kind));
+                    // An async source's untracked read is SC5001's (`PENDING_ASYNC_UNTRACKED_READ`, and
+                    // `PENDING_ASYNC_FORBIDDEN_SCOPE` in a leaf): its row is an async read, never a static one.
+                    if let HandedValue::Accessor { asynchronous: true } = kind
+                        && let Some(source) = capabilities.declaration(symbol)
+                    {
+                        async_claims.push(async_handed_claim(file, at, reference, source));
+                    }
+                    // A reactive source the package may read after the await of an async tracked computation:
+                    // the read loses its tracking (`UNTRACKED_READ_AFTER_AWAIT`, SC1002).
+                    if matches!(kind, HandedValue::Accessor { .. } | HandedValue::Store)
+                        && regions.contexts(file.path.as_str(), at).after_await
+                    {
+                        after_await.push(handed_after_await_claim(file, at, reference));
+                    }
                 }
             }
         };
@@ -1155,7 +1201,93 @@ pub(crate) fn package_handed_value_claims(
         crate::location_order(&left.location, &right.location).then_with(|| left.id.cmp(&right.id))
     });
     claims.dedup_by(|left, right| left.location == right.location && left.id == right.id);
-    claims
+    async_claims.sort_by(|left, right| {
+        crate::location_order(&left.location, &right.location)
+            .then_with(|| left.accessor.cmp(&right.accessor))
+    });
+    async_claims
+        .dedup_by(|left, right| left.location == right.location && left.accessor == right.accessor);
+    after_await.sort_by(|left, right| crate::location_order(&left.location, &right.location));
+    after_await.dedup_by(|left, right| left.location == right.location);
+    HandedClaims {
+        violations: claims,
+        async_reads: async_claims,
+        defects: after_await,
+    }
+}
+
+/// SC1002's uncertifiable row at the project site `at` that hands the reactive source `reference` to code in a package
+/// analyzed as source, after an await of an async tracked computation: a read the package makes there is a read after
+/// an await, which tracks nothing, and whether the package reads it is not proven.
+fn handed_after_await_claim(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    reference: Span,
+) -> crate::StaticDefect {
+    crate::StaticDefect {
+        kind: crate::StaticDefectKind::ReactiveReadAfterAwaitThroughCall {
+            accessor: file.source_text(reference).unwrap_or_default().into(),
+            via: file
+                .source_text(at)
+                .unwrap_or_default()
+                .split('(')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_owned(),
+        },
+        location: crate::location(file.path.shared(), at),
+        analysis_context: crate::blockers::PACKAGE_OPERATION_AFTER_AWAIT.into(),
+        fixes: Vec::new(),
+        uncertain: true,
+    }
+}
+
+/// SC5001's uncertifiable row at the project site `at` that hands an async accessor (`reference`, whose source is
+/// declared at `declaration`) to code in a package analyzed as source: the package may read it where nothing
+/// suspends (`PENDING_ASYNC_UNTRACKED_READ`, or `PENDING_ASYNC_FORBIDDEN_SCOPE` in a leaf scope), and whether it does,
+/// and where, is not proven. The same row an unaccounted pending-read site gets (`pending_accounting`): the read's
+/// invocation is the unproven part, so the finding is an obligation and never a violation.
+fn async_handed_claim(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    reference: Span,
+    declaration: &Location,
+) -> crate::AsyncRead {
+    crate::AsyncRead {
+        accessor: file.source_text(reference).unwrap_or_default().into(),
+        location: crate::location(file.path.shared(), at),
+        declaration: declaration.clone(),
+        execution: crate::ExecutionRole::Unknown,
+        leaf_owner: None,
+        under_loading: false,
+        async_provenance: true,
+        declared_loading: false,
+        options_opaque: false,
+        provenance_open: false,
+        caught: false,
+        component_prop: false,
+        ssr_client_hole: false,
+        server_rendering_unresolved: false,
+        host_callback_timing: false,
+        callee_callback_timing: false,
+        invocation_context_unproven: true,
+        leaf_call_site_gates: Vec::new(),
+        mount_unresolved: false,
+        settle_unproven: false,
+        call_attributed: false,
+        carrier_run_unproven: false,
+        creation_pass_unproven: false,
+        root_pass_unproven: false,
+        apply_first_run_pending: false,
+        pending_origin: None,
+        pending_apply: None,
+        origin: None,
+        unaccounted: false,
+        read_unresolved: false,
+        source_module_unresolved: false,
+        walk_cut: false,
+    }
 }
 
 /// Whether the call walk reads the bare argument `index` of `call`: an exact call (not `new`, not `.call`) of a function
@@ -1279,8 +1411,8 @@ fn handed_value_claims(
             asynchronous: false,
         } => (&[ACCESSOR], crate::blockers::ACCESSOR_HANDED_TO_PACKAGE),
         // An async source's untracked read is SC5001's (`PENDING_ASYNC_UNTRACKED_READ`), a rule the dialect emits only
-        // through the async-read channel, never as a static violation (`solve` panics on one): not claimed here yet
-        // (docs/open-work.md); the accessor's own claim stands.
+        // through the async-read channel, never as a static violation (`solve` panics on one): its row is
+        // [`async_handed_claim`]'s; the accessor's own claim stands beside it.
         HandedValue::Accessor { asynchronous: true } => {
             (&[ACCESSOR], crate::blockers::ACCESSOR_HANDED_TO_PACKAGE)
         }
