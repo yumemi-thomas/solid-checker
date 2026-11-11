@@ -923,15 +923,22 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // holds one (the ADR 0284 drop reports a dropped finding there), and the references no
     // exact call or tag decides.
     if let Some(view) = &owner_view {
+        let mentions = crate::owners::PackageMentions::build(facts);
         (program.package_entries, program.package_references) =
-            crate::owners::package_entry_table(facts, semantic_lookup, view, &program);
-        // Accessors and setters a project hands a package function in a shape no walk reads.
+            crate::owners::package_entry_table(facts, semantic_lookup, view, &program, &mentions);
+        // Capabilities a project hands code in a package in any shape.
         let claims = crate::owners::package_handed_value_claims(
             facts,
             semantic_lookup,
             view,
-            &source_discovery.setters,
-            &source_discovery.accessors,
+            &mentions,
+            &crate::owners::Capabilities {
+                setters: &source_discovery.setters,
+                accessors: &source_discovery.accessors,
+                actions: &source_discovery.actions,
+                source_kinds: &source_discovery.source_kinds,
+                async_sources: &source_discovery.async_sources,
+            },
         );
         program.static_violations.extend(claims);
     }

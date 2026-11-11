@@ -190,6 +190,15 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
         let Some(file) = self.file(&entry.path) else {
             return false;
         };
+        // Code after an `await`, or on a later `next()`, runs with no owner whatever the function was entered
+        // under: an async function or a generator around the reference never holds an owner on every run.
+        if file
+            .ast
+            .functions_owning(entry.reference)
+            .any(|function| function.r#async || function.generator)
+        {
+            return false;
+        }
         matches!(
             crate::local_access::hand_off_at(file, entry.reference, self.lookup),
             crate::local_access::HandOff::Call | crate::local_access::HandOff::Inline(_)
@@ -690,6 +699,7 @@ pub(crate) fn package_entry_table(
     lookup: &SemanticLookup<'_>,
     view: &OwnerView,
     program: &crate::Program,
+    mentions: &PackageMentions,
 ) -> (Vec<crate::PackageEntries>, Vec<crate::PackageReferences>) {
     // Every row of the program located in a package.
     let mut rows = Vec::<&Location>::new();
@@ -757,6 +767,36 @@ pub(crate) fn package_entry_table(
     for (root, entry) in walk.references_to(&root_list, &view.provider_free) {
         by_root.entry(root).or_default().push(site(entry));
     }
+    // A use of a binding that carries a package (`const Lazy = dynamic(() => Panel)`; `<Lazy />`) runs its code
+    // wherever it is used: a site of every finding of the package it mentions.
+    for (path, carriers) in &mentions.carriers {
+        let Some(file) = walk.file(path) else {
+            continue;
+        };
+        for (at, declaration) in &file.ast.reference_declarations {
+            let Some(carried) = carriers.get(declaration) else {
+                continue;
+            };
+            if reference_is_not_an_entry(lookup, file, *at, &view.provider_free)
+                || walk
+                    .node_at(path, *at)
+                    .is_some_and(|node| !walk.may_run(node))
+            {
+                continue;
+            }
+            for &root in carried {
+                by_root
+                    .entry(mentions.roots[root].clone())
+                    .or_default()
+                    .push(site(Entry {
+                        path: path.clone(),
+                        span: entry_anchor(file, *at),
+                        reference: *at,
+                        kind: crate::DependencyEntry::Reference,
+                    }));
+            }
+        }
+    }
     let references = by_root
         .into_iter()
         .map(|(root, mut sites)| {
@@ -768,29 +808,155 @@ pub(crate) fn package_entry_table(
     (entries, references)
 }
 
-/// The reactive values a project hands a package function in a shape no walk reads (ADR 0949, addendum 4).
-///
-/// A package analyzed as source is entered by a project call or render, and the checker follows what the
-/// call hands it only where a walk reads the argument: a bare identifier passed to a parameter the
-/// callee calls, through the call graph's summaries (`wr-memo-pkg-handed-setter` is a violation there).
-/// An accessor or a setter that rides inside a larger value (`Bump({ set: setN })`,
-/// `Panel({ read: n })`, `[setN]`) or in a JSX attribute (`<Bump set={setN} />`, `<Panel read={n} />`:
-/// the props object a render builds is no argument a walk reads) reaches the package where the checker
-/// proves nothing of it. The package may call it, and where it does so in an owned scope Solid's dev
-/// build says so: `REACTIVE_WRITE_IN_OWNED_SCOPE` for a setter (SC2001), `STRICT_READ_UNTRACKED` for an
-/// accessor (SC1001). Each such site gets an uncertifiable row of the claiming rule, never a violation:
-/// whether the package calls the value, and whether that call runs in an owned or an untracked scope,
-/// is not proven here (the SC9012 obligation beside it withholds, and claims nothing).
-///
-/// Only references that are values count: a callee (`setN(1)`) is a call, and a reference inside a function
-/// written in the value (`{ set: (v) => setN(v) }`) is that function's own site, judged by its role. A
-/// bare identifier argument is read by the call walk and gets no row here; a JSX attribute never is.
-/// Children are not read: `<Pkg>{setN}</Pkg>` stays a limit (docs/open-work.md).
-pub(crate) fn package_handed_value_claims(
-    facts: &ProjectFacts,
-    lookup: &SemanticLookup<'_>,
-    view: &OwnerView,
-    setters: &HashMap<
+/// Where a project mentions a package analyzed as source (ADR 0949, addendum 4): the references to the symbols a
+/// package declares, and the project bindings that carry one (`const Lazy = dynamic(() => Panel)`: using `Lazy` runs
+/// `Panel`). A site that mentions a package may run its code, by a path no call walk follows.
+pub(crate) struct PackageMentions {
+    /// The package roots, by index.
+    roots: Vec<String>,
+    /// Per project path, the spans of the references to a symbol a package declares, with the package's root, sorted.
+    refs: HashMap<String, Vec<(Span, usize)>>,
+    /// Per project path, the declaration (name) span of each immutable binding whose initializer mentions a package,
+    /// directly or through another such binding, with the roots it mentions.
+    carriers: HashMap<String, HashMap<Span, Vec<usize>>>,
+}
+
+impl PackageMentions {
+    pub(crate) fn build(facts: &ProjectFacts) -> Self {
+        let roots = facts.dependency_source_roots.clone();
+        let root_index: HashMap<&str, usize> = roots
+            .iter()
+            .enumerate()
+            .map(|(index, root)| (root.as_str(), index))
+            .collect();
+        // The root a declaration's path is under: its longest directory prefix that is a root.
+        let mut by_path = HashMap::<&str, Option<usize>>::default();
+        let mut refs = HashMap::<String, Vec<(Span, usize)>>::default();
+        for symbol in facts.typescript.symbols() {
+            let Some(root) = symbol.declarations().iter().find_map(|declaration| {
+                *by_path
+                    .entry(declaration.location.path.as_ref())
+                    .or_insert_with(|| {
+                        let mut prefix = declaration.location.path.as_ref();
+                        loop {
+                            if let Some(index) = root_index.get(prefix) {
+                                return Some(*index);
+                            }
+                            prefix = prefix.rsplit_once('/')?.0;
+                        }
+                    })
+            }) else {
+                continue;
+            };
+            for reference in symbol.references() {
+                if facts
+                    .dependency_source_root(reference.path.as_ref())
+                    .is_some()
+                {
+                    continue;
+                }
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(reference.start_byte),
+                    u32::try_from(reference.end_byte),
+                ) else {
+                    continue;
+                };
+                refs.entry(reference.path.to_string())
+                    .or_default()
+                    .push((Span::new(start, end), root));
+            }
+        }
+        for list in refs.values_mut() {
+            list.sort_unstable();
+            list.dedup();
+        }
+        let mut mentions = Self {
+            roots,
+            refs,
+            carriers: HashMap::default(),
+        };
+        // A binding whose initializer mentions a package carries it: three rounds follow `const B = A`.
+        for _ in 0..3 {
+            let mut found = Vec::<(String, Span, Vec<usize>)>::new();
+            for file in crate::base::reads::all_files(facts) {
+                if facts.dependency_source_root(file.path.as_str()).is_some() {
+                    continue;
+                }
+                for binding in &file.ast.bindings {
+                    if !binding.immutable
+                        || binding.shape != solid_facts::ast::BindingShape::Identifier
+                    {
+                        continue;
+                    }
+                    let (Some(name), Some(initializer)) =
+                        (binding.names.first(), binding.initializer)
+                    else {
+                        continue;
+                    };
+                    let roots = mentions.roots_in(file, initializer);
+                    if !roots.is_empty()
+                        && mentions
+                            .carriers
+                            .get(file.path.as_str())
+                            .is_none_or(|known| known.get(&name.span) != Some(&roots))
+                    {
+                        found.push((file.path.to_string(), name.span, roots));
+                    }
+                }
+            }
+            if found.is_empty() {
+                break;
+            }
+            for (path, name, roots) in found {
+                mentions
+                    .carriers
+                    .entry(path)
+                    .or_default()
+                    .insert(name, roots);
+            }
+        }
+        mentions
+    }
+
+    /// The package roots (indexes) mentioned within `span` of `file`: a reference to a symbol a package declares, or a
+    /// use of a binding that carries one.
+    fn roots_in(&self, file: &solid_facts::FileFacts, span: Span) -> Vec<usize> {
+        let path = file.path.as_str();
+        let mut found = Vec::new();
+        if let Some(list) = self.refs.get(path) {
+            let from = list.partition_point(|(at, _)| at.start < span.start);
+            for (at, root) in &list[from..] {
+                if at.start >= span.end {
+                    break;
+                }
+                if span.contains(*at) {
+                    found.push(*root);
+                }
+            }
+        }
+        if let Some(carriers) = self.carriers.get(path) {
+            let uses = &file.ast.reference_declarations;
+            let from = uses.partition_point(|(at, _)| at.start < span.start);
+            for (at, declaration) in &uses[from..] {
+                if at.start >= span.end {
+                    break;
+                }
+                if span.contains(*at)
+                    && let Some(roots) = carriers.get(declaration)
+                {
+                    found.extend(roots.iter().copied());
+                }
+            }
+        }
+        found.sort_unstable();
+        found.dedup();
+        found
+    }
+}
+
+/// The reactive capabilities of the program, by symbol: what a project can hand to code the checker does not follow.
+pub(crate) struct Capabilities<'a> {
+    pub(crate) setters: &'a HashMap<
         SymbolId,
         (
             SymbolId,
@@ -799,20 +965,80 @@ pub(crate) fn package_handed_value_claims(
             crate::ReactiveSourceKind,
         ),
     >,
-    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
+    pub(crate) async_sources: &'a HashSet<SymbolId>,
+}
+
+/// What a value is that a project hands to code the checker does not follow.
+#[derive(Clone, Copy)]
+enum HandedValue {
+    Setter,
+    Accessor { asynchronous: bool },
+    Store,
+    Action,
+}
+
+impl Capabilities<'_> {
+    fn of(&self, symbol: &SymbolId) -> Option<HandedValue> {
+        if self.setters.contains_key(symbol) {
+            Some(HandedValue::Setter)
+        } else if self.actions.contains_key(symbol) {
+            Some(HandedValue::Action)
+        } else if let Some((source, _)) = self.accessors.get(symbol) {
+            Some(HandedValue::Accessor {
+                asynchronous: self.async_sources.contains(symbol)
+                    || self.async_sources.contains(source),
+            })
+        } else if self.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store) {
+            Some(HandedValue::Store)
+        } else {
+            None
+        }
+    }
+}
+
+/// The reactive values a project hands code in a package in any shape (ADR 0949, addendum 4).
+///
+/// A package analyzed as source is entered by a project call, `new`, render or tagged template, or run by a project
+/// value that carries one (`dynamic(() => Panel)`, `createComponent(Panel, props)`, `Reflect.apply(fn, null, [set])`).
+/// A call walk follows what the call hands only where it resolves the callee to a function and reads the argument; a
+/// package's constructor, its returned object's getters, a hop through a primitive, a carrier, `Reflect.apply`, a
+/// JSX prop and any value inside a larger one are not followed. The package may call, write or read what it is
+/// handed, and where that happens in an owned scope Solid's dev build says so. Every site that mentions a package
+/// (its callee, tag or tag function, or any argument, names a symbol a package declares or a binding that carries one)
+/// and hands an exact capability in an argument, a JSX attribute or a template substitution is an uncertifiable row
+/// of each rule that claims the runtime code the capability's use throws: a setter, `REACTIVE_WRITE_IN_OWNED_SCOPE`
+/// (SC2001); an accessor, `STRICT_READ_UNTRACKED` (SC1001), and for an async source `PENDING_ASYNC_UNTRACKED_READ`
+/// (SC5001); a store, `STORE_WRITE_OUTSIDE_SETTER` (SC2003) and SC1001; an action, `ACTION_CALLED_IN_OWNED_SCOPE`
+/// (SC2002). Never a violation: whether the package uses it, and where, is not proven here; a violation the call walk
+/// proves at the same site stands beside it.
+///
+/// Only references that are values count: a callee (`setN(1)` is a call: the project's own read or write) and a
+/// reference inside a function written in the value (that function's own site, judged by its role) are not handed.
+/// Children (`<Pkg>{setN}</Pkg>`) are not read: a limit (docs/open-work.md).
+pub(crate) fn package_handed_value_claims(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    view: &OwnerView,
+    mentions: &PackageMentions,
+    capabilities: &Capabilities<'_>,
 ) -> Vec<crate::StaticViolation> {
-    if setters.is_empty() && accessors.is_empty() {
+    if mentions.refs.is_empty() && mentions.carriers.is_empty() {
         return Vec::new();
     }
     let walk = WalkCtx::new(facts, lookup, &view.nodes, &view.contexts, &view.outgoing);
-    let in_package = |path: &str| facts.dependency_source_root(path).is_some();
     let mut claims = Vec::<crate::StaticViolation>::new();
     for file in crate::base::reads::all_files(facts) {
-        if in_package(file.path.as_str()) {
+        if facts.dependency_source_root(file.path.as_str()).is_some()
+            || !(mentions.refs.contains_key(file.path.as_str())
+                || mentions.carriers.contains_key(file.path.as_str()))
+        {
             continue;
         }
         let ast = &file.ast;
-        let mut hand = |at: Span, values: &[(Span, bool)]| {
+        let mut hand = |at: Span, callee: Span, values: &[Span]| {
             // A site no execution reaches hands nothing (`may_run`: only a proof of that says no).
             if walk
                 .node_at(file.path.as_str(), at)
@@ -820,58 +1046,52 @@ pub(crate) fn package_handed_value_claims(
             {
                 return;
             }
-            for &(value, bare_is_read) in values {
-                for (reference, declaration) in value_references(ast, value) {
-                    if bare_is_read && ast.peel_ts_sugar_span(value) == reference {
-                        continue;
-                    }
+            if mentions.roots_in(file, callee).is_empty()
+                && values
+                    .iter()
+                    .all(|value| mentions.roots_in(file, *value).is_empty())
+            {
+                return;
+            }
+            for &value in values {
+                for (reference, declaration, shorthand) in value_references(ast, value) {
                     // The reference's own entity where the facts demanded one (an argument, a property
-                    // value), else the entity of the declaration it names (`[setN]`, `c ? setN : off`).
-                    let Some(symbol) = lookup
-                        .entities()
-                        .at(file.path.as_str(), reference)
+                    // value), else the entity of the declaration it names (`[setN]`, `c ? setN : off`);
+                    // a shorthand's is the declaration's alone.
+                    let own = if shorthand {
+                        None
+                    } else {
+                        lookup.entities().at(file.path.as_str(), reference)
+                    };
+                    let Some(kind) = own
                         .or_else(|| lookup.entities().at(file.path.as_str(), declaration))
+                        .and_then(|symbol| capabilities.of(symbol))
                     else {
                         continue;
                     };
-                    let kind = if setters.contains_key(symbol) {
-                        HandedValue::Setter
-                    } else if accessors.contains_key(symbol) {
-                        HandedValue::Accessor
-                    } else {
-                        continue;
-                    };
-                    claims.push(handed_value_claim(file, at, kind));
+                    claims.extend(handed_value_claims(file, at, kind));
                 }
             }
         };
         for element in &ast.jsx_elements {
-            let target = lookup
-                .function_called_at(file.path.as_str(), element.name.span)
-                .or_else(|| lookup.alias_rendered_tag_function(file, element.name.span));
-            if !target.is_some_and(|(target_file, _)| in_package(target_file.path.as_str())) {
-                continue;
-            }
             let values = element
                 .attributes
                 .iter()
                 .filter_map(|attribute| attribute.expression)
                 .chain(element.spreads.iter().map(|spread| spread.argument))
-                .map(|value| (value, false))
                 .collect::<Vec<_>>();
-            hand(element_site(element), &values);
+            hand(element_site(element), element.name.span, &values);
         }
         for call in &ast.calls {
-            let target = crate::execution_role::project_callee_at_parameter(file, call, 0, lookup);
-            if !target.is_some_and(|(target_file, _, _)| in_package(target_file.path.as_str())) {
-                continue;
-            }
             let values = call
                 .arguments
                 .iter()
-                .map(|argument| (argument.span, !argument.spread))
+                .map(|argument| argument.span)
                 .collect::<Vec<_>>();
-            hand(call.span, &values);
+            hand(call.span, call.callee, &values);
+        }
+        for template in &ast.tagged_templates {
+            hand(template.span, template.tag, &template.substitutions);
         }
     }
     claims.sort_by(|left, right| {
@@ -881,29 +1101,30 @@ pub(crate) fn package_handed_value_claims(
     claims
 }
 
-/// What a project hands a package function in a shape no walk reads.
-#[derive(Clone, Copy)]
-enum HandedValue {
-    Setter,
-    Accessor,
-}
-
 /// The references inside `value` that are values the project hands on: not a callee (`setN(1)` is a call, and a
 /// read or a write at the project's own site) and not inside a function written in the value (that function's own
 /// site, judged by its role).
 fn value_references(
     ast: &solid_facts::ast::AstFacts,
     value: Span,
-) -> impl Iterator<Item = (Span, Span)> + '_ {
+) -> impl Iterator<Item = (Span, Span, bool)> + '_ {
     let around = crate::owners::containing_ast_function(ast, value).map(|function| function.span);
     let from = ast
         .reference_declarations
         .partition_point(|(reference, _)| reference.start < value.start);
+    // A shorthand property (`{ setN }`) is no entry of `reference_declarations`: its binding is recorded on it, and the
+    // symbol the facts answer at its span is the property's, never the value binding's (the flag).
+    let shorthands = ast.object_properties.iter().filter_map(|property| {
+        property
+            .shorthand_binding
+            .map(|declaration| (property.value, declaration, true))
+    });
     ast.reference_declarations[from..]
         .iter()
         .take_while(move |(reference, _)| reference.start < value.end)
-        .copied()
-        .filter(move |(reference, _)| {
+        .map(|(reference, declaration)| (*reference, *declaration, false))
+        .chain(shorthands)
+        .filter(move |(reference, _, _)| {
             value.contains(*reference)
                 && ast.calls_with_peeled_callee(*reference).next().is_none()
                 && crate::owners::containing_ast_function(ast, *reference)
@@ -912,47 +1133,84 @@ fn value_references(
         })
 }
 
-/// SC2001's or SC1001's uncertifiable row at the project site that hands a package function a signal's setter or
-/// a reactive accessor in a shape no walk reads ([`package_handed_value_claims`]).
-fn handed_value_claim(
+/// The uncertifiable rows, one per rule that claims the runtime code the use of `kind` throws, at the project site
+/// `at` that hands it to code in a package ([`package_handed_value_claims`]).
+fn handed_value_claims(
     file: &solid_facts::FileFacts,
     at: Span,
     kind: HandedValue,
-) -> crate::StaticViolation {
-    let (id, rule, message, hint, blocker) = match kind {
-        HandedValue::Setter => (
-            "SC2001",
-            "no-write-in-pure-computation",
-            "this hands a signal's setter to code in a package analyzed as source, in a shape no walk of the \
-             project reads; the package may call it, and a write in an owned scope (a component body, a \
-             computation) throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in the dev build; whether it does, and \
-             whether that call runs in an owned scope, cannot be proven here",
-            "Call the setter in an event handler or an effect's apply function, or hand the package a \
-             callback that does.",
-            crate::blockers::SETTER_HANDED_TO_PACKAGE,
-        ),
-        HandedValue::Accessor => (
-            "SC1001",
-            "strict-read-untracked",
-            "this hands a reactive accessor to code in a package analyzed as source, in a shape no walk of \
-             the project reads; the package may call it, and a read where nothing tracks it (a component \
-             body, an owned setup) logs `STRICT_READ_UNTRACKED` in the dev build; whether it does, and \
-             whether that call runs untracked, cannot be proven here",
-            "Read the accessor in a tracking scope (a JSX expression, an effect's compute function or a \
-             memo) and hand the package its value.",
+) -> Vec<crate::StaticViolation> {
+    const SETTER: (&str, &str, &str, &str) = (
+        "SC2001",
+        "no-write-in-pure-computation",
+        "a signal's setter",
+        "a write in an owned scope (a component body, a computation) throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in the dev build",
+    );
+    const ACCESSOR: (&str, &str, &str, &str) = (
+        "SC1001",
+        "strict-read-untracked",
+        "a reactive accessor",
+        "a read where nothing tracks it (a component body, an owned setup) logs `STRICT_READ_UNTRACKED` in the dev build",
+    );
+    const ASYNC: (&str, &str, &str, &str) = (
+        "SC5001",
+        "pending-async-unsuspendable-read",
+        "an async accessor",
+        "a read of a pending value where nothing can suspend it throws `PENDING_ASYNC_UNTRACKED_READ` in the dev build",
+    );
+    const STORE_WRITE: (&str, &str, &str, &str) = (
+        "SC2003",
+        "no-store-mutation-outside-setter",
+        "a store",
+        "a write through the store outside its setter logs `STORE_WRITE_OUTSIDE_SETTER` in the dev build",
+    );
+    const STORE_READ: (&str, &str, &str, &str) = (
+        "SC1001",
+        "strict-read-untracked",
+        "a store",
+        "a read where nothing tracks it (a component body, an owned setup) logs `STRICT_READ_UNTRACKED` in the dev build",
+    );
+    const ACTION: (&str, &str, &str, &str) = (
+        "SC2002",
+        "action-called-in-owned-scope",
+        "an action",
+        "a call in an owned scope throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build",
+    );
+    let (rules, blocker): (&[(&str, &str, &str, &str)], &str) = match kind {
+        HandedValue::Setter => (&[SETTER], crate::blockers::SETTER_HANDED_TO_PACKAGE),
+        HandedValue::Accessor {
+            asynchronous: false,
+        } => (&[ACCESSOR], crate::blockers::ACCESSOR_HANDED_TO_PACKAGE),
+        HandedValue::Accessor { asynchronous: true } => (
+            &[ACCESSOR, ASYNC],
             crate::blockers::ACCESSOR_HANDED_TO_PACKAGE,
         ),
+        HandedValue::Store => (
+            &[STORE_WRITE, STORE_READ],
+            crate::blockers::STORE_HANDED_TO_PACKAGE,
+        ),
+        HandedValue::Action => (&[ACTION], crate::blockers::ACTION_HANDED_TO_PACKAGE),
     };
-    crate::StaticViolation {
-        id: id.into(),
-        rule: rule.into(),
-        message: message.into(),
-        hint: hint.into(),
-        location: crate::location(file.path.shared(), at),
-        analysis_context: blocker.to_owned(),
-        fixes: Vec::new(),
-        uncertain: true,
-    }
+    rules
+        .iter()
+        .map(|(id, rule, value, throws)| crate::StaticViolation {
+            id: (*id).into(),
+            rule: (*rule).into(),
+            message: format!(
+                "this hands {value} to code in a package analyzed as source, by a path no walk of the project \
+                 follows (an argument or attribute of a call, `new`, render or tagged template that names the \
+                 package, or of a carrier of it); the package may use it, and {throws}; whether it does, and \
+                 whether that runs in such a scope, cannot be proven here"
+            ),
+            hint: "Use it in the project's own code where it is legal (an event handler, an effect's apply \
+                   function, a tracking scope), and hand the package a value or a callback that does."
+                .into(),
+            location: crate::location(file.path.shared(), at),
+            analysis_context: blocker.to_owned(),
+            fixes: Vec::new(),
+            uncertain: true,
+        })
+        .collect()
 }
 
 /// The span a render is reported at: the element's opening tag.

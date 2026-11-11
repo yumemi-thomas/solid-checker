@@ -47,6 +47,12 @@ pub(crate) const SETTER_HANDED_TO_PACKAGE: &str = "setter-handed-to-package";
 /// call it, and where nothing tracks the call Solid logs `STRICT_READ_UNTRACKED`. SC1001's own obligation at the
 /// handing site, the rule that code is claimed by.
 pub(crate) const ACCESSOR_HANDED_TO_PACKAGE: &str = "accessor-handed-to-package";
+/// ADR 0949: a store a project hands to a package function in a shape no walk reads: the package may write it
+/// (`STORE_WRITE_OUTSIDE_SETTER`, SC2003) or read it untracked (SC1001).
+pub(crate) const STORE_HANDED_TO_PACKAGE: &str = "store-handed-to-package";
+/// ADR 0949: an action a project hands to a package function in a shape no walk reads: the package may call it in
+/// an owned scope (`ACTION_CALLED_IN_OWNED_SCOPE`, SC2002).
+pub(crate) const ACTION_HANDED_TO_PACKAGE: &str = "action-handed-to-package";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 
