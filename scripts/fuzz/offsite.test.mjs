@@ -42,7 +42,7 @@ describe("offSiteVerdicts", () => {
   });
   it("a code of the rule reported only elsewhere does not confirm the finding: a repeat, scored by its pair's twin (coordinator, Part 16; was unconnected)", () => {
     const same = withText({ 10: "r1();", 20: "r1();" });
-    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: same, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), plan: built.plan })).toEqual([{ finding: "strict-read-untracked@20", verdict: "stacked", first: "STRICT_READ_UNTRACKED", why: "repeat" }]);
+    expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: same, runtime: run([event("STRICT_READ_UNTRACKED", 10)]), plan: built.plan })).toEqual([{ finding: "strict-read-untracked@20", verdict: "stacked", first: "STRICT_READ_UNTRACKED", why: "repeat", firstAt: [{ line: 10, column: 1 }] }]);
     // Review of 1d6abdb80: `await x; a(); b();` warns per source, so a report at `a` is no repeat of a finding at `b`; nor is one with no text.
     expect(offSiteVerdicts({ findings: [finding("strict-read-untracked", 20)], built: withText({ 10: "a();", 20: "b();" }), runtime: run([event("STRICT_READ_UNTRACKED", 10)]), plan: built.plan }).map((row) => `${row.verdict}(${row.why})`)).toEqual(["false-positive(repeat-other-source)"]);
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 10)]))).toEqual(["false-positive(repeat-other-source)"]);
