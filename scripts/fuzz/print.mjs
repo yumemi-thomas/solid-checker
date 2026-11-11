@@ -236,6 +236,7 @@ function render(program, instrument) {
   function params(f, depth) {
     return f.params.map((p, index) => {
       const name = `p${index}`;
+      if (p.bare) return `${name}${p.optional ? "?" : ""}: ${p.type}`;
       const value = expr(p.default, depth);
       return p.destructured ? `{ ${name} = ${value} }: { ${name}?: ${paramTsType(p)} } = {}` : `${name}: ${paramTsType(p)} = ${value}`;
     }).join(", ");
