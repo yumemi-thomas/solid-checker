@@ -29,6 +29,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
+import { refuseAssumed } from "./lib/assumed.mjs";
 import { dialectStubProblems } from "./lib/dialect-stubs.mjs";
 import { ancestorChainDigest, hashTree, openGateCache } from "./lib/gate-cache.mjs";
 import { isNamedBlocker } from "./lib/blockers.mjs";
@@ -381,7 +382,8 @@ async function analyzeUnguarded(tsconfig, keepWording) {
       }
     }
   );
-  const snapshot = JSON.parse(output);
+  // ADR 0950: a what-if report is a prediction; a snapshot is a decision. Refused here, never recorded or compared.
+  const snapshot = refuseAssumed(JSON.parse(output), "scripts/coverage.mjs");
   // ADR 0680: every uncertifiable row names its blocker. Kept beside the
   // snapshot, never in it (the snapshot holds no blocker).
   const unnamed = (snapshot.findings ?? [])

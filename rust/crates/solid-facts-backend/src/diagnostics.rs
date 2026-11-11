@@ -421,19 +421,23 @@ impl DiagnosticSession {
         // Its own findings are not reported; what it does to project values
         // is reported at the project's call sites, through summaries and,
         // for owner requirements, through ADR 0290's attribution.
+        // ADR 0949: the one place a package's finding leaves the report: it stands again as an
+        // uncertifiable one at the project sites that enter the package code, never silent
+        // (`package_drop::hand_off`), including the obligations of a rule the project disabled.
         if !facts.dependency_source_roots.is_empty() {
-            let in_project = |finding: &Finding| {
-                facts
-                    .dependency_source_root(&finding.primary_location.path)
-                    .is_none()
-            };
-            let stage = solid_reactive_ir::ProofStage::begin(&findings);
-            findings.retain(in_project);
-            if let Some(stage) = stage {
-                stage.end(solid_reactive_ir::DropPass::DependencySource, &findings);
-            }
-            withheld_coverage.retain(in_project);
+            // The proof log's stages (the style drop, the hand-off) are written inside `hand_off`.
+            let report = crate::package_drop::hand_off(&mut findings, facts, &program, true);
+            let withheld =
+                crate::package_drop::hand_off(&mut withheld_coverage, facts, &program, false);
+            // The proof gate and the tests count drops against attributions: a drop with none is a bug.
+            assert!(
+                report.every_drop_attributed() && withheld.every_drop_attributed(),
+                "ADR 0949: a package finding was dropped with no project row: {:?} {:?}",
+                report.attributed,
+                withheld.attributed
+            );
         }
+        crate::package_drop::supersede_claims(&mut findings, true);
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
         // After enablement, like the refusal: the notice is about the installed
         // runtime, not a site, so there is nothing to suppress it at.

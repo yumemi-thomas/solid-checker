@@ -758,6 +758,7 @@ pub(crate) fn push_owner_requirement(
             context_unaccounted: status.context_unaccounted,
             missing_jsx_census,
             through_dependency: None,
+            through_dependency_entry: crate::DependencyEntry::Call,
             report: status.report,
         });
     }

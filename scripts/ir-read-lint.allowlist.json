@@ -257,6 +257,10 @@
   "rust/crates/solid-reactive-ir/src/owners/owner_state.rs": {
     "hashmap-iteration": 3
   },
+  "rust/crates/solid-reactive-ir/src/owners/package_entries.rs": {
+    "file_by_path": 1,
+    "typescript-table": 2
+  },
   "rust/crates/solid-reactive-ir/src/owners.rs": {
     "file_slots": 1,
     "typescript-table": 1

@@ -107,6 +107,28 @@ whose imported name is the primitive's, or a member of a namespace import of a
 Solid module. Any other attribution (a renamed re-export through a project
 barrel, an import whose target the producer could not read) is uncertifiable.
 
+A function entered twice under different contexts is walked twice (ADR 0961): the walk's visited set is keyed by how a
+body is entered (the entry kind, whether it is guaranteed, the argument standings the call proves, the class `this` is
+exact for), so `make(true); make(false)` reads the second entry and `isPending(g); g();` reads the direct call after the
+one `isPending` catches; a slot callback is walked on a copy, so its visits never suppress a later direct entry. A cycle
+still ends where a body is entered again the same way.
+
+A call written in a callback of a primitive that runs it in place, where the callback takes a parameter, is async or is a
+generator (`untrack((p) => onCleanup(…))`, `untrack(async () => { createMemo(…); })`), is an uncertifiable row of this
+rule (ADR 0959, the `UnmodelledSlot` operation, blocker `leaf-owner-unproven`): the slot climb does not cross such a
+callback, and what it runs is not read. A call that cannot operate is not claimed (a primitive the leaf owner never
+refuses, an accessor read, a setter call); any other call is, a helper or a member too. Never a violation.
+
+A call of a generator whose iterator the leaf callback keeps (`.next()`, a `for…of`, a spread, `Array.from`, a stored loop,
+`yield*` through another generator, an async generator's `.next()`) is an uncertifiable row of this rule (ADR 0961, the
+`GeneratorStepped` operation, blocker `generator-stepped`): a generator's body runs where its iterator is stepped, which no
+walk here follows, so a forbidden operation in a body that holds a call may run in this leaf scope. A call a statement
+discards runs none of the body, and a generator with no call in its body has nothing to run.
+
+A parameter initializer a leaf callback's call runs (a default, a destructuring default, an IIFE or closure in one, a
+constructor's) is covered by the withholding rows of the call (`leaf-callback-opaque`, `value-as-parameter-default`), as a
+function the walk cannot follow is; a `new` call's row stands at its `new` token, where V8 places the frame (ADR 0961).
+
 A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
 tracked-effect body whose every creation is inside an owned leaf body, where
 the creation itself throws first (`docs/open-work.md`).

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
-import { describe, test } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { describe, test, vi } from "vitest";
 
-import { armsOf, findingSites, findingsKey, gridPairs, moved, summarize, transitions } from "./proof-ablation.mjs";
+import { AssumedReportError } from "./lib/assumed.mjs";
+import { cleanReport, fakeChecker, flippedReport } from "./lib/assumed-fixtures.mjs";
+import { fixtureProjects } from "./lib/fixture-projects.mjs";
+import { armsOf, findingSites, findingsKey, gridPairs, main, moved, summarize, transitions } from "./proof-ablation.mjs";
 
 const decision = (arm, extra = {}) => ({ k: "decision", t: "read", role: "TrackedJsx", arm, default: false, silent: true, ...extra });
 
@@ -120,4 +126,46 @@ describe("a grid's pairs", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+// ADR 0950: a transition between two runs of the shipped checker is a measurement; a what-if report is a prediction. `mapPoolSettled` keeps a
+// pair's error unread and the run counts an unread one as "unrun", so a refused report would end as "N left": the run throws it instead, in both
+// modes (a fixture project through `checkProject`, a grid's program through the fuzz judge), and writes no report.
+describe("a checker that answers with a what-if report", () => {
+  const repo = resolve(import.meta.dirname, "..");
+  /** One run of `main` in a throwaway directory: the first fixture project with a proof log naming one silent arm, or a one-program grid. */
+  const ablate = async (mode, report, body) => {
+    const root = mkdtempSync(join(tmpdir(), "ablation-what-if-"));
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const out = join(root, "report.json");
+      const common = ["--checker-bin", fakeChecker(root, report), "--typefacts", join(root, "typefacts"), "--out", out, "--concurrency", "1"];
+      if (mode === "fixtures") {
+        const project = fixtureProjects(repo)[0];
+        mkdirSync(join(root, "logs"));
+        writeFileSync(join(root, "logs", `${project.id.replace(/\//g, "__")}.jsonl`), `${JSON.stringify({ k: "decision", f: "/p/App.tsx", silent: true, arm: "callee_roles.x", default: false })}\n`);
+        return await body({ out, run: () => main(["--logs", join(root, "logs"), "--only", project.id, ...common]) });
+      }
+      const grid = join(root, "grid");
+      mkdirSync(join(grid, "cases", "p1"), { recursive: true });
+      writeFileSync(join(grid, "cases", "p1", "App.tsx"), "export const App = () => null;\n");
+      const lines = [{ k: "path", q: 1, p: 0, f: "/w/.solid-checker-fuzz/run-1/slots/0/p1/App.tsx", g: "p1" }, { k: "read", q: 1, p: 0, s: 1, e: 2, role: "DeferredCallback", arm: "callee_roles.a", default: false, silent: true }];
+      writeFileSync(`${grid}.roles.jsonl`, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`);
+      return await body({ out, run: () => main(["--grid", grid, "--install", join(root, "install"), ...common]) });
+    } finally {
+      log.mockRestore();
+      rmSync(root, { recursive: true, force: true });
+    }
+  };
+  for (const mode of ["fixtures", "grid"]) {
+    test(`stops the ${mode} run with the refusal and writes no report`, () => ablate(mode, flippedReport(), async ({ out, run }) => {
+      await assert.rejects(run(), (error) => error instanceof AssumedReportError && /refuses this checker report: it is tainted by a what-if assumption/.test(error.message));
+      assert.equal(existsSync(out), false);
+    }));
+    test(`runs the ${mode} pair as before when the report is a default build's`, () => ablate(mode, { ...cleanReport(), findings: [] }, async ({ out, run }) => {
+      assert.equal(await run(), 0);
+      const report = JSON.parse(readFileSync(out, "utf8"));
+      assert.deepEqual([report.results.length, report.results[0].arm, report.results[0].changed, report.unrun], [1, mode === "grid" ? "callee_roles.a" : "callee_roles.x", false, []]);
+    }));
+  }
 });

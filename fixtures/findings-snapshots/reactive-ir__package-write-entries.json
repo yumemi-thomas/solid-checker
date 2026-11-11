@@ -1,0 +1,202 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 193,
+      "end": 199,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 297,
+      "end": 302,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 297,
+      "end": 302,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 297,
+      "end": 302,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 372,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 442,
+      "end": 450,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 530,
+      "end": 550,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "setter-handed-to-package",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 530,
+      "end": 550,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 530,
+      "end": 550,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 719,
+      "end": 739,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "setter-handed-to-package",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 719,
+      "end": 739,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 719,
+      "end": 739,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 820,
+      "end": 845,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "setter-handed-to-package",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 820,
+      "end": 845,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 820,
+      "end": 845,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 928,
+      "end": 966,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 928,
+      "end": 966,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-write-entries/App.tsx",
+      "start": 951,
+      "end": 962,
+      "fixes": 0
+    }
+  ]
+}

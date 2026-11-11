@@ -233,6 +233,12 @@ impl Finding {
                 && !requirement.context_unaccounted);
         let mut message = message.to_string();
         let mut hint = hint.to_string();
+        // ADR 0949: the project site a requirement of package source stands at.
+        let site = match requirement.through_dependency_entry {
+            crate::DependencyEntry::Call => "call",
+            crate::DependencyEntry::Render => "element",
+            crate::DependencyEntry::Reference => "use",
+        };
         if missing_jsx_census {
             message.push_str(
                 "; but this call is written inside a JSX expression the Solid compiler's execution census does not cover, so whether the operation executes — and under which owner — cannot be proven",
@@ -257,7 +263,9 @@ impl Finding {
                 && through_dependency.is_some()
             {
                 // ADR 0943: the context is a package's, created with no default; whose provider sits above the call is not proven.
-                "the package reads its context under a reactive owner, the context was created with no default, and no provider is proven above this call".into()
+                format!(
+                    "the package reads its context under a reactive owner, the context was created with no default, and no provider is proven above this {site}"
+                )
             } else if requirement.operation == crate::OwnerRequirementOperation::ContextProvider {
                 "the read runs under a reactive owner, and the analyzed program has no provider for this context, so Solid finds no value".into()
             } else if requirement.after_await {
@@ -293,9 +301,18 @@ impl Finding {
         // ADR 0290: the operation is in a package analyzed as source, and
         // this is the project's call that runs it.
         if let Some(operation) = through_dependency {
-            message.push_str(
-                "; this call runs it inside a package analyzed as source, under this call's owner context",
-            );
+            // ADR 0949: a render or a reference is no call; the wording names the site.
+            message.push_str(match requirement.through_dependency_entry {
+                crate::DependencyEntry::Call => {
+                    "; this call runs it inside a package analyzed as source, under this call's owner context"
+                }
+                crate::DependencyEntry::Render => {
+                    "; this element renders a component of a package analyzed as source that runs it, under an owner of its own"
+                }
+                crate::DependencyEntry::Reference => {
+                    "; this use hands a function, class or object of a package analyzed as source on, and whatever runs it may run it there"
+                }
+            });
             let provider_question =
                 requirement.operation == crate::OwnerRequirementOperation::ContextProvider;
             if uncertain
@@ -311,14 +328,24 @@ impl Finding {
                 );
             }
             hint.push_str(if provider_question {
-                " The read is in the package: render a provider for the package's context above this call."
+                match requirement.through_dependency_entry {
+                    crate::DependencyEntry::Call => {
+                        " The read is in the package: render a provider for the package's context above this call."
+                    }
+                    crate::DependencyEntry::Render => {
+                        " The read is in the package: render a provider for the package's context above this element."
+                    }
+                    crate::DependencyEntry::Reference => {
+                        " The read is in the package: render a provider for the package's context above wherever this runs."
+                    }
+                }
             } else {
                 " The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
             });
             evidence.insert(
                 0,
                 EvidenceStep {
-                    message: "this call enters package code that performs the operation".into(),
+                    message: format!("this {site} enters package code that performs the operation"),
                     location: Some(requirement.location.clone()),
                 },
             );
@@ -329,9 +356,9 @@ impl Finding {
         }
         if provider_open && through_dependency.is_some() {
             // ADR 0943: not the program's openness: the package's own code may provide its context.
-            message.push_str(
-                "; but the context is a package's, which may provide it itself, and no provider is proven above this call, so this is not proven",
-            );
+            message.push_str(&format!(
+                "; but the context is a package's, which may provide it itself, and no provider is proven above this {site}, so this is not proven"
+            ));
         } else if provider_open {
             message.push_str(
                 "; but the program is open, and code the analysis does not see may render a provider above this reader, so this is not proven",

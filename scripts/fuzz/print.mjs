@@ -76,8 +76,17 @@ export function usedPackageHelpers(program) {
 export function programPackages(program) {
   const files = packageFiles(usedPackageHelpers(program));
   // ADR 0940: a `use` of the context a dependency exports (misuse.mjs SOURCE_AXES `package`).
-  const context = [...walk(program)].some(({ node }) => node.k === "use" && (node.ctx || node.hook));
-  return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}) };
+  const context = [...walk(program)].some(({ node }) => node.k === "use" && (node.ctx || node.hook || node.component || node.handed || node.holder));
+  // ADR 0957: a site moved into a package (package-site.mjs): the package `describeUse` wrote for it.
+  const sites = {};
+  const signals = signalTable(program);
+  for (const component of program.components) {
+    const seen = sourcedSignals(component, signals);
+    for (const { node } of walk(component)) if (node.k === "use" && node.pkg) Object.assign(sites, describeUse(node, seen).pkgFiles ?? {});
+  }
+  // ADR 0962: a dependency a context ships (entry-shapes.mjs: the helper that makes an action of the generator it is handed).
+  const shipped = Object.assign({}, ...program.components.map((component) => component.packages ?? {}));
+  return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}), ...sites, ...shipped };
 }
 
 /**
@@ -229,6 +238,7 @@ function render(program, instrument) {
   function params(f, depth) {
     return f.params.map((p, index) => {
       const name = `p${index}`;
+      if (p.bare) return `${name}${p.optional ? "?" : ""}: ${p.type}`;
       const value = expr(p.default, depth);
       return p.destructured ? `{ ${name} = ${value} }: { ${name}?: ${paramTsType(p)} } = {}` : `${name}: ${paramTsType(p)} = ${value}`;
     }).join(", ");
@@ -368,6 +378,9 @@ function render(program, instrument) {
       case "class-sblock": return `class ${name} {\n${ind(depth + 1)}static ${block(c.body, depth + 1, open())}\n${ind(depth)}}`;
       case "class-method": return `class ${name} {\n${ind(depth + 1)}${asyncKw}m() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "call" ? line(`new ${name}().m();`) : c.use === "new" ? line(`new ${name}();`) : ""}`;
       case "class-ctor": return `class ${name} {\n${ind(depth + 1)}constructor() ${block(c.body, depth + 1, open())}\n${ind(depth)}}${c.use === "new" ? line(`new ${name}();`) : ""}`;
+      // entry-shapes.mjs `pd-ctor-*`: the one expression is the default of the constructor's parameter.
+      // `c.args` (batch-10 addendum 13): the arguments of the `new` (an identifier or an expression that is `undefined` at run time runs the default).
+      case "class-ctor-default": return `class ${name} {\n${ind(depth + 1)}constructor(p0: unknown = ${expr(c.body[0].e, depth + 1)}) {}\n${ind(depth)}}${line(`new ${name}(${(c.args ?? []).map((argument) => expr(argument, depth)).join(", ")});`)}`;
       case "dead-if": return `if (false) ${block(c.body, depth, open())}`;
       case "dead-after-return": return `(${asyncKw}() => ${block(c.body, depth, open(), ["return;"])})();`;
       case "dead-fn": return funcDecl(depth);
@@ -435,7 +448,7 @@ function render(program, instrument) {
       case "gen-sync-each": return `function* gen() {\n${ind(depth + 1)}yield 1;\n${ind(depth + 1)}[1].forEach(() => ${block(c.body, depth + 1)});\n${ind(depth)}}\n${ind(depth)}for (const _y of gen()) await Promise.resolve();`;
       case "gstep": {
         const body = c.mode === "first" ? block(c.body, depth, null, [], ["yield 1;"]) : block(c.body, depth, null, ["yield 1;"]);
-        return c.holder ? `const ${c.holder} = { *${c.name}() ${body} };` : `${c.exported ? "export " : ""}function* ${c.name}() ${body}`;
+        return c.holder ? `const ${c.holder} = { *${c.name}() ${body} };` : `${c.exported ? "export " : ""}${c.async ? "async " : ""}function* ${c.name}() ${body}`;
       }
       case "gen-drain": return `function* gen() ${block(c.body, depth, null, ["yield 1;"])}\n${ind(depth)}for (const _y of gen()) void _y;\n${ind(depth)}await Promise.resolve();`;
       default: if (c.form.startsWith("handoff-")) return handoffText(c, depth); if (c.form.startsWith("depth-")) return depthText(c, depth); if (c.form.startsWith("chain-") || c.form.startsWith("forward-")) return chainText(c, depth); throw new Error(`cannot print control form ${c.form}`);
@@ -549,14 +562,15 @@ function render(program, instrument) {
       case "render": used.add("createRenderEffect"); return `createRenderEffect(${f}, ${applyText(e.apply, depth)})`;
       case "tracked": used.add("createTrackedEffect"); return `createTrackedEffect(${f})`;
       case "action": {
-        used.add("action");
+        // ADR 0962 (`via`, a `ref` node): the generator function is handed to a helper that makes the action (a project's `run`, or a dependency's), not to `action`.
+        const callee = e.via ? expr(e.via, depth) : (used.add("action"), "action");
         // `afterYield` (the recall contexts): the body runs after the action's first `yield`, in a later step of its transition.
-        if (e.afterYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield Promise.resolve();"])})`;
+        if (e.afterYield) return `${callee}(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield Promise.resolve();"])})`;
         // `plainYield` (`action-plain-yield-from-apply`): a plain-value `yield` first; the next step runs synchronously on the same
         // stack (`@solidjs/signals` dist/dev.js:1637), so the body is still in the caller's window.
-        if (e.plainYield) return `action(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield 1;"])})`;
+        if (e.plainYield) return `${callee}(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield 1;"])})`;
         const { head, body } = fnParts(e.fn, depth, "()");
-        return `action(function* ${head} ${body})`;
+        return `${callee}(function* ${head} ${body})`;
       }
       default: throw new Error(`cannot print prim ${e.name}`);
     }

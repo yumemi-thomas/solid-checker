@@ -261,7 +261,7 @@ export function packageFiles(helpers) {
  * (`export const PkgContext = createContext();`); the program reads it with `useContext(PkgContext)` and no provider above, so Solid throws
  * CONTEXT_NOT_FOUND. The checker has to read the dependency's source to know there is no default, as it does for the helper packages above.
  */
-export const CONTEXT_PACKAGE = { name: "fz-ctx", exportName: "PkgContext", hookName: "usePkgContext" };
+export const CONTEXT_PACKAGE = { name: "fz-ctx", exportName: "PkgContext", hookName: "usePkgContext", componentName: "PkgPanel", className: "PkgReader" };
 export function contextPackageFiles() {
   const text = (lines) => `${lines.join("\n")}\n`;
   return {
@@ -271,8 +271,10 @@ export function contextPackageFiles() {
       exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
     }, null, 2)}\n`,
     // ADR 0943: the package's own hook reads the context (`package-hook`): the read is in the dependency's source, reached at the program's call.
-    "index.js": text(['import { createContext, useContext } from "solid-js";', "", `export const ${CONTEXT_PACKAGE.exportName} = createContext();`, "", `export function ${CONTEXT_PACKAGE.hookName}() {`, `  return useContext(${CONTEXT_PACKAGE.exportName});`, "}"]),
-    "index.d.ts": text(['import type { Context } from "solid-js";', "", `export declare const ${CONTEXT_PACKAGE.exportName}: Context<number>;`, `export declare function ${CONTEXT_PACKAGE.hookName}(): number;`]),
+    // ADR 0949: a component the program renders (`package-component`), a class whose method reads it (`package-holder`), and the hook handed on by
+    // reference (`package-handed`: `createEffect(usePkgContext, …)`): entries into the package's source no call names.
+    "index.js": text(['import { createContext, useContext } from "solid-js";', "", `export const ${CONTEXT_PACKAGE.exportName} = createContext();`, "", `export function ${CONTEXT_PACKAGE.hookName}() {`, `  return useContext(${CONTEXT_PACKAGE.exportName});`, "}", "", `export function ${CONTEXT_PACKAGE.componentName}(props) {`, `  useContext(${CONTEXT_PACKAGE.exportName});`, "  return props.children;", "}", "", `export class ${CONTEXT_PACKAGE.className} {`, "  read() {", `    return useContext(${CONTEXT_PACKAGE.exportName});`, "  }", "}"]),
+    "index.d.ts": text(['import type { Context, JSX } from "solid-js";', "", `export declare const ${CONTEXT_PACKAGE.exportName}: Context<number>;`, `export declare function ${CONTEXT_PACKAGE.hookName}(): number;`, `export declare function ${CONTEXT_PACKAGE.componentName}(props: { children?: JSX.Element }): JSX.Element;`, `export declare class ${CONTEXT_PACKAGE.className} {`, "  read(): number;", "}"]),
   };
 }
 

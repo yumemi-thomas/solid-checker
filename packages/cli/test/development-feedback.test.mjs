@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "vitest";
 import { feedbackSnapshot, captureTemplate, admitFeedbackCapture, inspectDevelopmentFeedback,
   DEFAULT_NATIVE_TIMEOUT_MS, NATIVE_TIMEOUT_ENV, describeNativeBinary, expandSolutionProject, feedbackBrowserSnapshots, nativeTimeoutMs,
-  parseNativeStderr, validateFeedbackInputs, SolutionProjectError } from "../scripts/development-feedback.mjs";
+  parseNativeStderr, validateFeedbackInputs, FeedbackNativeError, SolutionProjectError } from "../scripts/development-feedback.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 function fixture(run) {
@@ -402,3 +402,47 @@ test("later snapshots reuse a declaration parse only for the same bytes and stil
     assert.equal(feedbackSnapshot(second).sources.find(source => source.fileName.endsWith("shared.d.ts")).text, "export declare const shared: string;\n");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// ADR 0950: a report from the what-if build (`solid-checker-what-if --assume`: a top-level `assumed` key, or a finding premise of kind `assumed`) is
+// a prediction, never a fact about the checker. The feedback run refuses it from its native analysis as a structured failure of the native
+// run (kind `assumed-report`), the way it refuses malformed output, and a default build's report is the analysis as before.
+const whatIfHazard = "OpenMemberWrite(*)";
+const whatIfReports = {
+  "a top-level assumed key": { findings: [{ kind: "violation", id: "SC1001" }], assumed: { hazards: [whatIfHazard], flipped: [] } },
+  "a finding premise of kind assumed": { findings: [{ kind: "violation", id: "SC1001", premises: [{ kind: "assumed", hazards: [whatIfHazard] }] }] },
+  "both, as the what-if build writes them": {
+    findings: [{ kind: "violation", id: "SC1001", premises: [{ kind: "assumed", hazards: [whatIfHazard] }] }],
+    assumed: { hazards: [whatIfHazard], flipped: [whatIfHazard] }
+  }
+};
+const whatIfMessage = /^Native analysis produced a report tainted by a what-if assumption, .* Only scripts\/what-if\.mjs reads one\.$/;
+
+test("a what-if report from the native analysis is a structured failure, and a default build's report is the analysis", () => fixture(({ project }) => {
+  const analyze = report => () => ({ status: 0, stdout: JSON.stringify(report) });
+  for (const [name, report] of Object.entries(whatIfReports)) {
+    assert.throws(() => inspectDevelopmentFeedback(project, { analyze: analyze(report) }), error => {
+      assert(error instanceof FeedbackNativeError, name);
+      assert.equal(error.failure.kind, "assumed-report", name);
+      assert.match(error.message, whatIfMessage, name);
+      assert.equal(error.failure.message, error.message, name);
+      return true;
+    }, name);
+  }
+  const clean = { findings: [{ kind: "violation", id: "SC1005", premises: [{ kind: "SiteReachAbsentProp" }] }, { kind: "uncertifiable", id: "SC1001" }] };
+  const report = inspectDevelopmentFeedback(project, { analyze: analyze(clean) });
+  assert.deepEqual(report.analysis, clean);
+  assert.deepEqual(report.findings, [clean.findings[0]]);
+}));
+
+test("a native checker that prints a what-if report fails the feedback run: no analysis document, exit 2", () => workspace(root => {
+  const printed = join(root, "what-if.json");
+  writeFileSync(printed, JSON.stringify(whatIfReports["both, as the what-if build writes them"]));
+  const run = feedbackCli(["--project", leaf(root, "app")], { binary: fakeNative(root, `cat '${printed}'`) });
+  assert.equal(run.status, 2);
+  assert.equal(run.json.status, "native-failed");
+  assert.equal(run.json.failure.kind, "assumed-report");
+  assert.match(run.json.failure.message, whatIfMessage);
+  assert.match(run.stderr, /tainted by a what-if assumption/);
+  assert.equal(run.json.analysis, undefined);
+  assert.equal(run.json.findings, undefined);
+}));

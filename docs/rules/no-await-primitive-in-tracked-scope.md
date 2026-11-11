@@ -157,6 +157,10 @@ the value still will not update).
   unknown receiver may run it zero times: **uncertifiable**.
   An action's first step answers to the action's calls, under whatever observer each runs (ADR 0614). So does a callback a `flush()` under a computation may drain: **uncertifiable**. An IIFE run in place in a flow row's tracked JSX runs in that insert's computation (ADR 0834): a **violation** there.
   Where nothing places the call at all, the finding is **uncertifiable**. So is a call in a closure a named memo compute hands on (`[1].forEach(hf)`, `run(hf)`; ADR 0585): never a proven deferral.
+- **An async callback of `isPending` (ADR 0959).** `isPending` catches what its callback throws, so a `resolve()` or
+  `until()` in a plain callback of it is quiet (ADR 0941). An async callback's synchronous throw is the function's
+  rejection, which `isPending` does not catch, so the same call there is an uncertifiable row (blocker
+  `async-slot-unmodelled`), not silence.
 - **`onSettled` / leaf owners.** `resolve()` passes the observer guard there,
   so this rule is silent — but note that in an *owner-backed* `onSettled` the
   promise still rejects in dev with `PRIMITIVE_IN_FORBIDDEN_SCOPE` (probed):

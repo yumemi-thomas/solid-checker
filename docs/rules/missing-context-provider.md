@@ -118,6 +118,27 @@ package, so the call is an obligation. Only a default the syntax proves
 proof log names it (`ContextDefaultProven`). All of this is in
 `docs/open-work.md`.
 
+A call is not the only way project code runs a package's read (ADR 0949), so
+the same obligation stands at each other entry, with the same blocker:
+
+- a JSX element that renders a package component whose source, or the source of
+  what it calls or renders, reads such a context (`<Panel/>`, `<P/>` through an
+  import or an exact local alias, `<ui.Panel/>` through a namespace import). The
+  tag is resolved exactly; a component the walk reaches through other package
+  components counts, and a component a project function that may run renders is
+  reported at the element;
+- a project reference to a symbol the package declares that is no call and no
+  resolved tag (a function given to `createEffect` or a prop, `<Dynamic
+  component={Panel}>`, a function child, a class whose method reads it, a
+  getter's holder, an object member used as a tag): the reference may run it. A
+  package that reads no such context makes none of these an obligation. A
+  type position, an import or export specifier and a context binding are none;
+- a literal `import()` or `require()` of a package that stays off source is an
+  SC9005 obligation at the load (a dynamic load is not redirected).
+
+A read past an `await` on every path, and a read in a `try` whose `catch` cannot
+throw, are not reads of this kind (no `ContextNotFoundError` leaves them).
+
 ## A stored throw needs a read that reports it
 
 `resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893). Under a component, the boundary is where it renders that prop (ADR 0937).

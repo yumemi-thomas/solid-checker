@@ -32,6 +32,7 @@ import { registrationPositions } from "./registration.mjs";
 import { partlySilentRules, besideCode, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { loggedEvents, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
+import { repeatTwins, twinHolds } from "./repeat-twin.mjs";
 import { hitCount } from "./hits.mjs";
 import { DEFAULT_ORACLE_INSTALL, runChrome } from "./chrome.mjs";
 import { fnv } from "./rng.mjs";
@@ -41,8 +42,10 @@ import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
   BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption, fireShape } from "./misuse.mjs";
+import { COMPONENT_ENTRIES, parsePkg, pkgShapesOf } from "./package-site.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { PL_CONTEXT_NAMES } from "./primitive-layer-shapes.mjs";
+import { ENTRY_CONTEXT_NAMES } from "./entry-shapes.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
@@ -83,27 +86,21 @@ export const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line)
  * `built` (the program as printed: its sites, glue and plan; `program`, its tree, for registration lines) lets the violations away from the site be judged too (classify.mjs
  * `offSiteVerdicts`): one that ran where the runtime reported no code of its rule turns an `agree` or a `recall-gap` into a
  * `false-positive` (`detail.primary` keeps the site's own outcome). A remote claiming violation stays the site's agreement.
- * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, built?: object }} input
+ * `twins` (ADR 0953, option c): the repeat claims whose twin the grid ran, by finding label; one whose twin holds is the agreement it is, so the row keeps its own
+ * outcome, and the verdict of each twin is recorded in `detail.twins`. Without `twins` a repeat claim is scored by its pair, as before.
+ * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, built?: object, twins?: Record<string, { holds: boolean, why?: string }> }} input
  * @returns {{ outcome: string, detail?: object }}
  */
 export function judge(input) {
-  const verdict = judgeSite(input);
-  const { site, checker, runtime, built, program } = input;
-  if (!built || !checker?.ok || !runtime || !["agree", "recall-gap", "not-fired", "wrong-rule", "false-clean"].includes(verdict.outcome)) return verdict;
-  const region = regionOf(site);
-  // ADR 0614: the site's agreement answers for the row's own code, nothing else. Another rule's violation on the site's lines is judged like one
-  // away from them, and on a `not-fired` program so is the claiming rule's own: its site ran and the runtime reported nothing, which is what a
-  // false positive looks like, not a generator problem.
-  const claiming = codeRules[input.code] ?? [];
-  // A rule that stands beside the row's code (codes.mjs `besideCode`, ADR 0483) makes a claim the code's throw hides: the runtime stops first.
-  const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !(claiming.includes(finding.rule) || standsBeside(input.code, finding, runtime));
-  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && (!inLines(finding, region) || judgedAtSite(finding)));
-  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
-  if (!judged.length) return verdict;
-  const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.first ? `<${row.first}` : ""}${row.why ? `(${row.why})` : ""}`) };
+  const { verdict, judged } = judgeParts(input);
+  if (!judged?.length) return verdict;
+  // ADR 0953, option (c): `input.twins` (finding label -> { holds, why }, repeat-twin.mjs) is what the grid learned by running each repeat claim's twin.
+  // A claim whose twin holds is no claim; one whose twin failed, or no twin at all, is scored by its pair as before.
+  const twins = Object.entries(input.twins ?? {}).filter(([label]) => judged.some((row) => row.finding === label));
+  const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.first ? `<${row.first}` : ""}${row.why ? `(${row.why})` : ""}`), ...(twins.length ? { twins: Object.fromEntries(twins.map(([label, twin]) => [label, twin.holds ? "held" : twin.why])) } : {}) };
   // A stacked violation (classify.mjs `stacked`: Solid's first throw halted the run on its lines) is a false positive unless its pair is
   // proved (stacked.mjs), then a `stacked-claim`, listed by id with its pairs.
-  const { wrong, stacked } = stackedSplit(judged);
+  const { wrong, stacked } = stackedSplit(judged, undefined, { twins: input.twins });
   // A false clean at the site is already a problem: the off-site false positive is listed beside it. A wrong rule is not above a false
   // positive: a violation the runtime contradicts is one whatever else the row found, and `beside` is an `agree` with that violation in it.
   const scored = ["agree", "recall-gap", "not-fired", "wrong-rule"].includes(verdict.outcome);
@@ -121,6 +118,61 @@ export function judge(input) {
   if (unordered.length && scored) return { outcome: "unplaced", detail: { ...detail, primary, why: "halt-unordered", rules: [...new Set(unordered.map((row) => row.finding.split("@")[0]))], at: unordered.map((row) => Number(row.finding.split("@")[1])) } };
   if (unplaced.length && scored) return { outcome: "unjudged-claim", detail: { ...detail, primary, rules: [...new Set(unplaced.map((row) => row.finding.split("@")[0]))], at: unplaced.map((row) => Number(row.finding.split("@")[1])) } };
   return { outcome: verdict.outcome, detail };
+}
+
+/**
+ * The row's own verdict and the verdicts of its violations away from the site (the first half of `judge`): `judged` is absent when there is nothing to
+ * judge there (no printed program, a checker or runtime that failed, an outcome these rows cannot change), `offSite` holds the findings `judged` is of.
+ */
+function judgeParts(input) {
+  const verdict = judgeSite(input);
+  const { site, checker, runtime, built, program } = input;
+  if (!built || !checker?.ok || !runtime || !["agree", "recall-gap", "not-fired", "wrong-rule", "false-clean"].includes(verdict.outcome)) return { verdict };
+  const region = regionOf(site);
+  // ADR 0614: the site's agreement answers for the row's own code, nothing else. Another rule's violation on the site's lines is judged like one
+  // away from them, and on a `not-fired` program so is the claiming rule's own: its site ran and the runtime reported nothing, which is what a
+  // false positive looks like, not a generator problem.
+  const claiming = codeRules[input.code] ?? [];
+  // A rule that stands beside the row's code (codes.mjs `besideCode`, ADR 0483) makes a claim the code's throw hides: the runtime stops first.
+  const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !(claiming.includes(finding.rule) || standsBeside(input.code, finding, runtime));
+  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && (!inLines(finding, region) || judgedAtSite(finding)));
+  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
+  return { verdict, offSite, judged };
+}
+
+/**
+ * The twins that would settle a row's repeat claims (repeat-twin.mjs `repeatTwins`): one request per claim, with the twin program or why none can be
+ * built; none for a row with no repeat claim. The grid runs them and judges the row again with `twins` (`settleRepeats`).
+ */
+export function twinRequests(input) {
+  const { judged, offSite } = judgeParts(input);
+  return judged?.length && input.built && input.program ? repeatTwins({ judged, offSite, built: input.built, program: input.program }) : [];
+}
+
+/**
+ * ADR 0953, option (c): the rows of a chunk that stand as stacked claims get their repeat claims' twins run (one `evaluate`, so one fast-path batch; the
+ * twin cases are written under `<out>/twins/`), and are judged again with what the twins say (`judge`'s `twins`). `verdicts` (one per entry of `chunk`)
+ * is replaced in place; every twin that ran is kept in `kept` (`rows`, `values`) for the runtime differential. A claim with no twin, or whose twin failed, keeps
+ * its verdict: the twin only ever removes a claim, it adds no outcome.
+ */
+export async function settleRepeats({ chunk, results, verdicts, inputOf, run, out, kept }, { evaluate: evaluateTwins = evaluate } = {}) {
+  const asked = [];
+  chunk.forEach((entry, position) => {
+    const value = results.get(entry.built.id);
+    if (value?.error || verdicts[position].outcome !== "stacked-claim") return;
+    const requests = twinRequests(inputOf(entry, value));
+    if (requests.length) asked.push({ position, entry, value, requests });
+  });
+  const runnable = asked.flatMap(({ requests }) => requests.filter((request) => !request.refused));
+  const evaluated = runnable.length ? await evaluateTwins(runnable.map(({ program, built }) => ({ program, built })), { ...run, casesDir: join(out, "twins") }) : new Map();
+  for (const { position, entry, value, requests } of asked) {
+    const twins = Object.fromEntries(requests.map((request) => [request.label, twinHolds(request, evaluated.get(request.built?.id), judge)]));
+    verdicts[position] = judge({ ...inputOf(entry, value), twins });
+    for (const request of requests.filter((one) => !one.refused)) {
+      kept.values.set(request.built.id, evaluated.get(request.built.id));
+      kept.rows.push({ id: request.built.id, code: request.first, context: entry.cell.context, outcome: "twin" });
+    }
+  }
 }
 
 /** The line of a diagnostic's own `loc` (`…App.tsx:12:25`; a grid slot's prefix differs), or null. */
@@ -338,7 +390,7 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
 // await); `no-owner-context-aw-shared-*` keeps the shape.
 // ADR 0940: the `pl-*` contexts are the ten codes' cells, each measured (primitive-layer-shapes.mjs `PL_MEASURED`); a pair left out of them reports another code first,
 // never runs its site, or has a throw hidden by a later one, which the generic judge cannot score, so the census leaves them out for every code.
-const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
@@ -378,6 +430,34 @@ export const LEAN_DEMOTED = {
   callbacks: ["function", "let"],
 };
 export function recallAxes(code, context, base, variants, options = {}) {
+  return [...recallAxesOf(code, context, base, variants, options), ...packageShapes(code, context, base, options)];
+}
+
+/**
+ * ADR 0957: the package site (package-site.mjs). The plain shape of a cell (direct binding, no layer, root mount, local values) with its site inside a
+ * package, once for each entry, so every context a code has can be reached through a package and every entry reaches it. The base grid's other axes
+ * are not crossed with it: they change how the project reaches the site, and in a package the project reaches only the entry. The four codes of
+ * ADR 0957's cells first (`PACKAGE_SITE_CODES`), on the cells the code lists (`contexts`, `legal`).
+ */
+export const PACKAGE_SITE_FIRST = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "STRICT_READ_UNTRACKED", "NO_OWNER_EFFECT", "CONTEXT_NOT_FOUND"];
+/** Every code with a template (a `call`): the default twin. The four of ADR 0957's first cells lead the list. */
+export const PACKAGE_SITE_CODES = [...PACKAGE_SITE_FIRST, ...Object.keys(SPEC).filter((code) => !PACKAGE_SITE_FIRST.includes(code) && !SPEC[code].typedAway && typeof SPEC[code].call === "function")];
+export const plainShape = (shape) => shape.binding === "direct" && shape.layer === "none" && !shape.mount && !shape.source && !shape.callback && !shape.combo && !shape.pkg;
+/**
+ * What a component entry's site is: it runs in the body of a component the package exports, under that component's own root, wherever the project mounts
+ * it, so the cell's context does not decide it (a write there is owned in a handler too, an effect there has an owner). The component body is the code's
+ * `body` cell: a misuse or a legal one, and a code with neither has no claim for a component entry. A call-like entry keeps the cell's own claim.
+ */
+export const componentSide = (code) => (SPEC[code].contexts?.includes("body") ? "misuse" : SPEC[code].legal?.includes("body") ? "legal" : null);
+export function packageShapes(code, context, base, { legal = false } = {}) {
+  if (!PACKAGE_SITE_CODES.includes(code)) return [];
+  const cells = legal ? SPEC[code].legal ?? [] : SPEC[code].contexts;
+  if (!cells.includes(context)) return [];
+  const component = componentSide(code) === (legal ? "legal" : "misuse");
+  return base.filter(plainShape).flatMap((shape) => pkgShapesOf(SPEC[code].setup(shape.variant, (prefix) => `${prefix}1`))
+    .filter((pkg) => component || !COMPONENT_ENTRIES.includes(parsePkg(pkg).entry)).map((pkg) => ({ ...shape, pkg })));
+}
+function recallAxesOf(code, context, base, variants, options = {}) {
   const shapes = recallShapesOf(code, context, base, variants, options);
   // ASYNC_OUTSIDE_LOADING_BOUNDARY's `memo` cell (misuse.mjs SPEC): the wrapper's boundary around the hole is its question, so the root
   // program and the wrapper mounts, on the direct binding with no layer.
@@ -522,9 +602,9 @@ export function mountsOption(value) {
 }
 
 /** The id suffix of a shape's mount (none for the entry's own render, so a root program keeps its id). */
-export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}${shape.callback ? `-cb-${shape.callback}` : ""}${shape.combo ? "-c" : ""}`;
+export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}${shape.callback ? `-cb-${shape.callback}` : ""}${shape.pkg ? `-pk-${shape.pkg}` : ""}${shape.combo ? "-c" : ""}`;
 /** The seed key's tail of a shape's mount and source (none for a root, local program, so its seed stays). */
-export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}${shape.callback ? `/cb:${shape.callback}` : ""}${shape.combo ? "/combo" : ""}`;
+export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}${shape.callback ? `/cb:${shape.callback}` : ""}${shape.pkg ? `/pk:${shape.pkg}` : ""}${shape.combo ? "/combo" : ""}`;
 /** `--combine`: each shape's program is a combination program (misuse.mjs `buildCombo`) instead of the shape's own. */
 export const combined = (shapes, combine) => (combine ? shapes.map((shape) => ({ ...shape, combo: true })) : shapes);
 
@@ -566,7 +646,9 @@ async function chromeRecords(values, config, options, out, { withClean = true } 
 /** Chrome's outcome for a program, and whether it equals the fast path's. */
 function judgeChrome(row, record, built) {
   if (!record || record.runtime?.failure || !record.checker?.ok || record.checker.perturbed?.length) return { status: "chrome-inconclusive", why: record?.runtime?.failure?.message ?? record?.checker?.error ?? record?.checker?.perturbed?.[0] ?? "no record" };
-  const { outcome, detail } = judge({ code: row.code, site: row.site, typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, others: row.others, built });
+  // The twins a repeat claim was settled by (ADR 0953, option c) are the fast path's; the Chrome comparison of the twins is the runtime differential's.
+  const twins = Object.fromEntries(Object.entries(row.detail?.twins ?? {}).map(([label, why]) => [label, { holds: why === "held", why }]));
+  const { outcome, detail } = judge({ code: row.code, site: row.site, typecheck: { ok: true }, checker: record.checker, runtime: record.runtime, others: row.others, built, twins });
   return { status: outcome === row.outcome ? "same" : outcome === "not-fired" ? "not-fired-in-chrome" : "differs", outcome, detail };
 }
 
@@ -1026,6 +1108,8 @@ async function sweep(options, config, out) {
   profile.add("generate", performance.now() - phaseStart);
   console.error(`matrix: ${cells.length} cells, ${entries.length} programs (${TEMPLATE_CODES.length} codes); evaluating`);
   const rows = []; const values = new Map();
+  // The twins of repeat claims the grid ran (ADR 0953, option c), beside the rows: the runtime differential compares them with Chrome too.
+  const twinned = { rows: [], values: new Map() };
   // The rows judged so far, chunk by chunk (partial.mjs): what a grid process that dies before programs.jsonl leaves for focus.mjs.
   const partial = partialRows(out, { project: (row) => ({ ...row, site: undefined, region: regionOf(row.site) }) });
   const started = Date.now();
@@ -1047,10 +1131,14 @@ async function sweep(options, config, out) {
     // The checker on the typed-away programs too (tsc-overlap.mjs): a violation on code tsc rejects is judged, never dropped.
     await checkTypedAway(results, run);
     const at = number * CHUNK;
-    for (const { cell, index, program, built } of chunk) {
+    const inputOf = ({ cell, program, built }, value) => ({ code: cell.code, site: siteOf(built), typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built), built, program });
+    const verdicts = chunk.map((entry) => { const value = results.get(entry.built.id); return value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judge(inputOf(entry, value))); });
+    // ADR 0953, option (c): a row that stands as a stacked claim has its repeat claims' twins run, and is judged again with what they say.
+    await settleRepeats({ chunk, results, verdicts, inputOf, run, out, kept: twinned });
+    for (const [position, { cell, index, program, built }] of chunk.entries()) {
       const value = results.get(built.id);
       const site = siteOf(built);
-      const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judge({ code: cell.code, site, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, others: otherRegions(built), built, program }));
+      const verdict = verdicts[position];
       const misuse = program.components[0].misuse;
       const others = otherRegions(built);
       rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
@@ -1113,7 +1201,7 @@ async function sweep(options, config, out) {
   // per stratum. Beside the matrix, never in it.
   if (options.confirmWithChrome) profile.add("chrome", performance.now() - chromePhase);
   const perStratum = parsePerStratum(options.runtimeDiff);
-  if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential(rows, values, perStratum, config, options, out, "matrix"));
+  if (perStratum) await profile.time("runtimeDiff", () => runtimeDifferential([...rows, ...twinned.rows], new Map([...values, ...twinned.values]), perStratum, config, options, out, "matrix"));
   if (options.oracleCandidates !== undefined) console.error(`matrix: ${writeOracleCandidates(rows, values, parsePerStratum(options.oracleCandidates), options, out)} oracle candidates`);
   const shrinkPhase = performance.now();
 

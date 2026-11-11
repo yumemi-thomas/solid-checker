@@ -386,9 +386,30 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
             "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations.".into(),
         ),
+        LeafOwnerOperationKind::UnmodelledSlot => (
+            Rule::LeafOwnerForbiddenCall,
+            format!(
+                "this call is written in a callback of a primitive that runs it on the stack of {} (a callback with a parameter, an async callback or a generator is a shape the slot walk does not follow); whether it performs cleanup, flush, or creates a nested primitive in this leaf scope cannot be certified",
+                operation.owner
+            ),
+            "Move the call out of that callback, or give the primitive a plain callback with no parameter that is not async, so solid-checker can inspect it and certify or report its leaf-scope operations.".into(),
+        ),
+        LeafOwnerOperationKind::GeneratorStepped => (
+            Rule::LeafOwnerForbiddenCall,
+            format!(
+                "this call creates the iterator of a generator the {} callback keeps: a generator's body runs where its iterator is stepped, which solid-checker does not follow, so whether it performs cleanup, flush, or creates a primitive in this leaf scope cannot be certified",
+                operation.owner
+            ),
+            "Step the generator outside the leaf callback (an event handler, a timer), or call a plain function there, so solid-checker can inspect it and certify or report its leaf-scope operations.".into(),
+        ),
     };
     if let Some(via) = &operation.via
-        && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
+        && !matches!(
+            operation.kind,
+            LeafOwnerOperationKind::UnresolvedCallback
+                | LeafOwnerOperationKind::UnmodelledSlot
+                | LeafOwnerOperationKind::GeneratorStepped
+        )
     {
         message.push_str(&if operation.identity_unproven {
             format!(" — reached through {via}()")
@@ -407,6 +428,10 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
     let mut evidence = vec![EvidenceStep {
         message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
             "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
+        } else if matches!(operation.kind, LeafOwnerOperationKind::UnmodelledSlot) {
+            "the call is written in the callback of a primitive that runs it in place, and the callback takes a parameter, is async or is a generator, a shape the slot walk does not follow".into()
+        } else if matches!(operation.kind, LeafOwnerOperationKind::GeneratorStepped) {
+            "the call creates the iterator of a generator whose body holds calls, the leaf callback keeps the iterator, and no walk follows how it is stepped".into()
         } else {
             match &operation.via {
                 Some(via) if operation.possible && !operation.identity_unproven => format!(
@@ -434,8 +459,12 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             location: Some(operation.location.clone()),
         });
     } else if operation.uncertain
-        && (!matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
-            || operation.call_site_gate.is_some())
+        && (!matches!(
+            operation.kind,
+            LeafOwnerOperationKind::UnresolvedCallback
+                | LeafOwnerOperationKind::UnmodelledSlot
+                | LeafOwnerOperationKind::GeneratorStepped
+        ) || operation.call_site_gate.is_some())
     {
         message.push_str(
             "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",
@@ -871,6 +900,7 @@ fn after_await_obligation(reason: Option<&solid_reactive_ir::AfterAwaitObligatio
         Some(Why::AsyncSourceMayBePending) => "the source is async: read while pending it throws before any warning, read settled it warns, and which of the two this read meets is not proven".to_owned(),
         Some(Why::PropBackingUnproven { callers_unenumerable: true }) => "this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out".to_owned(),
         Some(Why::PropBackingUnproven { callers_unenumerable: false }) => "whether this prop is signal-backed is not proven from its uses".to_owned(),
+        Some(Why::ParameterInitializerUnplaced) => "the call after the await runs a parameter initializer of the function it calls (the default of an argument it omits, a destructuring default, an IIFE or closure in one, a constructor's) that holds code that may read a source, and the checker does not follow what that code reads, so whether a read there runs untracked on this computation's continuation is not proven".to_owned(),
         None => "whether this read runs untracked after the await on this computation's run is not proven".to_owned(),
     };
     format!("{why}{TAIL}")

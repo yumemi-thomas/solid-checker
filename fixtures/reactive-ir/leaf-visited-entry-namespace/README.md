@@ -1,0 +1,3 @@
+# leaf-visited-entry-namespace
+
+**Claim (ADR 0961).** The twice-entered walk of `leaf-visited-entry`, with every primitive spelled through the namespace import: `make(true); make(false)` with `S.createMemo` in the helper, and `S.isPending(flushes); flushes()`. Violations at the second entry (SC3001); the tolerant-only twins are clean for SC3001. A namespace import names every export of `solid-js`, `action` among them, so the program steps action callbacks as far as SC2006 can tell, and the flush in a function handed by name to `S.isPending` is an uncertifiable row of SC2006 and SC2008 (`function-run-unplaced`, ADR 0708): the price of the namespace, no claim about the flush.

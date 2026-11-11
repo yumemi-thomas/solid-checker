@@ -10,7 +10,9 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 use crate::effect_api::{ProofStatus, classify_effect_call};
-use crate::execution_role::{RootBodyGuard, allowed_callback_spans, semantic_write_execution_role};
+use crate::execution_role::{
+    ClimbStop, RootBodyGuard, SlotClimb, allowed_callback_spans, semantic_write_execution_role,
+};
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
 use crate::owners::{analysis_context, computation_is_async};
@@ -448,7 +450,8 @@ impl StaticApiContext<'_> {
             // tracked scope may reach (`createMemo(() => waitReady())`).
             let walk_limited = Cell::new(None);
             if kind == Some(Primitive::Resolve)
-                && resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
+                && (resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
+                    || in_async_swallowing_slot(file, call.span, self.lookup, &walk_limited))
             {
                 result.violations.push(StaticViolation {
                     id: "SC2004".into(),
@@ -502,7 +505,8 @@ impl StaticApiContext<'_> {
             // The same guard where nothing places the call: a helper that a
             // tracked scope may reach (`createMemo(() => waitReady())`).
             if kind == Some(Primitive::Until)
-                && resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
+                && (resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
+                    || in_async_swallowing_slot(file, call.span, self.lookup, &walk_limited))
             {
                 result.violations.push(StaticViolation {
                     id: "SC2005".into(),
@@ -701,7 +705,7 @@ impl StaticApiContext<'_> {
                     },
                     hint: "Remove the flush(): writes made in an effect are processed by the flush that is already running. To force a drain afterwards, defer it (`queueMicrotask(() => flush())`) or call it from an event handler or other code that runs outside the effect.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: origin.undecided.unwrap_or_default().into(),
+                    analysis_context: effect_phase_context(&origin, file, call.span),
                     fixes: vec![],
                     uncertain: origin.mixed,
                 });
@@ -740,8 +744,10 @@ impl StaticApiContext<'_> {
                     .lookup
                     .file_by_path(file.path.as_str())
                     .is_none_or(|file| !self.lookup.flush_runs_off_any_delivery(file, call));
+                // ADR 0961 (PD): the function that owns the call, its parameter list included: a flush written in a default
+                // is in no body, and its function is where a caller runs it.
                 if delivered
-                    && crate::owners::containing_ast_function(&file.ast, call.callee).is_some_and(
+                    && crate::owners::owning_function(&file.ast, call.callee).is_some_and(
                         |function| !self.lookup.function_may_be_component(file, function),
                     )
                 {
@@ -920,7 +926,7 @@ impl StaticApiContext<'_> {
                     },
                     hint: "Create the computation in the effect's compute function or the component body, where an owner holds it, or parent it explicitly: capture `const owner = getOwner()` outside and wrap the creation in `runWithOwner(owner, () => …)`.".into(),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: origin.undecided.unwrap_or_default().into(),
+                    analysis_context: effect_phase_context(&origin, file, call.span),
                     fixes: vec![],
                     // ADR 0613: the effect phase is the queue's drain, which
                     // a synchronous `flush()` runs under its caller's owner.
@@ -952,7 +958,10 @@ impl StaticApiContext<'_> {
                 })
                 && self.lookup.project_defers_callbacks()
                 && let Some(blocker) = unplaced_blocker(file, call.span, self.lookup, true)
-                && !self.runs_off_every_apply(file, call.span, &allowed)
+                // ADR 0961 (PD): the role of a site says where its code runs, and reads no parameter initializer's
+                // placement, so it cannot clear a site written in one.
+                && (blocker == crate::blockers::PARAMETER_INITIALIZER_UNPLACED
+                    || !self.runs_off_every_apply(file, call.span, &allowed))
             {
                 result.violations.push(StaticViolation {
                     id: "SC6002".into(),
@@ -1272,7 +1281,7 @@ impl StaticApiContext<'_> {
                 ),
                 hint: "Build the JSX in the effect's compute function or the component body, where an owner is set; an apply should only touch what already exists.".into(),
                 location: location(file.path.shared(), site.span),
-                analysis_context: origin.undecided.unwrap_or_default().into(),
+                analysis_context: effect_phase_context(&origin, file, site.span),
                 fixes: vec![],
                 uncertain,
             });
@@ -1306,6 +1315,130 @@ fn resolve_tracked_scope(
 
 /// ADR 0857 (reviews R13, R16): the row's blocker when the walk over entries
 /// stopped before reading them all.
+/// The context of a row built on an effect-phase origin: the bound that stopped the walk, or, for an origin the walk reached
+/// through a generator it follows only to the call that steps it (ADR 0961, F2), the premise that the stepping is not
+/// followed.
+fn effect_phase_context(
+    origin: &crate::effect_phase::EffectPhaseOrigin,
+    file: &FileFacts,
+    site: Span,
+) -> String {
+    if let Some(blocker) = origin.undecided {
+        return blocker.to_owned();
+    }
+    if origin.mixed
+        && crate::execution_role::functions_around(file, site)
+            .into_iter()
+            .any(|function| function.generator && function.body.contains(site))
+    {
+        return crate::blockers::GENERATOR_STEP_UNPLACED.to_owned();
+    }
+    String::new()
+}
+
+/// ADR 0961: whether the code at `site` is written in a generator and the program steps an action's body: no walk proves
+/// the generator to be, or not to be, an action's step body (a generator literal handed to a helper that makes the action,
+/// a project or a dependency one; `yield*` into another generator; a generator a handler steps), so what runs in it may run
+/// in a step. The exact stepper is a later proof target.
+fn in_generator_step(file: &FileFacts, site: Span, context: &StaticApiContext<'_>) -> bool {
+    context.lookup.project_steps_action_callbacks()
+        && crate::execution_role::functions_around(file, site)
+            .into_iter()
+            .any(|function| {
+                function.generator
+                    && function.body.contains(site)
+                    && !is_action_step_argument(file, function, context.lookup)
+                    && generator_may_be_stepped(file, function, context.lookup)
+            })
+}
+
+/// Whether the body of `function`, a generator, may run at all: it is handed on (a whole argument of a call, or a
+/// reference that is no plain call), or a call of it creates an iterator the program keeps (a call whose result a
+/// statement does not discard): the iterator may be stepped, iterated, spread, drained (`Array.from`, `new Set`),
+/// delegated to (`yield*`) or handed on, wherever it goes, and no walk here follows it (ADR 0961). A generator a
+/// statement calls and discards, or that nothing calls, runs none of its body.
+fn generator_may_be_stepped(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    if ast
+        .arguments_containing(function.span)
+        .any(|(call, index)| ast.peel_ts_sugar_span(call.arguments[index].span) == function.span)
+        || crate::owners::generator_iterator_used(file, function).is_some()
+    {
+        return true;
+    }
+    let by_name = match crate::local_access::function_reference_hand_offs(file, function, lookup) {
+        Some(references) => references
+            .iter()
+            .any(|(_, hand_off)| *hand_off != crate::local_access::HandOff::Call),
+        // No binding names it: a literal, handed on or called in place (the in-place layers are the climb's).
+        None => false,
+    };
+    by_name
+        || lookup
+            .function_call_sites(file.path.as_str(), function.span)
+            .into_iter()
+            .any(|(caller, callee)| {
+                caller.ast.calls.iter().any(|call| {
+                    !call.construct
+                        && caller.ast.peel_ts_sugar_span(call.callee) == callee
+                        && !call.result_discarded
+                })
+            })
+}
+
+/// Whether `function` is written as the callback an action primitive runs as its steps: the walk's proof decides what is
+/// in it (`action_step_body_at`), so it is no generator nobody places.
+fn is_action_step_argument(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function.span)
+        .any(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_runs_as_action_steps(primitive, index)
+                    })
+        })
+}
+
+/// ADR 0959: whether the call at `call` is written in an async callback of a primitive that runs it in place and
+/// catches what it throws (`isPending`). The observer guard's throw there is the async function's rejection, which the
+/// primitive does not catch (ADR 0960), and whether the guard throws at all is not modelled: an obligation, named in
+/// `limited` ([`walk_limit_context`]).
+fn in_async_swallowing_slot(
+    file: &FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+    limited: &Cell<Option<&'static str>>,
+) -> bool {
+    let inside = crate::execution_role::functions_around(file, call)
+        .into_iter()
+        .any(|function| {
+            function.r#async
+                && function.body.contains(call)
+                && crate::execution_role::slot_layer(file, function, lookup).is_some_and(|layer| {
+                    matches!(
+                        layer.run,
+                        SlotRun::InPlace(run) if matches!(run.throws, SlotThrows::Swallows)
+                    )
+                })
+        });
+    if inside {
+        limited.set(Some(crate::blockers::ASYNC_SLOT_UNMODELLED));
+    }
+    inside
+}
+
 fn walk_limit_context(limited: &Cell<Option<&'static str>>) -> String {
     limited.get().unwrap_or_default().to_owned()
 }
@@ -1878,8 +2011,8 @@ fn action_step_body_bounded(
     context: &StaticApiContext<'_>,
     depth: usize,
 ) -> Option<(&'static str, bool)> {
-    if let Some(body) = action_step_body_at(file, site, context) {
-        return Some((body, false));
+    if let Some(step) = action_step_body_at(file, site, context) {
+        return Some(step);
     }
     action_step_body_through(file, site, context, 4)
         .or_else(|| {
@@ -1924,7 +2057,15 @@ fn action_step_body_unplaced(
         None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
-        .filter(|function| function.body.contains(at) && !function.generator)?;
+        .filter(|function| function.body.contains(at))?;
+    // ADR 0961: a generator that is no action's own step body and may be stepped is the step body of an action no
+    // walk names (`in_generator_step` asks the same of every generator around the site): an obligation.
+    if function.generator {
+        return (context.lookup.project_steps_action_callbacks()
+            && !is_action_step_argument(file, function, context.lookup)
+            && generator_may_be_stepped(file, function, context.lookup))
+        .then_some("generator");
+    }
     let anchor = if function.method_name.is_some() {
         file.ast
             .classes
@@ -1960,11 +2101,18 @@ fn action_step_body_through(
     }
     let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
         Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
-        Some(_) => return None,
+        Some(_) => {
+            return None;
+        }
         None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
         .filter(|function| function.body.contains(at) && function.method_name.is_none())?;
+    // ADR 0961: the site (or the call that runs it) is written in a generator no walk proves to be an action's step
+    // body (handed to a helper that makes the action, `yield*`, stepped by a handler): an obligation, never dropped.
+    if function.generator && in_generator_step(file, at, context) {
+        return Some(("generator", true));
+    }
     if file
         .ast
         .arguments_containing(function.span)
@@ -2015,6 +2163,7 @@ fn action_step_body_through(
     }
     calls.into_iter().find_map(|(caller, call)| {
         action_step_body_at(caller, call, context)
+            .map(|(body, _)| body)
             .or_else(|| {
                 action_step_body_through(caller, call, context, depth - 1).map(|(body, _)| body)
             })
@@ -2083,7 +2232,7 @@ fn unplaced_step<'s, 'f: 's>(
     // (as ADR 0639's net assumes).
     if ownerless
         && (owner_set_around(file, site, lookup)
-            || crate::owners::containing_ast_function(&file.ast, site)
+            || crate::owners::owning_function(&file.ast, site)
                 .is_some_and(|function| lookup.function_may_be_component(file, function)))
     {
         return false;
@@ -2233,12 +2382,20 @@ fn runs_unplaced_once(
     // runs (other than `untrack`'s) has the owner that primitive sets, and a
     // body that may be a component's runs under the owner its render sets
     // (as ADR 0639's net assumes).
+    // ADR 0961 (PD): the function that owns the site, its parameter list included: a default is not run by the function that merely
+    // declares the one it is written in.
     if ownerless
         && (owner_set_around(file, site, lookup)
-            || crate::owners::containing_ast_function(&file.ast, site)
+            || crate::owners::owning_function(&file.ast, site)
                 .is_some_and(|function| lookup.function_may_be_component(file, function)))
     {
         return None;
+    }
+    // ADR 0961 (PD): a site written in a parameter initializer, or in a layer that runs in place in one, runs when a call
+    // of its function omits the argument, which no call edge below places: an obligation while that function is called or
+    // referenced anywhere.
+    if parameter_initializer_on_the_way(file, site, lookup) {
+        return Some(crate::blockers::PARAMETER_INITIALIZER_UNPLACED);
     }
     if crate::execution_role::unplaced_run(file, site, lookup) {
         return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
@@ -2257,7 +2414,15 @@ fn runs_unplaced_once(
         Some(_) | None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
-        .filter(|function| function.body.contains(at) && !function.generator)?;
+        .filter(|function| function.body.contains(at))?;
+    // ADR 0961: a generator's body runs where an iterator of it is stepped, which no call edge places: when it may be
+    // stepped (handed on, or a call of it creates an iterator the program uses) the run is unplaced, an obligation,
+    // not "placed". A generator nothing steps runs none of its body.
+    if function.generator {
+        return (!is_action_step_argument(file, function, lookup)
+            && generator_may_be_stepped(file, function, lookup))
+        .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
+    }
     crate::owners::function_binding_name(file, function)?;
     let calls = lookup
         .function_call_sites(file.path.as_str(), function.span)
@@ -2331,9 +2496,63 @@ fn foreign_quiet_primitive(file: &FileFacts, at: Span, lookup: &SemanticLookup<'
 fn unplaced_clause(blocker: &str) -> &'static str {
     if blocker == crate::blockers::FUNCTION_RUN_UNPLACED {
         "in a function that runs where no call edge places it"
+    } else if blocker == crate::blockers::PARAMETER_INITIALIZER_UNPLACED {
+        "in a parameter initializer, which runs wherever a call of its function omits the argument"
     } else {
         "in a function whose callers the walk stopped asking at its depth limit"
     }
+}
+
+/// ADR 0961 (PD): whether `site` is written in a parameter initializer (a default value, a destructuring default, an IIFE, a
+/// closure or a helper call in one) of a function that is called or referenced anywhere in the program. The initializer runs
+/// when a call of the function omits the argument, so the site may run wherever the function's calls do, and no net reads which
+/// calls omit it: an obligation, never a proof (a call that passes the argument runs nothing of it, and nothing here knows).
+/// A function written as an action's step body is no such function: the action evaluates its parameters when it creates the
+/// generator, before the first step (ADR 0454).
+fn parameter_initializer_run(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -> bool {
+    crate::execution_role::functions_around(file, site)
+        .into_iter()
+        .filter(|function| crate::execution_role::parameter_slot(function, site).is_some())
+        .any(|function| {
+            !is_action_step_argument(file, function, lookup)
+                && function_referenced(file, function, lookup)
+        })
+}
+
+/// [`parameter_initializer_run`] at `site` or at the call of a layer that runs in place on the way up from it (a helper
+/// called once, written in a default: the climb crosses it without saying where it was written).
+fn parameter_initializer_on_the_way(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    parameter_initializer_run(file, site, lookup)
+        || crate::execution_role::in_place_layer_calls(file, site, lookup)
+            .into_iter()
+            .any(|call| parameter_initializer_run(file, call, lookup))
+}
+
+/// Whether `function` is called or referenced anywhere in the program: a member (reached by any access) or a literal written
+/// where it is used always is; a function with a binding is when a call, a hand-off, another file or an export names it.
+fn function_referenced(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if function.method_name.is_some() {
+        return true;
+    }
+    let Some(references) =
+        crate::local_access::function_reference_hand_offs(file, function, lookup)
+    else {
+        return true;
+    };
+    !references.is_empty()
+        || !lookup
+            .function_call_sites(file.path.as_str(), function.span)
+            .is_empty()
+        || !crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
+        || crate::execution_role::module_exports(file, function, lookup)
 }
 
 /// ADR 0710: whether the functions directly around `site` are callbacks of
@@ -2377,11 +2596,12 @@ fn owner_set_around(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -
     false
 }
 
+#[deny(clippy::wildcard_enum_match_arm)]
 fn action_step_body_at(
     file: &FileFacts,
     site: Span,
     context: &StaticApiContext<'_>,
-) -> Option<&'static str> {
+) -> Option<(&'static str, bool)> {
     // ADR 0478: a call in function layers that run in place inside the body
     // (an IIFE, an inline standard-library callback, a helper's callback it
     // calls in its own body; ADR 0469's climb) runs on the stack of the
@@ -2394,20 +2614,50 @@ fn action_step_body_at(
     // (`untrack(() => flush())`: the action's depth is the runtime's, not the callback's). One that catches
     // what it throws (`isPending`) leaves a plain throw no report, and one whose own call throws first in a step
     // (`flush(fn)`) never runs the callback: neither is crossed.
-    let at = match crate::execution_role::climb_through_slots(file, site, context.lookup, |slot| {
-        match slot.run {
+    // ADR 0959: the climb crossed a callback with a parameter or an async one: the step it reaches is an obligation.
+    let mut unmodelled = false;
+    let at = match crate::execution_role::climb_through_slots(
+        file,
+        site,
+        context.lookup,
+        |slot, async_callback| match slot.run {
             SlotRun::InPlace(run) => match run.throws {
                 SlotThrows::Escapes => !context
                     .lookup
                     .dialect
                     .throws_inside_action_step(slot.primitive),
-                SlotThrows::Swallows => false,
+                // An async callback's synchronous part runs in place, but what it throws is its promise's rejection, which
+                // the primitive does not catch (ADR 0960): crossed, as an obligation (the callback is unmodelled).
+                SlotThrows::Swallows => async_callback,
             },
             SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => false,
+        },
+    ) {
+        Some(SlotClimb { climb, stop }) => {
+            // A site in a parameter list, or one after an await in its layer, is not claimed.
+            if climb.in_list || climb.suspended.is_some() {
+                return None;
+            }
+            match stop {
+                // Outer layers unread: no step is proven here (the unplaced net asks again from `climb.at`).
+                ClimbStop::Bound => return None,
+                // Every other stop ends the climb at the call inside the layer it stopped at: the dialect, the
+                // compiler or this walk's policy (the closure above) says the code does not run on a step's stack
+                // beyond it, so that call is where the step proof asks. `UnmodelledInPlace` and `NoSlot` are
+                // stops of the leaf-owner walk's path; this climb crosses the first and never reports the second.
+                ClimbStop::NoFunction
+                | ClimbStop::NotSlot
+                | ClimbStop::NoSlot
+                | ClimbStop::UnmodelledInPlace
+                | ClimbStop::UnmodelledElsewhere
+                | ClimbStop::JsxPlaced
+                | ClimbStop::RunsElsewhere
+                | ClimbStop::Declined => {
+                    unmodelled = climb.unmodelled;
+                    climb.at
+                }
+            }
         }
-    }) {
-        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
-        Some(_) => return None,
         None => site,
     };
     let (container, index) = file
@@ -2437,9 +2687,10 @@ fn action_step_body_at(
     let body = crate::owners::containing_body_function(&file.ast, at)
         .filter(|function| function.span == written && function.generator)?;
     if !body.r#async {
-        return Some("sync generator");
+        return Some(("sync generator", unmodelled));
     }
-    crate::effect_phase::runs_before_first_suspension(file, body, at).then_some("async generator")
+    crate::effect_phase::runs_before_first_suspension(file, body, at)
+        .then_some(("async generator", unmodelled))
 }
 
 /// The root expression span of a member/call chain: `state.user` and

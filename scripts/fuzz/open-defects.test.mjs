@@ -209,3 +209,20 @@ describe("open-rows.mjs (R25)", () => {
     expect(ledgerChange({ grids: { g: { a: { cause: "R" } } } }, { grids: { g: { a: { cause: "S" } } } }).moved).toEqual([{ id: "g/a", from: "R", to: "S" }]);
   });
 });
+
+// ADR 0953, option (c) (owner's ruling): the judge settles the aw-helper-late x UNTRACKED_READ_AFTER_AWAIT cell's 359 repeat claims by their twins, so the family entry
+// that held them (option b) is gone, and so are the ledger rows: a stacked claim of the cell is a failure again, as any problem row is. (The three tests that
+// held an unlisted claim `unlisted` and a ledgered row `held` went with the entry.)
+describe("the aw-helper-late cell's stacked claims have no standing", () => {
+  const list = readOpenDefects();
+  const prefix = "mx-untracked-read-after-await-aw-helper-late-";
+  const row = { id: `${prefix}x-an-id-no-ledger-holds`, code: "UNTRACKED_READ_AFTER_AWAIT", context: "aw-helper-late", variant: "-" };
+  it("holds nothing of the cell: no family entry, no ledger row, so a claim whose twin failed fails the run", () => {
+    expect((list.grids ?? []).filter((entry) => entry.outcome === "stacked-claim")).toEqual([]);
+    expect(Object.keys(list.rows.grids["mx-recall"] ?? {}).filter((id) => id.startsWith(prefix))).toEqual([]);
+    for (const strict of [false, true]) expect(gridStanding(list, row, "stacked-claim", { grid: "mx-recall", strict })).toBeNull();
+  });
+  it("names no repeat pair in the ratchet: both leave with their twins", () => {
+    expect(Object.keys(list.ratchet.stackedPairs).filter((pair) => ["UNTRACKED_READ_AFTER_AWAIT|reactive-read-after-await", "STORE_WRITE_OUTSIDE_SETTER|no-store-mutation-outside-setter"].includes(pair))).toEqual([]);
+  });
+});

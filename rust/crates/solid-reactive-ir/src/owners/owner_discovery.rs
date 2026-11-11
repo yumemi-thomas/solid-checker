@@ -1017,6 +1017,7 @@ pub(crate) fn find_missing_owners_incremental(
     SettledGateDecisions,
     OwnerIncrementalTimings,
     Vec<crate::StaticViolation>,
+    Option<OwnerView>,
 ) {
     let entities = lookup.entities();
     let mut timings = OwnerIncrementalTimings::default();
@@ -1140,8 +1141,10 @@ pub(crate) fn find_missing_owners_incremental(
         lookup,
         leaf_operations,
     );
+    let mut owner_view = None;
     if !facts.dependency_source_roots.is_empty() {
         let (nodes, contexts, outgoing) = graph.dense_view(&order);
+        let mut walked = HashSet::default();
         attribute_dependency_requirements(
             &mut requirements,
             facts,
@@ -1149,7 +1152,41 @@ pub(crate) fn find_missing_owners_incremental(
             &nodes,
             &contexts,
             &outgoing,
+            &mut walked,
         );
+        // ADR 0949: the project sites that enter package code and no call names.
+        let package_reads = order
+            .iter()
+            .filter_map(|pid| emissions.get(pid))
+            .flat_map(|emission| emission.package_reads.iter().cloned())
+            .collect::<Vec<_>>();
+        let package_requirements = order
+            .iter()
+            .filter_map(|pid| emissions.get(pid))
+            .flat_map(|emission| emission.package_requirements.iter().cloned())
+            .collect::<Vec<_>>();
+        let mentions = PackageMentions::build(facts);
+        attribute_package_entries(
+            &mut requirements,
+            facts,
+            lookup,
+            &nodes,
+            &contexts,
+            &outgoing,
+            &walked,
+            &provider_free,
+            &package_reads,
+            &package_requirements,
+            &mentions,
+        );
+        // ADR 0949: kept for the package entry table over the final rows.
+        owner_view = Some(OwnerView {
+            nodes,
+            contexts,
+            outgoing,
+            provider_free: provider_free.clone(),
+            mentions,
+        });
     }
     let requirement_emission = requirements_started.elapsed();
     (
@@ -1164,6 +1201,7 @@ pub(crate) fn find_missing_owners_incremental(
             ..timings
         },
         static_violations,
+        owner_view,
     )
 }
 

@@ -1,0 +1,5 @@
+# leaf-unmodelled-slot
+
+**Claim (ADR 0959).** A callback of a primitive that runs it in place, written with a parameter the primitive may never pass (`untrack((p0?: number) => …)`) or as an `async` function, is a layer the slot climb of the leaf-owner walk does not cross. The call written in it that may operate (`onCleanup`, `createMemo`, `flush`: a primitive the leaf owner refuses, or any call that is no primitive) is an uncertifiable row of SC3001 (`leaf-owner-unproven`), never a violation and never silence: Chrome (rc.21) reports the code at each, and the walk cannot say what the parameter is. A coarse rule for a rare shape (coordinator addendum 7); the precise continuation is a later proof target.
+
+`App.tsx`: `ParamCleanup`, `AsyncPrimitive`, `LatestParamFlush` (a parameter, an async callback, `latest`), `NamespaceParamCleanup` (`S.untrack`), `OwnerNullAsync` (`runWithOwner(null, async …)`): rows. `PlainUntrackFlush`: the walk's own proof (a violation). `ParamQuiet` (no call), `ParamAccessor` (the only call reads an accessor), `InBody` (not a leaf scope): no row.

@@ -48,8 +48,8 @@ fn key_of(name: &str) -> &str {
 
 /// The hazards [`handed_root_patch`] can read for `qualified_name`. Its formula: `written && (StandardRootHanded ||
 /// ((StandardRootReceived || StandardRootIterated) && RootPatch) || (StandardRootIterated && iterated_open))`, `written`
-/// being an open write of the member (or of any key), a reflective definer spelled, or an open write under a symbol with
-/// `Symbol` replaceable.
+/// being an open write of the member (or of any key), a reflective definer that may define any key or this member (ADR 0951: a
+/// definer put to another literal key is no atom), or an open write under a symbol with `Symbol` replaceable.
 pub(crate) fn handed_root_atoms(qualified_name: &str) -> Vec<HazardAtom> {
     let member = qualified_name
         .rsplit_once('.')
@@ -64,8 +64,12 @@ pub(crate) fn handed_root_atoms(qualified_name: &str) -> Vec<HazardAtom> {
             open_member_write(member),
         ),
         atom(
-            "ReflectiveDefinitionSpelling",
-            Hazard::ReflectiveDefinitionSpelling,
+            format!("ReflectiveDefinition({})", key_name(ANY_MEMBER)),
+            Hazard::ReflectiveDefinitionAny,
+        ),
+        atom(
+            format!("ReflectiveDefinition({})", key_name(member)),
+            reflective_definition_sole(member),
         ),
         atom(
             format!("OpenMemberWrite({})", key_name(SYMBOL_SITE)),
@@ -127,6 +131,39 @@ pub(crate) fn impostor_atoms(qualified_name: &str) -> Vec<HazardAtom> {
         ));
     }
     atoms
+}
+
+/// ADR 0950 (`--assume`): the hazard an id names, the inverse of the ids above (`OpenMemberWrite(*)`, `RootPatch`, `StandardImpostor(forEach)`,
+/// `StandardOverride(Array.map)`, `StandardPatch(.Symbol)`, `StandardPatch(*.then)`, ...), or none. Only the hazards a veto formula reads by
+/// name or by a census key; the ordinal ones (`Eval`, `SynchronousDispatch`, ...) have no id and no seam.
+#[cfg(feature = "what-if")]
+pub(crate) fn hazard_of_id(id: &str) -> Option<Hazard> {
+    let (head, argument) = match id.split_once('(') {
+        Some((head, rest)) => (head, Some(rest.strip_suffix(')')?)),
+        None => (id, None),
+    };
+    Some(match (head, argument) {
+        ("ReflectiveDefinitionSpelling", None) => Hazard::ReflectiveDefinitionSpelling,
+        ("ReflectiveDefinition", Some("*")) => Hazard::ReflectiveDefinitionAny,
+        ("ReflectiveDefinition", Some(key)) => reflective_definition_sole(key_of(key)),
+        ("StandardRootHanded", None) => Hazard::StandardRootHanded,
+        ("StandardRootReceived", None) => Hazard::StandardRootReceived,
+        ("StandardRootIterated", None) => Hazard::StandardRootIterated,
+        ("RootPatch", None) => Hazard::RootPatch,
+        ("AnyStandardPatch", None) => Hazard::AnyStandardPatch,
+        ("OpenMemberWrite", Some(key)) => open_member_write(key_of(key)),
+        ("StandardImpostor", Some(key)) => standard_impostor(key_of(key)),
+        ("StandardImpostorWrite", Some(key)) => standard_impostor_write(key_of(key)),
+        ("StandardOverride", Some(rest)) => {
+            let (owner, member) = rest.split_once('.')?;
+            standard_override(owner, key_of(member))
+        }
+        ("StandardPatch", Some(rest)) => {
+            let (owner, member) = rest.split_once('.')?;
+            standard_patch(owner, key_of(member))
+        }
+        _ => return None,
+    })
 }
 
 /// The ids of the `atoms` the program has, sorted, so a row names the same ones in any build.
@@ -237,6 +274,53 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
+    /// ADR 0950: `--assume` takes the ids a row's `fired` names, so every atom's id reads back to its hazard.
+    #[cfg(feature = "what-if")]
+    #[test]
+    fn every_atom_id_names_its_hazard() {
+        for name in [
+            "Number.isFinite",
+            "Array.map",
+            "ReadonlyArray.forEach",
+            "Promise.then",
+            "String.replace",
+            "String.replaceAll",
+        ] {
+            for atom in handed_root_atoms(name)
+                .into_iter()
+                .chain(impostor_atoms(name))
+            {
+                assert_eq!(
+                    hazard_of_id(&atom.id),
+                    Some(atom.hazard),
+                    "{name}: {}",
+                    atom.id
+                );
+            }
+        }
+        // the patch census ids a veto formula names (`patch_veto`): an owner and a member, the reached owner `*`
+        assert_eq!(
+            hazard_of_id("StandardPatch(Promise.then)"),
+            Some(standard_patch("Promise", "then"))
+        );
+        assert_eq!(
+            hazard_of_id("StandardPatch(*.then)"),
+            Some(standard_patch("*", "then"))
+        );
+        for bad in [
+            "",
+            "Eval",
+            "OpenMemberWrite",
+            "RootPatch(x)",
+            "StandardPatch(then)",
+            "StandardOverride(Array)",
+            "StandardImpostor(a",
+            "standardrootHanded",
+        ] {
+            assert_eq!(hazard_of_id(bad), None, "{bad}");
+        }
+    }
+
     #[test]
     fn every_hazard_a_formula_reads_is_one_of_its_atoms() {
         for name in [
@@ -298,6 +382,50 @@ mod tests {
         assert_eq!(
             impostor_cause("Array.map", &impostor),
             ["StandardImpostor(map)"]
+        );
+    }
+
+    /// ADR 0951: a reflective definer put to a literal key defines that key and no other, so it withholds that member only; a definer that
+    /// names no literal key (`Any`) withholds every member, as the blanket spelling did.
+    #[test]
+    fn a_definer_put_to_a_literal_key_withholds_that_key_only() {
+        let with = |extra: Hazard| {
+            let present = [extra, Hazard::StandardRootHanded];
+            move |hazard: Hazard| present.contains(&hazard)
+        };
+        assert!(!handed_root_patch(
+            "Number.isFinite",
+            &with(reflective_definition_sole("isNaN"))
+        ));
+        assert!(handed_root_patch(
+            "Number.isFinite",
+            &with(reflective_definition_sole("isFinite"))
+        ));
+        assert!(handed_root_patch(
+            "Number.isFinite",
+            &with(Hazard::ReflectiveDefinitionAny)
+        ));
+        // The spelling's own presence holds nothing now: what it may define decides.
+        assert!(!handed_root_patch(
+            "Number.isFinite",
+            &with(Hazard::ReflectiveDefinitionSpelling)
+        ));
+        assert_eq!(
+            handed_root_cause(
+                "Number.isFinite",
+                &with(reflective_definition_sole("isFinite"))
+            ),
+            Some(vec![
+                "ReflectiveDefinition(isFinite)".to_owned(),
+                "StandardRootHanded".to_owned(),
+            ])
+        );
+        assert_eq!(
+            handed_root_cause("Number.isFinite", &with(Hazard::ReflectiveDefinitionAny)),
+            Some(vec![
+                "ReflectiveDefinition(*)".to_owned(),
+                "StandardRootHanded".to_owned(),
+            ])
         );
     }
 

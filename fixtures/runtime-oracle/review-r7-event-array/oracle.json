@@ -1,10 +1,3 @@
 {
-  "note": "ADR 0326/0327 reviewer r7: event-array.",
-  "open": [
-    {
-      "code": "NO_OWNER_CLEANUP",
-      "site": "App.tsx:4",
-      "reason": "Real owner miss: the DOM dispatches the typed [handler, data] event tuple with no owner, but invocation-flow owner seeding does not follow the tuple handler."
-    }
-  ]
+  "note": "ADR 0326/0327 reviewer r7: event-array. The runtime's NO_OWNER_CLEANUP at App.tsx:4 is covered by an SC4001 uncertifiable there, so no site is open (ADR 0952)."
 }

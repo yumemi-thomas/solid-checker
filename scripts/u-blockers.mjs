@@ -20,6 +20,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
+import { refuseAssumed } from "./lib/assumed.mjs";
+
 /** The reports under `paths`: a file is one, a directory contributes every `*.json` below it, sorted. */
 export function reportFiles(paths) {
   const found = [];
@@ -32,13 +34,21 @@ export function reportFiles(paths) {
   return found;
 }
 
+/**
+ * The parsed reports of `reportFiles(paths)`. A what-if report (ADR 0950) is refused: the alternatives this ranks are what the shipped checker
+ * derives, and a prediction has already assumed some of its hazards away.
+ */
+export function readReports(paths) {
+  return reportFiles(paths).map((path) => refuseAssumed(JSON.parse(readFileSync(path, "utf8")), `scripts/u-blockers.mjs (${path})`));
+}
+
 /** `[a, b]` ordered by count (descending), then key. */
 const ranked = (counts) => [...counts].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 const bump = (map, key, by = 1) => map.set(key, (map.get(key) ?? 0) + by);
 
 // The veto formulas over their atoms, restated from the checker (`base/contributions/blocked_by.rs`). A formula the report does not
 // know lifts only when every fired atom goes.
-const WRITTEN = /^(?:OpenMemberWrite\((?!<symbol>)|ReflectiveDefinitionSpelling$)/;
+const WRITTEN = /^(?:OpenMemberWrite\((?!<symbol>)|ReflectiveDefinition(?:Spelling$|\())/;
 const SYMBOL_OPEN = ["StandardPatch(.Symbol)", "StandardPatch(.*)", "StandardImpostorWrite(Symbol)"];
 const ITERATED_OPEN = /^(?:StandardImpostor\(|StandardOverride\(Array\.)/;
 
@@ -202,7 +212,7 @@ function main(argv) {
     console.error("usage: bun scripts/u-blockers.mjs <report.json | directory> [...] [--top 10] [--json]");
     process.exit(64);
   }
-  const reports = reportFiles(paths).map((path) => JSON.parse(readFileSync(path, "utf8")));
+  const reports = readReports(paths);
   const result = analyze(reports, { top });
   process.stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : render(result));
 }

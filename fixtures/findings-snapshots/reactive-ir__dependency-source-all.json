@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 76,
+      "end": 87,
+      "fixes": 0
+    },
+    {
       "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",
@@ -23,9 +34,31 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 396,
+      "end": 410,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 644,
+      "end": 658,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
       "start": 644,
@@ -68,6 +101,17 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 1617,
+      "end": 1630,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
       "start": 1617,

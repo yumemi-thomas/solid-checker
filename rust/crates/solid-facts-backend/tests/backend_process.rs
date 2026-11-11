@@ -4,6 +4,10 @@
 // of the backend and compiler dependency graph on disk.
 #[path = "support/process.rs"]
 mod process_support;
+// ADR 0950: the default build's half of the what-if tests (a what-if build is tested by its own target, `what_if_process`).
+#[cfg(not(feature = "what-if"))]
+#[path = "support/what_if.rs"]
+mod what_if_support;
 
 #[path = "accessor_provenance_process.rs"]
 mod accessor_provenance_process;
@@ -70,3 +74,6 @@ mod site_reach_reads_process;
 mod transport_process;
 #[path = "warm_resolution_process.rs"]
 mod warm_resolution_process;
+#[cfg(not(feature = "what-if"))]
+#[path = "what_if_default_process.rs"]
+mod what_if_default_process;

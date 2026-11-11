@@ -37,6 +37,7 @@ import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { refuseAssumed } from "./lib/assumed.mjs";
 import { oracleCompilerOptions, oracleProject } from "./tsc-oracle.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -108,7 +109,8 @@ const analyze = (testCase, label, code, args) => {
     }
   );
   const rule = canonicalRule(testCase);
-  return (JSON.parse(output).findings ?? []).filter((finding) => finding.rule === rule);
+  // ADR 0950: a what-if report predicts what evidence would lift; this audit supplies the evidence to the shipped checker and looks.
+  return (refuseAssumed(JSON.parse(output), "scripts/obligation-audit.mjs").findings ?? []).filter((finding) => finding.rule === rule);
 };
 
 const slug = (name) => name.replace(/[^a-z0-9]+/gi, "-");

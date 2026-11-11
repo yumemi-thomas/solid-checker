@@ -60,6 +60,94 @@
       "start": 1168,
       "end": 1175,
       "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "async-slot-unmodelled",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 2483,
+      "end": 2490,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 2483,
+      "end": 2490,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "uncertifiable",
+      "blocker": "async-slot-unmodelled",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 2654,
+      "end": 2659,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 2654,
+      "end": 2659,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "async-slot-unmodelled",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 2825,
+      "end": 2832,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 3251,
+      "end": 3266,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "async-slot-unmodelled",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 3281,
+      "end": 3288,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-latest-ispending-observer-guard/App.tsx",
+      "start": 3281,
+      "end": 3288,
+      "fixes": 0
     }
   ]
 }

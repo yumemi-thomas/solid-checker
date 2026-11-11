@@ -4,6 +4,17 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 426,
+      "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
@@ -20,6 +31,17 @@
       "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
       "start": 447,
       "end": 452,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 573,
+      "end": 597,
       "fixes": 0
     },
     {
@@ -46,6 +68,17 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 681,
+      "end": 702,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
@@ -62,6 +95,17 @@
       "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
       "start": 706,
       "end": 711,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 787,
+      "end": 809,
       "fixes": 0
     },
     {
@@ -86,6 +130,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 1105,
+      "end": 1128,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -94,6 +149,17 @@
       "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
       "start": 1132,
       "end": 1137,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 1266,
+      "end": 1296,
       "fixes": 0
     },
     {
@@ -108,6 +174,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 1455,
+      "end": 1484,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -116,6 +193,17 @@
       "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
       "start": 1488,
       "end": 1493,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return/App.tsx",
+      "start": 1650,
+      "end": 1677,
       "fixes": 0
     },
     {

@@ -1,0 +1,92 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 452,
+      "end": 457,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 574,
+      "end": 579,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 694,
+      "end": 699,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 878,
+      "end": 883,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 1314,
+      "end": 1319,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 1449,
+      "end": 1454,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 1581,
+      "end": 1586,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-unmodelled-slot/App.tsx",
+      "start": 1954,
+      "end": 1959,
+      "fixes": 0
+    }
+  ]
+}

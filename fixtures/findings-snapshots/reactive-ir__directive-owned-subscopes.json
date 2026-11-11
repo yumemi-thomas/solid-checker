@@ -108,6 +108,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2270,
+      "end": 2280,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

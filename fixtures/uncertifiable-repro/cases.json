@@ -93,6 +93,31 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC7002",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
      }
     ]
    }
@@ -9814,6 +9839,206 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4002",
+      "context": "provider-not-proven-above"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
      }
     ]
    }
@@ -12932,6 +13157,46 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "package-finding-at-entry"
      }
     ]
    }

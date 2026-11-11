@@ -1,0 +1,125 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 713,
+      "end": 723,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 913,
+      "end": 918,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1032,
+      "end": 1037,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1136,
+      "end": 1141,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1232,
+      "end": 1242,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1243,
+      "end": 1248,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1349,
+      "end": 1354,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1378,
+      "end": 1383,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1490,
+      "end": 1499,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "generator-stepped",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1597,
+      "end": 1607,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 1804,
+      "end": 1814,
+      "fixes": 0
+    }
+  ]
+}

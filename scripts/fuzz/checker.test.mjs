@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { AssumedReportError } from "../lib/assumed.mjs";
+import { TAINTED, fakeChecker, finding as reportedFinding, flippedReport } from "../lib/assumed-fixtures.mjs";
 import { MAIN_SOURCE, UnmappedFindingsError, mainSourceFor, WORK_NAMESPACE, assertFindingsMapped, checkerResult, entryVeto, materializeForChecker, oracleMainSource, parseFindings, runChecker, siteVerdicts } from "./checker.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
@@ -241,5 +243,34 @@ describe("parseFindings through a symlinked directory", () => {
     const result = await runChecker(real, { bin });
     expect(result.ok).toBe(false);
     expect(() => assertFindingsMapped()).toThrow(/map to no file of the program/);
+  });
+});
+
+describe("a what-if report (ADR 0950)", () => {
+  const refusal = /^the fuzz judge \(scripts\/fuzz\/checker\.mjs\) refuses this checker report: it is tainted by a what-if assumption/;
+  for (const [name, make] of Object.entries(TAINTED)) {
+    it(`is refused by checkerResult at either exit status that carries a report (${name})`, () => {
+      for (const status of [0, 1]) {
+        expect(() => checkerResult({ status, stdout: JSON.stringify(make()) }, "/d")).toThrow(AssumedReportError);
+        expect(() => checkerResult({ status, stdout: JSON.stringify(make()) }, "/d")).toThrow(refusal);
+      }
+    });
+  }
+  it("leaves a default build's report, and the failures that are not this one, as they were (a failed run's stdout is not read at all)", () => {
+    expect(checkerResult({ status: 0, stdout: JSON.stringify({ status: "certified", findings: [] }) }, "/d")).toMatchObject({ ok: true, findings: [] });
+    expect(checkerResult({ status: 0, stdout: "not json" }, "/d")).toMatchObject({ ok: false, error: expect.stringMatching(/malformed/) });
+    expect(checkerResult({ status: 2, stdout: JSON.stringify(flippedReport()), stderr: "boom" }, "/d")).toMatchObject({ ok: false, exitStatus: 2 });
+  });
+  it("makes runChecker reject when the checker it runs prints one, and read the same checker's default-build report as its answer", async () => {
+    const root = mkdtempSync(join(tmpdir(), "fuzz-what-if-"));
+    try {
+      const env = { PATH: process.env.PATH };
+      await expect(runChecker(root, { bin: fakeChecker(root, flippedReport(), { name: "what-if" }), env })).rejects.toBeInstanceOf(AssumedReportError);
+      const own = reportedFinding({ rule: "strict-read-untracked", id: "SC1001", kind: "violation", primaryLocation: { path: join(root, "App.tsx"), line: 4, endLine: 4 } });
+      const result = await runChecker(root, { bin: fakeChecker(root, { status: "violation", findings: [own] }, { name: "default" }), env });
+      expect(result).toMatchObject({ ok: true, findings: [{ file: "App.tsx", rule: "strict-read-untracked", id: "SC1001", kind: "violation", line: 4, endLine: 4 }] });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

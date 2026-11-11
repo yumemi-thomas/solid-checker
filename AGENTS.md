@@ -97,6 +97,8 @@ and docs/decisions.md (live decisions by ADR number).
   build and use the fresh debug checker.
 - Proof or rule changes: `make fuzz-smoke` (the census and a covering sample; a PR job,
   `fuzz-pr.yml`). `not-fired` is judged: a violation on a site that ran fails it.
+- A veto or fail-closed change: `make corpus-delta OLD=<base build> DELTA_HAZARDS=<ids>` (old and new release checkers on the projects the `hazards` table
+  says are affected, plus controls; ADR 0955) and `node scripts/guard/rises.mjs` (names the rises on existing fixtures); the table goes in the PR.
 - Handoff authority: `make verify`, once, at the end.
 - `make` targets rebuild `bin/solid-typefacts` when its source stamp is stale;
   bare `cargo` does not. If a gate result looks impossible, rerun it with

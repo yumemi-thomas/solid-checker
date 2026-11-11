@@ -14,6 +14,9 @@ workspace = true
 [features]
 default = ["dialect-v2"]
 dialect-v2 = ["dep:solid-v2-compiler", "dep:solid-v2-rules"]
+# ADR 0950: the what-if build (`--assume <hazard>`, one-shot only, every report tainted); `make build-what-if` alone enables it, into its own target directory, and names the
+# binary `solid-checker-what-if`. Never in `default`. A binary built with it is the what-if checker whatever it is called: it refuses the daemon, `--certify` and every format but the JSON.
+what-if = ["solid-reactive-ir/what-if"]
 
 [dependencies]
 serde.workspace = true
@@ -71,3 +74,9 @@ path = "tests/backend_process.rs"
 [[test]]
 name = "write_walk_strategies_process"
 path = "tests/write_walk_strategies_process.rs"
+
+# ADR 0950: the what-if build's own tests (its seam, taint and refusals), only with the feature: `make test-what-if`, in the target directory of `build-what-if`.
+[[test]]
+name = "what_if_process"
+path = "tests/what_if_process.rs"
+required-features = ["what-if"]

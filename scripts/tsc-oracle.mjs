@@ -248,6 +248,7 @@ const callApiWorker = (request) => {
       maxBuffer: 1 << 28,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    // Not a checker report, so not subject to ADR 0950's refusal (scripts/lib/assumed.mjs): the TypeScript API worker's answer.
     return JSON.parse(stdout);
   } catch (error) {
     const detail = String(error.stderr ?? "").trim() || String(error.message ?? error);

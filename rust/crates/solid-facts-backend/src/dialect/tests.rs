@@ -118,6 +118,7 @@ fn catalog_prose_program() -> Program {
             default_unproven: false,
             owned_run_throws: false,
             through_dependency: None,
+            through_dependency_entry: solid_reactive_ir::DependencyEntry::Call,
             report: true,
         }],
         async_reads: vec![AsyncRead {

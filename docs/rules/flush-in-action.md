@@ -143,13 +143,36 @@ the result, read after the action resolves (`await save(); …`).
   A closure written as an argument of a project call in a step (a chain of
   forwarding helpers, `hc1(() => flush())`) is uncertifiable too, with the
   same blocker (ADR 0832): no layer follows the forward.
+- **A generator no walk places (ADR 0961).** A `flush` written in a generator, or in a helper a generator calls, is an
+  uncertifiable row (`function-run-unplaced`) when the project, or a package analyzed as source, names `action`:
+  a generator literal handed to a helper that makes the action (a project helper or a dependency), a `yield*` into
+  another generator, a generator a handler steps. Chrome throws FLUSH_IN_ACTION for each when it is an action's step;
+  the exact stepper is not followed. A generator that is the action's own argument keeps the walk's proof (a
+  violation); a program that names no `action` has no such site.
+- **A callback with a parameter or an async callback of a primitive that runs it in place (ADR 0959).** The climb crosses
+  it as an obligation (`untrack((p0) => flush())`, `latest(async () => { flush(); })` in a step): a parameter the primitive
+  may never pass, and an async callback's code before its first await, are shapes no proof reads, so the row is an
+  obligation, never a violation.
 - **After a suspension.** In an async generator, a call that any `await`,
   `for await`, `yield*` or `await using` of the body can run before — or that
   a loop can reach again after one — is not claimed. A later `yield` re-enters
   a step, so some of those calls do throw; the proof does not follow the
   generator's control flow far enough to say which.
 - **Arguments that are not the generator.** `action(wrap(function* () { … }))`
-  steps whatever `wrap` returns, so nothing inside is claimed.
+  steps whatever `wrap` returns, so no violation is claimed inside; the flush is an uncertifiable row (ADR 0961: a
+  generator handed on that no walk places), since `wrap` may return the generator itself.
+
+- **A generator whose iterator the program keeps (ADR 0961, R1).** A named generator's call whose result a statement does
+  not discard may be stepped anywhere (`Array.from(g())`, `new Set(g())`, `g().next()`, `const it = g(); it.next()`, a
+  loop over a stored iterator, `yield*`): a `flush` in its body is an uncertifiable row (`function-run-unplaced`) when the
+  program names `action`, never silence. Chrome throws FLUSH_IN_ACTION at each when the generator is stepped in a step. A
+  call a statement discards runs none of the body, and a generator nothing calls or steps has no site.
+- **A parameter initializer (ADR 0961, PD).** A `flush` written in a default value, a destructuring default, an IIFE or a
+  closure in one, or in a helper the default calls, of a function the program calls or references
+  (`function h(x = flush())` and `action(function* () { h(); })`) runs when a call omits the argument, which no walk
+  reads: an uncertifiable row (`parameter-initializer-unplaced`), never a violation. The default of the action's own step
+  generator is evaluated when the action creates the generator, before the first step (ADR 0454): no row. A method's
+  default is the same row.
 
 ## Related
 

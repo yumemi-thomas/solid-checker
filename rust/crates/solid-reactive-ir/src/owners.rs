@@ -29,12 +29,18 @@ mod owner_graph;
 pub(crate) use owner_graph::*;
 mod missing_owners;
 pub(crate) use missing_owners::*;
+mod package_entries;
+use package_entries::attribute_package_entries;
+pub(crate) use package_entries::{
+    Capabilities, OperationRegions, OwnerView, PackageMentions, package_entry_table,
+    package_handed_value_claims, package_operation_claims, package_operations,
+};
 mod context_census;
 pub(crate) use context_census::*;
 mod owner_state;
 use owner_state::{HandOuts, OwnerGraph, PathId};
 mod owner_emission;
-pub(crate) use owner_emission::Emission;
+pub(crate) use owner_emission::{Emission, PackageRead, PackageRequirement};
 use owner_emission::{EmissionInputs, emit_file};
 mod jsx_sites;
 pub(crate) use jsx_sites::{JsxSiteKind, aliased_primitive, control_flow_parent, jsx_sites};
@@ -63,7 +69,7 @@ pub(crate) fn collect_project(
     timings: &mut BuildTimings,
 ) {
     if let Some(cache) = cache {
-        let (requirements, gates, owner_timings, static_violations) =
+        let (requirements, gates, owner_timings, static_violations, owner_view) =
             find_missing_owners_incremental(
                 ctx.facts,
                 ctx.semantic_lookup,
@@ -73,6 +79,7 @@ pub(crate) fn collect_project(
                 &mut cache.owners,
                 &draft.leaf_operations,
             );
+        draft.owner_view = owner_view;
         draft.missing_owners.extend(requirements);
         // ADR 0713: open context reads.
         draft.static_violations.extend(static_violations);
@@ -84,7 +91,7 @@ pub(crate) fn collect_project(
         // A build with no retained cache runs the same pass over a scratch
         // state: one owner analysis, so a fresh and a retained build cannot
         // disagree (the duplicate batch pass drifted, S7f-0).
-        let (requirements, gates, owner_timings, static_violations) =
+        let (requirements, gates, owner_timings, static_violations, owner_view) =
             find_missing_owners_incremental(
                 ctx.facts,
                 ctx.semantic_lookup,
@@ -94,6 +101,7 @@ pub(crate) fn collect_project(
                 &mut OwnerState::default(),
                 &draft.leaf_operations,
             );
+        draft.owner_view = owner_view;
         draft.missing_owners.extend(requirements);
         // ADR 0713: open context reads.
         draft.static_violations.extend(static_violations);

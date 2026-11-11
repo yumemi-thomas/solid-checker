@@ -2,6 +2,28 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
+      "start": 111,
+      "end": 121,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
+      "start": 483,
+      "end": 500,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -10,6 +32,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
       "start": 506,
       "end": 511,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Awaited.tsx",
+      "start": 773,
+      "end": 790,
       "fixes": 0
     },
     {
@@ -46,6 +79,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Clean.tsx",
+      "start": 252,
+      "end": 269,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -65,6 +109,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Clean.tsx",
       "start": 444,
       "end": 457,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
+      "start": 537,
+      "end": 554,
       "fixes": 0
     },
     {
@@ -90,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
+      "start": 543,
+      "end": 560,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -108,6 +174,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
       "start": 579,
       "end": 586,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
+      "start": 1009,
+      "end": 1026,
       "fixes": 0
     },
     {
@@ -144,6 +221,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/FakeLazy.tsx",
+      "start": 267,
+      "end": 284,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -152,6 +240,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/FakeLazy.tsx",
       "start": 290,
       "end": 295,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/LocalLazy.tsx",
+      "start": 329,
+      "end": 346,
       "fixes": 0
     },
     {
@@ -166,6 +265,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 484,
+      "end": 501,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -174,6 +284,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 509,
       "end": 514,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 845,
+      "end": 862,
       "fixes": 0
     },
     {
@@ -188,6 +309,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 1198,
+      "end": 1215,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -196,6 +328,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 1221,
       "end": 1226,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 1526,
+      "end": 1543,
       "fixes": 0
     },
     {
@@ -210,6 +353,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 1889,
+      "end": 1906,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -221,6 +375,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 2225,
+      "end": 2242,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -229,6 +394,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 2248,
       "end": 2253,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 2528,
+      "end": 2545,
       "fixes": 0
     },
     {
@@ -251,6 +427,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 2584,
       "end": 2593,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 2866,
+      "end": 2883,
       "fixes": 0
     },
     {
@@ -287,6 +474,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 3197,
+      "end": 3214,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -295,6 +493,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 3220,
       "end": 3225,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 3433,
+      "end": 3450,
       "fixes": 0
     },
     {
@@ -309,6 +518,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 3716,
+      "end": 3733,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -317,6 +537,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
       "start": 3739,
       "end": 3744,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
+      "start": 3986,
+      "end": 4003,
       "fixes": 0
     },
     {
@@ -441,6 +672,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Shadow.tsx",
+      "start": 341,
+      "end": 358,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -485,6 +727,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 959,
+      "end": 976,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -493,6 +746,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
       "start": 982,
       "end": 987,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 1352,
+      "end": 1369,
       "fixes": 0
     },
     {

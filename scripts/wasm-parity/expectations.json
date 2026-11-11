@@ -685,6 +685,22 @@
           "path": "<root>/legacy/Legacy.tsx",
           "startByte": 348,
           "endByte": 352
+        },
+        {
+          "id": "SC9012",
+          "rule": "reactive-dispatch-unresolved",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 234,
+          "endByte": 248
+        },
+        {
+          "id": "SC1001",
+          "rule": "strict-read-untracked",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 66,
+          "endByte": 77
         }
       ],
       "metrics": {
@@ -779,6 +795,30 @@
           "path": "<root>/node_modules/dep-wrap/index.jsx",
           "startByte": 170,
           "endByte": 184
+        },
+        {
+          "id": "SC1001",
+          "rule": "strict-read-untracked",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 363,
+          "endByte": 371
+        },
+        {
+          "id": "SC5001",
+          "rule": "pending-async-unsuspendable-read",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 363,
+          "endByte": 371
+        },
+        {
+          "id": "SC5003",
+          "rule": "async-outside-loading-boundary",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 363,
+          "endByte": 371
         }
       ],
       "metrics": {

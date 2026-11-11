@@ -19,6 +19,7 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { refuseAssumed } from "./lib/assumed.mjs";
 import * as pathSemantics from "./wasm-parity/path-semantics.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -322,7 +323,8 @@ function runNative(tree, argv, label = tree.name) {
   return {
     status: result.status,
     stdout: result.stdout.toString("utf8"),
-    snapshot: result.status === 0 ? JSON.parse(result.stdout.toString("utf8")) : undefined,
+    // ADR 0950: the native reference is the shipped checker's; a what-if report (a prediction) is refused, never compared.
+    snapshot: result.status === 0 ? refuseAssumed(JSON.parse(result.stdout.toString("utf8")), "scripts/wasm-parity.mjs") : undefined,
     notes: stderr === "" ? [] : stderr.replace(/\n$/, "").split("\n"),
   };
 }
@@ -453,7 +455,7 @@ function runNativeRaw(label, argv) {
   const stderr = result.stderr.toString("utf8");
   return {
     status: result.status,
-    snapshot: result.status === 0 ? JSON.parse(result.stdout.toString("utf8")) : undefined,
+    snapshot: result.status === 0 ? refuseAssumed(JSON.parse(result.stdout.toString("utf8")), "scripts/wasm-parity.mjs") : undefined,
     notes: stderr === "" ? [] : stderr.replace(/\n$/, "").split("\n"),
   };
 }
@@ -902,10 +904,16 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     // ADR 0692: `name` handed to the package's `useLabelMemo` is the census's
     // `value-forwarded` uncertifiable.
     const handed = source.indexOf("useLabelMemo(name)") + "useLabelMemo(".length;
+    // ADR 0949: a finding in the package stands again at each project site that enters it, the call, uncertifiable (batch-10 addendum 13: the three rows
+    // the native checker has given since 0949 and this witness had not recorded; WASM equals native on them).
+    const whole = source.indexOf("useLabelMemo(name)");
     const expectedRows = [
       { id: "SC1001", rule: "strict-read-untracked", kind: "violation", path: join(tree.root, "App.tsx"), startByte: start, endByte: start + "useLabel(name)".length },
+      { id: "SC1001", rule: "strict-read-untracked", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: whole, endByte: whole + "useLabelMemo(name)".length },
       { id: "SC9012", rule: "reactive-dispatch-unresolved", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: handed, endByte: handed + "name".length },
       { id: "SC5003", rule: "async-outside-loading-boundary", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: later, endByte: later + "label()".length },
+      { id: "SC9012", rule: "reactive-dispatch-unresolved", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: start, endByte: start + "useLabel(name)".length },
+      { id: "SC9012", rule: "reactive-dispatch-unresolved", kind: "uncertifiable", path: join(tree.root, "App.tsx"), startByte: whole, endByte: whole + "useLabelMemo(name)".length },
     ];
     equalToNative(label("dotdot-fixture"), at("dotdot-fixture"), native["dotdot-fixture"]);
     check(native["dotdot-fixture"].snapshot?.status === "violation" && same(findingRows(native["dotdot-fixture"].snapshot), expectedRows),

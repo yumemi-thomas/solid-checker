@@ -835,6 +835,17 @@ impl<'a> SemanticLookup<'a> {
         rendered
     }
 
+    /// ADR 0949: the function the tag named at `name` renders through an exact
+    /// alias only ([`Self::alias_rendered_function`]); the call graph keeps no
+    /// entry for it.
+    pub(crate) fn alias_rendered_tag_function(
+        &self,
+        file: &FileFacts,
+        name: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        self.alias_rendered_function(file, name)
+    }
+
     /// The project function a tag name holds through exact aliases: the tag
     /// names a binding [`exact_alias_initializer`] accepts, whose initializer
     /// names a project function or, transitively, another such binding.

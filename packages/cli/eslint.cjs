@@ -378,6 +378,7 @@ function defaultNative() {
       }`
     );
   }
+  // Not a checker report, so not subject to ADR 0950's refusal: the launcher's answer (the executable and its environment).
   const invocation = JSON.parse(result.stdout);
   const env = Object.fromEntries(
     Object.entries(invocation.env).filter(([, value]) => typeof value === "string")
@@ -386,14 +387,38 @@ function defaultNative() {
   return resolvedNative;
 }
 
+/**
+ * ADR 0950: a report from the what-if build (`solid-checker-what-if --assume`) is a prediction of what proving a hazard away would lift, never a
+ * fact about the checker, and every reader of the checker's JSON report refuses it. It is tainted when it has a top-level `assumed` key (whatever
+ * its value) or a finding with a premise of kind `assumed`. This is the adapter's copy of scripts/lib/assumed.mjs: a published package cannot
+ * import from the repository's scripts (packages/cli/test/adapter.test.mjs holds each intake to it).
+ */
+function isAssumedReport(report) {
+  if (report === null || typeof report !== "object") return false;
+  if (Object.prototype.hasOwnProperty.call(report, "assumed")) return true;
+  const findings = report.findings;
+  return Array.isArray(findings) && findings.some(finding => Array.isArray(finding?.premises) && finding.premises.some(premise => premise?.kind === "assumed"));
+}
+
+function assumedReportMessage(source) {
+  return `solid-checker adapter refuses this checker report (${source}): it is tainted by a what-if assumption, ` +
+    "a prediction of what proving a hazard away would lift and no fact about the checker. Only scripts/what-if.mjs reads one.";
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
-  if (config.snapshot != null) return config.snapshot;
+  if (config.snapshot != null) {
+    if (isAssumedReport(config.snapshot)) throw new Error(assumedReportMessage("settings.solidChecker.snapshot"));
+    return config.snapshot;
+  }
   if (config.snapshotPath != null) {
     const path = resolve(config.cwd ?? process.cwd(), config.snapshotPath);
     const key = `file:${path}`;
     if (!snapshotCache.has(key)) {
-      snapshotCache.set(key, JSON.parse(readFileSync(path, "utf8")));
+      const stored = JSON.parse(readFileSync(path, "utf8"));
+      // Refused before it is cached: a cache never holds a tainted report, and a fixed file is read again.
+      if (isAssumedReport(stored)) throw new Error(assumedReportMessage(`snapshotPath ${path}`));
+      snapshotCache.set(key, stored);
     }
     return snapshotCache.get(key);
   }
@@ -512,6 +537,7 @@ function loadSnapshot(context) {
   } catch (error) {
     throw failure(`solid-checker adapter received invalid JSON: ${error.message}`);
   }
+  if (isAssumedReport(snapshot)) throw failure(assumedReportMessage("the native checker's output"));
   const notices = stderrNotices(result.stderr);
   if (inferredHostInputs !== inferenceFingerprint(project, runtime)) {
     throw failure("solid-checker adapter inferred-host inputs changed during analysis; retry lint");

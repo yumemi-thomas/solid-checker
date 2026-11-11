@@ -35,6 +35,41 @@ pub(crate) const SERVER_FUNCTION_VALUE_HANDED: &str = "server-function-value-han
 pub(crate) const LEAF_OPERATION_IDENTITY_UNPROVEN: &str = "leaf-operation-identity-unproven";
 pub(crate) const OPTIMISTIC_REACH_UNRESOLVED: &str = "optimistic-reach-unresolved";
 pub(crate) const PROVIDER_NOT_PROVEN_ABOVE: &str = "provider-not-proven-above";
+/// ADR 0949: a finding the ADR 0284 drop discards in a package, reported at the project site that enters the package code
+/// (`package-finding-at-entry:<code>`), or at the project's import of the package when no entry is proven.
+pub const PACKAGE_FINDING_AT_ENTRY: &str = "package-finding-at-entry";
+/// ADR 0949: a signal setter a project hands to a package function in a shape no walk reads (inside an object
+/// literal or an array, as a JSX attribute): the package may call it, and the owned scope that runs the package
+/// code may not write a signal. SC2001's own obligation at the handing site, the rule the runtime code
+/// (`REACTIVE_WRITE_IN_OWNED_SCOPE`) is claimed by.
+pub(crate) const SETTER_HANDED_TO_PACKAGE: &str = "setter-handed-to-package";
+/// ADR 0949: a reactive accessor a project hands to a package function in a shape no walk reads: the package may
+/// call it, and where nothing tracks the call Solid logs `STRICT_READ_UNTRACKED`. SC1001's own obligation at the
+/// handing site, the rule that code is claimed by.
+pub(crate) const ACCESSOR_HANDED_TO_PACKAGE: &str = "accessor-handed-to-package";
+/// ADR 0949: a store a project hands to a package function in a shape no walk reads: the package may write it
+/// (`STORE_WRITE_OUTSIDE_SETTER`, SC2003) or read it untracked (SC1001).
+pub(crate) const STORE_HANDED_TO_PACKAGE: &str = "store-handed-to-package";
+/// ADR 0949: an action a project hands to a package function in a shape no walk reads: the package may call it in
+/// an owned scope (`ACTION_CALLED_IN_OWNED_SCOPE`, SC2002).
+pub(crate) const ACTION_HANDED_TO_PACKAGE: &str = "action-handed-to-package";
+/// ADR 0949, addendum 6: a project site in a leaf owner's callback that may run package code which does something a leaf
+/// owner refuses (`onCleanup`, a creating call, `flush`) in a shape the call walk does not follow (a `new`, a getter, a
+/// reference), or in an effect's apply callback that may run package code that flushes or creates a computation, or
+/// after an await of an async tracked computation that may run package code that reads a reactive source: the claiming
+/// rule's own obligation at the site.
+pub(crate) const PACKAGE_OPERATION_IN_EFFECT_APPLY: &str = "package-operation-in-effect-apply";
+pub(crate) const PACKAGE_OPERATION_AFTER_AWAIT: &str = "package-operation-after-await";
+/// ADR 0959: the callback of a primitive that catches what its callback throws (`isPending`) is async, so its synchronous
+/// throw is a rejection the primitive does not catch: what the observer guard does there is an obligation.
+pub(crate) const ASYNC_SLOT_UNMODELLED: &str = "async-slot-unmodelled";
+/// ADR 0961: the call is written in a generator that an effect's apply (or an action's step) may step, and the walk follows
+/// the stepping only to the call that creates the iterator: whether the apply runs this body, and how far, is not proven.
+pub(crate) const GENERATOR_STEP_UNPLACED: &str = "generator-step-unplaced";
+/// ADR 0961 (PD): the site is written in a parameter initializer (a default value, a destructuring default, an IIFE, a closure or a
+/// helper call in one) of a function that is called or referenced in the program. The initializer runs when a call of the function
+/// omits the argument, so it may run wherever that function's calls do, and no walk here reads which calls omit it.
+pub(crate) const PARAMETER_INITIALIZER_UNPLACED: &str = "parameter-initializer-unplaced";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 
@@ -362,6 +397,19 @@ pub(crate) const HOST_INPUT_UNREADABLE: &str = "host-input-unreadable";
 /// proves real, while the program may put a function at that member of an
 /// object of its own.
 pub(crate) const STANDARD_MEMBER_IMPOSTOR: &str = "standard-member-impostor";
+
+/// Whether `analysis_context` names one of ADR 0949's handed-value claims (`*-handed-to-package`): an uncertifiable row
+/// the backend drops where a violation of the same rule stands at the same site.
+#[must_use]
+pub fn is_package_handed_claim(analysis_context: &str) -> bool {
+    matches!(
+        analysis_context,
+        SETTER_HANDED_TO_PACKAGE
+            | ACCESSOR_HANDED_TO_PACKAGE
+            | STORE_HANDED_TO_PACKAGE
+            | ACTION_HANDED_TO_PACKAGE
+    )
+}
 
 #[cfg(test)]
 mod tests {

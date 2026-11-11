@@ -10,7 +10,8 @@
 //!   [`crate::site_accounting`] writes it, so the log and the runtime agree);
 //! - the projection of rows to findings (`row`, with its typed reason, and
 //!   `finding`), and the passes inside it that drop or demote one;
-//! - the backend passes over the findings (`drop`, `reclass`, `verdict`);
+//! - the backend passes over the findings (`drop`, `reclass`, `verdict`, and `attributed`: the project sites a dropped
+//!   package finding stands at again, ADR 0949);
 //! - the accounting passes of SC4001 (ADR 0886) and the pending rules (ADR
 //!   0838), whose endings are already typed (`silent`, `owner`, `pending`).
 //!
@@ -433,6 +434,10 @@ pub(crate) enum PremiseKind {
     /// want of a provider (ADR 0943). The span is the binding the context is
     /// made at, in the file that holds it.
     ContextDefaultProven,
+    /// The rule is a style rule (SC80xx: duplicate props, prefer-for, prefer-show) and the finding sits in a
+    /// package analyzed as source: a style finding in a package's code is no runtime claim about the project
+    /// (ADR 0949, `package-style-not-project`). The span is the finding's site, in the package.
+    PackageStyleNotProject,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the
@@ -518,6 +523,9 @@ pub enum DropPass {
     RuntimeConfiguration,
     /// `finish_findings`: an equal finding is already in the list.
     EqualFinding,
+    /// ADR 0949: a style rule's finding in a package's source is dropped, not handed to the project
+    /// (`package-style-not-project`): it is no claim about what the project's code does at run time.
+    PackageStyleNotProject,
 }
 
 impl DropPass {
@@ -538,6 +546,7 @@ impl DropPass {
             Self::SupersededByViolation => "SupersededByViolation",
             Self::RuntimeConfiguration => "RuntimeConfiguration",
             Self::EqualFinding => "EqualFinding",
+            Self::PackageStyleNotProject => "PackageStyleNotProject",
         }
     }
 
@@ -558,6 +567,10 @@ impl DropPass {
             Self::SupersededByViolation => &[PremiseKind::ViolationAtSite],
             Self::RuntimeConfiguration => &[PremiseKind::RuntimeConfiguration],
             Self::EqualFinding => &[PremiseKind::EqualFinding],
+            Self::PackageStyleNotProject => &[
+                PremiseKind::DependencySourceRoot,
+                PremiseKind::PackageStyleNotProject,
+            ],
         }
     }
 }
@@ -658,6 +671,29 @@ impl ProofStage {
             );
         }
     }
+}
+
+/// ADR 0949, ADR 0958: the project sites a finding the dependency-source drop discarded stands at again, written beside its
+/// `drop` line (same file and span, kind `attributed`). The proof gate fails a `DependencySource` drop whose `attributed`
+/// line is missing or lists no site (C2, `package-drop-unattributed`): a package finding that left the report with no
+/// project row is the false clean ADR 0949 closes.
+pub fn record_attributed(code: &str, from: &Location, to: &[Location]) {
+    if !enabled() {
+        return;
+    }
+    emit(
+        from.path.as_ref(),
+        Some(location_pair(from)),
+        object(json!({
+            "k": "attributed",
+            "code": code,
+            "pass": DropPass::DependencySource.name(),
+            "to": to
+                .iter()
+                .map(|site| json!([site.path.as_ref(), site.start_byte, site.end_byte]))
+                .collect::<Vec<_>>(),
+        })),
+    );
 }
 
 /// The rows of a draft table before a pass that may remove some (ADR 0933):
@@ -1083,6 +1119,7 @@ mod tests {
             DropPass::SupersededByViolation,
             DropPass::RuntimeConfiguration,
             DropPass::EqualFinding,
+            DropPass::PackageStyleNotProject,
         ];
         let mut names = std::collections::BTreeSet::new();
         for pass in passes {

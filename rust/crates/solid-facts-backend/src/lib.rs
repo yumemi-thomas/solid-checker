@@ -53,6 +53,7 @@ mod host_plugins;
 mod inferred_host;
 pub mod installed_bytes;
 mod observed;
+mod package_drop;
 mod package_requirements;
 mod program_boundary;
 mod release_scope;

@@ -1,0 +1,38 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "blocker": "package-source-unavailable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-lazy/App.tsx",
+      "start": 65,
+      "end": 89,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-package-lazy/App.tsx",
+      "start": 217,
+      "end": 245,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-package-lazy/App.tsx",
+      "start": 286,
+      "end": 314,
+      "fixes": 0
+    }
+  ]
+}

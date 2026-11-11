@@ -13,3 +13,5 @@
 - `Module.tsx`: a call in a module-level function's list, called omitting the argument from a memo (`ModuleListWrite`, `ExportedListWrite`) or a component body (`ModuleViaListRead`), was silent (no function owned it: not reachable, not in the summary graph; rc.17 throws and warns, `oracle-parameter-list-owner-module-helper`): uncertifiable, as the nested forms are. `*Control` and `NestedViaListRead` stay violations; `ModuleListReadTracked` is legal and uncertifiable, a cost.
 
 Stub: `createSignal`, `createMemo`, `onCleanup`, `onSettled`, `createEffect`, context of rc.17.
+
+ADR 0961 (PD): a default that creates (`HandlerEffectDefault`'s `createEffect`, the closure only mentioned by `void g`) is also an SC6002 uncertifiable row (`parameter-initializer-unplaced`): a default runs when a call omits the argument, the closure is referenced, and no net reads which calls omit it, so it may run on an effect's apply.

@@ -27,12 +27,17 @@
 // Prefix the run with ~/.local/bin/sc-heavy when other agents share the
 // machine. Compare two reports with scripts/corpus-sweep-compare.mjs, by
 // finding key rather than by count.
+//
+// A checker that answers with a what-if report (ADR 0950: a prediction, tainted
+// by `assumed`) stops the sweep with an error and writes no report: a sweep
+// report is a baseline, and no prediction is one.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
 import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -89,6 +94,9 @@ if (options["order-from"]) {
 const env = { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: typefacts };
 const timeoutMs = Number(options.timeout) * 1000;
 
+// The checker processes in flight, so a refusal can stop them (ADR 0950).
+const running = new Set();
+
 function run(row) {
   const args = [
     "--format", "json",
@@ -99,8 +107,9 @@ function run(row) {
     ...(options["program-boundary"] ? ["--program-boundary", options["program-boundary"]] : []),
   ];
   const started = performance.now();
-  return new Promise((done) => {
+  return new Promise((done, refuse) => {
     const child = spawn(checker, args, { cwd: row.root, env });
+    running.add(child);
     const stdout = [];
     const stderr = [];
     child.stdout.on("data", (chunk) => stdout.push(chunk));
@@ -108,14 +117,19 @@ function run(row) {
     const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
     child.on("close", (exitCode, signal) => {
       clearTimeout(timer);
+      running.delete(child);
       const wallMs = Math.round(performance.now() - started);
       const text = Buffer.concat(stdout).toString("utf8");
       const errorText = Buffer.concat(stderr).toString("utf8");
       let payload = null;
       let parseError = null;
       try {
-        payload = JSON.parse(text);
+        payload = refuseAssumed(JSON.parse(text), "scripts/corpus-sweep.mjs");
       } catch (error) {
+        if (error instanceof AssumedReportError) {
+          refuse(error);
+          return;
+        }
         parseError = `${error.name}: ${error.message}`;
       }
       done({
@@ -128,6 +142,8 @@ function run(row) {
         // that the cause classifier (scripts/uncertifiable-causes.mjs) reads.
         premises: payload?.premises ?? [],
         findings: payload?.findings ?? [],
+        // ADR 0947's table of the hazards the rows' `blockedBy.fired` name: the scope of scripts/corpus-delta.mjs (ADR 0955).
+        hazards: payload?.hazards ?? [],
         metrics: payload?.metrics ?? null,
         parseError,
         stderr: exitCode !== 0 || parseError ? errorText.slice(-4000) : "",
@@ -148,7 +164,14 @@ async function worker() {
     );
   }
 }
-await Promise.all(Array.from({ length: Number(options.jobs) }, worker));
+try {
+  await Promise.all(Array.from({ length: Number(options.jobs) }, worker));
+} catch (error) {
+  // ADR 0950: a refused (what-if) report ends the sweep where it stands: no new project starts, the ones in flight are stopped, no report is written.
+  next = rows.length;
+  for (const child of running) child.kill("SIGKILL");
+  throw error;
+}
 
 results.sort(
   (left, right) =>

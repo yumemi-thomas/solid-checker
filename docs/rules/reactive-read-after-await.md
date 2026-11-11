@@ -351,6 +351,16 @@ own synchronous computation and compose the two.
 
 This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `reactive-read-after-await` alone overrides the group.
 
+## Parameter initializers (ADR 0961)
+
+A call written in the async computation's own body after its await runs the parameter initializers of the function it calls,
+or of the constructor it constructs, when it omits the argument: on the continuation, with no observer. The walk reads an
+accessor call written directly in a default; where an IIFE, a closure, a destructuring default or a constructor's holds a call
+or a member access (a function literal's own invocation reads nothing), the call is an uncertifiable row
+(`parameter-initializer-unplaced`), never a violation. An argument the call passes keeps the default from running (no row);
+`undefined`, no argument at its index and a spread that may hide it run it; a destructuring pattern's defaults run whatever
+the argument is. A constructor of a class written in another file is not followed.
+
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous variant

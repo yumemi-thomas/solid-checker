@@ -33,10 +33,32 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-invoked-literal/App.tsx",
+      "start": 925,
+      "end": 937,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-invoked-literal/App.tsx",
+      "start": 1126,
+      "end": 1138,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-invoked-literal/App.tsx",
       "start": 1126,

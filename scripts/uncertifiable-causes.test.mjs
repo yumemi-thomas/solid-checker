@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "vitest";
 
-import { afterSuspension, heldProblems } from "./uncertifiable-causes.mjs";
+import { AssumedReportError } from "./lib/assumed.mjs";
+import { TAINTED, cleanReport, fakeChecker } from "./lib/assumed-fixtures.mjs";
+import { afterSuspension, heldProblems, sweepSet } from "./uncertifiable-causes.mjs";
 
 const ts = createRequire(new URL("../packages/cli/package.json", import.meta.url))("typescript");
 
@@ -111,4 +116,26 @@ test("restoredBy must equal an open-work title exactly, not a part of one", () =
   assert.ok(heldProblems([partial], report, OPEN_WORK, 1).some((problem) => problem.includes("exact title")));
   const prose = heldCase({ expect: [TIW], restoredBy: "later proof." });
   assert.ok(heldProblems([prose], report, OPEN_WORK, 1).some((problem) => problem.includes("exact title")));
+});
+
+// ADR 0950: the cause classifier reads the shipped checker's report of each project of the reproduction set; a what-if report is a prediction.
+test("a what-if report stops the sweep of the reproduction set, and a default build's report is read as before", () => {
+  const root = mkdtempSync(join(tmpdir(), "causes-what-if-"));
+  try {
+    const set = join(root, "set");
+    mkdirSync(join(set, "p"), { recursive: true });
+    writeFileSync(join(set, "p", "tsconfig.json"), "{}\n");
+    for (const [name, make] of Object.entries(TAINTED)) {
+      assert.throws(
+        () => sweepSet(set, fakeChecker(root, make(), { name: `what-if-${name}` }), "/tf/solid-typefacts"),
+        (error) => error instanceof AssumedReportError && /^scripts\/uncertifiable-causes\.mjs refuses this checker report: it is tainted by a what-if assumption/.test(error.message),
+        name,
+      );
+    }
+    const report = { ...cleanReport(), premises: ["standard runtime configuration (ADRs 0266/0268)"] };
+    const { results } = sweepSet(set, fakeChecker(root, report, { name: "default" }), "/tf/solid-typefacts");
+    assert.deepEqual(results, [{ app: "p", root: join(set, "p"), project: "tsconfig.json", premises: report.premises, findings: report.findings }]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

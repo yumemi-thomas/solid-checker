@@ -51,6 +51,9 @@ pub(crate) struct ProgramDraft {
     pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
     pub(crate) event_dispatch_sites: Vec<crate::EventDispatchSite>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    /// ADR 0949: the owner graph's dense view, kept for the package entry table
+    /// (built over the final rows, `owners::package_entry_table`).
+    pub(crate) owner_view: Option<crate::owners::OwnerView>,
     /// ADR 0936: the silences the producers named for sites they gave no row,
     /// filed beside the rows of the same results.
     pub(crate) site_ends: crate::site_accounting::SiteEnds,
@@ -276,6 +279,8 @@ impl ProgramDraft {
             early_mention_sites: Vec::new(),
             blocked_by: Vec::new(),
             hazards: Vec::new(),
+            package_entries: Vec::new(),
+            package_references: Vec::new(),
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -885,6 +890,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.site_ends,
     );
     let site_ends = std::mem::take(&mut draft.site_ends);
+    let owner_view = draft.owner_view.take();
     let mut program = draft.into_program(factory_instances);
     program.execution_paths = crate::execution_paths::execution_paths(
         facts,
@@ -913,6 +919,48 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     program.early_mention_sites =
         crate::indexes::early_mention_report_sites(&program, semantic_lookup);
+    // ADR 0949: over the final rows, the project sites that may run each package function that
+    // holds one (the ADR 0284 drop reports a dropped finding there), and the references no
+    // exact call or tag decides.
+    if let Some(view) = &owner_view {
+        // ADR 0949, addendum 6: the contexts a project site may run package operations in, and the operations.
+        let regions =
+            crate::owners::OperationRegions::build(facts, semantic_lookup, &view.mentions);
+        let operations =
+            crate::owners::package_operations(facts, semantic_lookup, &regions, &program);
+        (program.package_entries, program.package_references) =
+            crate::owners::package_entry_table(facts, semantic_lookup, view, &program, &operations);
+        // Capabilities a project hands code in a package in any shape.
+        let claims = crate::owners::package_handed_value_claims(
+            facts,
+            semantic_lookup,
+            view,
+            &view.mentions,
+            &crate::owners::Capabilities {
+                setters: &source_discovery.setters,
+                accessors: &source_discovery.accessors,
+                actions: &source_discovery.actions,
+                source_kinds: &source_discovery.source_kinds,
+                async_sources: &source_discovery.async_sources,
+            },
+            &regions,
+        );
+        program.static_violations.extend(claims.violations);
+        program.async_reads.extend(claims.async_reads);
+        let handed_defects = claims.defects.clone();
+        program.static_defects.extend(claims.defects);
+        let claims = crate::owners::package_operation_claims(
+            facts,
+            semantic_lookup,
+            &program,
+            &regions,
+            &operations,
+            &handed_defects,
+        );
+        program.leaf_operations.extend(claims.leaf_operations);
+        program.static_violations.extend(claims.violations);
+        program.static_defects.extend(claims.defects);
+    }
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =
         crate::blocked_by::typed_blockers(&program, semantic_lookup);

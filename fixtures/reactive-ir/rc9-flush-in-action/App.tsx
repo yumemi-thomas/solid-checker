@@ -97,8 +97,7 @@ export const inUntrack = action(function* () {
   untrack(() => flush());
 });
 
-// Negative: the argument is not the generator, so what is stepped is whatever
-// `wrap` returns.
+// Uncertifiable (ADR 0961): `wrap` may return the generator itself, so what it steps is unproven
 function wrap<Args extends any[], Y, R>(genFn: (...args: Args) => Generator<Y, R, any>) {
   return genFn;
 }

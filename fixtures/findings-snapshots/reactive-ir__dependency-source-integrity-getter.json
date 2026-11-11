@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
+      "start": 100,
+      "end": 112,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -149,6 +160,61 @@
       "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
       "start": 2250,
       "end": 2256,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
+      "start": 2459,
+      "end": 2467,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
+      "start": 2459,
+      "end": 2467,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
+      "start": 2459,
+      "end": 2467,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
+      "start": 2459,
+      "end": 2467,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-getter/App.tsx",
+      "start": 2459,
+      "end": 2467,
       "fixes": 0
     },
     {

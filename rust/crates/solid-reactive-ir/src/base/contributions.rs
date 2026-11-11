@@ -745,6 +745,14 @@ pub(crate) enum Hazard {
     /// ADR 0939: code may write this member (the hash of [`ANY_MEMBER`] for a
     /// key no fact names) of an object it did not make here (value 0).
     OpenMemberWrite(u32),
+    /// ADR 0951: some reflective definer spelling may define any key (value 0):
+    /// a call that names no literal key, `defineProperties`, a definer held as a
+    /// value, destructured or called under another name ([`DefinerKey::Any`]).
+    ReflectiveDefinitionAny,
+    /// ADR 0951: a reflective definer spelling is called with this literal key
+    /// (the hash of the key, [`member_hash`] with no container) and defines no
+    /// other ([`DefinerKey::Sole`]; value 0).
+    ReflectiveDefinitionSole(u32),
 }
 
 const STANDARD_CONTAINERS: [&str; 6] = ["Array", "Map", "Set", "WeakMap", "WeakSet", "Promise"];
@@ -786,6 +794,10 @@ fn standard_impostor_write(member: &str) -> Hazard {
 
 fn open_member_write(member: &str) -> Hazard {
     Hazard::OpenMemberWrite(member_hash("", member))
+}
+
+fn reflective_definition_sole(key: &str) -> Hazard {
+    Hazard::ReflectiveDefinitionSole(member_hash("", key))
 }
 
 fn push_patch(root: &StandardRoot, member: &str, patches: &mut Vec<Hazard>) {
@@ -1384,9 +1396,12 @@ pub(crate) fn handed_root_patch(qualified_name: &str, hazard: &impl Fn(Hazard) -
         .into_iter()
         .any(hazard)
     };
+    // ADR 0951: a reflective definer put to a literal key defines that key and no other (the census `definers` already says so
+    // for `impostor_veto`): the blanket spelling no longer withholds every member.
     let written = hazard(open_member_write(ANY_MEMBER))
         || hazard(open_member_write(member))
-        || hazard(Hazard::ReflectiveDefinitionSpelling)
+        || hazard(Hazard::ReflectiveDefinitionAny)
+        || hazard(reflective_definition_sole(member))
         || (hazard(open_member_write(SYMBOL_SITE)) && symbol_open());
     let iterated_open = || {
         hazard(standard_impostor(ANY_MEMBER))
@@ -2832,7 +2847,7 @@ pub(crate) fn impostor_veto(
 /// [`BuildConstants`] (the parameter is unused); the kept index is also
 /// stamped with the constants it was folded under and refolds when they
 /// differ, and shadow and verify-reused modes compare it with a refold.
-pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
+pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
     let file = view.file;
     let mut entries = Vec::new();
     for (index, hazard) in file.ast.module_hazards.iter().enumerate() {
@@ -2886,6 +2901,13 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
     }
     if reflective_definition_spelled(file) {
         entries.push((Hazard::ReflectiveDefinitionSpelling, 0));
+        // ADR 0951: what the spellings may define, by key: any, or the literal keys their calls pass.
+        for (key, ()) in definers(view, constants) {
+            entries.push(match key {
+                DefinerKey::Any => (Hazard::ReflectiveDefinitionAny, 0),
+                DefinerKey::Sole(key) => (reflective_definition_sole(&key), 0),
+            });
+        }
     }
     let writes = assignment_writes(file);
     let patches = standard_patches(view, &writes);

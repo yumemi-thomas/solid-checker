@@ -28,7 +28,9 @@ import { ARM_CONTEXT_NAMES, armContext, armPlacement } from "./arm-shapes.mjs";
 import { SEAM_CONTEXT_NAMES, seamContext, seamPlacement } from "./seam-shapes.mjs";
 import { REF_LAYER_CONTEXT_NAMES, refLayerContext, refLayerPlacement } from "./ref-layer-shapes.mjs";
 import { PL_CONTEXT_NAMES, plContext, plNotVariants, plPlacement } from "./primitive-layer-shapes.mjs";
+import { ENTRY_CONTEXT_NAMES, entryContext, entryNotVariants, entryPlacement } from "./entry-shapes.mjs";
 import { CONTEXT_PACKAGE } from "./package.mjs";
+import { PKG_ENTRIES, packageSite, parsePkg } from "./package-site.mjs";
 
 /** The binding forms. `direct` is the baseline; the others change how the call reaches the API, never what it does. */
 export const BINDINGS = ["direct", "namespace", "alias", "destructured", "wrapper"];
@@ -77,11 +79,17 @@ export const SOURCE_AXES = {
   files: ["module-barrel", "module-default-hook", "prop-value-cast"],
   // ADR 0940 (SC4002, CONTEXT_NOT_FOUND only: no other template has a context to bring): the context is an export of a dependency package, made with no default
   // (`fz-ctx`, package.mjs `contextPackageFiles`), read with no provider above. The checker reads the dependency's source to know it has no default.
-  package: ["package-export", "package-hook"],
+  // ADR 0949: the same package's component a tag renders (`package-component`), its hook handed on by reference (`package-handed`) and its class (`package-holder`):
+  // entries into the dependency's source that no call names.
+  package: ["package-export", "package-hook", "package-component", "package-handed", "package-holder"],
 };
+/** The `package` source's forms (ADRs 0940, 0943, 0949). */
+const PACKAGE_SOURCES = SOURCE_AXES.package;
+/** The package forms that read through a call, a render or a reference to a name the program writes: the `direct` binding only. */
+const PACKAGE_ENTRY_SOURCES = PACKAGE_SOURCES.filter((source) => source !== "package-export");
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** Sources the grids enumerate and a random draw never takes (as `gridVariants`): random programs and combinations keep theirs. */
-export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct", "package-export", "package-hook"];
+export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct", ...PACKAGE_SOURCES];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module") && !source.startsWith("package");
 /** A source whose values `helpers.ts` creates at its own scope (print.mjs `moduleFiles`), before App.tsx runs a statement of its own. */
@@ -101,7 +109,8 @@ export function sourcesOf(code, variant, binding, context, { draw = false } = {}
   const sigs = spec.setup(variant, (prefix) => `${prefix}1`);
   // A template with no values has no source to bring, but the context a dependency exports (`packageContext`: CONTEXT_NOT_FOUND's plain variant).
   // `package-hook` (ADR 0943): the dependency's own hook reads that context, called as `usePkgContext()`: a call, so the `direct` binding only.
-  if (!sigs.length) return spec.packageContext && !variant ? ["local", ...["package-export", "package-hook"].filter((source) => !excluded.includes(source) && (source !== "package-hook" || binding === "direct"))] : ["local"];
+  // ADR 0949: the render (`package-component`), the hand-on (`package-handed`) and the class (`package-holder`) the same.
+  if (!sigs.length) return spec.packageContext && !variant ? ["local", ...PACKAGE_SOURCES.filter((source) => !excluded.includes(source) && (!PACKAGE_ENTRY_SOURCES.includes(source) || binding === "direct"))] : ["local"];
   const isAsync = sigs.some((sig) => sig.kind === "async");
   const target = spec.call({ code, variant }, sigs);
   const bareRead = target.kind === "local" && !target.args && sigs.some((sig) => sig.name === target.name && [undefined, "memo", "async"].includes(sig.kind));
@@ -109,7 +118,7 @@ export function sourcesOf(code, variant, binding, context, { draw = false } = {}
   const only = spec.variantSources?.[variant];
   return SOURCES.filter((source) => {
     // The context a dependency exports is a source of a template with no values only (above): no value is brought from a package.
-    if (source === "package-export" || source === "package-hook") return false;
+    if (PACKAGE_SOURCES.includes(source)) return false;
     if (only) return only.includes(source);
     // Its async memos settle before the mount, which takes an async template's code away (the `settled` variant is that case).
     if (source === "module-hook-shared" && isAsync) return false;
@@ -602,14 +611,15 @@ export const SPEC = {
   },
   NO_OWNER_CONTEXT: { legal: ["body", "memo", "root"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], contextLine: "const Ctx = createContext(7);", call: () => api("useContext", "Ctx") },
   // `sourcesNotIn`: the flip contexts that provide the module's own `Ctx` (flip-write.mjs `flw-ctx-*`) have no use for a dependency's.
-  CONTEXT_NOT_FOUND: { packageContext: true, sourcesNotIn: { "flw-ctx-sibling": ["package-export", "package-hook"], "flw-ctx-two-renders": ["package-export", "package-hook"] }, recallVariants: ["default-undefined"], variantContexts: { "default-undefined": ["body", "memo", "render-compute", "root", "jsx", "show", "for"] },
+  CONTEXT_NOT_FOUND: { packageContext: true, sourcesNotIn: { "flw-ctx-sibling": PACKAGE_SOURCES, "flw-ctx-two-renders": PACKAGE_SOURCES }, recallVariants: ["default-undefined"], variantContexts: { "default-undefined": ["body", "memo", "render-compute", "root", "jsx", "show", "for"] },
     contexts: ["body", "memo", "render-compute", "root", "jsx", "show", "for"], bindings: BINDINGS, setup: () => [],
     // `default-undefined` (recall): `createContext<number | undefined>(undefined)` is default-less too (CHEATSHEET.md; rc.17
     // `getContext`, packages/signals/src/core/context.ts:38-52: an `undefined` value falls to the default, `undefined` again throws).
     contextLine: (variant) => (variant === "default-undefined" ? "const Ctx = createContext<number | undefined>(undefined);" : "const Ctx = createContext<number>();"),
     // `ctx` (the `package` source): the context is the dependency's export, imported by name, not the module's own `Ctx`. `hook` (ADR 0943): the dependency's
     // own hook reads it, so the program calls `usePkgContext()` and the read is in the package's source.
-    call: (node) => (node.hook ? local(node.hook) : api("useContext", node.ctx ?? "Ctx")),
+    // ADR 0949: `component` (a tag renders it), `handed` (the hook goes to `createEffect` by reference) and `holder` (a class: `new PkgReader().read()`).
+    call: (node) => (node.hook || node.component || node.handed || node.holder ? local(node.hook ?? node.component ?? node.handed ?? node.holder) : api("useContext", node.ctx ?? "Ctx")),
   },
   // ADR 0867: `any-callee` is a call with no resolved fact: it runs, and Chrome reports it.
   SETTLED_CLEANUP_UNOWNED: { legal: ["body", "root"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "effect-apply"], bindings: BINDINGS, setup: () => [], recallVariants: ["any-callee"], variantContexts: { "any-callee": UNOWNED }, bindingsFor: (variant) => (variant === "any-callee" ? ["direct"] : BINDINGS),
@@ -1074,6 +1084,8 @@ const SEAM_PLACEMENT = seamPlacement();
 const REF_LAYER_PLACEMENT = refLayerPlacement();
 /** ADR 0940 (primitive-layer-shapes.mjs): the site in the callback of a primitive that runs it in place, nested in a host; recall contexts, base shapes. */
 const PL_PLACEMENT = plPlacement();
+/** ADR 0962 (entry-shapes.mjs): the site reached through an indirect action step body, or in a function a leaf's callback enters twice; recall contexts, base shapes. */
+const ENTRY_PLACEMENT = entryPlacement();
 /**
  * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
  * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
@@ -1099,7 +1111,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
 const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
   ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
@@ -1211,13 +1223,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1226,6 +1238,12 @@ for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACE
 
 // ADR 0940: a `pl-*` legal cell the `effect` variant of a primitive code cannot take: with no owner at the site it reports NO_OWNER_EFFECT.
 for (const [code, byContext] of Object.entries(plNotVariants())) {
+  const spec = SPEC[code];
+  spec.recallVariantsNotIn ??= {};
+  for (const [context, variants] of Object.entries(byContext)) spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), ...variants])];
+}
+// ADR 0962: the variants an entry context's cells do not take (entry-shapes.mjs `ENTRY_NOT_VARIANTS`).
+for (const [code, byContext] of Object.entries(entryNotVariants())) {
   const spec = SPEC[code];
   spec.recallVariantsNotIn ??= {};
   for (const [context, variants] of Object.entries(byContext)) spec.recallVariantsNotIn[context] = [...new Set([...(spec.recallVariantsNotIn[context] ?? []), ...variants])];
@@ -1303,10 +1321,27 @@ export const AUX = "@@AUX@@";
  *   the imports; `preludeLines` go at the top of the component body; AUX in a line marks the call the runtime frame sits in.
  */
 export function describeUse(node, signals) {
+  const base = describeProjectUse(node, signals);
+  return node.pkg ? describePackageUse(node, base, (node.sigs ?? []).map((name) => signals.get(name))) : base;
+}
+
+// ADR 0957: a package site's description is a function of the node and its project description, which a render, the module files and the
+// package files all ask for, so it is made once per node (a program tree is not edited after it is built).
+const packageUses = new WeakMap();
+function describePackageUse(node, base, sigs) {
+  if (packageUses.has(node)) return packageUses.get(node);
+  const moved = packageSite(base, node.pkg.entry, MODULE, { own: node.pkg.own, sigs });
+  const out = { ...base, text: moved.text, solid: moved.solid, web: moved.web, namespaces: moved.namespaces, moduleLines: moved.moduleLines, preludeLines: [], contextLine: undefined, importLines: moved.importLines, files: moved.files, pkgFiles: moved.pkgFiles };
+  packageUses.set(node, out);
+  return out;
+}
+
+function describeProjectUse(node, signals) {
   const spec = SPEC[node.code];
   const sigs = (node.sigs ?? []).map((name) => signals.get(name));
   const target = spec.call(node, sigs);
-  const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: node.ctx || node.hook ? undefined : typeof spec.contextLine === "function" ? spec.contextLine(node.variant) : spec.contextLine, ...(node.ctx || node.hook ? { importLines: [`import { ${node.ctx ?? node.hook} } from "${CONTEXT_PACKAGE.name}";`] } : {}) };
+  const packaged = node.ctx ?? node.hook ?? node.component ?? node.handed ?? node.holder;
+  const out = { text: "", solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: packaged ? undefined : typeof spec.contextLine === "function" ? spec.contextLine(node.variant) : spec.contextLine, ...(packaged ? { importLines: [`import { ${packaged} } from "${CONTEXT_PACKAGE.name}";`] } : {}) };
   // A variant's own module-scope lines (the iteration patch of `iter-swap`), above the components that run after them.
   out.moduleLines.push(...(spec.moduleLines?.(node.variant) ?? []));
   const importsOf = (module) => (module === "@solidjs/web" ? out.web : out.solid);
@@ -1351,6 +1386,13 @@ export function describeUse(node, signals) {
   }
   if (target.kind === "local") {
     const { name, args } = target;
+    // ADR 0949: an entry into the dependency's source no call names, written at the site: a tag renders the component, the hook goes by reference to an effect's compute, a class
+    // instance's method runs. The `direct` binding only.
+    if (node.component || node.handed || node.holder) {
+      if (node.handed) out.solid.push("createEffect");
+      out.text = node.component ? `<${name} />` : node.handed ? `createEffect(${name}, () => {})` : `new ${name}().read()`;
+      return out;
+    }
     // A value source (`prop-value`): the value is a getter on `props`, so the read is the member itself, not a call.
     const bare = sigs.some((sig) => sig?.read === "value" && sig.name === name);
     if (HOOK_SLOT_BINDINGS.includes(node.bind)) {
@@ -1683,7 +1725,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? plContext(context, stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
@@ -2204,7 +2246,12 @@ function buildOne(kit, plan = {}) {
   const binding = plan.binding ?? rng.pick(bindingsOf(code, variant));
   const layer = plan.layer ?? rng.weighted([[5, "none"], [3, "closure"], [2, "helper"], [1, "iife"], [1, "closure+helper"]]);
   const sigs = spec.setup(variant, kit.name);
-  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : plan.source === "package-hook" ? { hook: CONTEXT_PACKAGE.hookName } : {}) });
+  // ADR 0957: `plan.pkg` is an entry (package-site.mjs): the site's text is in a package, and the program writes the entry. The direct binding only: the
+  // other bindings change how the project reaches an API, and a package reaches its own.
+  const pkg = plan.pkg === undefined ? undefined : parsePkg(plan.pkg);
+  if (pkg && !PKG_ENTRIES.includes(pkg.entry)) throw new Error(`unknown package entry ${plan.pkg}`);
+  if (plan.pkg !== undefined && binding !== "direct") throw new Error(`a package site takes the direct binding, not ${binding}`);
+  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : plan.source === "package-hook" ? { hook: CONTEXT_PACKAGE.hookName } : plan.source === "package-component" ? { component: CONTEXT_PACKAGE.componentName } : plan.source === "package-handed" ? { handed: CONTEXT_PACKAGE.hookName } : plan.source === "package-holder" ? { holder: CONTEXT_PACKAGE.className } : {}), ...(pkg ? { pkg: { entry: pkg.entry, ...(pkg.own ? { own: true } : {}) } } : {}) });
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);
@@ -2241,7 +2288,9 @@ function buildOne(kit, plan = {}) {
     // ADR 0917: a context's `moduleTop` must run before the values; a module source creating them at its scope prints it there instead.
     ...(placed.moduleTop && moduleScoped(source) ? { moduleTop: placed.moduleTop } : placed.top ? { top: placed.top } : {}),
     ...(placed.files ? { files: placed.files, importLines: placed.importLines ?? [] } : {}),
-    shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}`,
-    misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}) },
+    // ADR 0962 (entry-shapes.mjs): a dependency the context ships beside its import line.
+    ...(placed.packages ? { packages: placed.packages, importLines: placed.importLines ?? [] } : {}),
+    shape: `${code}/${context}/${binding}/${layer}${mount === "root" || source !== "local" ? "" : `/${mount}`}${source === "local" ? "" : `/${source}`}${plan.callback ? `/cb:${plan.callback}` : ""}${plan.pkg !== undefined ? `/pk:${plan.pkg}` : ""}`,
+    misuse: { code, context, variant, binding, layer, mount, ...sourced, ...(plan.callback ? { callback: plan.callback } : {}), ...(plan.pkg !== undefined ? { pkg: plan.pkg } : {}) },
   };
 }

@@ -1,0 +1,4 @@
+{
+ "about": "Per-fact rises of the uncertifiable count on existing fixtures (ADR 0955; scripts/guard/rises.mjs). A veto or a fail-closed change raises the count on purpose; a row here names the fixture, the `code blocker` key, the counts, the ADR and the typed fact (hazards, formula or missing fact) that did it. Named, never blocked: an unnamed rise is printed, not a failure. Append-only; counts.json is not rekeyed.",
+ "rises": []
+}

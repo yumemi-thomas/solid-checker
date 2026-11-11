@@ -51,6 +51,8 @@ mod cleanup;
 mod development_feedback;
 mod directives;
 mod execution_paths;
+#[cfg(feature = "what-if")]
+pub mod what_if;
 pub use development_feedback::{
     DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
 };
@@ -91,7 +93,7 @@ mod site_accounting;
 pub use execution_role::{WALK_STEP_BOUND, bound_walks, follow_every_path};
 pub use proof_log::{
     DropPass, ProofLogTarget, ProofStage, configure as configure_proof_log, flush_proof_log,
-    record_verdicts,
+    record_attributed, record_verdicts,
 };
 pub use role_log::{RoleLogTarget, configure as configure_role_log};
 pub mod route_components;
@@ -845,6 +847,15 @@ pub enum LeafOwnerOperationKind {
     /// available. It may contain any of the forbidden operations above, so
     /// the leaf scope is a proof obligation rather than a clean result.
     UnresolvedCallback,
+    /// A call written in a callback of a primitive the slot climb cannot cross: the callback takes a parameter, is
+    /// async or is a generator, so whether the primitive runs it in place on the leaf scope's stack is not modelled
+    /// (ADR 0959). The call may be any of the forbidden operations: a proof obligation, never silence.
+    UnmodelledSlot,
+    /// A call of a generator whose iterator the leaf callback keeps (the call's result is no statement's discard): the
+    /// generator's body runs where the iterator is stepped (`.next()`, `for…of`, a spread, `Array.from`, a stored loop,
+    /// `yield*`), which no call edge here follows, so its operations may run in this leaf scope (ADR 0961): a proof
+    /// obligation, never silence.
+    GeneratorStepped,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1009,6 +1020,10 @@ pub enum AfterAwaitObligation {
     /// A prop read whose signal backing is not proven: the component's call
     /// sites cannot be enumerated, or the prop's use is unknown.
     PropBackingUnproven { callers_unenumerable: bool },
+    /// ADR 0961 (PD): the call after the await runs a parameter initializer (a default value, a destructuring default, an
+    /// IIFE, a closure, a constructor's) of the function it calls when it omits the argument, and the walk does not read which
+    /// calls do: what the initializer reads runs on the continuation, with no observer.
+    ParameterInitializerUnplaced,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1425,7 +1440,65 @@ pub struct OwnerRequirement {
     /// project's call that runs it there, under the call's owner context.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub through_dependency: Option<Location>,
+    /// ADR 0949: what the project site of a requirement that stands
+    /// [`Self::through_dependency`] is. The call that enters the package
+    /// function is the default (ADR 0290).
+    #[serde(default, skip_serializing_if = "DependencyEntry::is_call")]
+    pub through_dependency_entry: DependencyEntry,
     pub report: bool,
+}
+
+/// ADR 0949: how project code enters package code, at the site an owner
+/// requirement of the package stands (`OwnerRequirement::through_dependency`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DependencyEntry {
+    /// A call written in the project that enters the package function (ADR 0290).
+    #[default]
+    Call,
+    /// A JSX element whose tag renders the package function as a component:
+    /// no call names the entry, and the component runs under a root of its own.
+    Render,
+    /// A reference to a symbol the package declares that is no call and no
+    /// render (a function handed to a primitive or a prop, a class, a getter's
+    /// holder, a namespace): whatever runs the value is not followed.
+    Reference,
+}
+
+impl DependencyEntry {
+    #[must_use]
+    pub(crate) const fn is_call(&self) -> bool {
+        matches!(self, Self::Call)
+    }
+}
+
+/// ADR 0949: a project site that enters package code, and how.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageEntrySite {
+    pub location: Location,
+    pub kind: DependencyEntry,
+}
+
+/// ADR 0949: the project sites that may run the package function at `function`
+/// (its path and span): each call, render or reference in a project function that may run,
+/// found by walking back through the package's own callers. A finding the ADR 0284 drop pass
+/// discards in that function is reported at each of them (`diagnostics.rs`, the one place).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageEntries {
+    pub function: Location,
+    pub sites: Vec<PackageEntrySite>,
+}
+
+/// ADR 0949: the project references to a symbol a package (`root`, its directory) declares that no
+/// exact call or tag decides: a value handed on, a holder, a namespace. Any of them may run any
+/// function of the package, so a finding dropped in the package stands at each.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageReferences {
+    pub root: String,
+    pub sites: Vec<PackageEntrySite>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -1627,6 +1700,7 @@ fn default_async_provenance() -> bool {
 }
 
 pub use blockers::with_detail as blocked_context;
+pub use blockers::{PACKAGE_FINDING_AT_ENTRY, is_package_handed_claim};
 pub use execution_paths::{ArmSide, BuildArm, ClientPath, ExecutionPaths};
 pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 
@@ -1680,6 +1754,13 @@ pub struct Program {
     pub blocked_by: Vec<blocked_by::BlockedRow>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hazards: Vec<blocked_by::HazardSites>,
+    /// ADR 0949: for each package function that holds a row, the project sites that may run it,
+    /// sorted by function location. Not in the internal JSON: the backend reads it.
+    #[serde(default, skip_serializing)]
+    pub package_entries: Vec<PackageEntries>,
+    /// ADR 0949: per package that holds a row, the project references no exact call or tag decides.
+    #[serde(default, skip_serializing)]
+    pub package_references: Vec<PackageReferences>,
 }
 
 /// The site of a reportable row that no execution of the program reaches

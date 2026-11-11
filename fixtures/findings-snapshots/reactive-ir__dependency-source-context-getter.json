@@ -154,6 +154,39 @@
       "start": 2274,
       "end": 2280,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 2483,
+      "end": 2491,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 2483,
+      "end": 2491,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 2483,
+      "end": 2491,
+      "fixes": 0
     }
   ]
 }

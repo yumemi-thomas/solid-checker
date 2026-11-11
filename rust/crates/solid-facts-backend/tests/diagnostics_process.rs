@@ -1495,7 +1495,10 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     // ADR 0822: `WindowQuery`'s `typeof window` branch is live, so the walk
     // over dep-query ends at its Proxy: SC9012 U, never silent. `FoldedQuery`
-    // stays the proved SC1001 V.
+    // stays the proved SC1001 V. ADR 0949 (addendum 1): the findings dep-query
+    // holds, dropped with the package (ADR 0284), stand again as uncertifiable
+    // rows at the two project calls that enter it: an SC1001 and an SC9012 at
+    // `useQuery(...)`, an SC9012 at `useWindowQuery(...)`.
     for (fixture, expected, flags) in [
         (
             "returned-store-proxy",
@@ -1504,7 +1507,13 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
         ),
         (
             "dependency-source-proxy-store",
-            vec![("uncertifiable", "SC9012"), ("violation", "SC1001")],
+            vec![
+                ("uncertifiable", "SC1001"),
+                ("uncertifiable", "SC9012"),
+                ("uncertifiable", "SC9012"),
+                ("uncertifiable", "SC9012"),
+                ("violation", "SC1001"),
+            ],
             vec![
                 "--runtime-target",
                 "browser",
@@ -1544,16 +1553,28 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
             .collect::<Vec<_>>();
         found.sort_unstable();
         assert_eq!(found, expected, "{fixture}: {rows:#?}");
-        for row in reads
+        // Of the SC9012 rows, exactly one is the project's own (the walk's end at the
+        // Proxy); the others are ADR 0949's hand-off of the package's findings.
+        let own = reads
             .iter()
             .filter(|row| fixture == "dependency-source-proxy-store" && row["id"] == "SC9012")
-        {
-            assert!(
+            .inspect(|row| {
+                assert!(
+                    row["analysisContext"]
+                        .as_str()
+                        .is_some_and(|context| context.starts_with("dependency-value-unfollowed")
+                            || context == "package-finding-at-entry:SC9012"),
+                    "{fixture}: {row:#?}"
+                );
+            })
+            .filter(|row| {
                 row["analysisContext"]
                     .as_str()
-                    .is_some_and(|context| context.starts_with("dependency-value-unfollowed")),
-                "{fixture}: {row:#?}"
-            );
+                    .is_some_and(|context| context.starts_with("dependency-value-unfollowed"))
+            })
+            .count();
+        if fixture == "dependency-source-proxy-store" {
+            assert_eq!(own, 1, "{fixture}: {rows:#?}");
         }
     }
 }
@@ -2410,32 +2431,43 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     // and nothing reports on rc.3, where flush drains inside a
     // step as anywhere else.
     let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
-    for (fixture, lines, notice) in [
+    for (fixture, lines, obligations, beside, notice) in [
         // ADR 0944: line 97 is `untrack(() => flush())`, an in-place callback of a primitive.
+        // ADR 0961: line 106 is `wrap(function* () { flush(); })`: `wrap` may return the generator itself, so what steps it is
+        // unproven, an uncertifiable SC2006 row and, beside it, SC2008's (one of `beside`).
         (
             "rc9-flush-in-action",
             &[14_u64, 20, 27, 32, 39, 44, 97][..],
+            &[106_u64][..],
+            1,
             1,
         ),
-        ("release-triple-flush-rc8", &[9, 15][..], 1),
-        ("release-triple-flush-rc3", &[][..], 1),
+        ("release-triple-flush-rc8", &[9, 15][..], &[][..], 0, 1),
+        ("release-triple-flush-rc3", &[][..], &[][..], 0, 1),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             continue;
         };
         let flushes = findings_for_rule(&findings, "flush-in-action");
-        assert_eq!(
+        let of_kind = |kind: &str| {
             flushes
                 .iter()
+                .filter(|finding| finding["kind"] == kind)
                 .map(|finding| line(finding))
-                .collect::<Vec<_>>(),
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            of_kind("violation"),
             lines.iter().copied().map(Some).collect::<Vec<_>>(),
             "{fixture}: {findings:#?}"
         );
+        assert_eq!(
+            of_kind("uncertifiable"),
+            obligations.iter().copied().map(Some).collect::<Vec<_>>(),
+            "{fixture}: {findings:#?}"
+        );
         assert!(
-            flushes
-                .iter()
-                .all(|finding| finding["id"] == "SC2006" && finding["kind"] == "violation"),
+            flushes.iter().all(|finding| finding["id"] == "SC2006"),
             "{fixture}: {findings:#?}"
         );
         // Beside them only the release notice, which every one of these
@@ -2447,7 +2479,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
         assert_eq!(
             findings.len(),
-            lines.len() + notice,
+            lines.len() + obligations.len() + beside + notice,
             "{fixture}: {findings:#?}"
         );
     }

@@ -2,6 +2,50 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 64,
+      "end": 89,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 64,
+      "end": 89,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 64,
+      "end": 89,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 64,
+      "end": 89,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

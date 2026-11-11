@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-style-rule/App.tsx",
+      "start": 102,
+      "end": 130,
+      "fixes": 0
+    }
+  ]
+}

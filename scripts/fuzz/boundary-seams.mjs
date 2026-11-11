@@ -59,6 +59,13 @@ export const SEAMS = [
     gap: "no pair yet: the table family has no string-method row, and the case needs a project object with a well-known-symbol method as the argument",
   },
   {
+    id: "package-operation-claims",
+    sites: [{ file: "rust/crates/solid-reactive-ir/src/owners/package_entries/operations.rs", match: /function by its own name is the leaf walk's and the after-await walk's/ }],
+    between: ["the package operation claims (`owners/package_entries/operations.rs`, ADR 0949 addendum 6)", "the leaf walk (SC3001) and the after-await walk (SC1002), which read the body of an exact call of a plain function"],
+    case: "a project site that calls a package's plain function by its own name from a leaf callback or after an await: the claim is not made there because the walks read the body, so a body a walk reads and then declines (a depth limit, an unmodelled slot, a getter or a closure it cannot enter) must leave a row of its own, or the site is silent",
+    fixtures: ["reactive-ir/package-operations"],
+  },
+  {
     id: "promise-flight-and-stack",
     sites: [{ file: "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs", match: /handled by the promise-flight walk, never by this stack walk/ }],
     between: ["the stack walk (`report_prefix`, an async function's prefix)", "the promise-flight walk (its tail past the first await)"],

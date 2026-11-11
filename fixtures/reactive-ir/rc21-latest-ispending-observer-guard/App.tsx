@@ -92,3 +92,46 @@ export function InHandler() {
     </button>
   );
 }
+
+// ADR 0959: `isPending(async () => …)` runs the callback's code before its first await in place, but the guard's throw there is the
+// async function's rejection, which `isPending` does not catch, and whether it throws at all is not modelled: an uncertifiable row
+// (`async-slot-unmodelled`), never the silence of `IsPendingCatches`. Chrome (rc.21 dev) reports both codes at these sites.
+export function IsPendingAsyncResolve() {
+  createTrackedEffect(() => {
+    isPending(async () => {
+      void resolve(() => count());
+    });
+  });
+  return <p>{1}</p>;
+}
+
+export function IsPendingAsyncUntil() {
+  createTrackedEffect(() => {
+    isPending(async () => {
+      void until(() => count());
+    });
+  });
+  return <p>{1}</p>;
+}
+
+export function IsPendingAsyncMemo() {
+  const m = createMemo(() => {
+    S.isPending(async () => {
+      void resolve(() => count());
+    });
+    return 1;
+  });
+  return <p>{m()}</p>;
+}
+
+// After an await the code runs on a later task, outside any observer, but the coarse rule does not read the await's position (a rare
+// shape, ADR 0959): the same uncertifiable rows, a price of the rule and no claim about the code.
+export function IsPendingAsyncAfterAwait() {
+  createTrackedEffect(() => {
+    isPending(async () => {
+      await Promise.resolve();
+      void resolve(() => count());
+    });
+  });
+  return <p>{1}</p>;
+}

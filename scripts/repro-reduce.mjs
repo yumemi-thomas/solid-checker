@@ -8,6 +8,8 @@
 //     --file <path, relative to the project directory> [--file ...]
 //     --rule SC2001 --family unplaced-write [--context <kind>] --marker <text on the result's line>
 //     [--boundary open|closed] [--restrict] [--checker <bin>] [--typefacts <bin>]
+//   or, keyed on the blocker the checker reports (ADR 0956), in place of --family/--context/--marker:
+//     --blocker <kind> [--formula <name> --fired <hazard,hazard,...>] [--missing <fact>[:<member>]] [--rule SC9012] [--marker <text>]
 //
 // The app is mirrored into --out (every file outside node_modules copied, each
 // node_modules rebuilt as links: a workspace link stays relative, so it points
@@ -18,7 +20,13 @@
 // checker, run with the corpus configuration (browser, development, csr),
 // reports in the first file an uncertifiable result with --rule, the message
 // family and analysis context kind of scripts/uncertifiable-causes.mjs, on a
-// line containing --marker, and TypeScript 7.1 (the tsc oracle's install,
+// line containing --marker (the text key: labels read from wording), or, with
+// --blocker, an uncertifiable result whose `blockedBy` is the typed blocker named
+// (its kind; for a veto its formula and the exact set of hazards that fired; for
+// a row one test decides its missing fact), so the reduced program keeps the same
+// veto or the same missing fact and cannot drift to another cause behind the same
+// words (scripts/lib/repro-key.mjs; `scripts/u-blockers.mjs` and
+// `scripts/u-verdicts.mjs` print the formulas and their fired sets), and TypeScript 7.1 (the tsc oracle's install,
 // `make tsc-oracle-provision`) reports no more errors in the reduced files
 // than at the start. The guard matters: without it a reduction drifts into
 // code that no longer type-checks (a deleted declaration leaves an unresolved
@@ -49,7 +57,8 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { contextKind, messageFamily } from "./uncertifiable-causes.mjs";
+import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
+import { describeKey, holdsKey, parseKey } from "./lib/repro-key.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const typescript = createRequire(join(repo, "packages/cli/package.json"))("typescript");
@@ -63,6 +72,10 @@ const options = {
   family: null,
   context: "",
   marker: null,
+  blocker: null,
+  formula: null,
+  fired: null,
+  missing: null,
   boundary: null,
   restrict: false,
   checker: join(repo, "rust/target/release/solid-checker-rust"),
@@ -79,7 +92,8 @@ for (let index = 0; index < argv.length; index++) {
   if (name === "file") options.file.push(argv[++index]);
   else options[name] = argv[++index];
 }
-for (const name of ["source", "out", "rule", "family", "marker"]) if (!options[name]) throw new Error(`--${name} is required`);
+for (const name of ["source", "out"]) if (!options[name]) throw new Error(`--${name} is required`);
+const key = parseKey(options);
 if (!options.file.length) throw new Error("--file is required");
 const tsc = join(repo, "rust/target/tsc-oracle/typescript/node_modules/.bin/tsc");
 if (!existsSync(tsc)) throw new Error(`no TypeScript at ${tsc}: run make tsc-oracle-provision`);
@@ -189,22 +203,18 @@ function holds() {
   );
   let payload;
   try {
-    payload = JSON.parse(run.stdout);
-  } catch {
+    payload = refuseAssumed(JSON.parse(run.stdout), "scripts/repro-reduce.mjs");
+  } catch (error) {
+    // ADR 0950: a what-if report is not "the result is gone" (which is what `false` says): the reduction stops, since every chunk it kept or
+    // dropped would be judged on a prediction.
+    if (error instanceof AssumedReportError) throw error;
     return false;
   }
   const lines = readFileSync(target, "utf8").split("\n");
-  return payload.findings.some(
-    (finding) =>
-      finding.kind === "uncertifiable" &&
-      finding.id === options.rule &&
-      messageFamily(finding.message) === options.family &&
-      contextKind(finding.analysisContext) === options.context &&
-      finding.primaryLocation.path === target &&
-      (lines[finding.primaryLocation.line - 1] ?? "").includes(options.marker),
-  );
+  return payload.findings.some((finding) => holdsKey(key, finding, target, lines));
 }
 
+console.error(`holding: ${describeKey(key)}`);
 if (options.restrict) {
   const original = readFileSync(tsconfig, "utf8");
   const parsed = readJsonc(tsconfig);

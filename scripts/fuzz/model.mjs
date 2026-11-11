@@ -67,6 +67,11 @@ export const iter = (method, fn) => ({ k: "iter", method, fn });
 /** `concise` (misuse.mjs APPLY_VOID_CONTEXTS): an arrow whose body is its one `return`'s expression, `() => e`. */
 export const fn = (body, { params = [], form = "arrow", async = false, concise = false } = {}) => ({ k: "fn", form, async, params, body, ...(concise ? { concise } : {}) });
 export const param = (def, destructured = false) => ({ k: "param", destructured, default: def });
+/**
+ * ADR 0960: a parameter with no default, `p0?: number` (or `p0: () => void` for `createRoot`'s dispose): a callback that takes an argument its body never
+ * uses. The node keeps a `default` (`0`) only so the tree walks as every parameter does; the printer never writes it.
+ */
+export const bareParam = (type = "number", optional = true) => ({ k: "param", destructured: false, default: { k: "num", n: 0 }, bare: true, type, optional });
 export const prim = (name, f, extra = {}) => ({ k: "prim", name, fn: f, ...extra });
 export const expr = (e) => ({ k: "expr", e });
 export const decl = (name, e, extra = {}) => ({ k: "decl", name, e, ...extra });
@@ -147,6 +152,8 @@ export const CONTAINER_KINDS = [
 /** Containers only an effect apply holds (the misuse profile's `-guarded` contexts): `guard-return` puts its statements behind
  * `if (v === 1) return;`, skipped on the first run, whose `v` is the compute's 1 (ADR 0504 review). */
 export const APPLY_CONTAINER_KINDS = ["guard-return"];
+/** Containers only a shape holds (entry-shapes.mjs `pd-ctor-*`, ADR 0961 PD): `class-ctor-default` writes its one expression as the default of the parameter of a class's constructor and constructs the class. */
+export const PARAMETER_CONTAINER_KINDS = ["class-ctor-default"];
 /** Kinds whose body is the body of a function of its own (an `await` needs `async`). The rest run inside the parent function. */
 export const FUNCTION_KINDS = new Set([
   "comp-never", "comp-rendered", "comp-slot", "comp-prop", "comp-returned", "class-method", "class-ctor", "class-static", "class-sblock",
@@ -155,7 +162,7 @@ export const FUNCTION_KINDS = new Set([
 /** Kinds that can be async (the others cannot hold an `await`: a field initializer, a constructor, a static block, a rendered component). */
 export const ASYNC_KINDS = new Set(["comp-never", "comp-slot", "comp-prop", "comp-returned", "class-method", "dead-after-return", "dead-fn"]);
 export const USES = {
-  "comp-returned": ["discard", "call"], "class-field": ["new", "never"], "class-ctor": ["new", "never"], "class-method": ["call", "new", "never"],
+  "comp-returned": ["discard", "call"], "class-field": ["new", "never"], "class-ctor": ["new", "never"], "class-method": ["call", "new", "never"], "class-ctor-default": ["new"],
 };
 export const contain = (kind, id, body, extra = {}) => ({ k: "contain", kind, id, async: false, use: null, body, ...extra });
 
@@ -502,7 +509,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
     }
 
     function checkContain(stmt, scope) {
-      if (!CONTAINER_KINDS.includes(stmt.kind) && !APPLY_CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
+      if (!CONTAINER_KINDS.includes(stmt.kind) && !APPLY_CONTAINER_KINDS.includes(stmt.kind) && !PARAMETER_CONTAINER_KINDS.includes(stmt.kind)) fail(`${where}: unknown container ${stmt.kind}`);
       const own = FUNCTION_KINDS.has(stmt.kind);
       if (stmt.async && !ASYNC_KINDS.has(stmt.kind)) fail(`${where}: a ${stmt.kind} cannot be async`);
       if (stmt.kind === "comp-rendered" && stmt.body.at(-1)?.k !== "return") fail(`${where}: a rendered component returns`);
@@ -531,11 +538,13 @@ export function validate(program, { maxNodes = 400 } = {}) {
       for (const [name, type] of vars) inner.vars.set(name, type);
       f.params.forEach((p, index) => {
         const type = typeOf(p.default, inner);
-        if (type && (type.t === "fn" || type.t === "acc")) fail(`${where}: a function-typed default is not generated`);
+        // A parameter a shape annotates itself (`type` on a parameter with a default: entry-shapes.mjs `pd-closure-*`) may hold a closure; a drawn one never does.
+        const annotated = p.type !== undefined && !p.bare;
+        if (type && (type.t === "fn" || type.t === "acc") && !annotated) fail(`${where}: a function-typed default is not generated`);
         // The parameter is in scope for later defaults and the body (`p0`, `p1`, ...). Its type is
         // its printed annotation (exprTsType), not the default's inferred literal type.
         const annotation = paramTsType(p);
-        inner.vars.set(`p${index}`, annotation === "number" ? T.num : annotation === "void" ? T.void : T.unknown);
+        inner.vars.set(`p${index}`, annotation === "number" ? T.num : annotation === "void" ? T.void : annotated && annotation === "() => void" ? T.fn(T.void) : T.unknown);
       });
       const r = checkBlock(f.body, inner, f.async ? "free" : returns);
       if (f.async && returns === "num" && r.t !== "num") fail(`${where}: an effect compute must return a number`);
@@ -687,6 +696,8 @@ export const isValid = (program) => validate(program).length === 0;
 
 /** A parameter's printed type annotation. A destructured `void` field is `unknown` (TypeScript rejects a void default there). */
 export function paramTsType(p) {
+  // `type` on a parameter that has a default overrides the inferred annotation (entry-shapes.mjs `pd-*`: `p0: unknown = flush()`, so a call can pass an argument).
+  if (p.bare || p.type !== undefined) return p.type;
   const type = exprTsType(p.default);
   return p.destructured && type === "void" ? "unknown" : type;
 }

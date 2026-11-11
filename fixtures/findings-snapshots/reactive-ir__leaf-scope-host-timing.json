@@ -18,7 +18,7 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-host-timing/App.tsx",
-      "start": 167,
+      "start": 163,
       "end": 174,
       "fixes": 0
     },
@@ -29,7 +29,7 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-host-timing/App.tsx",
-      "start": 411,
+      "start": 407,
       "end": 418,
       "fixes": 0
     },

@@ -90,6 +90,16 @@ createEffect(() => count(), (value) => {
 });
 ```
 
+## Generators and parameter initializers (ADR 0961)
+
+- **A generator stepped from an effect's apply.** A creating call in a generator body an apply steps is an uncertifiable
+  row (`generator-step-unplaced`) where the stepping is not followed; a generator the apply calls and discards runs none of
+  its body.
+- **A parameter initializer.** A creating call written in a default value, a destructuring default, an IIFE or closure in
+  one, or a constructor's default, of a function the program calls or references, is an uncertifiable row
+  (`parameter-initializer-unplaced`), never silence: the component that merely declares the function does not run its
+  defaults, and the role veto (`runs off every apply`) cannot clear a default, which no role places.
+
 ## How to fix
 
 Create the computation in the effect's compute function or in the component

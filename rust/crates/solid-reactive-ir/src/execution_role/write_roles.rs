@@ -3613,6 +3613,11 @@ pub(crate) struct InPlaceClimb {
     /// ADR 0874: the climb crossed a call the census withholds, which only
     /// [`in_place_run_site_placing`] does: a row it places is undecided.
     pub(crate) withheld: bool,
+    /// ADR 0959: the climb crossed the callback of a primitive that runs it in place, where the callback takes a
+    /// parameter, is async or is a generator ([`climb_through_slots`]): a parameter the primitive may never pass, an
+    /// async callback's code before its first await run in place, shapes no proof reads. The placement the climb gives
+    /// is an obligation.
+    pub(crate) unmodelled: bool,
 }
 
 /// ADR 0493 review: whether the climb from `span` to `to` crosses a layer that
@@ -4793,6 +4798,18 @@ pub(crate) fn climb_in_place_layers_within(
     climb_in_place_layers_recording(file, span, lookup, false, within, &mut Vec::new())
 }
 
+/// The call of each layer [`climb_in_place_layers`] crosses from `span`, innermost first (ADR 0961, PD: a call among them may be
+/// written in a parameter list, which the climb's `in_list` says and does not locate).
+pub(crate) fn in_place_layer_calls(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let mut passed = Vec::new();
+    climb_in_place_layers_recording(file, span, lookup, false, None, &mut passed);
+    passed
+}
+
 /// [`climb_in_place_layers_within`], appending to `passed` the call of each
 /// layer crossed, innermost first.
 fn climb_in_place_layers_recording(
@@ -4810,6 +4827,7 @@ fn climb_in_place_layers_recording(
         among_others: false,
         suspended: None,
         withheld: false,
+        unmodelled: false,
     };
     // Bounded: each step moves to the call that holds the previous function.
     for step in 0..16 {
@@ -4944,6 +4962,7 @@ fn in_place_run_site_recording(
         among_others: false,
         suspended: None,
         withheld: false,
+        unmodelled: false,
     };
     let mut through_generator = false;
     for step in 0..8 {

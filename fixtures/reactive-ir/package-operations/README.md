@@ -1,0 +1,15 @@
+# package-operations
+
+**Claim (ADR 0949, addendum 6).** A package analyzed as source does things the runtime refuses in some contexts: a leaf owner (`onSettled`, `createTrackedEffect`) throws on `onCleanup`, a creating call and `flush`; an effect's apply phase throws on a creating call and warns on `flush`; a read after an await of an async tracked computation tracks nothing. The walks of those rules start at the operation or at a project call they follow, and stop where they cannot follow: the leaf scope's call walk does not enter a constructor or a returned object's getter, the effect phase's origin walk gives up at an exported function, the read-after-await walk does not follow `new`, a getter or a tag into a package. The package holds no finding of those rules for the operation, so the project was certified clean where Solid fired the code (W's package-site cells, ADR 0957: 49 false cleans on 0d472d4e4).
+
+A project site that may run a package function holding such an operation (`PackageEntries`, `PackageReferences`) and is written in a context that makes it a claim is the claiming rule's uncertifiable row, never a violation (`owners/package_entries/operations.rs`). Package `dep-ops` is a synthetic package of this fixture.
+
+`App.tsx`:
+
+- **Leaf scope, SC3001** (`leaf-owner-unproven`, at the entry): `LeafNew` (`new Cleans()` in `onSettled`: a constructor), `LeafGetterCreates` and `LeafGetterFlushes` (`makeCreates().value`, `makeFlushes().value` in `createTrackedEffect`: the operation is in a returned object's getter).
+- **Not claimed beside the call walk's own row:** `LeafCall` (`flushes()`: an exact call of a plain function, which the call walk reads: an SC3001 violation, no claim beside it). **Silent:** `LeafQuiet` (`quiet()` does nothing), `BodyNew` (`new Cleans()` outside any leaf callback: the package's own findings stand, no SC3001).
+- **Effect apply, SC2008 and SC6002** (`package-operation-in-effect-apply`): `ApplyFlush` (`flushes()` in an apply), `ApplyCreate` (`creates()` in an apply). No walk runs from the apply down, so an exact call stands too. **Silent:** `ApplyQuiet`.
+- **After an await, SC1002** (`package-operation-after-await`): `AwaitNew` (`new Reads()`: the constructor reads a reactive source), `AwaitTag` (``tag`x` ``), `AwaitHanded` (`new Takes(n)`: a reactive source handed in, which the package may read). **Not claimed beside the walk's own:** `AwaitCall` (`reads()`: an exact call the after-await walk reads). **Silent for this rule:** `BeforeAwait` (`new Reads()` before the await).
+- **Async capability, SC5001** (`invocation-context-unproven`, beside SC1001's `accessor-handed-to-package`): `AsyncHanded` (`new Takes(later)` with an async memo's accessor: the async-read channel, since the dialect emits SC5001 only through it).
+
+The package's own findings (`package-finding-at-entry`, SC9012 `leaf-callback-opaque`) stand beside them as before. Chrome, rc.21 development build: W's cells cross these entries with each code; every program of the 4,229 is covered by a row of the claiming rule (0 false clean, 0 false positive, 0 wrong rule).
