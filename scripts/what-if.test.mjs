@@ -10,7 +10,7 @@ import { AssumedReportError } from "./lib/assumed.mjs";
 import { cleanReport, flippedReport } from "./lib/assumed-fixtures.mjs";
 import {
   addOutcomes, calibration, canonical, chromeRecords, finishFold, finishJudge, fold, foldOne, groupOf, judgeMoves, judgeOne, judgeReport, label, liftingSetsOf, newFold, newJudge, parseSet,
-  premiseSetsFromBaselines, programOutcomes, rankSets, rankText, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
+  premiseOf, premiseSetsFromBaselines, programOutcomes, programWantsSet, rankSets, rankText, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
 } from "./what-if.mjs";
 
 const HERE = "/p";
@@ -424,4 +424,19 @@ test("the ranking of a corpus report: the sets by the rows they lift, the share 
   assert.match(text, /100 uncertifiable rows/);
   assert.match(text, /45 rows \( 45\.0%\)\s+42 sites\s+2 program\(s\) toV 5 Premise\(c-d\)/);
   assert.equal(text.split("\n").filter(Boolean).length, 3, "the header and the top two");
+});
+
+test("a grid program is run under a set when a formula row fires one of its hazards, or, for a premise id, when it carries a row of that cause", () => {
+  assert.equal(premiseOf("Premise(function-run-unplaced)"), "function-run-unplaced");
+  for (const other of ["RootPatch", "OpenMemberWrite(*)", "Premise()", "Premise(App)", "premise(a-b)", "Premise(a-b"]) assert.equal(premiseOf(other), null, other);
+  const program = { formulas: [{ kind: "standard-member-impostor", formula: "handed-root-patch", fired: ["RootPatch", "StandardRootHanded"] }], kinds: ["function-run-unplaced", "standard-member-impostor"] };
+  const set = (...ids) => ({ name: "s", ids });
+  assert.equal(programWantsSet(program, set("RootPatch")), true);
+  assert.equal(programWantsSet(program, set("OpenMemberWrite(*)")), false);
+  assert.equal(programWantsSet(program, set("Premise(function-run-unplaced)")), true);
+  assert.equal(programWantsSet(program, set("Premise(unresolved-invocation)")), false);
+  assert.equal(programWantsSet(program, set("Premise(unresolved-invocation)"), true), true, "`--programs-from all`");
+  // a program kept by its causes alone has no formula row, and one the scan read without `kinds` has no list
+  assert.equal(programWantsSet({ formulas: [], kinds: ["unresolved-invocation"] }, set("Premise(unresolved-invocation)")), true);
+  assert.equal(programWantsSet({ formulas: [] }, set("Premise(unresolved-invocation)")), false);
 });

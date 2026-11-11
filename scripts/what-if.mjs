@@ -14,6 +14,7 @@
 //        [--order-from sweep.json] [--jobs 12] [--no-control] --out report.json
 //   node scripts/what-if.mjs grid --what-if-bin ... --checker-bin ... --typefacts ... --scan <blocker-scan rows.jsonl> --set name=ids ... [--sets-file f] [--jobs 12]
 //        [--programs-from all] [--control N] [--every K] [--limit N] --out report.json [--movers-out ids.json]
+//        ADR 0965: a `Premise(<kind>)` set runs the scan's programs that carry a row of that cause (the scan's `u.kinds`), not only the ones with a formula row.
 //   node scripts/what-if.mjs rank --report corpus.json [--top 40]            ADR 0965: the sets of a corpus report ranked by the rows and sites they lift
 //   node scripts/what-if.mjs sets --scan <blocker-scan rows.jsonl> [--top 30]      the lifting sets of the scan's formula groups, with their rows and programs
 //   node scripts/what-if.mjs movers --report grid.json --out <manifest dir> [--run-out dir] [--checker-bin ... --typefacts ...]   the programs that moved, as the commands that run them in Chrome
@@ -469,16 +470,33 @@ async function corpus(argv) {
   process.stdout.write(summaryText(report, sets));
 }
 
-/** The lines of a blocker scan (ADR 0954): the programs with formula rows, `{ id, grid, formulas: [{ kind, formula, fired }] }`. */
-async function scanPrograms(path) {
+/**
+ * The lines of a blocker scan (ADR 0954): the programs with formula rows, `{ id, grid, formulas: [{ kind, formula, fired }] }`. ADR 0965: with `kinds`, also the programs that carry an uncertifiable
+ * row of some cause (`u.kinds`, the scan's count of every row by its `blockedBy.kind`), `{ ..., kinds: [<kind>] }`: what a `Premise(<kind>)` set can move.
+ */
+async function scanPrograms(path, { kinds = false } = {}) {
   const programs = [];
   for await (const line of createInterface({ input: createReadStream(resolve(path)) })) {
     if (line.startsWith('{"scan"')) continue;
     const row = JSON.parse(line);
-    if (row.error || !row.formulas?.length) continue;
-    programs.push({ id: row.id, grid: row.grid, code: row.code, context: row.context, side: row.side, formulas: row.formulas });
+    if (row.error) continue;
+    const present = kinds ? Object.entries(row.u?.kinds ?? {}).filter(([, counts]) => counts.some((count) => count > 0)).map(([kind]) => kind) : [];
+    if (!row.formulas?.length && !present.length) continue;
+    programs.push({ id: row.id, grid: row.grid, code: row.code, context: row.context, side: row.side, formulas: row.formulas ?? [], kinds: present });
   }
   return programs;
+}
+
+/** The cause a `Premise(<kind>)` id names, or null for any other id. */
+export const premiseOf = (id) => /^Premise\(([a-z0-9]+(?:-[a-z0-9]+)+)\)$/.exec(id)?.[1] ?? null;
+
+/**
+ * Whether the grid's program can move under `set` (so it is run under it): one of its formula rows fires a hazard of the set (the seam answers only for a hazard the program has), or, for a
+ * `Premise(<kind>)` id (ADR 0965), the program carries a row of that cause; `all` (`--programs-from all`) runs every program under every set.
+ */
+export function programWantsSet(program, set, all = false) {
+  if (all) return true;
+  return program.formulas.some(({ fired }) => fired.some((id) => set.ids.includes(id))) || set.ids.some((id) => { const kind = premiseOf(id); return kind !== null && (program.kinds ?? []).includes(kind); });
 }
 
 /** The lifting sets of a scan's formula groups, with the rows and programs of each: what to ask `--assume`. */
@@ -568,16 +586,16 @@ async function grid(argv) {
   const { materializeForChecker, checkerEnv } = await import("./fuzz/checker.mjs");
   const install = resolve(found.install ?? join(here, "fuzz", "install"));
   const seed = found.seed ?? "1";
-  const scanned = await scanPrograms(found.scan);
+  const scanned = await scanPrograms(found.scan, { kinds: sets.some((set) => set.ids.some((id) => premiseOf(id) !== null)) });
   // A program can move under a set only when one of its rows fires a hazard of it (the seam answers only for a hazard the program has, and a row's `fired` names the ones that
-  // veto it); every other program is not run. `--programs-from all` runs every program with a formula row under every set instead.
-  const wanted = (program, set) => found["programs-from"] === "all" || program.formulas.some(({ fired }) => fired.some((id) => set.ids.includes(id)));
+  // veto it), or, for a `Premise(<kind>)` id, carries a row of that cause; every other program is not run. `--programs-from all` runs every program the scan holds under every set instead.
+  const wanted = (program, set) => programWantsSet(program, set, found["programs-from"] === "all");
   // `--every K` takes every K-th program of the selection (a spread over the groups, for a pilot); `--limit N` the first N.
   const needed = scanned.filter((program) => sets.some((set) => wanted(program, set))).filter((_, at) => at % Number(found.every ?? 1) === 0).slice(0, found.limit ? Number(found.limit) : undefined);
   const byId = new Map(needed.map((program) => [program.id, program]));
   const rows = [];
   for (const name of new Set(needed.map((program) => program.grid))) for (const row of gridRows(name)) if (byId.has(row.id)) rows.push(row);
-  process.stderr.write(`what-if grid: ${needed.length} program(s) with a row firing a hazard of a set (of ${scanned.length} with formula rows), ${rows.length} regenerated\n`);
+  process.stderr.write(`what-if grid: ${needed.length} program(s) with a row firing a hazard of a set or carrying a cause of one (of ${scanned.length} the scan holds), ${rows.length} regenerated\n`);
   const ordinary = ["--format", "json", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
   const feedback = ["--format", "json", "--feedback-facts", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
   // The control (a what-if run that assumes nothing must be the shipped checker's report) runs on `--control N` programs spread over the selection, 200 by default.
