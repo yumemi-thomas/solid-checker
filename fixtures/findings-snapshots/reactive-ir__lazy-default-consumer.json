@@ -85,17 +85,6 @@
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Clean.tsx",
-      "start": 60,
-      "end": 70,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Clean.tsx",
       "start": 252,
       "end": 269,
       "fixes": 0
@@ -129,17 +118,6 @@
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
-      "start": 60,
-      "end": 70,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
       "start": 537,
       "end": 554,
       "fixes": 0
@@ -164,17 +142,6 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Conditional.tsx",
       "start": 784,
       "end": 803,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Default.tsx",
-      "start": 70,
-      "end": 80,
       "fixes": 0
     },
     {
@@ -260,17 +227,6 @@
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/FakeLazy.tsx",
-      "start": 61,
-      "end": 71,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/FakeLazy.tsx",
       "start": 267,
       "end": 284,
       "fixes": 0
@@ -293,17 +249,6 @@
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/LocalLazy.tsx",
-      "start": 27,
-      "end": 37,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/LocalLazy.tsx",
       "start": 329,
       "end": 346,
       "fixes": 0
@@ -317,17 +262,6 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/LocalLazy.tsx",
       "start": 352,
       "end": 357,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Refused.tsx",
-      "start": 60,
-      "end": 70,
       "fixes": 0
     },
     {
@@ -744,17 +678,6 @@
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/Shadow.tsx",
-      "start": 60,
-      "end": 70,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Shadow.tsx",
       "start": 341,
       "end": 358,
       "fixes": 0
@@ -779,17 +702,6 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Shadow.tsx",
       "start": 633,
       "end": 647,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
-      "start": 90,
-      "end": 100,
       "fixes": 0
     },
     {

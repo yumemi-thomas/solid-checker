@@ -1,5 +1,5 @@
 import { createMemo, createSignal } from "solid-js";
-import { Bump, SetBy, bump, bumpNow, reset, store } from "dep-write";
+import { Bump, Label, SetBy, bump, bumpNow, reset, store } from "dep-write";
 
 export function CalledInMemo() {
   const m = createMemo(() => bump());
@@ -22,4 +22,19 @@ export function PropSetter() {
 }
 export function Handler() {
   return <button onClick={() => reset()}>reset</button>;
+}
+export function ObjectSetter() {
+  const [, setN] = createSignal(0);
+  return SetBy({ set: setN });
+}
+export function ArraySetter() {
+  const [, setN] = createSignal(0);
+  return SetBy({ set: [setN][0] });
+}
+export function ClosureSetter() {
+  const [, setN] = createSignal(0);
+  return <SetBy set={(value) => setN(value)} />;
+}
+export function Plain() {
+  return <Label />;
 }

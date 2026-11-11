@@ -425,9 +425,10 @@ impl DiagnosticSession {
         // uncertifiable one at the project sites that enter the package code, never silent
         // (`package_drop::hand_off`), including the obligations of a rule the project disabled.
         if !facts.dependency_source_roots.is_empty() {
-            let stage = solid_reactive_ir::ProofStage::begin(&findings);
-            let report = crate::package_drop::hand_off(&mut findings, facts, &program);
-            let withheld = crate::package_drop::hand_off(&mut withheld_coverage, facts, &program);
+            // The proof log's stages (the style drop, the hand-off) are written inside `hand_off`.
+            let report = crate::package_drop::hand_off(&mut findings, facts, &program, true);
+            let withheld =
+                crate::package_drop::hand_off(&mut withheld_coverage, facts, &program, false);
             // The proof gate and the tests count drops against attributions: a drop with none is a bug.
             assert!(
                 report.every_drop_attributed() && withheld.every_drop_attributed(),
@@ -435,9 +436,6 @@ impl DiagnosticSession {
                 report.attributed,
                 withheld.attributed
             );
-            if let Some(stage) = stage {
-                stage.end(solid_reactive_ir::DropPass::DependencySource, &findings);
-            }
         }
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
         // After enablement, like the refusal: the notice is about the installed

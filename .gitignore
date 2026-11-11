@@ -1335,3 +1335,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/package-owner-entries/node_modules/**
 !fixtures/reactive-ir/context-package-hop/node_modules/
 !fixtures/reactive-ir/context-package-hop/node_modules/**
+!fixtures/reactive-ir/package-style-rule/node_modules/
+!fixtures/reactive-ir/package-style-rule/node_modules/**

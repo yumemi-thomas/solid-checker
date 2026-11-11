@@ -38,11 +38,15 @@ pub(crate) const PROVIDER_NOT_PROVEN_ABOVE: &str = "provider-not-proven-above";
 /// ADR 0949: a finding the ADR 0284 drop discards in a package, reported at the project site that enters the package code
 /// (`package-finding-at-entry:<code>`), or at the project's import of the package when no entry is proven.
 pub const PACKAGE_FINDING_AT_ENTRY: &str = "package-finding-at-entry";
-/// ADR 0949: a signal setter a project hands to package code that calls a member of its own parameter
-/// (an SC9012 `*-member-dispatch` obligation in the package): the call may be the setter, so the owned
-/// scope that runs the package code may write in it. SC2001's own obligation at the handing site, the
-/// rule the runtime code (`REACTIVE_WRITE_IN_OWNED_SCOPE`) is claimed by.
-pub(crate) const SETTER_HANDED_TO_PACKAGE_DISPATCH: &str = "setter-handed-to-package-dispatch";
+/// ADR 0949: a signal setter a project hands to a package function in a shape no walk reads (inside an object
+/// literal or an array, as a JSX attribute): the package may call it, and the owned scope that runs the package
+/// code may not write a signal. SC2001's own obligation at the handing site, the rule the runtime code
+/// (`REACTIVE_WRITE_IN_OWNED_SCOPE`) is claimed by.
+pub(crate) const SETTER_HANDED_TO_PACKAGE: &str = "setter-handed-to-package";
+/// ADR 0949: a reactive accessor a project hands to a package function in a shape no walk reads: the package may
+/// call it, and where nothing tracks the call Solid logs `STRICT_READ_UNTRACKED`. SC1001's own obligation at the
+/// handing site, the rule that code is claimed by.
+pub(crate) const ACCESSOR_HANDED_TO_PACKAGE: &str = "accessor-handed-to-package";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 

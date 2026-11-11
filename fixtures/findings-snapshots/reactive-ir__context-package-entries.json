@@ -5,11 +5,11 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "package-finding-at-entry",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 355,
-      "end": 384,
+      "start": 458,
+      "end": 461,
       "fixes": 0
     },
     {
@@ -19,74 +19,8 @@
       "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 355,
-      "end": 384,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 448,
-      "end": 475,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-context-provider",
-      "code": "SC4002",
-      "kind": "uncertifiable",
-      "blocker": "provider-not-proven-above",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 448,
-      "end": 475,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 524,
-      "end": 547,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-context-provider",
-      "code": "SC4002",
-      "kind": "uncertifiable",
-      "blocker": "provider-not-proven-above",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 524,
-      "end": 547,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 592,
-      "end": 597,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-context-provider",
-      "code": "SC4002",
-      "kind": "uncertifiable",
-      "blocker": "provider-not-proven-above",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 592,
-      "end": 597,
+      "start": 458,
+      "end": 461,
       "fixes": 0
     },
     {
@@ -96,8 +30,8 @@
       "blocker": "package-finding-at-entry",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 637,
-      "end": 649,
+      "start": 511,
+      "end": 514,
       "fixes": 0
     },
     {
@@ -107,8 +41,8 @@
       "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 637,
-      "end": 649,
+      "start": 511,
+      "end": 514,
       "fixes": 0
     },
     {
@@ -118,8 +52,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 708,
-      "end": 716,
+      "start": 661,
+      "end": 690,
       "fixes": 0
     },
     {
@@ -129,8 +63,8 @@
       "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 708,
-      "end": 716,
+      "start": 661,
+      "end": 690,
       "fixes": 0
     },
     {
@@ -140,8 +74,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 784,
-      "end": 786,
+      "start": 754,
+      "end": 781,
       "fixes": 0
     },
     {
@@ -151,8 +85,184 @@
       "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
-      "start": 784,
-      "end": 786,
+      "start": 754,
+      "end": 781,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 830,
+      "end": 853,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 830,
+      "end": 853,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 898,
+      "end": 903,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 898,
+      "end": 903,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 943,
+      "end": 955,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 943,
+      "end": 955,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1014,
+      "end": 1022,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1014,
+      "end": 1022,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1090,
+      "end": 1092,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1090,
+      "end": 1092,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1381,
+      "end": 1391,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1381,
+      "end": 1391,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1446,
+      "end": 1459,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1446,
+      "end": 1459,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1516,
+      "end": 1527,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-entries/App.tsx",
+      "start": 1516,
+      "end": 1527,
       "fixes": 0
     }
   ]

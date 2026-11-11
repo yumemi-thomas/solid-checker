@@ -433,6 +433,10 @@ pub(crate) enum PremiseKind {
     /// want of a provider (ADR 0943). The span is the binding the context is
     /// made at, in the file that holds it.
     ContextDefaultProven,
+    /// The rule is a style rule (SC80xx: duplicate props, prefer-for, prefer-show) and the finding sits in a
+    /// package analyzed as source: a style finding in a package's code is no runtime claim about the project
+    /// (ADR 0949, `package-style-not-project`). The span is the finding's site, in the package.
+    PackageStyleNotProject,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the
@@ -518,6 +522,9 @@ pub enum DropPass {
     RuntimeConfiguration,
     /// `finish_findings`: an equal finding is already in the list.
     EqualFinding,
+    /// ADR 0949: a style rule's finding in a package's source is dropped, not handed to the project
+    /// (`package-style-not-project`): it is no claim about what the project's code does at run time.
+    PackageStyleNotProject,
 }
 
 impl DropPass {
@@ -538,6 +545,7 @@ impl DropPass {
             Self::SupersededByViolation => "SupersededByViolation",
             Self::RuntimeConfiguration => "RuntimeConfiguration",
             Self::EqualFinding => "EqualFinding",
+            Self::PackageStyleNotProject => "PackageStyleNotProject",
         }
     }
 
@@ -558,6 +566,10 @@ impl DropPass {
             Self::SupersededByViolation => &[PremiseKind::ViolationAtSite],
             Self::RuntimeConfiguration => &[PremiseKind::RuntimeConfiguration],
             Self::EqualFinding => &[PremiseKind::EqualFinding],
+            Self::PackageStyleNotProject => &[
+                PremiseKind::DependencySourceRoot,
+                PremiseKind::PackageStyleNotProject,
+            ],
         }
     }
 }
@@ -1083,6 +1095,7 @@ mod tests {
             DropPass::SupersededByViolation,
             DropPass::RuntimeConfiguration,
             DropPass::EqualFinding,
+            DropPass::PackageStyleNotProject,
         ];
         let mut names = std::collections::BTreeSet::new();
         for pass in passes {

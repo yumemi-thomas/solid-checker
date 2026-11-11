@@ -6,6 +6,19 @@ import { Pure, PureBadge, pureHook } from "dep-ui-pure";
 function Layout(props: { comp: (props: { children?: any }) => any }) {
   return <props.comp>x</props.comp>;
 }
+// Project helpers that run a function handed to them: the call that runs it is the entry.
+function run(f: () => unknown) {
+  return f();
+}
+function runOnce(f: () => unknown) {
+  return f();
+}
+function runVia(f: () => unknown) {
+  return runOnce(f);
+}
+function keep(f: () => unknown) {
+  return () => f;
+}
 
 export function Handed() {
   createEffect(useUi, () => {});
@@ -41,4 +54,21 @@ export function PureChild() {
 }
 export function PureDynamic() {
   return <Dynamic component={Pure}>x</Dynamic>;
+}
+
+export function Helper() {
+  run(useUi);
+  return <p>x</p>;
+}
+export function HelperVia() {
+  runVia(useUi);
+  return <p>x</p>;
+}
+export function HelperKeeps() {
+  keep(useUi);
+  return <p>x</p>;
+}
+export function PureHelper() {
+  run(pureHook);
+  return <p>x</p>;
 }

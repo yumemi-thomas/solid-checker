@@ -10,12 +10,18 @@
 //! uncertifiable result of any rule, stands again as an **uncertifiable** finding of the same rule at
 //! every project site the program says may run the function that holds it
 //! ([`solid_reactive_ir::PackageEntries`]) and at every project reference no exact call or tag decides
-//! ([`solid_reactive_ir::PackageReferences`]); where no site is proven it stands at the project's
-//! import of the package, where there is no import at the project's first file, and where there is no
-//! file at the project's configuration. Never a violation
+//! ([`solid_reactive_ir::PackageReferences`]); where no site is proven it stands once per package and
+//! rule at the project's first import of the package, where there is no import at the project's first
+//! file, and where there is no file at the project's configuration. Never a violation
 //! (the package's own execution is not proven by a path that is not followed), never silence. A site
 //! that already holds a finding of the rule (a violation or an obligation the call walk or the read
 //! transport attributed) is that finding's: nothing is added beside it.
+//!
+//! One kind of finding is not handed off: a **style** rule's (SC80xx: duplicate props, prefer-for,
+//! prefer-show). A style finding in a package's code is no claim about what the project's code does at
+//! run time, so there is nothing for a project site to answer for. It is dropped under the named premise
+//! `package-style-not-project` (`DropPass::PackageStyleNotProject`, `PremiseKind::PackageStyleNotProject`),
+//! typed and written to the proof log with the finding's package site; every other rule keeps the hand-off.
 //!
 //! [`hand_off`] returns the [`DropReport`] of the drop, and `diagnostics.rs` is the only caller of it:
 //! the tests in this module and the proof log (`attributed` lines, checked by the proof gate) count
@@ -25,19 +31,23 @@ use std::collections::{BTreeSet, HashMap};
 
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
-    DependencyEntry, EvidenceStep, Finding, PACKAGE_FINDING_AT_ENTRY, PackageEntrySite, Program,
+    DependencyEntry, DropPass, EvidenceStep, Finding, PACKAGE_FINDING_AT_ENTRY, PackageEntrySite,
+    Program, ProofStage,
 };
 use typefacts::Location;
 
 /// What one drop did, counted per dropped finding.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DropReport {
-    /// Findings located in a package, discarded from the report.
+    /// Findings of a runtime-code rule located in a package, discarded from the report.
     pub(crate) dropped: usize,
     /// Of those, the ones that stand again at a project site the program proves enters the package code.
     pub(crate) at_entry: usize,
-    /// The ones that stand at the project's import of the package: no exact entry is proven.
+    /// The ones that stand at the project's first import of the package: no exact entry is proven.
     pub(crate) at_import: usize,
+    /// Style findings located in a package, dropped under the premise `package-style-not-project`:
+    /// no project row stands for them, and the proof log names the premise ([`is_style_rule`]).
+    pub(crate) style_dropped: usize,
     /// Each dropped finding's replacements, by the package location it was at, for the log and the tests.
     pub(crate) attributed: Vec<(Location, Vec<Location>)>,
 }
@@ -52,12 +62,20 @@ impl DropReport {
     }
 }
 
+/// Whether `id` is a style rule's code (SC80xx: duplicate props, prefer-for, prefer-show): the premise
+/// `package-style-not-project` applies to a finding of it that sits in a package.
+fn is_style_rule(id: &str) -> bool {
+    id.starts_with("SC80")
+}
+
 /// Moves the findings located in a package out of `findings` and puts them back, as uncertifiable
-/// findings, at the project sites that enter the package code (see the module).
+/// findings, at the project sites that enter the package code (see the module). `proof_log` writes the
+/// drops to the proof log under their typed passes (`findings` of the report, not the withheld ones).
 pub(crate) fn hand_off(
     findings: &mut Vec<Finding>,
     facts: &ProjectFacts,
     program: &Program,
+    proof_log: bool,
 ) -> DropReport {
     let mut report = DropReport::default();
     let in_package = |finding: &Finding| {
@@ -68,6 +86,16 @@ pub(crate) fn hand_off(
     if !findings.iter().any(in_package) {
         return report;
     }
+    // A style rule's finding in a package: dropped under its named premise, handed to no site.
+    let stage = proof_log.then(|| ProofStage::begin(findings)).flatten();
+    let held = findings.len();
+    findings.retain(|finding| !(in_package(finding) && is_style_rule(&finding.id)));
+    report.style_dropped = held - findings.len();
+    if let Some(stage) = stage {
+        stage.end(DropPass::PackageStyleNotProject, findings);
+    }
+    // Every other package finding is handed to the project.
+    let stage = proof_log.then(|| ProofStage::begin(findings)).flatten();
     let mut kept = Vec::with_capacity(findings.len());
     let mut dropped = Vec::new();
     for finding in std::mem::take(findings) {
@@ -84,6 +112,7 @@ pub(crate) fn hand_off(
         .map(|finding| finding_key(finding, &finding.primary_location))
         .collect::<BTreeSet<_>>();
     let entries = entries_by_path(program);
+    let mut first_imports = HashMap::<String, Location>::new();
     let mut replacements = Vec::new();
     for finding in dropped {
         report.dropped += 1;
@@ -93,13 +122,17 @@ pub(crate) fn hand_off(
         let sites = sites_of(&finding.primary_location, root, &entries, program);
         let mut at = Vec::<Location>::new();
         if sites.is_empty() {
-            for location in import_sites(facts, root) {
-                let key = finding_key(&finding, &location);
-                if standing.insert(key) {
-                    replacements.push(replacement(&finding, &location, None));
-                }
-                at.push(location);
+            // No exact project entry is proven: once per package and rule, at the project's first
+            // import of the package (`finding_key` is the rule and the site).
+            let location = first_imports
+                .entry(root.to_owned())
+                .or_insert_with(|| first_import_site(facts, root))
+                .clone();
+            let key = finding_key(&finding, &location);
+            if standing.insert(key) {
+                replacements.push(replacement(&finding, &location, None));
             }
+            at.push(location);
             report.at_import += 1;
         } else {
             for site in sites {
@@ -117,6 +150,9 @@ pub(crate) fn hand_off(
     }
     kept.extend(replacements);
     *findings = kept;
+    if let Some(stage) = stage {
+        stage.end(DropPass::DependencySource, findings);
+    }
     report
 }
 
@@ -161,49 +197,47 @@ fn entries_by_path(program: &Program) -> HashMap<&str, Vec<&solid_reactive_ir::P
     by_path
 }
 
-/// The project's imports of the package at `root`, or, with none, its first project file, or, with
-/// no project file, its configuration: never empty.
-fn import_sites(facts: &ProjectFacts, root: &str) -> Vec<Location> {
-    let mut sites = BTreeSet::new();
-    if let Some(imports) = &facts.resolved_imports {
-        for (importer, import) in imports.iter() {
-            if facts.dependency_source_root(importer).is_none()
-                && std::path::Path::new(import.resolved_path.as_ref()).starts_with(root)
-            {
-                sites.insert((
+/// The project's first import of the package at `root` (the importing file's path, then the offset), or,
+/// with none, its first project file, or, with no project file, its configuration: never absent.
+fn first_import_site(facts: &ProjectFacts, root: &str) -> Location {
+    let first = facts.resolved_imports.as_ref().and_then(|imports| {
+        imports
+            .iter()
+            .filter(|(importer, import)| {
+                facts.dependency_source_root(importer).is_none()
+                    && std::path::Path::new(import.resolved_path.as_ref()).starts_with(root)
+            })
+            .map(|(importer, import)| {
+                (
                     importer.to_owned(),
                     u64::from(import.span.start),
                     u64::from(import.span.end),
-                ));
-            }
-        }
-    }
-    let mut locations = sites
-        .into_iter()
-        .map(|(path, start_byte, end_byte)| Location {
+                )
+            })
+            .min()
+    });
+    if let Some((path, start_byte, end_byte)) = first {
+        return Location {
             path: path.as_str().into(),
             start_byte,
             end_byte,
-        })
-        .collect::<Vec<_>>();
-    if locations.is_empty() {
-        // No project file loads the package (a transitive dependency no project file names): the
-        // project's first file, else its configuration, so that a drop always leaves a project row.
-        let path = facts
-            .files
-            .iter()
-            .find(|file| facts.dependency_source_root(file.path.as_str()).is_none())
-            .map_or_else(
-                || facts.project_id.as_str().into(),
-                |file| file.path.shared(),
-            );
-        locations.push(Location {
-            path,
-            start_byte: 0,
-            end_byte: 0,
-        });
+        };
     }
-    locations
+    // No project file loads the package (a transitive dependency no project file names): the
+    // project's first file, else its configuration, so that a drop always leaves a project row.
+    let path = facts
+        .files
+        .iter()
+        .find(|file| facts.dependency_source_root(file.path.as_str()).is_none())
+        .map_or_else(
+            || facts.project_id.as_str().into(),
+            |file| file.path.shared(),
+        );
+    Location {
+        path,
+        start_byte: 0,
+        end_byte: 0,
+    }
 }
 
 /// The dedupe identity of a finding at a location: its rule code and where it starts.
@@ -226,7 +260,7 @@ fn replacement(dropped: &Finding, at: &Location, kind: Option<DependencyEntry>) 
     let mut evidence = vec![EvidenceStep {
         message: match kind {
             Some(_) => format!("this {site} enters package code that holds the finding below"),
-            None => "no project site is proven to enter the package code that holds the finding below, so the package's import stands for it".into(),
+            None => "no project site is proven to enter the package code that holds the finding below, so the project's first import of the package stands for it".into(),
         },
         location: Some(at.clone()),
     }];
@@ -343,7 +377,12 @@ mod tests {
                 },
             ],
         }];
-        let report = hand_off(&mut findings, &facts(), &program(entries, Vec::new()));
+        let report = hand_off(
+            &mut findings,
+            &facts(),
+            &program(entries, Vec::new()),
+            false,
+        );
         assert_eq!(report.dropped, 1);
         assert_eq!(report.at_entry, 1);
         assert!(report.every_drop_attributed());
@@ -383,7 +422,12 @@ mod tests {
                 kind: DependencyEntry::Call,
             }],
         }];
-        let report = hand_off(&mut findings, &facts(), &program(entries, Vec::new()));
+        let report = hand_off(
+            &mut findings,
+            &facts(),
+            &program(entries, Vec::new()),
+            false,
+        );
         assert!(report.every_drop_attributed());
         assert_eq!(findings.len(), 1, "the violation stands; nothing beside it");
         assert_eq!(findings[0].kind, "violation");
@@ -396,7 +440,12 @@ mod tests {
             "uncertifiable",
             at("/p/node_modules/pkg/index.js", 10, 20),
         )];
-        let report = hand_off(&mut findings, &facts(), &program(Vec::new(), Vec::new()));
+        let report = hand_off(
+            &mut findings,
+            &facts(),
+            &program(Vec::new(), Vec::new()),
+            false,
+        );
         assert_eq!(report.dropped, 1);
         assert_eq!(report.at_import, 1);
         assert!(report.every_drop_attributed());
@@ -410,6 +459,155 @@ mod tests {
         assert_eq!(
             findings[0].analysis_context,
             format!("{PACKAGE_FINDING_AT_ENTRY}:SC4001")
+        );
+    }
+
+    #[test]
+    fn a_style_finding_in_a_package_is_dropped_by_its_premise_and_handed_to_no_site() {
+        let mut findings = vec![
+            finding(
+                "SC8003",
+                "violation",
+                at("/p/node_modules/pkg/index.js", 10, 20),
+            ),
+            finding(
+                "SC8015",
+                "uncertifiable",
+                at("/p/node_modules/pkg/index.js", 30, 40),
+            ),
+            finding("SC8003", "violation", at("/p/App.tsx", 1, 2)),
+        ];
+        let entries = vec![PackageEntries {
+            function: at("/p/node_modules/pkg/index.js", 0, 50),
+            sites: vec![PackageEntrySite {
+                location: at("/p/App.tsx", 100, 110),
+                kind: DependencyEntry::Render,
+            }],
+        }];
+        let report = hand_off(
+            &mut findings,
+            &facts(),
+            &program(entries, Vec::new()),
+            false,
+        );
+        assert_eq!(
+            report.style_dropped, 2,
+            "both style findings of the package"
+        );
+        assert_eq!(report.dropped, 0, "no runtime-code finding was dropped");
+        assert!(report.every_drop_attributed());
+        // The project's own style finding stands, and no row stands for the package's.
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].primary_location.path.as_ref(), "/p/App.tsx");
+    }
+
+    #[test]
+    fn a_runtime_rule_beside_a_style_rule_keeps_the_hand_off() {
+        let mut findings = vec![
+            finding(
+                "SC8003",
+                "violation",
+                at("/p/node_modules/pkg/index.js", 10, 20),
+            ),
+            finding(
+                "SC2001",
+                "violation",
+                at("/p/node_modules/pkg/index.js", 12, 18),
+            ),
+        ];
+        let entries = vec![PackageEntries {
+            function: at("/p/node_modules/pkg/index.js", 0, 50),
+            sites: vec![PackageEntrySite {
+                location: at("/p/App.tsx", 100, 110),
+                kind: DependencyEntry::Call,
+            }],
+        }];
+        let report = hand_off(
+            &mut findings,
+            &facts(),
+            &program(entries, Vec::new()),
+            false,
+        );
+        assert_eq!(
+            (report.style_dropped, report.dropped, report.at_entry),
+            (1, 1, 1)
+        );
+        assert!(report.every_drop_attributed());
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].id, "SC2001");
+        assert_eq!(findings[0].kind, "uncertifiable");
+    }
+
+    #[test]
+    fn with_no_entry_there_is_one_row_per_package_and_rule_at_the_first_import() {
+        use solid_facts::resolution::{AttestedImport, AttestedImportIndex, ImportResolution};
+        let import = |start: u32| AttestedImport {
+            span: solid_facts::core::Span::new(start, start + 5),
+            text: "pkg".into(),
+            resolution: ImportResolution::NodeModules,
+            resolved_path: "/p/node_modules/pkg/index.js".into(),
+            included_path: "".into(),
+            symlink_path: "".into(),
+            extension: ".js".into(),
+            package_name: Some("pkg".into()),
+            package_version: None,
+            package_manifest: None,
+            resolver_package_name: None,
+            resolver_package_version: None,
+        };
+        let mut imports = AttestedImportIndex::default();
+        // The order of insertion is not the order of the report: the first by path, then offset.
+        imports.insert_file("/p/b.tsx", vec![import(0)]);
+        imports.insert_file("/p/a.tsx", vec![import(40), import(7)]);
+        let mut facts = facts();
+        facts.resolved_imports = Some(imports);
+        let mut findings = vec![
+            finding(
+                "SC1001",
+                "uncertifiable",
+                at("/p/node_modules/pkg/a.js", 1, 2),
+            ),
+            finding(
+                "SC1001",
+                "uncertifiable",
+                at("/p/node_modules/pkg/b.js", 3, 4),
+            ),
+            finding(
+                "SC4001",
+                "uncertifiable",
+                at("/p/node_modules/pkg/a.js", 5, 6),
+            ),
+            finding(
+                "SC4001",
+                "uncertifiable",
+                at("/p/node_modules/pkg/c.js", 7, 8),
+            ),
+        ];
+        let report = hand_off(
+            &mut findings,
+            &facts,
+            &program(Vec::new(), Vec::new()),
+            false,
+        );
+        assert_eq!((report.dropped, report.at_import), (4, 4));
+        assert!(report.every_drop_attributed());
+        let rows = findings
+            .iter()
+            .map(|finding| {
+                (
+                    finding.id.as_str(),
+                    finding.primary_location.path.to_string(),
+                    finding.primary_location.start_byte,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            vec![
+                ("SC1001", "/p/a.tsx".to_owned(), 7),
+                ("SC4001", "/p/a.tsx".to_owned(), 7)
+            ],
+            "one row per rule, at the package's first import"
         );
     }
 
@@ -451,7 +649,12 @@ mod tests {
                 kind: DependencyEntry::Reference,
             }],
         }];
-        let report = hand_off(&mut findings, &facts(), &program(Vec::new(), references));
+        let report = hand_off(
+            &mut findings,
+            &facts(),
+            &program(Vec::new(), references),
+            false,
+        );
         assert!(report.every_drop_attributed());
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].primary_location.start_byte, 7);

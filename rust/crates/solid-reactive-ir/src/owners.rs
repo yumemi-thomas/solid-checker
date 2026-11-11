@@ -31,7 +31,7 @@ mod missing_owners;
 pub(crate) use missing_owners::*;
 mod package_entries;
 use package_entries::attribute_package_entries;
-pub(crate) use package_entries::{OwnerView, package_entry_table};
+pub(crate) use package_entries::{OwnerView, package_entry_table, package_handed_value_claims};
 mod context_census;
 pub(crate) use context_census::*;
 mod owner_state;

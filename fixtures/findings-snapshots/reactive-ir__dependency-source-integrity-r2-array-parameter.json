@@ -13,17 +13,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-array-parameter/App.tsx",
-      "start": 148,
-      "end": 160,
-      "fixes": 0
-    },
-    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",

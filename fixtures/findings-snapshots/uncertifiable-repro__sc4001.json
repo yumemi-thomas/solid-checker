@@ -988,61 +988,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "sync-computation-received-async",
-      "code": "SC7002",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1538,17 +1483,6 @@
       "fixes": 0
     },
     {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
-      "start": 313,
-      "end": 319,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1631,17 +1565,6 @@
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
-      "start": 421,
-      "end": 427,
-      "fixes": 0
-    },
-    {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
       "start": 421,
       "end": 427,
@@ -1758,17 +1681,6 @@
       "fixes": 0
     },
     {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
-      "start": 322,
-      "end": 328,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1873,17 +1785,6 @@
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
-      "start": 425,
-      "end": 431,
-      "fixes": 0
-    },
-    {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
       "start": 425,
       "end": 431,
@@ -2011,17 +1912,6 @@
       "fixes": 0
     },
     {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
-      "start": 704,
-      "end": 710,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2126,17 +2016,6 @@
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
-      "start": 767,
-      "end": 773,
-      "fixes": 0
-    },
-    {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 767,
       "end": 773,
@@ -2253,17 +2132,6 @@
       "fixes": 0
     },
     {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
-      "start": 840,
-      "end": 846,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2352,17 +2220,6 @@
       "fixes": 0
     },
     {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
-      "start": 864,
-      "end": 870,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2445,17 +2302,6 @@
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
-      "start": 891,
-      "end": 897,
-      "fixes": 0
-    },
-    {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 891,
       "end": 897,
@@ -2528,61 +2374,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
-      "start": 163,
-      "end": 188,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
-      "start": 163,
-      "end": 188,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
-      "start": 163,
-      "end": 188,
-      "fixes": 0
-    },
-    {
-      "rule": "sync-computation-received-async",
-      "code": "SC7002",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
-      "start": 163,
-      "end": 188,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
-      "start": 163,
-      "end": 188,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2613,61 +2404,6 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
       "start": 511,
       "end": 516,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "sync-computation-received-async",
-      "code": "SC7002",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
-      "start": 168,
-      "end": 193,
       "fixes": 0
     },
     {
@@ -2715,61 +2451,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
-      "start": 230,
-      "end": 255,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
-      "start": 230,
-      "end": 255,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
-      "start": 230,
-      "end": 255,
-      "fixes": 0
-    },
-    {
-      "rule": "sync-computation-received-async",
-      "code": "SC7002",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
-      "start": 230,
-      "end": 255,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
-      "start": 230,
-      "end": 255,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2800,61 +2481,6 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
       "start": 590,
       "end": 595,
-      "fixes": 0
-    },
-    {
-      "rule": "no-store-mutation-outside-setter",
-      "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "sync-computation-received-async",
-      "code": "SC7002",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
-      "start": 168,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
-      "start": 168,
-      "end": 193,
       "fixes": 0
     },
     {

@@ -211,28 +211,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
-      "start": 129,
-      "end": 140,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
-      "start": 129,
-      "end": 140,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
