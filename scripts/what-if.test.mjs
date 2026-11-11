@@ -144,6 +144,11 @@ test("a finding the shipped checker had no finding at is counted per project, a 
   assert.equal(whole.errors, 1);
 });
 
+test("a control entry that is an error stops the fold and names the program", () => {
+  const sets = [{ name: "a", ids: ["RootPatch"] }];
+  assert.throws(() => foldOne(newFold(sets), { program: "demo/p", bySet: { control: { error: "the what-if build exited 3: boom" } } }), /the control run failed at demo\/p: the what-if build exited 3: boom/);
+});
+
 test("the corpus asks for the lifting sets of its own veto groups too, those the build can name, with enough rows, and not twice", () => {
   const row = (fired) => finding({ line: 1, blockedBy: handed(fired) });
   const rows = (fired, count) => Array.from({ length: count }, () => row(fired));
@@ -326,6 +331,15 @@ test("the corpus command runs the shipped checker and the what-if build, and sto
     const broken = run(whatIf("broken"));
     assert.equal(broken.status, 2);
     assert.match(broken.stderr, /the control differs from the shipped checker/);
+    // a control that fails (the build exits 3 when it assumes nothing, or is killed) stops the run and names the run: it is not counted and passed over
+    const failing = fake("what-if-failing-control", `
+      const at = process.argv.indexOf("--assume");
+      const ids = process.argv[at + 1].split(",").filter(Boolean);
+      if (ids.length === 0) { process.stderr.write("boom"); process.exit(3); }
+      process.stdout.write(JSON.stringify({ status: "certified", findings: [], assumed: { hazards: ids, flipped: [] } }));`);
+    const failed = run(failing);
+    assert.equal(failed.status, 2);
+    assert.match(failed.stderr, /the control run failed at demo\/tsconfig\.json: the what-if build exited 3: boom/);
     // the shipped checker handed in as the what-if build is an error, not a baseline
     const same = run(shipped);
     assert.equal(same.status, 2);

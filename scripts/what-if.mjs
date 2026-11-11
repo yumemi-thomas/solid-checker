@@ -220,7 +220,12 @@ async function baselineRun({ program, binaries, env = checkerEnvironment(binarie
 /** The what-if build's run of a program under the assumption `ids`, set against the shipped checker's `baseline`: the entry of the program's `bySet`. */
 async function whatIfRun({ program, baseline, name, ids, binaries, env = checkerEnvironment(binaries.typefacts), root = "" }) {
   const answer = await run(binaries.whatIf, [...program.args, "--assume", ids.join(",")], { cwd: program.cwd, env });
-  if (answer.status !== 0 && answer.status !== 1) return { error: `the what-if build exited ${answer.status}: ${answer.stderr.slice(-300)}` };
+  if (answer.status !== 0 && answer.status !== 1) {
+    const error = `the what-if build ${answer.status === null ? "was killed (its time limit) or did not start" : `exited ${answer.status}`}: ${answer.stderr.slice(-300)}`;
+    // The control is what makes every other number of a program the shipped checker's: a control that fails stops the run and names itself (it is not counted and passed over).
+    if (name === "control") throw new Error(`the control run failed at ${program.id}: ${error}`);
+    return { error };
+  }
   const report = readWhatIf(answer.stdout, ids);
   if (name === "control") {
     if (!sameReport(baseline, report)) throw new Error(`the control differs from the shipped checker at ${program.id}: a what-if run that assumed nothing must report what the shipped checker reports`);
@@ -262,7 +267,13 @@ export function newFold(sets) {
 /** Adds one program's result (with its full entries) to a fold state: the harness's transitions per set, group tallies per set and per project. */
 export function foldOne(state, result) {
   if (result.error) { state.errors += 1; return; }
-  if (result.bySet.control) { state.control.programs += 1; state.control.same += result.bySet.control.same ? 1 : 0; state.control.flipped += result.bySet.control.flipped.length; }
+  if (result.bySet.control) {
+    const control = result.bySet.control;
+    if (control.error) throw new Error(`the control run failed at ${result.program}: ${control.error}`);
+    state.control.programs += 1;
+    state.control.same += control.same ? 1 : 0;
+    state.control.flipped += control.flipped.length;
+  }
   for (const { name } of state.sets) {
     const entry = result.bySet[name];
     if (!entry || entry.error) { if (entry?.error) state.errors += 1; continue; }
