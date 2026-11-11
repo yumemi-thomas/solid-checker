@@ -171,7 +171,7 @@ or `flush()` written where such a member runs it (a class element, an object lit
 function a `new` runs, a helper those call) is an uncertifiable row of this rule (`function-run-unplaced`;
 `field-initializer-unplaced` directly in a class field's initializer), never a violation, while the program names a
 primitive that opens a leaf scope. A function handed where nothing follows it is run by a call, which the walk answers
-itself (SC9012, `leaf-callback-opaque`): not this net's.
+itself (SC9012, `leaf-callback-opaque`): not this net's. The net adds no row where the walk's own operation stands (a helper's creation is reported at the helper call), and an opaque call's SC9012 row answers for no accessor or method written in its arguments.
 
 ## How to fix
 

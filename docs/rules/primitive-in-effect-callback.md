@@ -107,6 +107,9 @@ effect's apply is not made; the calls the walk sees are proven runs there. A hel
 with no owner (Chrome: `PRIMITIVE_IN_EFFECT_CALLBACK`), exported or not. For an exported function the origin is `mixed`
 (ADR 0516): the creation is an uncertifiable row, never a violation and never silence; the unexported twin stays a
 violation, and an exported helper only an event handler calls stays silent.
+A call the call graph withheld (ADR 0339: a `const` arrow is not hoisted, and a call through an import cycle, a self-import included,
+may run before the binding's declarator) is followed as a run the walk does not prove: the origin it reaches is `mixed`, an
+uncertifiable row, where the helper was certified clean for want of a call edge.
 
 ## How to fix
 

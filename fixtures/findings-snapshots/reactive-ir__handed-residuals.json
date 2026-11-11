@@ -46,17 +46,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
-      "start": 2638,
-      "end": 2648,
-      "fixes": 0
-    },
-    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -75,17 +64,6 @@
       "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
       "start": 2670,
       "end": 2672,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/handed-residuals/App.tsx",
-      "start": 2926,
-      "end": 2936,
       "fixes": 0
     },
     {

@@ -7,8 +7,29 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/exported-helper-in-apply/App.tsx",
-      "start": 1014,
-      "end": 1024,
+      "start": 1063,
+      "end": 1073,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/exported-helper-in-apply/App.tsx",
+      "start": 1926,
+      "end": 1936,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/exported-helper-in-apply/App.tsx",
+      "start": 1983,
+      "end": 1993,
       "fixes": 0
     },
     {

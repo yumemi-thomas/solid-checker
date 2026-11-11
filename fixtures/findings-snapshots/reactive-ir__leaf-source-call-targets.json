@@ -109,17 +109,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
-      "start": 210,
-      "end": 219,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -128,28 +117,6 @@
       "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
       "start": 210,
       "end": 219,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
-      "start": 253,
-      "end": 263,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
-      "start": 324,
-      "end": 333,
       "fixes": 0
     },
     {

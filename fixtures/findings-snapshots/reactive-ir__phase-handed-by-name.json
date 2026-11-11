@@ -81,33 +81,11 @@
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
-      "start": 7874,
-      "end": 7879,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
       "start": 7894,
       "end": 7896,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
-      "start": 8033,
-      "end": 8038,
       "fixes": 0
     },
     {

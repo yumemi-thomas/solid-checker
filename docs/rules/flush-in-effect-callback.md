@@ -206,6 +206,8 @@ An exported function is entered by calls outside the project as well, so the cla
 effect's apply is not made; the calls the walk sees are proven runs there. For an exported function the origin is `mixed`
 (ADR 0516): a `flush()` in a helper an apply calls is an uncertifiable row, never a violation and never silence; the
 unexported twin stays a violation.
+A call the call graph withheld (ADR 0339: a `const` arrow is not hoisted, and a call through an import cycle, a self-import
+included, may run before the binding's declarator) is followed the same way, as a run the walk does not prove.
 
 ## Premises
 

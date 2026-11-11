@@ -53,13 +53,21 @@ pub(crate) fn check_project(
     };
     let mut inputs = crate::late_chunks::ChunkInputs::of(ctx);
     inputs.discovery = checker.tables;
+    // ADR 0963: the leaf walk's rows (it runs before this stage) account for the code they reach.
+    let accounted = LeafRowsAccount::of(&draft.leaf_operations);
     for result in
         crate::late_chunks::FileChunks::run(chunks, &inputs, |file| checker.check_file(file))
     {
         draft.static_defects.extend(result.defects.iter().cloned());
-        draft
-            .static_violations
-            .extend(result.violations.iter().cloned());
+        draft.static_violations.extend(
+            result
+                .violations
+                .iter()
+                .filter(|violation| {
+                    !(violation.id == "SC3001" && accounted.covers(&violation.location))
+                })
+                .cloned(),
+        );
         draft.writes.extend(result.writes.iter().cloned());
         draft
             .write_action_obligations
@@ -68,6 +76,50 @@ pub(crate) fn check_project(
             .jsx_phase_sites
             .extend(result.jsx_phase_sites.iter().cloned());
         draft.site_ends.extend(&result.ends);
+    }
+}
+
+/// ADR 0963: where the leaf walk's rows already stand, so the net for code no call shows adds none beside them: the sites an
+/// operation reached through a helper is written at (or its own location when it stands at its own call). A net row inside one
+/// is one obligation twice: the walk's row stands at the helper call, a frame of the stack the operation throws on. A leaf scope
+/// whose callback could not be resolved (`UnresolvedCallback`, SC9012 `leaf-callback-opaque`) stands at the call and answers for
+/// no site inside its arguments (as for [`crate::site_accounting::delegate_row`]): what the call runs may be run later, at a
+/// place the row's line is no frame of (`new Proxy(target, { get() { onCleanup(f); } })` runs the trap where the proxy is read).
+struct LeafRowsAccount {
+    spans: rustc_hash::FxHashMap<String, Vec<(u64, u64)>>,
+}
+
+impl LeafRowsAccount {
+    fn of(operations: &[crate::LeafOwnerOperation]) -> Self {
+        let mut spans = rustc_hash::FxHashMap::<String, Vec<(u64, u64)>>::default();
+        let mut add = |location: &typefacts::Location| {
+            spans
+                .entry(location.path.to_string())
+                .or_default()
+                .push((location.start_byte, location.end_byte));
+        };
+        for operation in operations {
+            if matches!(
+                operation.kind,
+                crate::LeafOwnerOperationKind::UnresolvedCallback
+            ) {
+                continue;
+            }
+            if operation.sites.is_empty() {
+                add(&operation.location);
+            } else {
+                operation.sites.iter().for_each(&mut add);
+            }
+        }
+        Self { spans }
+    }
+
+    fn covers(&self, location: &typefacts::Location) -> bool {
+        self.spans.get(location.path.as_ref()).is_some_and(|spans| {
+            spans
+                .iter()
+                .any(|(start, end)| *start <= location.start_byte && location.end_byte <= *end)
+        })
     }
 }
 
