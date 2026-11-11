@@ -986,15 +986,20 @@ impl Capabilities<'_> {
             Some(HandedValue::Setter)
         } else if self.actions.contains_key(symbol) {
             Some(HandedValue::Action)
-        } else if let Some((source, _)) = self.accessors.get(symbol) {
-            Some(HandedValue::Accessor {
-                asynchronous: self.async_sources.contains(symbol)
-                    || self.async_sources.contains(source),
+        } else if self.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store)
+            || self.accessors.get(symbol).is_some_and(|(source, _)| {
+                self.source_kinds.get(source) == Some(&crate::ReactiveSourceKind::Store)
             })
-        } else if self.source_kinds.get(symbol) == Some(&crate::ReactiveSourceKind::Store) {
+        {
+            // A store's root is read like an accessor and written through its properties.
             Some(HandedValue::Store)
         } else {
-            None
+            self.accessors
+                .get(symbol)
+                .map(|(source, _)| HandedValue::Accessor {
+                    asynchronous: self.async_sources.contains(symbol)
+                        || self.async_sources.contains(source),
+                })
         }
     }
 }
