@@ -42,8 +42,6 @@ mod argument_values;
 mod attribution;
 mod base;
 pub mod blocked_by;
-#[cfg(feature = "what-if")]
-pub mod what_if;
 mod blockers;
 mod boundary_defects;
 mod cache;
@@ -53,6 +51,8 @@ mod cleanup;
 mod development_feedback;
 mod directives;
 mod execution_paths;
+#[cfg(feature = "what-if")]
+pub mod what_if;
 pub use development_feedback::{
     DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
 };

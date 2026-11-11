@@ -28,7 +28,8 @@ static FLIPPED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 pub fn assume(ids: &[String]) -> Result<(), String> {
     let mut parsed = Vec::<(String, Hazard)>::new();
     for id in ids {
-        let hazard = hazard_of_id(id).ok_or_else(|| format!("--assume: `{id}` names no hazard fact"))?;
+        let hazard =
+            hazard_of_id(id).ok_or_else(|| format!("--assume: `{id}` names no hazard fact"))?;
         if !parsed.iter().any(|(_, held)| *held == hazard) {
             parsed.push((id.clone(), hazard));
         }
@@ -40,7 +41,10 @@ pub fn assume(ids: &[String]) -> Result<(), String> {
 
 /// The seam's answer: whether `hazard` is assumed absent. Records it as flipped; the caller asks only for a hazard the program has.
 pub(crate) fn assumed_absent(hazard: Hazard) -> bool {
-    let Some((id, _)) = ASSUMED.get().and_then(|assumed| assumed.iter().find(|(_, held)| *held == hazard)) else {
+    let Some((id, _)) = ASSUMED
+        .get()
+        .and_then(|assumed| assumed.iter().find(|(_, held)| *held == hazard))
+    else {
         return false;
     };
     FLIPPED
@@ -53,9 +57,9 @@ pub(crate) fn assumed_absent(hazard: Hazard) -> bool {
 /// The ids the process assumed, in the order given.
 #[must_use]
 pub fn assumed_ids() -> Vec<String> {
-    ASSUMED
-        .get()
-        .map_or_else(Vec::new, |assumed| assumed.iter().map(|(id, _)| id.clone()).collect())
+    ASSUMED.get().map_or_else(Vec::new, |assumed| {
+        assumed.iter().map(|(id, _)| id.clone()).collect()
+    })
 }
 
 /// The assumed ids whose answer actually flipped (the program had the hazard), sorted. Empty: the run is the default build's.
@@ -85,9 +89,17 @@ mod tests {
     fn the_seam_answers_absent_for_the_assumed_hazards_only_and_records_them() {
         assert!(!assumed_absent(Hazard::RootPatch), "nothing is assumed yet");
         assert!(flipped().is_empty());
-        assume(&["RootPatch".to_owned(), "OpenMemberWrite(*)".to_owned(), "RootPatch".to_owned()]).unwrap();
+        assume(&[
+            "RootPatch".to_owned(),
+            "OpenMemberWrite(*)".to_owned(),
+            "RootPatch".to_owned(),
+        ])
+        .unwrap();
         assert_eq!(assumed_ids(), ["RootPatch", "OpenMemberWrite(*)"]);
-        assert!(assume(&["StandardRootHanded".to_owned()]).is_err(), "assumed once per process");
+        assert!(
+            assume(&["StandardRootHanded".to_owned()]).is_err(),
+            "assumed once per process"
+        );
         assert!(assumed_absent(Hazard::RootPatch));
         assert!(!assumed_absent(Hazard::StandardRootHanded));
         assert_eq!(flipped(), ["RootPatch"]);

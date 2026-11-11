@@ -272,15 +272,45 @@ mod tests {
     #[cfg(feature = "what-if")]
     #[test]
     fn every_atom_id_names_its_hazard() {
-        for name in ["Number.isFinite", "Array.map", "ReadonlyArray.forEach", "Promise.then", "String.replace", "String.replaceAll"] {
-            for atom in handed_root_atoms(name).into_iter().chain(impostor_atoms(name)) {
-                assert_eq!(hazard_of_id(&atom.id), Some(atom.hazard), "{name}: {}", atom.id);
+        for name in [
+            "Number.isFinite",
+            "Array.map",
+            "ReadonlyArray.forEach",
+            "Promise.then",
+            "String.replace",
+            "String.replaceAll",
+        ] {
+            for atom in handed_root_atoms(name)
+                .into_iter()
+                .chain(impostor_atoms(name))
+            {
+                assert_eq!(
+                    hazard_of_id(&atom.id),
+                    Some(atom.hazard),
+                    "{name}: {}",
+                    atom.id
+                );
             }
         }
         // the patch census ids a veto formula names (`patch_veto`): an owner and a member, the reached owner `*`
-        assert_eq!(hazard_of_id("StandardPatch(Promise.then)"), Some(standard_patch("Promise", "then")));
-        assert_eq!(hazard_of_id("StandardPatch(*.then)"), Some(standard_patch("*", "then")));
-        for bad in ["", "Eval", "OpenMemberWrite", "RootPatch(x)", "StandardPatch(then)", "StandardOverride(Array)", "StandardImpostor(a", "standardrootHanded"] {
+        assert_eq!(
+            hazard_of_id("StandardPatch(Promise.then)"),
+            Some(standard_patch("Promise", "then"))
+        );
+        assert_eq!(
+            hazard_of_id("StandardPatch(*.then)"),
+            Some(standard_patch("*", "then"))
+        );
+        for bad in [
+            "",
+            "Eval",
+            "OpenMemberWrite",
+            "RootPatch(x)",
+            "StandardPatch(then)",
+            "StandardOverride(Array)",
+            "StandardImpostor(a",
+            "standardrootHanded",
+        ] {
             assert_eq!(hazard_of_id(bad), None, "{bad}");
         }
     }

@@ -21,10 +21,23 @@ const fn what_if_binary() -> bool {
     true
 }
 
+/// ADR 0950: the analysis logs the gates fold (`scripts/lib/proof-log.mjs`, `scripts/fuzz/roles.mjs`, the delta and memo records) carry no taint, so a what-if run
+/// writes none: it refuses to start with one asked for.
+#[cfg(feature = "what-if")]
+const UNTAINTED_LOGS: [&str; 5] = [
+    "SOLID_CHECKER_IR_PROOF_LOG",
+    "SOLID_CHECKER_IR_ROLE_LOG",
+    "SOLID_CHECKER_IR_BOOKKEEPING_LOG",
+    "SOLID_CHECKER_IR_MEMO_LOG",
+    "SOLID_CHECKER_IR_DELTA_LOG",
+];
+
 /// ADR 0950: the report with its taint: a top-level `assumed` naming what was assumed and what flipped, and, when an answer flipped, a typed
 /// `Assumed` premise on every finding (the seam cannot say which finding read the hazard, so all are tainted: a superset). Every consumer refuses it.
 #[cfg(feature = "what-if")]
-fn taint(emission: snapshot_emission::Emission) -> Result<snapshot_emission::Emission, Box<dyn std::error::Error>> {
+fn taint(
+    emission: snapshot_emission::Emission,
+) -> Result<snapshot_emission::Emission, Box<dyn std::error::Error>> {
     let mut report: serde_json::Value = serde_json::from_slice(&emission.output)?;
     let flipped = solid_reactive_ir::what_if::flipped();
     report["assumed"] = serde_json::json!({ "hazards": solid_reactive_ir::what_if::assumed_ids(), "flipped": flipped });
@@ -701,6 +714,12 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if format_given && format != "json" {
             return Err("the what-if binary answers the internal JSON only (--format json): no text, no ESLint report".into());
+        }
+        if let Some(name) = UNTAINTED_LOGS
+            .into_iter()
+            .find(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
+        {
+            return Err(format!("the what-if binary writes no analysis log, which would carry no taint: unset {name}").into());
         }
         format = "json".into();
         internal = true;
