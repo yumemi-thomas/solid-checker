@@ -107,6 +107,29 @@ fn the_log_names_each_file_once_and_every_line_by_it() {
     fs::remove_dir_all(directory).ok();
 }
 
+// Batch 11, slice 0: a finding and a verdict name the rule that reported them, so a fold can say which rule ended a site (`scripts/lib/proof-credit.mjs`).
+#[test]
+fn a_finding_and_a_verdict_name_their_rule() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-rules");
+    let log = directory.join("latent.jsonl");
+    check(&typefacts, "latent-silent-arms", Some(&log));
+    let found = lines(&log)
+        .into_iter()
+        .filter(|line| line["k"] == "finding" || line["k"] == "verdict")
+        .collect::<Vec<_>>();
+    assert!(!found.is_empty(), "no finding or verdict line");
+    for line in &found {
+        assert!(line["code"].as_str().unwrap().starts_with("SC"), "{line}");
+        assert!(
+            line["rule"].as_str().is_some_and(|rule| !rule.is_empty()),
+            "a {} line names no rule: {line}",
+            line["k"]
+        );
+    }
+    fs::remove_dir_all(directory).ok();
+}
+
 #[test]
 fn a_finding_a_pass_removes_leaves_a_typed_drop() {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");

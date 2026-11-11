@@ -924,6 +924,7 @@ fn emit_finding(kind: &str, finding: &Finding) {
         object(json!({
             "k": kind,
             "code": finding.id,
+            "rule": finding.rule,
             "kind": finding.kind,
             "ctx": finding.analysis_context,
         })),
