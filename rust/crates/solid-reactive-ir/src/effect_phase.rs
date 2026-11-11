@@ -23,7 +23,10 @@
 //!   exported, with at least one call and *every* reference to it one of its
 //!   exact calls, each of which is itself proven by this walk. A caller
 //!   outside the effect phase, an alias, a handler, an argument or an export
-//!   would let the flush run elsewhere.
+//!   would let the flush run elsewhere. An exported function is such a layer
+//!   too, with `mixed` set (ADR 0963): its calls the walk sees are proven runs
+//!   in the phase, and the calls outside the project it cannot see are the
+//!   runs it does not prove (ADR 0516).
 //!
 //! The file holding the `flush` call and the file holding the `createEffect`
 //! call must load the same installed `solid-js` at runtime
@@ -1006,15 +1009,18 @@ impl<'l, 'a> Walk<'l, 'a> {
     /// `f.call(…)`, a template tag) is a run at that carrier, proven by the
     /// walk from there; one handing it to code the walk does not follow
     /// leaves it unplaced ([`Self::unplaced_layer`]).
+    /// ADR 0963: an exported function is entered by calls outside the project
+    /// as well, so no run is *every* run: the walk still follows the calls it
+    /// can see, and a run it proves in the phase is an origin with `mixed` set
+    /// (ADR 0516, an obligation). It was `None`, which made a helper that an
+    /// apply calls silent for the one reason that it is exported.
     fn named_layer(
         &mut self,
         file: &FileFacts,
         literal: &FunctionFact,
         helper_calls: usize,
     ) -> Option<EffectPhaseOrigin> {
-        if exported(self.lookup, file, literal) {
-            return None;
-        }
+        let entered_elsewhere = exported(self.lookup, file, literal);
         // ADR 0538: a member's value (`o.m = () => …`, `this.m = …`) runs
         // wherever that member is called.
         if crate::local_access::member_assigned(file, literal) {
@@ -1060,7 +1066,8 @@ impl<'l, 'a> Walk<'l, 'a> {
                 .collect()
         };
         let mut positions = Vec::new();
-        let mut escapes = false;
+        // ADR 0963: an exported function's other callers are runs elsewhere.
+        let mut escapes = entered_elsewhere;
         // ADR 0538: a reference the walk follows to no run and no proof of a
         // run elsewhere: the function is unplaced.
         let mut unplaced = false;

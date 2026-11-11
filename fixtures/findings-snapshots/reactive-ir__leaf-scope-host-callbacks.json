@@ -195,6 +195,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
+      "start": 942,
+      "end": 951,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -302,6 +313,17 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
       "start": 798,
       "end": 810,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 921,
+      "end": 930,
       "fixes": 0
     },
     {

@@ -36,8 +36,8 @@ export function Helpers() {
   return <span>helpers</span>;
 }
 
-// An exported helper may be called from anywhere, so the checker is silent
-// though this call warns: a known open site (oracle.json).
+// An exported helper may be called from anywhere, so the claim that it only runs on an apply's stack is not made: the call warns,
+// and the helper's flush is an uncertifiable row of SC2008, not a violation (ADR 0963, ADR 0516).
 export function OtherFile() {
   const [value] = createSignal(1);
   createEffect(value, () => {

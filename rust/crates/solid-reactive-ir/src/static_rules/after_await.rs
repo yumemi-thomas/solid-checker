@@ -288,6 +288,11 @@ pub(super) fn run<'a>(
         .flatten()
         .collect::<Vec<_>>()
     };
+    // ADR 0963: the region of the net for reads no call edge places: a tracked async computation, and a suspension in the program
+    // for a continuation to follow (an `await` or an implicit suspension, or a promise handler: `then`, `catch`, `finally`).
+    computations
+        .holds_suspending
+        .set(!starts.is_empty() && program_suspends(ctx));
     // ADR 0909: a member's walk is a function of the member and the build;
     // only the rows' span dedup reads the draft (`ProgramDraft::spans_agree`)
     // and only the queue's bound reads the walks so far
@@ -304,6 +309,83 @@ pub(super) fn run<'a>(
         }
     }
     unlisted_async_computations(ctx, &reach, draft);
+}
+
+/// ADR 0963: whether the program holds a suspension a continuation follows: an `await`, an implicit suspension (`for await`,
+/// `await using`), or a call of a promise handler (`then`, `catch`, `finally`: named, as a premise only, never as proof). An async
+/// function with none (`async () => 1`) has no code after a suspension.
+fn program_suspends(ctx: &AnalysisContext<'_>) -> bool {
+    crate::base::reads::all_files(ctx.facts).iter().any(|file| {
+        let ast = &file.ast;
+        !ast.awaits.is_empty()
+            || !ast.implicit_suspensions.is_empty()
+            || ast.calls.iter().any(|call| {
+                ast.member_at(ast.peel_ts_sugar_span(call.callee))
+                    .and_then(|member| file.source_text(member.property))
+                    .is_some_and(|name| matches!(name, "then" | "catch" | "finally"))
+            })
+    })
+}
+
+/// ADR 0963: a reactive read the continuation of an async computation may run by a route no call shows is an obligation of
+/// SC1002 when the program holds a tracked async computation with something after a suspension: the read is written in a class
+/// element (a constructor, a method, an accessor, a field's initializer), in an object literal's accessor or method (a getter
+/// or setter, a coercion or iterator-protocol method, a Proxy trap), in a tag function, in a function a `new` runs, or in a
+/// helper the exact calls of which end in one of those ([`crate::static_api::unplaced_member_blocker`]); the continuation runs
+/// them without a call (a property access, a `new`, a coercion, a spread or a destructuring, a tag, a trap), the walk of the
+/// continuation follows calls, and the read is untracked there. Only reads the role engine could not place are asked (a read
+/// in code a call edge places has its role). The same reads stand in SC1001's uncertifiable rows; the claiming rule of a read
+/// after an await is SC1002, so the row is its own (a row of another rule at the site covers nothing of it). Never a
+/// violation: nothing here proves a continuation runs the member. A read directly in a class field's initializer says so
+/// ([`crate::blockers::FIELD_INITIALIZER_UNPLACED`]): the construction that runs it is the missing witness. A function handed
+/// where nothing follows it is run by a call; its reads are not this net's.
+pub(super) fn reads_run_unplaced(
+    computations: &SharedAsyncComputations<'_>,
+    files_by_path: &std::collections::HashMap<&str, &FileFacts>,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    draft: &mut ProgramDraft,
+) {
+    if !computations.holds_suspending.get() {
+        return;
+    }
+    let defects = draft
+        .reads
+        .iter()
+        .filter(|read| {
+            matches!(
+                read.execution,
+                crate::ExecutionRole::Unknown | crate::ExecutionRole::Unreported
+            )
+        })
+        .filter_map(|read| {
+            let file = files_by_path.get(read.location.path.as_ref())?;
+            let span = Span::new(
+                u32::try_from(read.location.start_byte).ok()?,
+                u32::try_from(read.location.end_byte).ok()?,
+            );
+            let blocker = crate::static_api::unplaced_member_blocker(file, span, lookup)?;
+            Some(StaticDefect {
+                kind: StaticDefectKind::ReactiveReadAfterAwait {
+                    accessor: read.accessor.to_string(),
+                    obligation: Some(AfterAwaitObligation::RunUnplaced),
+                },
+                location: read.location.clone(),
+                analysis_context: if blocker == crate::blockers::FUNCTION_RUN_UNPLACED
+                    && crate::execution_role::in_field_initializer(file, span)
+                {
+                    crate::blockers::FIELD_INITIALIZER_UNPLACED
+                } else {
+                    blocker
+                }
+                .into(),
+                fixes: vec![],
+                uncertain: true,
+            })
+        })
+        .collect::<Vec<_>>();
+    for defect in defects {
+        draft.push_defect(defect);
+    }
 }
 
 /// The walks done ahead of the driver, by member ([`speculate_waves`]).

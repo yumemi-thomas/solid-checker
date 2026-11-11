@@ -868,6 +868,7 @@ pub(crate) fn reactive_read_after_await_through_calls<'a>(
             .iter()
             .map(|file| (file.path.as_str(), file))
             .collect();
+    after_await::reads_run_unplaced(computations, &files_by_path, ctx.semantic_lookup, draft);
     let mut attributed = std::collections::HashMap::<(&str, u64, u64), Vec<&ReactiveRead>>::new();
     for read in draft.reads.iter().filter(|read| read.origin.is_some()) {
         attributed
@@ -1703,11 +1704,16 @@ impl<'t> ExactArguments<'t> {
 /// something to report needs it, and the prepass's reach and the rule over
 /// calls the interprocedural pass attributed both ask for it.
 #[derive(Default)]
-pub(crate) struct SharedAsyncComputations<'t>(std::cell::OnceCell<AsyncComputations<'t>>);
+pub(crate) struct SharedAsyncComputations<'t> {
+    index: std::cell::OnceCell<AsyncComputations<'t>>,
+    /// ADR 0963: whether the prepass found a tracked async computation with something after a suspension to walk (the region
+    /// of SC1002); set by [`after_await::run`], read by the net for reads no call edge places.
+    holds_suspending: std::cell::Cell<bool>,
+}
 
 impl<'t> SharedAsyncComputations<'t> {
     fn get(&self, ctx: &AnalysisContext<'t>) -> &AsyncComputations<'t> {
-        self.0.get_or_init(|| {
+        self.index.get_or_init(|| {
             let facts: &'t solid_facts::ProjectFacts = ctx.facts;
             AsyncComputations::new(ctx, facts)
         })

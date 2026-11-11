@@ -403,6 +403,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 1165,
+      "end": 1174,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -411,6 +422,17 @@
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
       "start": 1165,
       "end": 1174,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
+      "start": 1408,
+      "end": 1417,
       "fixes": 0
     },
     {

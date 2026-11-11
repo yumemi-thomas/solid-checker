@@ -70,6 +70,10 @@ pub(crate) const GENERATOR_STEP_UNPLACED: &str = "generator-step-unplaced";
 /// helper call in one) of a function that is called or referenced in the program. The initializer runs when a call of the function
 /// omits the argument, so it may run wherever that function's calls do, and no walk here reads which calls omit it.
 pub(crate) const PARAMETER_INITIALIZER_UNPLACED: &str = "parameter-initializer-unplaced";
+/// ADR 0963: the site is written directly in a class field's or static block's initializer, which runs where an instance is
+/// constructed (or the class is evaluated), and no call edge shows that construction: the exact witness (a `new` of the class,
+/// of a subclass, or of an unresolved class) is a later proof target, so the site may run wherever one is.
+pub(crate) const FIELD_INITIALIZER_UNPLACED: &str = "field-initializer-unplaced";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 

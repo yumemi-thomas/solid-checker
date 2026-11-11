@@ -900,6 +900,43 @@ pub(crate) fn unplaced_run(
         || crate::local_access::function_escapes_unfollowed(file, span, lookup)
 }
 
+/// ADR 0963: whether the code at `span` is run by a route no call shows and no walk that follows calls can name, so that the
+/// rule asking is not answered by the call it would follow: written in a class element (a constructor, a method, an accessor, a
+/// field's initializer, a static block), in a function that is an object literal's accessor or method (a getter or setter, a
+/// coercion or iterator-protocol method, a Proxy trap), in a tag function, or in a function a `new` runs. [`unplaced_run`]
+/// without the function handed where nothing follows it: that function is run by a call, which the walk of the rule asking
+/// follows or answers itself, and a rule whose sites are everywhere (a reactive read) cannot ask for every hand-off.
+pub(crate) fn runs_implicitly(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if matches!(SiteReach::new(lookup).site(file, span), Reach::Unreached(_)) {
+        return false;
+    }
+    let ast = &file.ast;
+    ast.classes
+        .iter()
+        .flat_map(|class| &class.elements)
+        .any(|element| element.value.is_some_and(|value| value.contains(span)))
+        || ast.functions_owning(span).any(|function| {
+            let value = function.span;
+            ast.object_properties
+                .iter()
+                .any(|property| !property.data && ast.peel_ts_sugar_span(property.value) == value)
+                || crate::owners::function_binding_name(file, function).is_some_and(|name| {
+                    ast.tagged_template_tags
+                        .iter()
+                        .any(|tag| ast.reference_declaration(*tag) == Some(name.span))
+                        || ast.calls.iter().any(|call| {
+                            call.construct
+                                && ast.reference_declaration(ast.peel_ts_sugar_span(call.callee))
+                                    == Some(name.span)
+                        })
+                })
+        })
+}
+
 impl SiteReach<'_, '_> {
     /// ADR 0576: whether a read of the lazy computation `call` creates is
     /// proven: its result is bound to a `const` (the identifier, or the first

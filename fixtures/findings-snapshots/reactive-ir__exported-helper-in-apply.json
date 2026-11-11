@@ -1,0 +1,37 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/exported-helper-in-apply/App.tsx",
+      "start": 1014,
+      "end": 1024,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/exported-helper-in-apply/helper.ts",
+      "start": 80,
+      "end": 90,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/exported-helper-in-apply/helper.ts",
+      "start": 148,
+      "end": 158,
+      "fixes": 0
+    }
+  ]
+}
