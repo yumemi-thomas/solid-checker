@@ -9,8 +9,8 @@ import { test } from "vitest";
 import { AssumedReportError } from "./lib/assumed.mjs";
 import { cleanReport, flippedReport } from "./lib/assumed-fixtures.mjs";
 import {
-  addOutcomes, calibration, canonical, chromeRecords, fold, groupOf, judgeMoves, judgeReport, label, liftingSetsOf, parseSet, programOutcomes, readBaseline, readWhatIf, rowOutcomes,
-  sameReport, slim, standsAt, summaryText, untainted,
+  addOutcomes, calibration, canonical, chromeRecords, finishFold, finishJudge, fold, foldOne, groupOf, judgeMoves, judgeOne, judgeReport, label, liftingSetsOf, newFold, newJudge, parseSet,
+  programOutcomes, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
 } from "./what-if.mjs";
 
 const HERE = "/p";
@@ -130,6 +130,37 @@ test("the fold is the harness's: transitions per set, groups per set, projects, 
   assert.deepEqual(Object.keys(slim(entry)).sort(), ["flipped", "moved", "new", "now", "rows", "status", "transitions"]);
 });
 
+test("a finding the shipped checker had no finding at is counted per project, a violation apart from an obligation (and the fold by one program at a time is the fold)", () => {
+  const base = { findings: [finding({ line: 1, blockedBy: handed(FIRED) })] };
+  const now = { findings: [finding({ line: 1, kind: "violation" }), finding({ line: 9, id: "SC1001", kind: "violation", rule: "strict-read-untracked" }), finding({ line: 10 }), finding({ line: 11 })] };
+  const entry = { flipped: ["RootPatch"], transitions: { cleanToU: [{ site: "x" }, { site: "y" }], cleanToV: [{ site: "z" }], vToU: [], vLost: [], uToV: [{ site: "a" }], uLost: [] }, outcomes: rowOutcomes(base, now, HERE), status: "violation", now: [] };
+  const sets = [{ name: "a", ids: ["RootPatch"] }];
+  const results = [{ program: "p", project: "demo/p", bySet: { a: entry } }, { program: "q", error: "exit 2" }];
+  const whole = fold(results, sets);
+  assert.deepEqual(whole.projects.a["demo/p"], { programs: 1, rows: 1, toV: 1, toClean: 0, stillU: 0, other: 0, newV: 1, newU: 2 });
+  const state = newFold(sets);
+  for (const result of results) foldOne(state, result);
+  assert.deepEqual(finishFold(state), whole);
+  assert.equal(whole.errors, 1);
+});
+
+test("the corpus asks for the lifting sets of its own veto groups too, those the build can name, with enough rows, and not twice", () => {
+  const row = (fired) => finding({ line: 1, blockedBy: handed(fired) });
+  const rows = (fired, count) => Array.from({ length: count }, () => row(fired));
+  const baselines = [
+    { findings: [...rows(["OpenMemberWrite(*)", "OpenMemberWrite(<symbol>)", "RootPatch", "StandardRootReceived"], 30), finding({ line: 2, blockedBy: { kind: "function-run-unplaced" } })] },
+    { findings: rows(["OpenMemberWrite(*)", "RootPatch", "StandardRootReceived"], 5) },
+    { findings: [finding({ line: 3, blockedBy: { kind: "tuple-iteration-written", formula: "array-slots-withdrawn", fired: ["TupleSlotIterationMayBeMutated"] } })] },
+  ];
+  const derived = setsFromBaselines(baselines, [{ name: "open", ids: ["OpenMemberWrite(*)"] }], 20);
+  const names = derived.map((set) => set.name);
+  // the veto of the first group lifts with the open write `*` alone (the symbol one is no write by itself), with RootPatch, or with StandardRootReceived; the first is asked already, the
+  // other two have the rows of both groups (35), and no tuple-slot atom is asked of a build that cannot name it
+  assert.deepEqual(names, ["RootPatch", "StandardRootReceived"]);
+  assert.ok(setsFromBaselines(baselines, [], 1).some((set) => set.name === "OpenMemberWrite(*)"), "it is a set when it is not asked already");
+  assert.ok(setsFromBaselines(baselines, [], 1000).length === 0);
+});
+
 // A program's Chrome record: the oracle's row (diagnostics with `covering`, and the shipped checker's findings).
 const record = (diagnostics, findings = []) => ({ id: "p", diagnostics, findings });
 const diagnostic = ({ code = "STRICT_READ_UNTRACKED", line, stack = [], covering = [] }) => ({ code, file: "App.tsx", line, stack, covering });
@@ -198,6 +229,29 @@ test("a grid report's moved programs are judged against the records read from a 
   }
 });
 
+test("a report's results are read from the file it names, a program a line, or from its own list, and judged one at a time as they come", async () => {
+  const root = mkdtempSync(join(tmpdir(), "what-if-lines-"));
+  try {
+    const entry = { flipped: ["RootPatch"], transitions: { uLost: [{ site: "s" }] }, moved: [row()], new: [], now: [] };
+    const results = [{ program: "a", grid: "mx-recall", code: "X", bySet: { s: entry } }, { program: "b", grid: "mx-recall", code: "X", bySet: { s: entry } }];
+    writeFileSync(join(root, "report.results.jsonl"), results.map((result) => `${JSON.stringify(result)}\n`).join(""));
+    const reported = { resultsFile: "report.results.jsonl" };
+    const read = [];
+    for await (const result of resultLines(reported, join(root, "report.json"))) read.push(result);
+    assert.deepEqual(read, results);
+    const inline = [];
+    for await (const result of resultLines({ results }, join(root, "report.json"))) inline.push(result);
+    assert.deepEqual(inline, results);
+    const records = new Map([["a", { id: "a", diagnostics: [diagnostic({ line: 12, covering: [label(row())] })], findings: [] }]]);
+    const state = newJudge();
+    for await (const result of resultLines(reported, join(root, "report.json"))) judgeOne(state, result, records, new Map([["b", "typed-away"]]));
+    assert.deepEqual(finishJudge(state), judgeReport({ results }, records, new Map([["b", "typed-away"]])));
+    assert.deepEqual(finishJudge(state).sets.s.noRecordBy, { "typed-away": 1 });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("the lifting sets of a scan's groups, with the rows each would lift", async () => {
   const root = mkdtempSync(join(tmpdir(), "what-if-sets-"));
   try {
@@ -256,6 +310,10 @@ test("the corpus command runs the shipped checker and the what-if build, and sto
     assert.equal(good.status, 0, good.stderr);
     const report = JSON.parse((await import("node:fs")).readFileSync(join(root, "report.json"), "utf8"));
     assert.equal(report.kind, "what-if");
+    assert.equal(report.resultsFile, "report.results.jsonl");
+    const lines = (await import("node:fs")).readFileSync(join(root, report.resultsFile), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    assert.deepEqual(lines.map((line) => line.program), ["demo/tsconfig.json"]);
+    assert.equal(lines[0].bySet.omw.moved.length, 1);
     assert.deepEqual(report.control, { programs: 1, same: 1, flipped: 0 });
     assert.equal(report.arms.omw.counts.uLost, 1);
     assert.equal(report.arms.patch.witnesses.length, 0);

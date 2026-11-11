@@ -10,10 +10,10 @@
 // a report without it, so a default build handed in as the what-if binary is an error, not a baseline). It compares only runs it makes itself, with the two binaries it is given.
 //
 //   node scripts/what-if.mjs corpus --what-if-bin <solid-checker-what-if> --checker-bin <solid-checker-rust, a default build of the same source> --typefacts <solid-typefacts>
-//        --set name=Hazard,Hazard ... [--sets-file f.json] [--manifest scripts/corpus/rc21-manifest.json] [--apps-root ../solid-checker-rc21-frozen/apps] [--apps a,b]
+//        --set name=Hazard,Hazard ... [--sets-file f.json] [--sets-from-baseline N] [--manifest scripts/corpus/rc21-manifest.json] [--apps-root ../solid-checker-rc21-frozen/apps] [--apps a,b]
 //        [--order-from sweep.json] [--jobs 12] [--no-control] --out report.json
 //   node scripts/what-if.mjs grid --what-if-bin ... --checker-bin ... --typefacts ... --scan <blocker-scan rows.jsonl> --set name=ids ... [--sets-file f] [--jobs 12]
-//        [--programs-from all] [--control N] [--limit N] --out report.json [--movers-out ids.json]
+//        [--programs-from all] [--control N] [--every K] [--limit N] --out report.json [--movers-out ids.json]
 //   node scripts/what-if.mjs sets --scan <blocker-scan rows.jsonl> [--top 30]      the lifting sets of the scan's formula groups, with their rows and programs
 //   node scripts/what-if.mjs movers --report grid.json --out <manifest dir> [--run-out dir] [--checker-bin ... --typefacts ...]   the programs that moved, as the commands that run them in Chrome
 //   node scripts/what-if.mjs judge --report grid.json --chrome <dir of chrome-*.json> --out judged.json    each moved row against Chrome's record: false clean, false positive, confirmed
@@ -24,8 +24,8 @@
 // all`: every program with a formula row, under every set); the control runs on `--control N` programs spread over the selection (200 by default, `0` for none).
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { appendFileSync, createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -250,40 +250,50 @@ async function measure({ program, sets, binaries, control, env, root = "" }) {
 /** A program's result as stored: each set's entry slimmed. */
 export const slimResult = ({ bySet, ...rest }) => ({ ...rest, ...(bySet ? { bySet: Object.fromEntries(Object.entries(bySet).map(([name, entry]) => [name, slim(entry)])) } : {}) });
 
+const NO_MOVES = { cleanToU: [], cleanToV: [], vToU: [], vLost: [], uToV: [], uLost: [] };
+
+/** The state a fold starts from: one tally per set for the harness, the groups, the projects and the programs that moved, and the control's. */
+export function newFold(sets) {
+  const byName = (make) => Object.fromEntries(sets.map(({ name }) => [name, make()]));
+  return { sets, harness: [], groups: byName(() => ({})), projects: byName(() => ({})), moved: byName(() => []), control: { programs: 0, same: 0, flipped: 0 }, errors: 0 };
+}
+
+/** Adds one program's result (with its full entries) to a fold state: the harness's transitions per set, group tallies per set and per project. */
+export function foldOne(state, result) {
+  if (result.error) { state.errors += 1; return; }
+  if (result.bySet.control) { state.control.programs += 1; state.control.same += result.bySet.control.same ? 1 : 0; state.control.flipped += result.bySet.control.flipped.length; }
+  for (const { name } of state.sets) {
+    const entry = result.bySet[name];
+    if (!entry || entry.error) { if (entry?.error) state.errors += 1; continue; }
+    const changed = Object.values(entry.transitions).some((list) => list.length > 0);
+    state.harness.push({ fixture: result.program, arm: name, changed, transitions: changed ? entry.transitions : NO_MOVES });
+    addOutcomes(state.groups[name], entry.outcomes);
+    const project = (state.projects[name][result.project ?? result.program] ??= { programs: 1, rows: 0, toV: 0, toClean: 0, stillU: 0, other: 0, newV: 0, newU: 0 });
+    for (const row of entry.outcomes.rows) {
+      project.rows += 1;
+      if (TO_V.has(row.outcome)) project.toV += 1;
+      else if (row.outcome === "toClean") project.toClean += 1;
+      else if (row.outcome === "stillU") project.stillU += 1;
+      else project.other += 1;
+    }
+    project.newV += entry.outcomes.new.filter((one) => one.kind === "violation").length;
+    project.newU += entry.outcomes.new.filter((one) => one.kind !== "violation").length;
+    if (changed) state.moved[name].push(result.program);
+  }
+}
+
+/** The fold's report: the harness's `summarize` per set (a count of the programs a set did not move, not their ids, which made a first corpus report too long to write), groups, projects. */
+export function finishFold(state) {
+  const { arms, unwitnessed } = summarize(state.harness);
+  for (const arm of Object.values(arms)) arm.inert = arm.inert.length;
+  return { arms, unwitnessed, groups: state.groups, projects: state.projects, moved: state.moved, control: state.control, errors: state.errors };
+}
+
 /** Folds the programs' results into the report: the harness's `summarize` per set, group tallies per set and per project. */
 export function fold(results, sets) {
-  const harness = [];
-  const groups = Object.fromEntries(sets.map(({ name }) => [name, {}]));
-  const projects = Object.fromEntries(sets.map(({ name }) => [name, {}]));
-  const moved = Object.fromEntries(sets.map(({ name }) => [name, []]));
-  const control = { programs: 0, same: 0, flipped: 0 };
-  let errors = 0;
-  for (const result of results) {
-    if (result.error) { errors += 1; continue; }
-    if (result.bySet.control) { control.programs += 1; control.same += result.bySet.control.same ? 1 : 0; control.flipped += result.bySet.control.flipped.length; }
-    for (const { name } of sets) {
-      const entry = result.bySet[name];
-      if (!entry || entry.error) { if (entry?.error) errors += 1; continue; }
-      const changed = Object.values(entry.transitions).some((list) => list.length > 0);
-      harness.push({ fixture: result.program, arm: name, changed, transitions: entry.transitions });
-      addOutcomes(groups[name], entry.outcomes);
-      const project = (projects[name][result.project ?? result.program] ??= { programs: 1, rows: 0, toV: 0, toClean: 0, stillU: 0, other: 0, newV: 0, newU: 0 });
-      for (const row of entry.outcomes.rows) {
-        project.rows += 1;
-        if (TO_V.has(row.outcome)) project.toV += 1;
-        else if (row.outcome === "toClean") project.toClean += 1;
-        else if (row.outcome === "stillU") project.stillU += 1;
-        else project.other += 1;
-      }
-      project.newV += entry.outcomes.new.filter(([, , kind]) => kind === "violation").length;
-      project.newU += entry.outcomes.new.filter(([, , kind]) => kind !== "violation").length;
-      if (changed) moved[name].push(result.program);
-    }
-  }
-  // The harness lists the programs a set did not move (`inert`): 35,000 ids a set on a grid, which is what made the first corpus report too long to write. A count is what is kept.
-  const { arms, unwitnessed } = summarize(harness);
-  for (const arm of Object.values(arms)) arm.inert = arm.inert.length;
-  return { arms, unwitnessed, groups, projects, moved, control, errors };
+  const state = newFold(sets);
+  for (const result of results) foldOne(state, result);
+  return finishFold(state);
 }
 
 /** The `--flag value` options of an argument list; `--set` repeats. */
@@ -300,10 +310,10 @@ function options(argv, known) {
   return found;
 }
 
-function setsOf(found) {
+function setsOf(found, { optional = false } = {}) {
   const sets = found.set.map(parseSet);
   if (found["sets-file"]) for (const [name, ids] of Object.entries(JSON.parse(readFileSync(resolve(found["sets-file"]), "utf8")))) sets.push({ name, ids: [...new Set(ids)] });
-  if (sets.length === 0) throw new Error("name at least one assumption: --set name=Hazard,Hazard or --sets-file");
+  if (sets.length === 0 && !optional) throw new Error("name at least one assumption: --set name=Hazard,Hazard or --sets-file");
   if (new Set(sets.map(({ name }) => name)).size !== sets.length || sets.some(({ name }) => name === "control")) throw new Error("set names are distinct, and `control` is the run that assumes nothing");
   return sets;
 }
@@ -324,10 +334,43 @@ const header = (binaries, extra) => ({
   ...extra,
 });
 
+/** The hazard ids the what-if build can name (ADR 0947's atoms): a lifting set with another atom (the array-slots formula's) is not asked of it. */
+const KNOWN_ATOM = /^(OpenMemberWrite\(.+\)|StandardImpostor(Write)?\(.+\)|StandardOverride\(.+\)|StandardPatch\(.+\)|ReflectiveDefinitionSpelling|StandardRoot(Handed|Received|Iterated)|RootPatch|AnyStandardPatch)$/;
+
+/**
+ * The lifting sets (`liftingSets`) of every veto group the shipped checker's reports of the corpus hold, that the build can name, that at least `minRows` rows stand in and that `existing`
+ * does not already ask: `[{ name, ids }]`, the biggest first. The corpus asks for its own groups' ways to lift, not only the grids' (a project's groups have atoms the grids' do not).
+ */
+export function setsFromBaselines(baselines, existing, minRows = 20) {
+  const groups = new Map();
+  for (const baseline of baselines) {
+    for (const finding of baseline.findings ?? []) {
+      const blocked = finding.blockedBy;
+      if (finding.kind !== "uncertifiable" || !blocked?.formula) continue;
+      const key = JSON.stringify([blocked.formula, [...(blocked.fired ?? [])].sort()]);
+      groups.set(key, (groups.get(key) ?? 0) + 1);
+    }
+  }
+  const found = new Map();
+  for (const [key, rows] of groups) {
+    const [formula, fired] = JSON.parse(key);
+    for (const set of liftingSets(formula, fired)) {
+      if (!set.every((id) => KNOWN_ATOM.test(id))) continue;
+      const name = set.join(" + ");
+      found.set(name, { name, ids: set, rows: (found.get(name)?.rows ?? 0) + rows });
+    }
+  }
+  const have = new Set(existing.map(({ ids }) => [...ids].sort().join("\0")));
+  return [...found.values()]
+    .filter((set) => set.rows >= minRows && !have.has([...set.ids].sort().join("\0")))
+    .sort((a, b) => b.rows - a.rows || (a.name < b.name ? -1 : 1))
+    .map(({ name, ids }) => ({ name, ids }));
+}
+
 async function corpus(argv) {
-  const found = options(argv, ["what-if-bin", "checker-bin", "typefacts", "set", "sets-file", "manifest", "apps-root", "apps", "order-from", "jobs", "no-control", "out"]);
+  const found = options(argv, ["what-if-bin", "checker-bin", "typefacts", "set", "sets-file", "sets-from-baseline", "manifest", "apps-root", "apps", "order-from", "jobs", "no-control", "out"]);
   if (!found.out) throw new Error("--out <report.json> is required");
-  const sets = setsOf(found);
+  let sets = setsOf(found, { optional: Boolean(found["sets-from-baseline"]) });
   const binaries = binariesOf(found);
   const manifestPath = resolve(found.manifest ?? join(repo, "scripts/corpus/rc21-manifest.json"));
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -345,12 +388,23 @@ async function corpus(argv) {
   // The shipped checker once per project, then every (project, set) run on its own: one slow project does not hold the others' sets behind it.
   const bases = await pool(programs.map((program) => () => baselineRun({ program, binaries })), jobs);
   process.stderr.write(`what-if corpus: ${programs.length} project(s) under the shipped checker\n`);
+  // `--sets-from-baseline N`: besides the sets named, the lifting sets of the corpus's own veto groups with at least N rows.
+  if (found["sets-from-baseline"]) {
+    const derived = setsFromBaselines(bases.filter((base) => !base.error).map((base) => base.baseline), sets, Number(found["sets-from-baseline"]));
+    sets = [...sets, ...derived];
+    process.stderr.write(`what-if corpus: ${derived.length} lifting set(s) of the corpus's own groups added (${sets.length} in all)\n`);
+  }
   const asked = [...(found["no-control"] ? [] : [{ name: "control", ids: [] }]), ...sets];
+  // Every (project, set) run is folded into the report's tallies the moment it ends, and only its slim entry is kept: the full rows of 34 projects under every set (kui's have 4,000 each) are
+  // what filled the parent's memory in the first runs. A project whose baseline failed is one error.
+  const state = newFold(sets);
+  programs.forEach((program, at) => { if (bases[at].error) foldOne(state, { program: program.id, error: bases[at].error }); });
   const jobsList = programs.flatMap((program, at) => (bases[at].error ? [] : asked.map(({ name, ids }) => ({ program, at, name, ids }))));
   const entries = await pool(jobsList.map(({ program, at, name, ids }) => async () => {
     const entry = await whatIfRun({ program, baseline: bases[at].baseline, name, ids, binaries });
     process.stderr.write(`${program.id} ${name}: ${entry.error ?? (entry.transitions ? `${entry.transitions.uToV.length} U->V, ${entry.transitions.uLost.length} U->clean` : "same")}\n`);
-    return entry;
+    foldOne(state, { program: program.id, project: program.id, bySet: { [name]: entry } });
+    return slim(entry);
   }), jobs);
   const results = programs.map((program, at) => {
     if (bases[at].error) return { program: program.id, error: bases[at].error, app: program.row.app, project: program.id };
@@ -358,8 +412,10 @@ async function corpus(argv) {
     jobsList.forEach((job, index) => { if (job.at === at) bySet[job.name] = entries[index]; });
     return { program: program.id, ...bases[at].summary, bySet, app: program.row.app, project: program.id };
   });
-  const report = { ...header(binaries, { source: "corpus", manifest: { path: manifestPath, sha256: sha256(manifestPath) }, configuration, sets, programs: results.length }), ...fold(results, sets), results: results.map(slimResult) };
+  const resultsFile = `${basename(resolve(found.out), ".json")}.results.jsonl`;
+  const report = { ...header(binaries, { source: "corpus", manifest: { path: manifestPath, sha256: sha256(manifestPath) }, configuration, sets, programs: results.length }), ...finishFold(state), resultsFile };
   mkdirSync(dirname(resolve(found.out)), { recursive: true });
+  writeFileSync(join(dirname(resolve(found.out)), resultsFile), results.map((result) => `${JSON.stringify(result)}\n`).join(""));
   writeFileSync(resolve(found.out), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(summaryText(report, sets));
 }
@@ -418,7 +474,7 @@ async function moversCommand(argv) {
   const { GENERATOR_VERSION } = await import("./fuzz/generate.mjs");
   const report = JSON.parse(readFileSync(resolve(found.report), "utf8"));
   const groups = new Map();
-  for (const result of report.results) {
+  for await (const result of resultLines(report, found.report)) {
     if (!Object.values(result.bySet ?? {}).some((entry) => entry.transitions)) continue;
     const key = `${result.grid}\0${result.code}`;
     const entry = groups.get(key) ?? { grid: result.grid, code: result.code, seed: report.seed, ids: [], contexts: new Set() };
@@ -444,14 +500,17 @@ async function judgeCommand(argv) {
   if (!found.report || !found.chrome || !found.out) throw new Error("--report <grid report.json>, --chrome <dir of chrome-*.json> and --out <judged.json> are required");
   const report = JSON.parse(readFileSync(resolve(found.report), "utf8"));
   const records = chromeRecords(found.chrome);
-  const judged = { kind: "what-if", note: "A prediction judged against Chrome's runtime record: line and policy based, not the fuzz judge.", report: found.report, chromeRecords: records.size, ...judgeReport(report, records, programOutcomes(found.chrome)) };
+  const outcomes = programOutcomes(found.chrome);
+  const state = newJudge();
+  for await (const result of resultLines(report, found.report)) judgeOne(state, result, records, outcomes);
+  const judged = { kind: "what-if", note: "A prediction judged against Chrome's runtime record: line and policy based, not the fuzz judge.", report: found.report, chromeRecords: records.size, ...finishJudge(state) };
   writeFileSync(resolve(found.out), `${JSON.stringify(judged, null, 2)}\n`);
   for (const [name, tally] of Object.entries(judged.sets)) process.stdout.write(`${name}: ${tally.programs} program(s) (${tally.noRecord} without a record: ${JSON.stringify(tally.noRecordBy)}): ${Object.entries(tally.verdicts).map(([verdict, count]) => `${verdict} ${count}`).join(", ")}\n`);
   process.stdout.write(`calibration: ${judged.calibration.agree} of ${judged.calibration.diagnostics} diagnostics (${judged.calibration.programs} programs) read as the oracle covered them; ${judged.calibration.disagree.length} differ\n`);
 }
 
 async function grid(argv) {
-  const found = options(argv, ["what-if-bin", "checker-bin", "typefacts", "set", "sets-file", "scan", "jobs", "limit", "programs-from", "control", "out", "movers-out", "install", "seed"]);
+  const found = options(argv, ["what-if-bin", "checker-bin", "typefacts", "set", "sets-file", "scan", "jobs", "limit", "every", "programs-from", "control", "out", "movers-out", "install", "seed"]);
   if (!found.out || !found.scan) throw new Error("--scan <rows.jsonl> and --out <report.json> are required");
   const sets = setsOf(found);
   const binaries = binariesOf(found);
@@ -464,7 +523,8 @@ async function grid(argv) {
   // A program can move under a set only when one of its rows fires a hazard of it (the seam answers only for a hazard the program has, and a row's `fired` names the ones that
   // veto it); every other program is not run. `--programs-from all` runs every program with a formula row under every set instead.
   const wanted = (program, set) => found["programs-from"] === "all" || program.formulas.some(({ fired }) => fired.some((id) => set.ids.includes(id)));
-  const needed = scanned.filter((program) => sets.some((set) => wanted(program, set))).slice(0, found.limit ? Number(found.limit) : undefined);
+  // `--every K` takes every K-th program of the selection (a spread over the groups, for a pilot); `--limit N` the first N.
+  const needed = scanned.filter((program) => sets.some((set) => wanted(program, set))).filter((_, at) => at % Number(found.every ?? 1) === 0).slice(0, found.limit ? Number(found.limit) : undefined);
   const byId = new Map(needed.map((program) => [program.id, program]));
   const rows = [];
   for (const name of new Set(needed.map((program) => program.grid))) for (const row of gridRows(name)) if (byId.has(row.id)) rows.push(row);
@@ -473,6 +533,7 @@ async function grid(argv) {
   const feedback = ["--format", "json", "--feedback-facts", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
   // The control (a what-if run that assumes nothing must be the shipped checker's report) runs on `--control N` programs spread over the selection, 200 by default.
   const stride = Math.max(1, Math.floor(rows.length / Number(found.control ?? 200)));
+  const resultsFile = `${basename(resolve(found.out), ".json")}.results.jsonl`;
   const tasks = rows.map((row, index) => async () => {
     const built = buildRow(row, seed);
     const dir = materializeForChecker(built, install, built.id);
@@ -481,14 +542,21 @@ async function grid(argv) {
       const mine = sets.filter((set) => wanted(byId.get(row.id), set));
       const program = { id: row.id, cwd: dir, args: ["--project", join(dir, "tsconfig.json"), ...(packaged ? ordinary : feedback)] };
       const result = await measure({ program, sets: mine, binaries, control: index % stride === 0 && found.control !== "0", root: realpathSync(dir), env: { ...checkerEnv({ typefacts: binaries.typefacts }), SOLID_CHECKER_DAEMON: "0" } });
-      return { ...result, project: `${row.grid}/${row.code}`, grid: row.grid, code: row.code, context: row.context, side: row.side };
+      const full = { ...result, project: `${row.grid}/${row.code}`, grid: row.grid, code: row.code, context: row.context, side: row.side };
+      foldOne(state, full);
+      const stored = slimResult(full);
+      // A program that moved (or failed) is written as soon as it is known, one line, and not kept: the whole sample does not fit one JSON string.
+      if (stored.error || Object.values(stored.bySet ?? {}).some((entry) => entry.transitions)) appendFileSync(join(dirname(resolve(found.out)), resultsFile), `${JSON.stringify(stored)}\n`);
+      return null;
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
-  const results = await pool(tasks, Number(found.jobs ?? 12));
-  const stored = results.map(slimResult).filter((result) => result.error || Object.values(result.bySet ?? {}).some((entry) => entry.transitions));
-  const report = { ...header(binaries, { source: "grid", scan: found.scan, sets, programs: results.length, seed }), ...fold(results, sets), results: stored };
+  const state = newFold(sets);
+  mkdirSync(dirname(resolve(found.out)), { recursive: true });
+  writeFileSync(join(dirname(resolve(found.out)), resultsFile), "");
+  await pool(tasks, Number(found.jobs ?? 12));
+  const report = { ...header(binaries, { source: "grid", scan: found.scan, sets, programs: rows.length, seed }), ...finishFold(state), resultsFile };
   mkdirSync(dirname(resolve(found.out)), { recursive: true });
   writeFileSync(resolve(found.out), `${JSON.stringify(report, null, 2)}\n`);
   if (found["movers-out"]) writeFileSync(resolve(found["movers-out"]), `${JSON.stringify(Object.fromEntries(Object.entries(report.moved)), null, 1)}\n`);
@@ -589,40 +657,57 @@ export function judgeMoves(entry, oracle) {
   return verdicts;
 }
 
-/** Per set, the verdicts of every moved program of a grid report against `records` (a program with no record is `no-chrome-record`, not a guess). */
-export function judgeReport(report, records, outcomes = new Map()) {
-  const bySet = {};
-  const calibrated = { programs: 0, diagnostics: 0, agree: 0, disagree: [] };
-  const seen = new Set();
-  for (const result of report.results ?? []) {
-    const oracle = records.get(result.program);
-    for (const [name, entry] of Object.entries(result.bySet ?? {})) {
-      if (!entry.transitions) continue;
-      const tally = (bySet[name] ??= { programs: 0, noRecord: 0, noRecordBy: {}, verdicts: {}, groups: {}, problems: [] });
-      tally.programs += 1;
-      if (!oracle) {
-        tally.noRecord += 1;
-        const why = outcomes.get(result.program) ?? "no row";
-        tally.noRecordBy[why] = (tally.noRecordBy[why] ?? 0) + 1;
-        continue;
-      }
-      for (const verdict of judgeMoves(entry, oracle)) {
-        tally.verdicts[verdict.verdict] = (tally.verdicts[verdict.verdict] ?? 0) + 1;
-        const inGroup = (tally.groups[verdict.group] ??= {});
-        inGroup[verdict.verdict] = (inGroup[verdict.verdict] ?? 0) + 1;
-        if (/^[A-Z-]+$/.test(verdict.verdict) && verdict.verdict !== "clean-silent") tally.problems.push({ program: result.program, grid: result.grid, code: result.code, context: result.context, side: result.side, ...verdict });
-      }
+/** The state a judge starts from. */
+export const newJudge = () => ({ sets: {}, calibration: { programs: 0, diagnostics: 0, agree: 0, disagree: [] }, seen: new Set() });
+
+/** Adds one stored program result (its moved sets) to a judge state, against `records` (a program with no record says why, from the grid run's own outcome, and is not guessed). */
+export function judgeOne(state, result, records, outcomes = new Map()) {
+  const oracle = records.get(result.program);
+  for (const [name, entry] of Object.entries(result.bySet ?? {})) {
+    if (!entry.transitions) continue;
+    const tally = (state.sets[name] ??= { programs: 0, noRecord: 0, noRecordBy: {}, verdicts: {}, groups: {}, problems: [] });
+    tally.programs += 1;
+    if (!oracle) {
+      tally.noRecord += 1;
+      const why = outcomes.get(result.program) ?? "no row";
+      tally.noRecordBy[why] = (tally.noRecordBy[why] ?? 0) + 1;
+      continue;
     }
-    if (oracle && !seen.has(result.program)) {
-      seen.add(result.program);
-      const one = calibration(oracle);
-      calibrated.programs += 1;
-      calibrated.diagnostics += one.diagnostics;
-      calibrated.agree += one.agree;
-      calibrated.disagree.push(...one.disagree.map((item) => ({ program: result.program, ...item })));
+    for (const verdict of judgeMoves(entry, oracle)) {
+      tally.verdicts[verdict.verdict] = (tally.verdicts[verdict.verdict] ?? 0) + 1;
+      const inGroup = (tally.groups[verdict.group] ??= {});
+      inGroup[verdict.verdict] = (inGroup[verdict.verdict] ?? 0) + 1;
+      if (/^[A-Z-]+$/.test(verdict.verdict) && verdict.verdict !== "clean-silent") tally.problems.push({ program: result.program, grid: result.grid, code: result.code, context: result.context, side: result.side, ...verdict });
     }
   }
-  return { sets: bySet, calibration: calibrated };
+  if (oracle && !state.seen.has(result.program)) {
+    state.seen.add(result.program);
+    const one = calibration(oracle);
+    state.calibration.programs += 1;
+    state.calibration.diagnostics += one.diagnostics;
+    state.calibration.agree += one.agree;
+    state.calibration.disagree.push(...one.disagree.map((item) => ({ program: result.program, ...item })));
+  }
+}
+
+/** The verdicts of a judge state: `{ sets, calibration }`. */
+export const finishJudge = (state) => ({ sets: state.sets, calibration: state.calibration });
+
+/** Per set, the verdicts of every moved program of a report that holds its results (`results`) against `records`. */
+export function judgeReport(report, records, outcomes = new Map()) {
+  const state = newJudge();
+  for (const result of report.results ?? []) judgeOne(state, result, records, outcomes);
+  return finishJudge(state);
+}
+
+/**
+ * The stored results of a report, one at a time: the report's own `results`, or the lines of the file it names (`resultsFile`, beside it, one program a line: a corpus of 35,000 programs
+ * does not fit one JSON string).
+ */
+export async function* resultLines(report, reportPath) {
+  if (report.results) { yield* report.results; return; }
+  if (!report.resultsFile) return;
+  for await (const line of createInterface({ input: createReadStream(resolve(dirname(resolve(reportPath)), report.resultsFile)) })) if (line) yield JSON.parse(line);
 }
 
 /** The summary printed after a run: per set, the harness's counts and the groups that moved. */
