@@ -2431,32 +2431,43 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
     // and nothing reports on rc.3, where flush drains inside a
     // step as anywhere else.
     let line = |finding: &serde_json::Value| finding["primaryLocation"]["line"].as_u64();
-    for (fixture, lines, notice) in [
+    for (fixture, lines, obligations, beside, notice) in [
         // ADR 0944: line 97 is `untrack(() => flush())`, an in-place callback of a primitive.
+        // ADR 0961: line 106 is `wrap(function* () { flush(); })`: `wrap` may return the generator itself, so what steps it is
+        // unproven, an uncertifiable SC2006 row and, beside it, SC2008's (one of `beside`).
         (
             "rc9-flush-in-action",
             &[14_u64, 20, 27, 32, 39, 44, 97][..],
+            &[106_u64][..],
+            1,
             1,
         ),
-        ("release-triple-flush-rc8", &[9, 15][..], 1),
-        ("release-triple-flush-rc3", &[][..], 1),
+        ("release-triple-flush-rc8", &[9, 15][..], &[][..], 0, 1),
+        ("release-triple-flush-rc3", &[][..], &[][..], 0, 1),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             continue;
         };
         let flushes = findings_for_rule(&findings, "flush-in-action");
-        assert_eq!(
+        let of_kind = |kind: &str| {
             flushes
                 .iter()
+                .filter(|finding| finding["kind"] == kind)
                 .map(|finding| line(finding))
-                .collect::<Vec<_>>(),
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            of_kind("violation"),
             lines.iter().copied().map(Some).collect::<Vec<_>>(),
             "{fixture}: {findings:#?}"
         );
+        assert_eq!(
+            of_kind("uncertifiable"),
+            obligations.iter().copied().map(Some).collect::<Vec<_>>(),
+            "{fixture}: {findings:#?}"
+        );
         assert!(
-            flushes
-                .iter()
-                .all(|finding| finding["id"] == "SC2006" && finding["kind"] == "violation"),
+            flushes.iter().all(|finding| finding["id"] == "SC2006"),
             "{fixture}: {findings:#?}"
         );
         // Beside them only the release notice, which every one of these
@@ -2468,7 +2479,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
         assert_eq!(
             findings.len(),
-            lines.len() + notice,
+            lines.len() + obligations.len() + beside + notice,
             "{fixture}: {findings:#?}"
         );
     }
