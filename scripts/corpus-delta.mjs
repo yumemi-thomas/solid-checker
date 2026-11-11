@@ -28,6 +28,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
 import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -231,13 +232,17 @@ export function parseOptions(argv) {
 
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-function runProject(checker, typefacts, row, configuration, boundary, timeoutMs) {
+/**
+ * One checker run of one project, exported for its test. It rejects with an `AssumedReportError` when the checker printed a what-if report (ADR 0950): the
+ * delta compares two builds of the shipped checker, and a prediction is neither.
+ */
+export function runProject(checker, typefacts, row, configuration, boundary, timeoutMs) {
   const args = [
     "--format", "json", "--project", join(row.root, row.project),
     "--runtime-target", configuration.runtimeTarget, "--runtime-build", configuration.runtimeBuild, "--rendering", configuration.rendering,
     ...(boundary ? ["--program-boundary", boundary] : []),
   ];
-  return new Promise((done) => {
+  return new Promise((done, refuse) => {
     const child = spawn(checker, args, { cwd: row.root, env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: typefacts } });
     const stdout = [];
     const stderr = [];
@@ -248,7 +253,10 @@ function runProject(checker, typefacts, row, configuration, boundary, timeoutMs)
       clearTimeout(timer);
       let payload = null;
       let parseError = null;
-      try { payload = JSON.parse(Buffer.concat(stdout).toString("utf8")); } catch (error) { parseError = `${error.name}: ${error.message}`; }
+      try { payload = refuseAssumed(JSON.parse(Buffer.concat(stdout).toString("utf8")), "scripts/corpus-delta.mjs"); } catch (error) {
+        if (error instanceof AssumedReportError) { refuse(error); return; }
+        parseError = `${error.name}: ${error.message}`;
+      }
       done({ app: row.app, project: row.project, exitCode: signal ? null : exitCode, parseError, findings: payload?.findings ?? [], ...(payload && "hazards" in payload ? { hazards: payload.hazards } : {}), stderr: exitCode > 1 || parseError ? Buffer.concat(stderr).toString("utf8").slice(-600) : "" });
     });
   });

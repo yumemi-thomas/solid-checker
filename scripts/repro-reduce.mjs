@@ -57,6 +57,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
 import { describeKey, holdsKey, parseKey } from "./lib/repro-key.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -202,8 +203,11 @@ function holds() {
   );
   let payload;
   try {
-    payload = JSON.parse(run.stdout);
-  } catch {
+    payload = refuseAssumed(JSON.parse(run.stdout), "scripts/repro-reduce.mjs");
+  } catch (error) {
+    // ADR 0950: a what-if report is not "the result is gone" (which is what `false` says): the reduction stops, since every chunk it kept or
+    // dropped would be judged on a prediction.
+    if (error instanceof AssumedReportError) throw error;
     return false;
   }
   const lines = readFileSync(target, "utf8").split("\n");

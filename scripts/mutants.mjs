@@ -29,6 +29,8 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { refuseAssumed } from "./lib/assumed.mjs";
+
 const script = fileURLToPath(import.meta.url);
 const repo = resolve(dirname(script), "..");
 // Each pattern: the rule that must report it, the dev-runtime code its
@@ -622,6 +624,8 @@ async function processApp(app, appRows) {
       let payload;
       try { payload = JSON.parse(run.stdout); }
       catch (cause) { throw new Error(`${prefix} ${phase}: invalid JSON, exit ${run.status}: ${run.stderr.slice(-4000)}`, { cause }); }
+      // ADR 0950: recall is measured against the shipped checker; a what-if report (a prediction) is refused. The checkpoint saved above holds no payload, so a resume runs again.
+      refuseAssumed(payload, "scripts/mutants.mjs");
       assert(Array.isArray(payload.findings) && [0, 1].includes(run.status), `${prefix} ${phase}: invalid analysis ${run.status} ${run.stderr}`);
       save(join(output, `${prefix}-${phase}.json`), { ...run, stdout: undefined, payload });
       return { ...run, payload };

@@ -16,6 +16,7 @@ import {
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { refuseAssumed } from "./lib/assumed.mjs";
 import { openGateCache } from "./lib/gate-cache.mjs";
 import { DIALECTS } from "./lib/tsc-oracle-case.mjs";
 import { oracleCompilerOptions, oracleProject, oracleTypescriptTree, runOracle } from "./tsc-oracle.mjs";
@@ -355,7 +356,8 @@ for (const { config, members } of groups.values()) {
     for (const rule of config.enableRules) args.push("--enable-rule", rule);
     const output = execFileSync(CHECKER, args, { encoding: "utf8", maxBuffer: 1 << 28, env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: TYPEFACTS } });
     const checkerRows = [];
-    for (const finding of JSON.parse(output).findings ?? []) {
+    // ADR 0950: a what-if report is a prediction; this gate holds the shipped checker to what it owns.
+    for (const finding of refuseAssumed(JSON.parse(output), "scripts/ownership-gate.mjs").findings ?? []) {
       const name = finding.primaryLocation.path.split(/[\\/]/).slice(-2).join("/");
       const member = members.find((candidate) => candidate.path === name);
       if (member) checkerRows.push([member.testCase.id, finding]);

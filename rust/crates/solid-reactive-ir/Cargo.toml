@@ -9,6 +9,12 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+# ADR 0950: what-if runs (`--assume <hazard>`): a seam at `hazard_present` that treats a named hazard fact as absent, for one analysis, with every finding marked
+# `Assumed`. Off by default and never enabled by a workspace, a default or CI: only `make build-what-if` turns it on, into its own target directory, as
+# `solid-checker-what-if`. A default build has no `what_if` module and no seam, so no flag, no environment variable and no input can reach one.
+[features]
+what-if = []
+
 [dependencies]
 parking_lot.workspace = true
 rustc-hash.workspace = true

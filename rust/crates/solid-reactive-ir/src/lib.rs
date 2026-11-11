@@ -51,6 +51,8 @@ mod cleanup;
 mod development_feedback;
 mod directives;
 mod execution_paths;
+#[cfg(feature = "what-if")]
+pub mod what_if;
 pub use development_feedback::{
     DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
 };

@@ -264,6 +264,8 @@ export function haltPlace(runtime, hitIds) {
  *   stacked         (why `repeat`) the rule's code was reported, only off the finding's lines (once `unconnected`): that does not confirm
  *                   this finding, but Solid reports some codes once, so it scores like a stacked claim, with the code reported as
  *                   `first`. A report of the rule's code with no authored line may be this finding's: unjudged (`unplaced`), listed.
+ *                   The row carries `firstAt`, the frames of that first report that read the finding's source: the read a twin of the
+ *                   claim removes (ADR 0953, option c; repeat-twin.mjs).
  * @returns {{ finding: string, verdict: string, why?: string }[]}
  */
 export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
@@ -304,15 +306,18 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     const text = String(built?.files?.["App.tsx"] ?? built?.text ?? "").split("\n");
     // ADR 0938: a prop's innermost frame is the parent's compiled getter, the expression of a component attribute (`<C1 r1={r1()} />`);
     // the read that ran it (`props.r1`, the finding's kind of source) is the next authored frame, which is compared as well.
-    const sameSource = (event) => {
+    // The frames of an event that read the finding's source: the first report's own reads, which a twin of the repeat blanks (`firstAt`, ADR 0953 option c).
+    const sameFrames = (event) => {
       const authored = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
       const mine = sourceExprAt(text, finding.line, finding.column);
-      if (!mine) return false;
+      if (!mine) return [];
       const frames = authored.slice(0, attributeGetterFrame(text, authored[0]) ? 2 : 1);
-      return frames.some((at) => sourceExprAt(text, at?.line, at?.column) === mine);
+      return frames.filter((at) => sourceExprAt(text, at?.line, at?.column) === mine);
     };
-    const elsewhere = reported.find((event) => appLines(event).length && sameSource(event))?.code ?? null;
-    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat" } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });
+    const matched = reported.find((event) => appLines(event).length && sameFrames(event).length);
+    const elsewhere = matched?.code ?? null;
+    const firstAt = matched ? sameFrames(matched).map(({ line, column }) => ({ line, column })) : null;
+    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat", firstAt } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });
     const halted = (verdict, hitIds = []) => {
       if (!disturbed.length) return verdict;
       // A repeat stays one in a halted run (its pair needs the same twin); a stacked claim needs nothing of the rule reported anywhere.

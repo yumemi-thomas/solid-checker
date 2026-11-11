@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "vitest";
 
-import { addsViolation, blockerOf, buildReport, diffProject, hazardMatches, keyOf, parseOptions, pickControls, recordsHazards, render, scope } from "./corpus-delta.mjs";
+import { AssumedReportError } from "./lib/assumed.mjs";
+import { TAINTED, cleanReport, fakeChecker } from "./lib/assumed-fixtures.mjs";
+import { addsViolation, blockerOf, buildReport, diffProject, hazardMatches, keyOf, parseOptions, pickControls, recordsHazards, render, runProject, scope } from "./corpus-delta.mjs";
 
 // ADR 0955: the scoped corpus delta, on in-memory results.
 const at = (path, startByte, line = 1) => ({ path, startByte, endByte: startByte + 4, line });
@@ -122,4 +127,29 @@ test("the options must name the scope and both builds", () => {
   assert.equal(parsed.json, true);
   assert.equal(parsed.controls, 3);
   assert.equal(parseOptions([...base, "--all"]).spec.all, true);
+});
+
+// ADR 0950: the delta compares two builds of the shipped checker; a what-if report from either is a prediction, so the run refuses it
+// (the pool rejects, the run ends) instead of recording a project the checker "could not answer".
+test("a what-if report from either build stops the delta, and a default build's report is read as before", async () => {
+  const root = mkdtempSync(join(tmpdir(), "corpus-delta-what-if-"));
+  try {
+    const configuration = { runtimeTarget: "browser", runtimeBuild: "development", rendering: "csr" };
+    const project = { app: "one", root, project: "tsconfig.json" };
+    const run = (checker) => runProject(checker, "/tf/solid-typefacts", project, configuration, null, 30_000);
+    for (const [name, make] of Object.entries(TAINTED)) {
+      await assert.rejects(
+        run(fakeChecker(root, make(), { name: `what-if-${name}` })),
+        (error) => error instanceof AssumedReportError && /^scripts\/corpus-delta\.mjs refuses this checker report: it is tainted by a what-if assumption/.test(error.message),
+        name,
+      );
+    }
+    const report = { ...cleanReport(), hazards: table("RootPatch") };
+    const result = await run(fakeChecker(root, report, { name: "default" }));
+    assert.deepEqual(result.findings, report.findings);
+    assert.deepEqual(result.hazards, report.hazards);
+    assert.deepEqual([result.exitCode, result.parseError], [0, null]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

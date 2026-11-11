@@ -73,3 +73,44 @@ test("a well-formed refusal resolves and leaves the checker usable", async () =>
   await checker.close();
   assert.equal(worker.terminated, 1);
 });
+
+// ADR 0950: a report from the what-if build (`solid-checker-what-if --assume`: a top-level `assumed` key, or a finding premise of kind `assumed`) is
+// a prediction, never a fact about the checker. The owned checker never writes one; a worker that answered one is not one to stand behind, so
+// the answer poisons the checker the way a malformed one does, under a message of its own.
+const hazard = "OpenMemberWrite(*)";
+const finding = extra => ({ id: "SC1001", rule: "strict-read-untracked", kind: "violation", primaryLocation: { path: "/m/a/App.tsx", startByte: 10, endByte: 20, line: 4, column: 3, endLine: 4 }, ...extra });
+const withheld = { kind: "assumed", hazards: [hazard] };
+
+for (const [name, snapshot] of [
+  ["a top-level assumed key", { status: "violation", findings: [finding()], assumed: { hazards: [hazard], flipped: [] } }],
+  ["a finding premise of kind assumed", { status: "violation", findings: [finding({ premises: [withheld] })] }],
+  ["both, as the what-if build writes them", { status: "violation", findings: [finding({ premises: [withheld] })], assumed: { hazards: [hazard], flipped: [hazard] } }],
+]) {
+  test(`${name} (a what-if report) rejects the active, queued and later checks and stops the worker`, async () => {
+    const worker = new ScriptedWorker(({ id }) => ({ type: "result", id, status: 0, output: JSON.stringify({ snapshot, notes: [] }), transport: {} }));
+    const checker = await attach(worker, init);
+    const active = outcome(checker.check({ projectId: "/m/a" }));
+    const queued = outcome(checker.check({ projectId: "/m/b" }));
+    await flush();
+    await flush();
+    assert.equal(active.settled, "rejected");
+    assert.equal(queued.settled, "rejected");
+    assert.equal(active.error.name, "OwnedCheckerError");
+    assert.match(active.error.message, /^the owned checker answered a report tainted by a what-if assumption, .* Only scripts\/what-if\.mjs reads one\.$/);
+    assert.equal(queued.error, active.error);
+    await assert.rejects(checker.check({ projectId: "/m/c" }), error => error === active.error);
+    assert.equal(worker.checks, 1);
+    assert.equal(worker.terminated, 1);
+  });
+}
+
+test("a report as a default build writes it, premises of other kinds included, is the answer unchanged", async () => {
+  const snapshot = { status: "violation", findings: [finding({ premises: [{ kind: "SiteReachAbsentProp" }] })] };
+  const worker = new ScriptedWorker(({ id }) => ({ type: "result", id, status: 0, output: JSON.stringify({ snapshot, notes: ["a note"] }), transport: { opened: [] } }));
+  const checker = await attach(worker, init);
+  const answer = await checker.check({ projectId: "/m/a" });
+  assert.deepEqual([answer.ok, answer.snapshot, answer.notes], [true, snapshot, ["a note"]]);
+  assert.equal(worker.terminated, 0);
+  await checker.close();
+  assert.equal(worker.terminated, 1);
+});

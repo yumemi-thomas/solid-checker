@@ -1,6 +1,7 @@
 // Stacked claims (coordinator, Part 16): a violation on a line where Solid's first throw halted the run before the rule's own code could
 // fire (classify.mjs offSiteVerdicts `stacked`). It scores `stacked-claim` only for a (first code, rule) pair stacked-pairs.json proves with
 // a Chrome twin; any other is a false positive. patterns.mjs checks every pair's twins on each run (`stackedProblems`).
+// A `repeat` claim is also settled per program (ADR 0953, option c; repeat-twin.mjs): where its own twin holds the claim is the agreement it is.
 import { readFileSync } from "node:fs";
 import { codesForRule } from "./codes.mjs";
 
@@ -10,11 +11,23 @@ export const STACKED_PAIRS = TABLE.pairs;
 export const PATTERN_CLAIMS = TABLE.patternClaims;
 export const pairOf = (row) => `${row.first}|${row.finding.split("@")[0]}`;
 
-/** Off-site rows (`{ finding, verdict, first? }`) split: false positives (an unproved stack among them) and proved stacked claims. */
-export function stackedSplit(judged, pairs = STACKED_PAIRS) {
-  const stacked = judged.filter((row) => row.verdict === "stacked" && pairs[pairOf(row)]);
-  const wrong = judged.filter((row) => row.verdict === "false-positive" || (row.verdict === "stacked" && !pairs[pairOf(row)]));
-  return { wrong, stacked };
+/**
+ * A repeat claim a twin can settle (ADR 0953, option c): the rule's own code reported once elsewhere (`why` `repeat`, not a disturbed run's), of a pair
+ * the table marks `repeat`. A claim of any other kind, or of an unproved pair, has no twin and is split as before.
+ */
+export const isRepeat = (row, pairs = STACKED_PAIRS) => row.verdict === "stacked" && row.why === "repeat" && pairs[pairOf(row)]?.kind === "repeat";
+
+/**
+ * Off-site rows (`{ finding, verdict, first? }`) split: false positives (an unproved stack among them), proved stacked claims, and `twinned`: the
+ * repeat claims whose twin held (`twins`: finding label -> `{ holds }`, repeat-twin.mjs). A twinned claim is the agreement it is: it is neither
+ * stacked nor wrong. Without a twin, or with one that failed, a repeat is split by its pair as it always was.
+ */
+export function stackedSplit(judged, pairs = STACKED_PAIRS, { twins = {} } = {}) {
+  const twinned = judged.filter((row) => isRepeat(row, pairs) && twins[row.finding]?.holds === true);
+  const open = judged.filter((row) => !twinned.includes(row));
+  const stacked = open.filter((row) => row.verdict === "stacked" && pairs[pairOf(row)]);
+  const wrong = open.filter((row) => row.verdict === "false-positive" || (row.verdict === "stacked" && !pairs[pairOf(row)]));
+  return { wrong, stacked, twinned };
 }
 
 /** Why a pair's proof fails on a patterns run (`rows`: judged patterns by id; `records`: Chrome's, by id), as sentences. */

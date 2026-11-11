@@ -21,6 +21,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { availableParallelism, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { refuseAssumed } from "../lib/assumed.mjs";
 import { resolveTsc, requireTypeChecker, tsconfigFor, typecheck, typecheckBatch } from "../fuzz/typecheck.mjs";
 import { judgeWitness, vanishedRows } from "./judge.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
@@ -72,6 +73,8 @@ async function judge(id) {
       : ["--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
   const r = await runChecker(dir, mode);
   let out; try { out = JSON.parse(r.stdout); } catch { rows.push(`ERROR ${id}: ${(r.stderr ?? "").slice(0, 200)}`); fail++; return; }
+  // ADR 0950: a witness is judged on the shipped checker; a what-if report (a prediction) stops the check, it is no row to fail.
+  refuseAssumed(out, "scripts/flip/check.mjs");
   const verdict = judgeWitness(w, out);
   if (!verdict.ok) { fail++; rows.push(`FAIL ${(w.host ? "host" : w.kind).padEnd(7)} ${id}: ${verdict.why}`); }
 }

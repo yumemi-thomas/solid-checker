@@ -17,11 +17,13 @@
 // region (matrix.mjs `regionOf`: the site's line and its aux lines) in App.tsx; the judge also covers by a frame Chrome recorded, which
 // this run has no record of, so a row at a frame reads `away` here. `kinds` counts every uncertifiable finding by its blocker kind
 // (`blockedBy.kind`, else `none`); `formulas` lists the rows whose blocker names a formula or a missing fact, one entry each. A program
-// the checker could not answer is `{ id, grid, error }`. The summary on stderr counts programs, rows, errors and the rate.
+// the checker could not answer is `{ id, grid, error }`. The summary on stderr counts programs, rows, errors and the rate. A checker that
+// answers with a what-if report (ADR 0950) stops the scan with an error and leaves no output file: a prediction is no row to join.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { join, relative, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { AssumedReportError, refuseAssumed } from "../lib/assumed.mjs";
 import { gridRows } from "./cover.mjs";
 import { GRIDS } from "./focus-grids.mjs";
 import { checkerEnv, materializeForChecker } from "./checker.mjs";
@@ -120,6 +122,7 @@ export function reduceReport(report, root, site) {
   return { total, violationsAtSite, kinds: Object.fromEntries(Object.entries(kinds).sort(([a], [b]) => (a < b ? -1 : 1))), formulas };
 }
 
+/** One checker run: `{ report }`, `{ error }` for a run with no report, or `{ refused }` (an `AssumedReportError`, ADR 0950) for a what-if report, which stops the scan. */
 function runChecker(dir, { checker, typefacts, ordinary }) {
   return new Promise((done) => {
     const child = spawn(checker, ["--project", join(dir, "tsconfig.json"), ...(ordinary ? ORDINARY_ARGS : CHECKER_ARGS)], {
@@ -134,7 +137,9 @@ function runChecker(dir, { checker, typefacts, ordinary }) {
     child.on("close", (status) => {
       clearTimeout(timer);
       if (status !== 0 && status !== 1) { done({ error: `exit ${status}: ${stderr.slice(-300)}` }); return; }
-      try { done({ report: JSON.parse(stdout) }); } catch (error) { done({ error: `malformed output: ${error.message}` }); }
+      try { done({ report: refuseAssumed(JSON.parse(stdout), "scripts/fuzz/blocker-scan.mjs") }); } catch (error) {
+        done(error instanceof AssumedReportError ? { refused: error } : { error: `malformed output: ${error.message}` });
+      }
     });
   });
 }
@@ -152,6 +157,9 @@ async function scan(options) {
   const stats = { programs: 0, errors: 0, rows: 0, formulaRows: 0 };
   const started = Date.now();
   let next = 0;
+  // ADR 0950: the first what-if report stops every worker. An error row per program would scan the whole grid for nothing, and the rows
+  // already written are not a scan anything may join (`u-verdicts.mjs`), so the file goes too.
+  let refused = null;
   const worker = async () => {
     while (next < rows.length) {
       const row = rows[next++];
@@ -162,6 +170,7 @@ async function scan(options) {
         try {
           const ordinary = Object.keys(built.packages ?? {}).length > 0;
           const answer = await runChecker(dir, { checker, typefacts, ordinary });
+          if (answer.refused) throw answer.refused;
           const site = siteOf(built);
           if (answer.error) line = { id: row.id, grid: row.grid, error: answer.error };
           else {
@@ -174,6 +183,11 @@ async function scan(options) {
           rmSync(dir, { recursive: true, force: true });
         }
       } catch (error) {
+        if (error instanceof AssumedReportError) {
+          refused ??= error;
+          next = rows.length;
+          return;
+        }
         line = { id: row.id, grid: row.grid, error: error instanceof Error ? error.message : String(error) };
       }
       if (line.error) stats.errors += 1;
@@ -184,6 +198,10 @@ async function scan(options) {
   };
   process.stderr.write(`blocker-scan: ${rows.length} programs from ${options.grids.join(",")}${options.codes ? ` (codes ${options.codes.join(",")})` : ""}\n`);
   await Promise.all(Array.from({ length: options.concurrency }, worker));
+  if (refused) {
+    rmSync(out, { force: true });
+    throw refused;
+  }
   const seconds = (Date.now() - started) / 1000;
   process.stderr.write(`blocker-scan: done ${stats.programs} programs in ${seconds.toFixed(0)} s (${(stats.programs / seconds).toFixed(0)}/s): ${stats.rows} uncertifiable rows, ${stats.formulaRows} with a formula or a missing fact, ${stats.errors} errors\n`);
   if (stats.errors) process.exitCode = 1;

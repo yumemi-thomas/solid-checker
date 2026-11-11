@@ -2678,7 +2678,14 @@ impl<'a> SemanticLookup<'a> {
         self.note_probe_read(crate::base::memo::probes::Probe::Hazard(hazard), || {
             crate::base::memo::probes::PolledKey::Unit
         });
-        self.hazards_index().contains_key(&hazard)
+        let present = self.hazards_index().contains_key(&hazard);
+        // ADR 0950, the one seam: a what-if build answers `false` for a hazard it was told to assume absent. This block does not exist in a default
+        // build (`what-if` is in no default, workspace or CI), so nothing there can reach it.
+        #[cfg(feature = "what-if")]
+        if present && crate::what_if::assumed_absent(hazard) {
+            return false;
+        }
+        present
     }
 
     /// L1: module edges by specifier.

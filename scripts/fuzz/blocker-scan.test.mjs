@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { gridRows } from "./cover.mjs";
 import { buildRow, parseOptions, readIds, reduceReport, selected } from "./blocker-scan.mjs";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fakeChecker, flippedReport } from "../lib/assumed-fixtures.mjs";
 
 // ADR 0954: the scan's pure parts. The checker is the grids' business; what is tested here is which programs a selection names, how a report
 // is reduced to the line the join reads, and that a row is rebuilt as the grid built it.
@@ -118,5 +120,46 @@ describe("a row rebuilt as the grid built it", () => {
   it("refuses a row whose id is not the program's", () => {
     const row = gridRows("mx-recall", { codes: ["UNTRACKED_READ_AFTER_AWAIT"] })[0];
     expect(() => buildRow({ ...row, id: "mx-not-the-id" })).toThrow(/id mismatch/);
+  });
+});
+
+// ADR 0950: the scan runs the real script against a fake checker, because the intake is a callback of a spawned process and the refusal is
+// what the whole scan does about it: the first what-if report stops every worker, and the file the scan began is removed.
+describe("a checker that answers with a what-if report", () => {
+  const script = new URL("./blocker-scan.mjs", import.meta.url).pathname;
+  const code = "UNTRACKED_READ_AFTER_AWAIT";
+  const scan = (root, report) => {
+    writeFileSync(join(root, "ids.txt"), `${gridRows("mx-recall", { codes: [code] })[0].id}\n`);
+    const out = join(root, "rows.jsonl");
+    const run = spawnSync(process.execPath, [
+      script, "--checker-bin", fakeChecker(root, report), "--typefacts", join(root, "typefacts"), "--out", out,
+      "--grids", "mx-recall", "--codes", code, "--ids", join(root, "ids.txt"), "--install", join(root, "install"), "--concurrency", "1",
+    ], { encoding: "utf8" });
+    return { run, out };
+  };
+  it("stops the scan with the refusal and leaves no output behind", () => {
+    const root = mkdtempSync(join(tmpdir(), "blocker-scan-what-if-"));
+    try {
+      const { run, out } = scan(root, flippedReport());
+      expect(run.status).not.toBe(0);
+      expect(run.stderr).toMatch(/scripts\/fuzz\/blocker-scan\.mjs refuses this checker report: it is tainted by a what-if assumption/);
+      expect(run.stderr).not.toMatch(/blocker-scan: done/);
+      expect(existsSync(out)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it("is read as the scan's row when it is a default build's report", () => {
+    const root = mkdtempSync(join(tmpdir(), "blocker-scan-default-"));
+    try {
+      const { run, out } = scan(root, { status: "certified", findings: [] });
+      expect(run.status, run.stderr).toBe(0);
+      const [header, row] = readFileSync(out, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      expect(header.scan.programs).toBe(1);
+      expect(row).toMatchObject({ grid: "mx-recall", code, u: { total: 0, kinds: {} }, violationsAtSite: 0, formulas: [] });
+      expect(row.error).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
