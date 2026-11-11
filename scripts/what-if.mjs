@@ -10,10 +10,13 @@
 // a report without it, so a default build handed in as the what-if binary is an error, not a baseline). It compares only runs it makes itself, with the two binaries it is given.
 //
 //   node scripts/what-if.mjs corpus --what-if-bin <solid-checker-what-if> --checker-bin <solid-checker-rust, a default build of the same source> --typefacts <solid-typefacts>
-//        --set name=Hazard,Hazard ... [--sets-file f.json] [--sets-from-baseline N] [--manifest scripts/corpus/rc21-manifest.json] [--apps-root ../solid-checker-rc21-frozen/apps] [--apps a,b]
+//        --set name=Hazard,Hazard ... [--sets-file f.json] [--sets-from-baseline N] [--premise-sets N] [--manifest scripts/corpus/rc21-manifest.json] [--apps-root ../solid-checker-rc21-frozen/apps] [--apps a,b]
 //        [--order-from sweep.json] [--jobs 12] [--no-control] --out report.json
 //   node scripts/what-if.mjs grid --what-if-bin ... --checker-bin ... --typefacts ... --scan <blocker-scan rows.jsonl> --set name=ids ... [--sets-file f] [--jobs 12]
 //        [--programs-from all] [--control N] [--every K] [--limit N] --out report.json [--movers-out ids.json]
+//        ADR 0965: a `Premise(<kind>)` set runs the scan's programs that carry a row of that cause (the scan's `u.kinds`), not only the ones with a formula row.
+//   node scripts/what-if.mjs rank --report corpus.json [--judged judged.json] [--top 40]   ADR 0965: the sets of a corpus report ranked by the rows and sites they lift, with what Chrome said of
+//        the same sets on the grids (`judge`'s report) beside each
 //   node scripts/what-if.mjs sets --scan <blocker-scan rows.jsonl> [--top 30]      the lifting sets of the scan's formula groups, with their rows and programs
 //   node scripts/what-if.mjs movers --report grid.json --out <manifest dir> [--run-out dir] [--checker-bin ... --typefacts ...]   the programs that moved, as the commands that run them in Chrome
 //   node scripts/what-if.mjs judge --report grid.json --chrome <dir of chrome-*.json> --out judged.json    each moved row against Chrome's record: false clean, false positive, confirmed
@@ -358,6 +361,26 @@ const header = (binaries, extra) => ({
   ...extra,
 });
 
+/**
+ * ADR 0965: one set per typed cause (`blockedBy.kind`) that at least `minRows` uncertifiable rows of the shipped checker's reports stand under: `Premise(<kind>)`, the cause assumed away
+ * as a whole (every row of that kind leaves the report, whatever the veto or placement behind it). `existing` is not asked twice. The biggest cause first, then by name.
+ */
+export function premiseSetsFromBaselines(baselines, existing, minRows = 20) {
+  const kinds = new Map();
+  for (const baseline of baselines) {
+    for (const finding of baseline.findings ?? []) {
+      const kind = finding.blockedBy?.kind;
+      if (finding.kind !== "uncertifiable" || typeof kind !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(kind)) continue;
+      kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+    }
+  }
+  const have = new Set(existing.map(({ ids }) => [...ids].sort().join("\0")));
+  return [...kinds]
+    .filter(([kind, rows]) => rows >= minRows && !have.has(`Premise(${kind})`))
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([kind]) => ({ name: `premise:${kind}`, ids: [`Premise(${kind})`] }));
+}
+
 /** The hazard ids the what-if build can name (ADR 0947's atoms): a lifting set with another atom (the array-slots formula's) is not asked of it. */
 const KNOWN_ATOM = /^(OpenMemberWrite\(.+\)|StandardImpostor(Write)?\(.+\)|StandardOverride\(.+\)|StandardPatch\(.+\)|ReflectiveDefinitionSpelling|ReflectiveDefinition\(.+\)|StandardRoot(Handed|Received|Iterated)|RootPatch|AnyStandardPatch)$/;
 
@@ -392,9 +415,9 @@ export function setsFromBaselines(baselines, existing, minRows = 20) {
 }
 
 async function corpus(argv) {
-  const found = options(argv, ["what-if-bin", "checker-bin", "typefacts", "set", "sets-file", "sets-from-baseline", "manifest", "apps-root", "apps", "order-from", "jobs", "no-control", "out"]);
+  const found = options(argv, ["what-if-bin", "checker-bin", "typefacts", "set", "sets-file", "sets-from-baseline", "premise-sets", "manifest", "apps-root", "apps", "order-from", "jobs", "no-control", "out"]);
   if (!found.out) throw new Error("--out <report.json> is required");
-  let sets = setsOf(found, { optional: Boolean(found["sets-from-baseline"]) });
+  let sets = setsOf(found, { optional: Boolean(found["sets-from-baseline"] || found["premise-sets"]) });
   const binaries = binariesOf(found);
   const manifestPath = resolve(found.manifest ?? join(repo, "scripts/corpus/rc21-manifest.json"));
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -417,6 +440,12 @@ async function corpus(argv) {
     const derived = setsFromBaselines(bases.filter((base) => !base.error).map((base) => base.baseline), sets, Number(found["sets-from-baseline"]));
     sets = [...sets, ...derived];
     process.stderr.write(`what-if corpus: ${derived.length} lifting set(s) of the corpus's own groups added (${sets.length} in all)\n`);
+  }
+  // `--premise-sets N` (ADR 0965): one set per typed cause with at least N uncertifiable rows in the corpus's own reports.
+  if (found["premise-sets"]) {
+    const derived = premiseSetsFromBaselines(bases.filter((base) => !base.error).map((base) => base.baseline), sets, Number(found["premise-sets"]));
+    sets = [...sets, ...derived];
+    process.stderr.write(`what-if corpus: ${derived.length} typed cause(s) added as premise sets (${sets.length} in all)\n`);
   }
   const asked = [...(found["no-control"] ? [] : [{ name: "control", ids: [] }]), ...sets];
   // Every (project, set) run is folded into the report's tallies the moment it ends, and only its slim entry is kept: the full rows of 34 projects under every set (kui's have 4,000 each) are
@@ -442,16 +471,33 @@ async function corpus(argv) {
   process.stdout.write(summaryText(report, sets));
 }
 
-/** The lines of a blocker scan (ADR 0954): the programs with formula rows, `{ id, grid, formulas: [{ kind, formula, fired }] }`. */
-async function scanPrograms(path) {
+/**
+ * The lines of a blocker scan (ADR 0954): the programs with formula rows, `{ id, grid, formulas: [{ kind, formula, fired }] }`. ADR 0965: with `kinds`, also the programs that carry an uncertifiable
+ * row of some cause (`u.kinds`, the scan's count of every row by its `blockedBy.kind`), `{ ..., kinds: [<kind>] }`: what a `Premise(<kind>)` set can move.
+ */
+async function scanPrograms(path, { kinds = false } = {}) {
   const programs = [];
   for await (const line of createInterface({ input: createReadStream(resolve(path)) })) {
     if (line.startsWith('{"scan"')) continue;
     const row = JSON.parse(line);
-    if (row.error || !row.formulas?.length) continue;
-    programs.push({ id: row.id, grid: row.grid, code: row.code, context: row.context, side: row.side, formulas: row.formulas });
+    if (row.error) continue;
+    const present = kinds ? Object.entries(row.u?.kinds ?? {}).filter(([, counts]) => counts.some((count) => count > 0)).map(([kind]) => kind) : [];
+    if (!row.formulas?.length && !present.length) continue;
+    programs.push({ id: row.id, grid: row.grid, code: row.code, context: row.context, side: row.side, formulas: row.formulas ?? [], kinds: present });
   }
   return programs;
+}
+
+/** The cause a `Premise(<kind>)` id names, or null for any other id. */
+export const premiseOf = (id) => /^Premise\(([a-z0-9]+(?:-[a-z0-9]+)+)\)$/.exec(id)?.[1] ?? null;
+
+/**
+ * Whether the grid's program can move under `set` (so it is run under it): one of its formula rows fires a hazard of the set (the seam answers only for a hazard the program has), or, for a
+ * `Premise(<kind>)` id (ADR 0965), the program carries a row of that cause; `all` (`--programs-from all`) runs every program under every set.
+ */
+export function programWantsSet(program, set, all = false) {
+  if (all) return true;
+  return program.formulas.some(({ fired }) => fired.some((id) => set.ids.includes(id))) || set.ids.some((id) => { const kind = premiseOf(id); return kind !== null && (program.kinds ?? []).includes(kind); });
 }
 
 /** The lifting sets of a scan's formula groups, with the rows and programs of each: what to ask `--assume`. */
@@ -541,16 +587,16 @@ async function grid(argv) {
   const { materializeForChecker, checkerEnv } = await import("./fuzz/checker.mjs");
   const install = resolve(found.install ?? join(here, "fuzz", "install"));
   const seed = found.seed ?? "1";
-  const scanned = await scanPrograms(found.scan);
+  const scanned = await scanPrograms(found.scan, { kinds: sets.some((set) => set.ids.some((id) => premiseOf(id) !== null)) });
   // A program can move under a set only when one of its rows fires a hazard of it (the seam answers only for a hazard the program has, and a row's `fired` names the ones that
-  // veto it); every other program is not run. `--programs-from all` runs every program with a formula row under every set instead.
-  const wanted = (program, set) => found["programs-from"] === "all" || program.formulas.some(({ fired }) => fired.some((id) => set.ids.includes(id)));
+  // veto it), or, for a `Premise(<kind>)` id, carries a row of that cause; every other program is not run. `--programs-from all` runs every program the scan holds under every set instead.
+  const wanted = (program, set) => programWantsSet(program, set, found["programs-from"] === "all");
   // `--every K` takes every K-th program of the selection (a spread over the groups, for a pilot); `--limit N` the first N.
   const needed = scanned.filter((program) => sets.some((set) => wanted(program, set))).filter((_, at) => at % Number(found.every ?? 1) === 0).slice(0, found.limit ? Number(found.limit) : undefined);
   const byId = new Map(needed.map((program) => [program.id, program]));
   const rows = [];
   for (const name of new Set(needed.map((program) => program.grid))) for (const row of gridRows(name)) if (byId.has(row.id)) rows.push(row);
-  process.stderr.write(`what-if grid: ${needed.length} program(s) with a row firing a hazard of a set (of ${scanned.length} with formula rows), ${rows.length} regenerated\n`);
+  process.stderr.write(`what-if grid: ${needed.length} program(s) with a row firing a hazard of a set or carrying a cause of one (of ${scanned.length} the scan holds), ${rows.length} regenerated\n`);
   const ordinary = ["--format", "json", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
   const feedback = ["--format", "json", "--feedback-facts", "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"];
   // The control (a what-if run that assumes nothing must be the shipped checker's report) runs on `--control N` programs spread over the selection, 200 by default.
@@ -734,6 +780,52 @@ export async function* resultLines(report, reportPath) {
   for await (const line of createInterface({ input: createReadStream(resolve(dirname(resolve(reportPath)), report.resultsFile)) })) if (line) yield JSON.parse(line);
 }
 
+/**
+ * ADR 0965: the sets of a corpus report ranked by what they lift, the most first: `[{ name, ids, sites, rows, toV, programs }]`. `sites` are the sites that stop holding an obligation
+ * (`uLost`, and the ones that become a violation, `uToV`), `rows` the uncertifiable rows that leave or become a violation in the groups that moved, `programs` the projects it moved. A count,
+ * never safety: the rows leave as clean, and the corpus has no runtime to say a site must not.
+ */
+export function rankSets(report, judged = null) {
+  const total = (report.baselines ?? []).reduce((sum, base) => sum + (base.rows?.u ?? 0), 0);
+  return report.sets.map(({ name, ids }) => {
+    const counts = report.arms[name]?.counts ?? {};
+    const groups = Object.values(report.groups[name] ?? {});
+    const rows = groups.reduce((sum, entry) => sum + entry.toClean + entry.toV + entry.toVOther, 0);
+    return { name, ids, sites: (counts.uLost ?? 0) + (counts.uToV ?? 0), rows, toV: groups.reduce((sum, entry) => sum + entry.toV + entry.toVOther, 0), programs: report.moved?.[name]?.length ?? 0, share: total ? rows / total : 0, chrome: chromeOf(judged, name) };
+  }).sort((a, b) => b.rows - a.rows || b.sites - a.sites || (a.name < b.name ? -1 : 1));
+}
+
+/**
+ * ADR 0965: what Chrome said of the programs a set moved (`judge`'s report, `sets[name]`): the programs with a record, those where the lifted site is silent or covered by another row, and the
+ * false cleans (a diagnostic of Chrome's at a site the set would leave clean). `null` where the judged report holds no such set.
+ */
+export function chromeOf(judged, name) {
+  const tally = judged?.sets?.[name];
+  if (!tally) return null;
+  const verdicts = tally.verdicts ?? {};
+  return { judged: tally.programs - tally.noRecord, silent: verdicts["clean-silent"] ?? 0, covered: verdicts["clean-covered-elsewhere"] ?? 0, falseClean: verdicts["FALSE-CLEAN"] ?? 0, other: Object.entries(verdicts).filter(([verdict]) => !["clean-silent", "clean-covered-elsewhere", "FALSE-CLEAN"].includes(verdict)).reduce((sum, [, count]) => sum + count, 0) };
+}
+
+/** The ranking as text: one line a set, with the share of the corpus's uncertifiable rows and, with a judged grid report, what Chrome said. */
+export function rankText(report, top = 40, judged = null) {
+  const total = (report.baselines ?? []).reduce((sum, base) => sum + (base.rows?.u ?? 0), 0);
+  const lines = [`what-if ranking (${report.source}): ${report.programs} program(s), ${total} uncertifiable rows under the shipped checker; control ${report.control.same} of ${report.control.programs} identical${judged ? `; Chrome: ${judged.chromeRecords} record(s)` : ""}`];
+  for (const entry of rankSets(report, judged).slice(0, top)) {
+    const chrome = judged ? (entry.chrome ? ` | chrome ${String(entry.chrome.judged).padStart(5)} judged, false clean ${String(entry.chrome.falseClean).padStart(4)}, silent ${entry.chrome.silent}, covered elsewhere ${entry.chrome.covered}` : " | chrome: no program of the grid") : "";
+    lines.push(`${String(entry.rows).padStart(8)} rows (${(100 * entry.share).toFixed(1).padStart(5)}%) ${String(entry.sites).padStart(7)} sites ${String(entry.programs).padStart(3)} program(s) ${entry.toV ? `toV ${entry.toV} ` : ""}${entry.ids.join(" + ")}${chrome}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+async function rankCommand(argv) {
+  const found = options(argv, ["report", "top", "judged"]);
+  if (!found.report) throw new Error("--report <corpus report.json> is required");
+  const report = JSON.parse(readFileSync(resolve(found.report), "utf8"));
+  if (report.kind !== "what-if" || report.source !== "corpus") throw new Error("rank reads a corpus what-if report");
+  const judged = found.judged ? JSON.parse(readFileSync(resolve(found.judged), "utf8")) : null;
+  process.stdout.write(rankText(report, Number(found.top ?? 40), judged));
+}
+
 /** The summary printed after a run: per set, the harness's counts and the groups that moved. */
 export function summaryText(report, sets) {
   const lines = [`what-if (${report.source}): ${report.programs} program(s), ${report.errors} error(s); control: ${report.control.same} of ${report.control.programs} identical to the shipped checker`];
@@ -749,7 +841,7 @@ export function summaryText(report, sets) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, ...rest] = process.argv.slice(2);
-  const commands = { corpus, grid, sets: setsCommand, movers: moversCommand, judge: judgeCommand };
+  const commands = { corpus, grid, sets: setsCommand, movers: moversCommand, judge: judgeCommand, rank: rankCommand };
   if (!commands[command]) {
     process.stderr.write("usage: node scripts/what-if.mjs corpus|grid|sets ... (see the header of the script)\n");
     process.exit(64);

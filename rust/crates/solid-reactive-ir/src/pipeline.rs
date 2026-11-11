@@ -279,6 +279,8 @@ impl ProgramDraft {
             early_mention_sites: Vec::new(),
             blocked_by: Vec::new(),
             hazards: Vec::new(),
+            #[cfg(feature = "what-if")]
+            assumed_premises: Vec::new(),
             package_entries: Vec::new(),
             package_references: Vec::new(),
             obligation_counts: ObligationCounts {
@@ -964,6 +966,11 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =
         crate::blocked_by::typed_blockers(&program, semantic_lookup);
+    // ADR 0965: the causes a what-if run assumed away, asked of the seam once the rows are final.
+    #[cfg(feature = "what-if")]
+    {
+        program.assumed_premises = semantic_lookup.assumed_premises();
+    }
     if defer_memo_end {
         semantic_lookup.defer_end_memos();
     } else if let Some(report) = semantic_lookup.end_memos() {

@@ -162,8 +162,28 @@ pub(crate) fn hazard_of_id(id: &str) -> Option<Hazard> {
             let (owner, member) = rest.split_once('.')?;
             standard_patch(owner, key_of(member))
         }
+        // ADR 0965: any blocker kind (`blockedBy.kind`, kebab-case, no detail): the causes are an open set (a constant of `blockers.rs`, or a context a rule
+        // names where it emits), so the id is checked for its shape, and a kind no row carries lifts nothing.
+        ("Premise", Some(kind)) if crate::blockers::named(kind) && !kind.contains(':') => {
+            Hazard::Premise(premise_kind(kind))
+        }
         _ => return None,
     })
+}
+
+/// The kind of a `Premise(kind)` id as a `&'static str`, one allocation per kind for the life of the process (a what-if run names a handful).
+#[cfg(feature = "what-if")]
+fn premise_kind(kind: &str) -> &'static str {
+    static KINDS: std::sync::Mutex<BTreeSet<&'static str>> = std::sync::Mutex::new(BTreeSet::new());
+    let mut kinds = KINDS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(known) = kinds.get(kind) {
+        return known;
+    }
+    let leaked: &'static str = Box::leak(kind.to_owned().into_boxed_str());
+    kinds.insert(leaked);
+    leaked
 }
 
 /// The ids of the `atoms` the program has, sorted, so a row names the same ones in any build.
@@ -316,6 +336,40 @@ mod tests {
             "StandardOverride(Array)",
             "StandardImpostor(a",
             "standardrootHanded",
+        ] {
+            assert_eq!(hazard_of_id(bad), None, "{bad}");
+        }
+    }
+
+    // ADR 0965: a typed cause is a hazard id `Premise(<blocker kind>)`: any kebab-case kind with no detail, the same hazard for the same kind, none for another.
+    #[cfg(feature = "what-if")]
+    #[test]
+    fn what_if_premise_id_names_a_blocker_kind() {
+        for kind in [
+            "function-run-unplaced",
+            "unresolved-invocation",
+            "search-depth-limit",
+            "handed-member-dispatch",
+            "package-source-unavailable",
+        ] {
+            let id = format!("Premise({kind})");
+            assert_eq!(hazard_of_id(&id), Some(Hazard::Premise(premise_kind(kind))));
+            assert_eq!(hazard_of_id(&id), hazard_of_id(&id), "one kind, one hazard");
+        }
+        assert_ne!(
+            hazard_of_id("Premise(function-run-unplaced)"),
+            hazard_of_id("Premise(unresolved-invocation)")
+        );
+        for bad in [
+            "Premise",
+            "Premise()",
+            "Premise(App)",
+            "Premise(Function-Run-Unplaced)",
+            "Premise(function-run-unplaced:detail)",
+            "Premise(-function)",
+            "Premise(function-run-unplaced",
+            "premise(function-run-unplaced)",
+            "Premise(a b-c)",
         ] {
             assert_eq!(hazard_of_id(bad), None, "{bad}");
         }

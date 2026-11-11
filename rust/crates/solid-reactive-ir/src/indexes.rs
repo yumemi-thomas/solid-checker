@@ -2692,10 +2692,17 @@ impl<'a> SemanticLookup<'a> {
     /// Whether some file has `hazard`: a whole-program answer, recorded for
     /// the computation recording as its probe's (`indexes::hand_outs`).
     pub(crate) fn hazard_present(&self, hazard: crate::base::Hazard) -> bool {
-        self.note_probe_read(crate::base::memo::probes::Probe::Hazard(hazard), || {
-            crate::base::memo::probes::PolledKey::Unit
-        });
-        let present = self.hazards_index().contains_key(&hazard);
+        // ADR 0965: a premise is no census fact: it is present wherever it is asked, and only an assumption answers it absent. A default build has no such hazard.
+        #[cfg(feature = "what-if")]
+        let premise = matches!(hazard, crate::base::Hazard::Premise(_));
+        #[cfg(not(feature = "what-if"))]
+        let premise = false;
+        if !premise {
+            self.note_probe_read(crate::base::memo::probes::Probe::Hazard(hazard), || {
+                crate::base::memo::probes::PolledKey::Unit
+            });
+        }
+        let present = premise || self.hazards_index().contains_key(&hazard);
         // ADR 0950, the one seam: a what-if build answers `false` for a hazard it was told to assume absent. This block does not exist in a default
         // build (`what-if` is in no default, workspace or CI), so nothing there can reach it.
         #[cfg(feature = "what-if")]
@@ -2703,6 +2710,16 @@ impl<'a> SemanticLookup<'a> {
             return false;
         }
         present
+    }
+
+    /// ADR 0965: the blocker kinds this run assumed away (`--assume Premise(kind)`), each asked of the seam, which is how the run records that it flipped.
+    #[cfg(feature = "what-if")]
+    pub(crate) fn assumed_premises(&self) -> Vec<String> {
+        crate::what_if::premises()
+            .into_iter()
+            .filter(|kind| !self.hazard_present(crate::base::Hazard::Premise(kind)))
+            .map(str::to_owned)
+            .collect()
     }
 
     /// L1: module edges by specifier.
