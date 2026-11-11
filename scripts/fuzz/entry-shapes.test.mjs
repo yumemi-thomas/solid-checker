@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { runtimeEvents } from "./classify.mjs";
 import { policyOf } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
-import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, GE_ACTION_CODES, GE_APPLY_CODES, GE_COMPUTE_CODES, GE_STEPS, TW_LAYERS, entryNotVariants, entryPlacement, twParts } from "./entry-shapes.mjs";
+import { ENTRY_CODES, ENTRY_CONTEXTS, ENTRY_CONTEXT_NAMES, GE_ACTION_CODES, GE_APPLY_CODES, GE_COMPUTE_CODES, GE_STEPS, PD_FORMS, PD_HOSTS, PD_HOST_CODES, PD_NEVER_RUN, TW_LAYERS, entryNotVariants, entryPlacement, pdNames, twParts } from "./entry-shapes.mjs";
 import { DEFAULT_FAST_INSTALL, runFast } from "./fast.mjs";
 import { generateProgram } from "./generate.mjs";
 import { hitCount } from "./hits.mjs";
@@ -25,11 +25,13 @@ const lines = (text) => text.split("\n").map((line) => line.trim());
 const at = (all, wanted, from = 0) => all.findIndex((line, index) => index >= from && line === wanted);
 
 describe("the entry contexts", () => {
-  it("are the action family's eight, the twice-entered family's 72 and the generator-stepped family's 35, each name parsed back", () => {
+  it("are the action family's eight, the twice-entered family's 72, the generator-stepped family's 35 and the parameter-initializer family's 24, each name parsed back", () => {
     // eight steps in each of four hosts (an effect's apply, a memo's compute, an effect's compute, an action's step), and the legal twin of the apply, of the memo and of the action
-    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3 + (8 * 4 + 3));
+    // four forms, a twin that passes the argument and a twin that leaves the call to a handler, in each of four hosts
+    expect(ENTRY_CONTEXT_NAMES).toHaveLength(8 + 2 * 2 * 3 * 2 * 3 + (8 * 4 + 3) + 4 * 6);
     expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ae-"))).toHaveLength(8);
     expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("ge-"))).toHaveLength(35);
+    expect(ENTRY_CONTEXT_NAMES.filter((name) => name.startsWith("pd-"))).toHaveLength(24);
     for (const name of ENTRY_CONTEXT_NAMES.filter((one) => one.startsWith("tw-"))) {
       const parts = twParts(name);
       expect(parts, name).not.toBeNull();
@@ -40,16 +42,24 @@ describe("the entry contexts", () => {
   });
   it("are placed for the codes whose tolerant layer they use, and for no other", () => {
     const placement = entryPlacement();
-    expect(Object.keys(placement).sort()).toEqual(["FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "REACTIVE_WRITE_IN_OWNED_SCOPE"]);
-    for (const code of GE_APPLY_CODES) expect(placement[code]).toEqual({ misuse: GE_STEPS.map((step) => `ge-${step}-apply`), legal: ["ge-idle-apply"] });
+    expect(Object.keys(placement).sort()).toEqual(["CLEANUP_IN_FORBIDDEN_SCOPE", "FLUSH_IN_ACTION", "FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "REACTIVE_WRITE_IN_OWNED_SCOPE"]);
+    const pd = (host, code = null) => ({ misuse: PD_FORMS.map((form) => `pd-${form}-${host}`), legal: pdNames(host, code).filter((name) => /^pd-(passed|idle)-/.test(name)) });
+    for (const code of GE_APPLY_CODES) expect(placement[code]).toEqual({ misuse: [...GE_STEPS.map((step) => `ge-${step}-apply`), ...pd("apply", code).misuse], legal: ["ge-idle-apply", ...pd("apply", code).legal] });
     for (const code of GE_COMPUTE_CODES) expect(placement[code]).toEqual({ misuse: ["memo", "effect"].flatMap((host) => GE_STEPS.map((step) => `ge-${step}-${host}`)), legal: ["ge-idle-memo"] });
-    for (const code of GE_ACTION_CODES) expect(placement[code]).toEqual({ misuse: ["ae-helper", "ae-helper-named", "ae-package", "ae-delegate", ...GE_STEPS.map((step) => `ge-${step}-action`)], legal: ["ae-helper-plain", "ae-helper-named-plain", "ae-package-plain", "ae-delegate-plain", "ge-idle-action"] });
+    for (const code of GE_ACTION_CODES) expect(placement[code]).toEqual({ misuse: ["ae-helper", "ae-helper-named", "ae-package", "ae-delegate", ...GE_STEPS.map((step) => `ge-${step}-action`), ...pd("action", code).misuse], legal: ["ae-helper-plain", "ae-helper-named-plain", "ae-package-plain", "ae-delegate-plain", "ge-idle-action", ...pd("action", code).legal] });
+    // the parameter-initializer family: the hosts name the codes it is placed for
+    expect(PD_HOSTS).toEqual(["action", "apply", "tracked", "settled"]);
+    for (const [host, codes] of Object.entries(PD_HOST_CODES)) for (const code of codes) expect(pdNames(host, code).every((name) => placement[code].misuse.includes(name) || placement[code].legal.includes(name)), `${code}/${host}`).toBe(true);
+    // a cleanup has no legal handler (NO_OWNER_CLEANUP): its legal twin is the one that passes the argument
+    expect(placement.CLEANUP_IN_FORBIDDEN_SCOPE).toEqual({ misuse: [...pd("tracked").misuse, ...pd("settled").misuse], legal: ["pd-passed-tracked", "pd-passed-settled"] });
+    expect(PD_NEVER_RUN).toEqual(["pd-passed-action", "pd-passed-apply", "pd-passed-tracked", "pd-passed-settled"]);
     expect(GE_STEPS).toEqual(["forof", "spread", "next", "yield", "from", "direct", "set", "stored"]);
     for (const [code, layer] of Object.entries(TW_LAYERS)) {
-      expect(placement[code].misuse.every((name) => twParts(name).layer === layer && twParts(name).order !== "both")).toBe(true);
-      expect(placement[code].legal.every((name) => twParts(name).layer === layer && twParts(name).order === "both")).toBe(true);
-      expect(placement[code].misuse).toHaveLength(24);
-      expect(placement[code].legal).toHaveLength(12);
+      const twice = (names) => names.filter((name) => twParts(name));
+      expect(twice(placement[code].misuse).every((name) => twParts(name).layer === layer && twParts(name).order !== "both")).toBe(true);
+      expect(twice(placement[code].legal).every((name) => twParts(name).layer === layer && twParts(name).order === "both")).toBe(true);
+      expect(twice(placement[code].misuse)).toHaveLength(24);
+      expect(twice(placement[code].legal)).toHaveLength(12);
     }
     expect(TW_LAYERS).toEqual({ PRIMITIVE_IN_FORBIDDEN_SCOPE: "owner-null", FLUSH_IN_TRACKED_QUEUE_CALLBACK: "ispending" });
   });
@@ -68,7 +78,7 @@ describe("the entry contexts", () => {
   it("leave the `effect` variant out of the owner-null cells: with no owner it is NO_OWNER_EFFECT, a code of its own", () => {
     const notVariants = entryNotVariants();
     expect(Object.keys(notVariants)).toEqual(["PRIMITIVE_IN_FORBIDDEN_SCOPE"]);
-    for (const context of ENTRY_CODES.PRIMITIVE_IN_FORBIDDEN_SCOPE) {
+    for (const context of ENTRY_CODES.PRIMITIVE_IN_FORBIDDEN_SCOPE.filter((name) => twParts(name))) {
       expect(SPEC.PRIMITIVE_IN_FORBIDDEN_SCOPE.recallVariantsNotIn[context]).toContain("effect");
       const side = ENTRY_CONTEXTS[context] === "misuse" ? recallShapes : recallLegalShapes;
       expect(side("PRIMITIVE_IN_FORBIDDEN_SCOPE", context).some((shape) => shape.variant === "effect")).toBe(false);
@@ -175,6 +185,35 @@ describe("the generator-stepped programs (ADR 0961, F2)", () => {
   });
 });
 
+describe("the parameter-initializer programs (ADR 0961, PD)", () => {
+  it("put the site in the default of a function the host calls, in the form the name says", () => {
+    const value = lines(textOf("FLUSH_IN_ACTION", "pd-value-action").built.text);
+    expect(value.some((line) => /^const pdf1 = \(p0: unknown = flush\(\)\) => \{$/.test(line)), value.join("\n")).toBe(true);
+    expect(value).toContain("const a1 = action(function* () {");
+    expect(value).toContain("pdf1();");
+    const iifeForm = lines(textOf("FLUSH_IN_EFFECT_CALLBACK", "pd-iife-apply").built.text);
+    expect(iifeForm.some((line) => /^const pdf1 = \(p0: unknown = \(\(\) => \{$/.test(line)), iifeForm.join("\n")).toBe(true);
+    expect(iifeForm).toContain("createEffect(() => {");
+    const closure = lines(textOf("PRIMITIVE_IN_FORBIDDEN_SCOPE", "pd-closure-tracked").built.text);
+    expect(closure.some((line) => /^const pdf1 = \(p0: \(\) => void = \(\) => \{$/.test(line)), closure.join("\n")).toBe(true);
+    expect(closure).toContain("p0();");
+    expect(closure).toContain("createTrackedEffect(() => {");
+    const helper = lines(textOf("CLEANUP_IN_FORBIDDEN_SCOPE", "pd-helper-settled").built.text);
+    expect(helper).toContain("const pdg1 = () => {");
+    expect(helper).toContain("const pdf1 = (p0: unknown = pdg1()) => {");
+    expect(helper).toContain("onSettled(() => {");
+  });
+  it("pass the argument in one legal twin and leave the call to a handler in the other", () => {
+    const passed = lines(textOf("FLUSH_IN_ACTION", "pd-passed-action").built.text);
+    expect(passed).toContain("pdf1(1);");
+    const idle = lines(textOf("FLUSH_IN_EFFECT_CALLBACK", "pd-idle-apply").built.text);
+    expect(idle).toContain("pdf1();");
+    expect(at(idle, "createEffect(() => {")).toBeLessThan(at(idle, "pdf1();"));
+    // the call is in the handler only: the effect's apply is empty
+    expect(idle.filter((line) => line === "pdf1();")).toHaveLength(1);
+  });
+});
+
 describe("the twice-entered programs", () => {
   const entered = (code, context) => {
     const { program, built } = textOf(code, context);
@@ -239,7 +278,7 @@ describe("the entry cells on the fast runtime", () => {
         const shape = (kind === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none");
         return { code, context, kind, variant: shape.variant ?? null };
       }));
-      expect(plans).toHaveLength(8 + 9 + 36 + 36 + 9 + 9 + 17);
+      expect(plans).toHaveLength(8 + 9 + 6 + 36 + 12 + 36 + 12 + 10 + 9 + 6 + 9 + 6 + 17);
       const entries = plans.map((plan, index) => {
         const program = generateProgram(6000 + index, { profile: "misuse", misusePlan: { code: plan.code, context: plan.context, variant: plan.variant, binding: "direct", layer: "none", legal: plan.kind === "legal" } });
         return { plan, built: buildCase(program, { id: `entry-${index}` }) };
@@ -257,7 +296,7 @@ describe("the entry cells on the fast runtime", () => {
         }
         const reported = runtimeEvents(runtime ?? {}).map((event) => event.code).filter((code) => policyOf(code)?.disposition?.startsWith("defect"));
         if (reported.length) wrong.push(`${label}: reported ${reported.join(",")}`);
-        if (!(hitCount(runtime?.hits ?? null, site.hit) > 0)) wrong.push(`${label}: the site did not run`);
+        if (!PD_NEVER_RUN.includes(plan.context) && !(hitCount(runtime?.hits ?? null, site.hit) > 0)) wrong.push(`${label}: the site did not run`);
       }
       expect(wrong).toEqual([]);
     } finally { rmSync(root, { recursive: true, force: true }); }

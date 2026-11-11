@@ -744,8 +744,10 @@ impl StaticApiContext<'_> {
                     .lookup
                     .file_by_path(file.path.as_str())
                     .is_none_or(|file| !self.lookup.flush_runs_off_any_delivery(file, call));
+                // ADR 0961 (PD): the function that owns the call, its parameter list included: a flush written in a default
+                // is in no body, and its function is where a caller runs it.
                 if delivered
-                    && crate::owners::containing_ast_function(&file.ast, call.callee).is_some_and(
+                    && crate::owners::owning_function(&file.ast, call.callee).is_some_and(
                         |function| !self.lookup.function_may_be_component(file, function),
                     )
                 {
@@ -956,7 +958,10 @@ impl StaticApiContext<'_> {
                 })
                 && self.lookup.project_defers_callbacks()
                 && let Some(blocker) = unplaced_blocker(file, call.span, self.lookup, true)
-                && !self.runs_off_every_apply(file, call.span, &allowed)
+                // ADR 0961 (PD): the role of a site says where its code runs, and reads no parameter initializer's
+                // placement, so it cannot clear a site written in one.
+                && (blocker == crate::blockers::PARAMETER_INITIALIZER_UNPLACED
+                    || !self.runs_off_every_apply(file, call.span, &allowed))
             {
                 result.violations.push(StaticViolation {
                     id: "SC6002".into(),
@@ -2227,7 +2232,7 @@ fn unplaced_step<'s, 'f: 's>(
     // (as ADR 0639's net assumes).
     if ownerless
         && (owner_set_around(file, site, lookup)
-            || crate::owners::containing_ast_function(&file.ast, site)
+            || crate::owners::owning_function(&file.ast, site)
                 .is_some_and(|function| lookup.function_may_be_component(file, function)))
     {
         return false;
@@ -2377,12 +2382,20 @@ fn runs_unplaced_once(
     // runs (other than `untrack`'s) has the owner that primitive sets, and a
     // body that may be a component's runs under the owner its render sets
     // (as ADR 0639's net assumes).
+    // ADR 0961 (PD): the function that owns the site, its parameter list included: a default is not run by the function that merely
+    // declares the one it is written in.
     if ownerless
         && (owner_set_around(file, site, lookup)
-            || crate::owners::containing_ast_function(&file.ast, site)
+            || crate::owners::owning_function(&file.ast, site)
                 .is_some_and(|function| lookup.function_may_be_component(file, function)))
     {
         return None;
+    }
+    // ADR 0961 (PD): a site written in a parameter initializer, or in a layer that runs in place in one, runs when a call
+    // of its function omits the argument, which no call edge below places: an obligation while that function is called or
+    // referenced anywhere.
+    if parameter_initializer_on_the_way(file, site, lookup) {
+        return Some(crate::blockers::PARAMETER_INITIALIZER_UNPLACED);
     }
     if crate::execution_role::unplaced_run(file, site, lookup) {
         return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
@@ -2483,9 +2496,63 @@ fn foreign_quiet_primitive(file: &FileFacts, at: Span, lookup: &SemanticLookup<'
 fn unplaced_clause(blocker: &str) -> &'static str {
     if blocker == crate::blockers::FUNCTION_RUN_UNPLACED {
         "in a function that runs where no call edge places it"
+    } else if blocker == crate::blockers::PARAMETER_INITIALIZER_UNPLACED {
+        "in a parameter initializer, which runs wherever a call of its function omits the argument"
     } else {
         "in a function whose callers the walk stopped asking at its depth limit"
     }
+}
+
+/// ADR 0961 (PD): whether `site` is written in a parameter initializer (a default value, a destructuring default, an IIFE, a
+/// closure or a helper call in one) of a function that is called or referenced anywhere in the program. The initializer runs
+/// when a call of the function omits the argument, so the site may run wherever the function's calls do, and no net reads which
+/// calls omit it: an obligation, never a proof (a call that passes the argument runs nothing of it, and nothing here knows).
+/// A function written as an action's step body is no such function: the action evaluates its parameters when it creates the
+/// generator, before the first step (ADR 0454).
+fn parameter_initializer_run(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -> bool {
+    crate::execution_role::functions_around(file, site)
+        .into_iter()
+        .filter(|function| crate::execution_role::parameter_slot(function, site).is_some())
+        .any(|function| {
+            !is_action_step_argument(file, function, lookup)
+                && function_referenced(file, function, lookup)
+        })
+}
+
+/// [`parameter_initializer_run`] at `site` or at the call of a layer that runs in place on the way up from it (a helper
+/// called once, written in a default: the climb crosses it without saying where it was written).
+fn parameter_initializer_on_the_way(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    parameter_initializer_run(file, site, lookup)
+        || crate::execution_role::in_place_layer_calls(file, site, lookup)
+            .into_iter()
+            .any(|call| parameter_initializer_run(file, call, lookup))
+}
+
+/// Whether `function` is called or referenced anywhere in the program: a member (reached by any access) or a literal written
+/// where it is used always is; a function with a binding is when a call, a hand-off, another file or an export names it.
+fn function_referenced(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if function.method_name.is_some() {
+        return true;
+    }
+    let Some(references) =
+        crate::local_access::function_reference_hand_offs(file, function, lookup)
+    else {
+        return true;
+    };
+    !references.is_empty()
+        || !lookup
+            .function_call_sites(file.path.as_str(), function.span)
+            .is_empty()
+        || !crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
+        || crate::execution_role::module_exports(file, function, lookup)
 }
 
 /// ADR 0710: whether the functions directly around `site` are callbacks of

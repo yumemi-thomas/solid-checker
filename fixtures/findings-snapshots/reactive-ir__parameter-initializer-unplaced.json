@@ -1,0 +1,247 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 832,
+      "end": 837,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 832,
+      "end": 837,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 974,
+      "end": 979,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 974,
+      "end": 979,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1116,
+      "end": 1121,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1116,
+      "end": 1121,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1285,
+      "end": 1290,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1285,
+      "end": 1290,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1421,
+      "end": 1426,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1421,
+      "end": 1426,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1607,
+      "end": 1612,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1607,
+      "end": 1612,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1810,
+      "end": 1815,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1810,
+      "end": 1815,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2007,
+      "end": 2012,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2007,
+      "end": 2012,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2315,
+      "end": 2320,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2315,
+      "end": 2320,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2921,
+      "end": 2926,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2921,
+      "end": 2926,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2978,
+      "end": 2988,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-as-parameter-default",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2978,
+      "end": 2997,
+      "fixes": 0
+    }
+  ]
+}

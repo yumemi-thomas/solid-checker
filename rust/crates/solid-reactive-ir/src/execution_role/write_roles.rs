@@ -4798,6 +4798,18 @@ pub(crate) fn climb_in_place_layers_within(
     climb_in_place_layers_recording(file, span, lookup, false, within, &mut Vec::new())
 }
 
+/// The call of each layer [`climb_in_place_layers`] crosses from `span`, innermost first (ADR 0961, PD: a call among them may be
+/// written in a parameter list, which the climb's `in_list` says and does not locate).
+pub(crate) fn in_place_layer_calls(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let mut passed = Vec::new();
+    climb_in_place_layers_recording(file, span, lookup, false, None, &mut passed);
+    passed
+}
+
 /// [`climb_in_place_layers_within`], appending to `passed` the call of each
 /// layer crossed, innermost first.
 fn climb_in_place_layers_recording(

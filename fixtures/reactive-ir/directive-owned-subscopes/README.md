@@ -8,3 +8,5 @@ execution remains uncertifiable. `runWithOwner` may receive null. Explicit roots
 are lifetime obligations (ADR 0355): they may be empty or disposed. RootLifetime
 pins namespace, factory and shadowed cases. Signatures copy signals rc.13
 `dist/types`.
+
+ADR 0961 (PD): the positive default parameter (the ref callback's `memo = createMemo(…)`, line 51) also carries an SC6002 uncertifiable row (`parameter-initializer-unplaced`): a default runs when a call omits the argument, so it may run on an effect's apply too.

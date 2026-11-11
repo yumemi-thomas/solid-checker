@@ -1359,3 +1359,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/package-action-step-plain/node_modules/**
 !fixtures/reactive-ir/leaf-visited-entry-namespace/node_modules/
 !fixtures/reactive-ir/leaf-visited-entry-namespace/node_modules/**
+!fixtures/reactive-ir/parameter-initializer-unplaced/node_modules/
+!fixtures/reactive-ir/parameter-initializer-unplaced/node_modules/**

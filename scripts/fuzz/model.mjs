@@ -536,11 +536,13 @@ export function validate(program, { maxNodes = 400 } = {}) {
       for (const [name, type] of vars) inner.vars.set(name, type);
       f.params.forEach((p, index) => {
         const type = typeOf(p.default, inner);
-        if (type && (type.t === "fn" || type.t === "acc")) fail(`${where}: a function-typed default is not generated`);
+        // A parameter a shape annotates itself (`type` on a parameter with a default: entry-shapes.mjs `pd-closure-*`) may hold a closure; a drawn one never does.
+        const annotated = p.type !== undefined && !p.bare;
+        if (type && (type.t === "fn" || type.t === "acc") && !annotated) fail(`${where}: a function-typed default is not generated`);
         // The parameter is in scope for later defaults and the body (`p0`, `p1`, ...). Its type is
         // its printed annotation (exprTsType), not the default's inferred literal type.
         const annotation = paramTsType(p);
-        inner.vars.set(`p${index}`, annotation === "number" ? T.num : annotation === "void" ? T.void : T.unknown);
+        inner.vars.set(`p${index}`, annotation === "number" ? T.num : annotation === "void" ? T.void : annotated && annotation === "() => void" ? T.fn(T.void) : T.unknown);
       });
       const r = checkBlock(f.body, inner, f.async ? "free" : returns);
       if (f.async && returns === "num" && r.t !== "num") fail(`${where}: an effect compute must return a number`);
@@ -692,7 +694,8 @@ export const isValid = (program) => validate(program).length === 0;
 
 /** A parameter's printed type annotation. A destructured `void` field is `unknown` (TypeScript rejects a void default there). */
 export function paramTsType(p) {
-  if (p.bare) return p.type;
+  // `type` on a parameter that has a default overrides the inferred annotation (entry-shapes.mjs `pd-*`: `p0: unknown = flush()`, so a call can pass an argument).
+  if (p.bare || p.type !== undefined) return p.type;
   const type = exprTsType(p.default);
   return p.destructured && type === "void" ? "unknown" : type;
 }

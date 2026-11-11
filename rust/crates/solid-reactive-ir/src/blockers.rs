@@ -66,6 +66,10 @@ pub(crate) const ASYNC_SLOT_UNMODELLED: &str = "async-slot-unmodelled";
 /// ADR 0961: the call is written in a generator that an effect's apply (or an action's step) may step, and the walk follows
 /// the stepping only to the call that creates the iterator: whether the apply runs this body, and how far, is not proven.
 pub(crate) const GENERATOR_STEP_UNPLACED: &str = "generator-step-unplaced";
+/// ADR 0961 (PD): the site is written in a parameter initializer (a default value, a destructuring default, an IIFE, a closure or a
+/// helper call in one) of a function that is called or referenced in the program. The initializer runs when a call of the function
+/// omits the argument, so it may run wherever that function's calls do, and no walk here reads which calls omit it.
+pub(crate) const PARAMETER_INITIALIZER_UNPLACED: &str = "parameter-initializer-unplaced";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 

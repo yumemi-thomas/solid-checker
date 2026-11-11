@@ -32,9 +32,20 @@
 //              action  an action's step body, a generator literal written as the action's argument (FLUSH_IN_ACTION)
 //     ge-idle-<host>     legal twin: the host's callback calls `g();` and discards the iterator (none of the body runs there) and a button's handler steps it with a `for…of`, where the site is legal
 //
+//   a site in a PARAMETER INITIALIZER of a function the host's callback calls (ADR 0961, PD: Chrome fires FLUSH_IN_ACTION at the flush of `function h(x = flush())` an
+//   action's step calls, and of a closure or a helper the default reaches; 588affbf3 certified it clean: every net asked about code in a function BODY)
+//     pd-<form>-<host>   the site is in the default of `h`'s parameter, and the host's callback calls `h()`
+//       form   value    the site call is the default itself, `h(p0: unknown = flush())` (an IIFE where the site is more than one expression)
+//              iife     the default is an IIFE holding the site, `h(p0: unknown = (() => { flush(); return 1; })())`
+//              closure  the default is a closure holding the site, `h(p0: () => void = () => { flush(); }) { p0(); }`
+//              helper   the default calls a function that holds the site, `h(p0: unknown = g())`
+//       host   action  an action's step body (FLUSH_IN_ACTION)    apply  an effect's apply (the effect phase's codes)    tracked  `createTrackedEffect`    settled  `onSettled` (the leaf codes)
+//     pd-passed-<host>   legal twin: the host calls `h(1)`: the argument is passed, so the default never runs
+//     pd-idle-<host>     legal twin: the host calls nothing, and a button's handler calls `h()`, where the site is legal
+//
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is how the site is entered, not the spelling of the site. The census does not cross them
 // with other codes (matrix.mjs CENSUS_SKIPS): they are the cells of the codes that name them, as the `pl-*` ones.
-import { bareParam, button, call, child, ctl, decl, domExpr, expr, fn, num, prim, ref, ret } from "./model.mjs";
+import { bareParam, button, call, child, ctl, decl, domExpr, expr, fn, iife, num, param, prim, ref, ret } from "./model.mjs";
 
 /** The helper `ae-helper` hands the generator to (a project's `run`): it makes the action. */
 const RUN_ACTION = "(g: () => Generator<unknown, void, any>) => action(g)";
@@ -79,19 +90,43 @@ const GE_ACTION_NAMES = [...GE_STEPS.map((step) => `ge-${step}-action`), "ge-idl
 const GE_PATTERN = new RegExp(`^ge-(${[...GE_STEPS, "idle"].join("|")})-(apply|memo|effect|action)$`);
 export const GE_CONTEXTS = Object.fromEntries([...GE_APPLY_NAMES, ...GE_COMPUTE_NAMES, ...GE_ACTION_NAMES].map((name) => [name, name.startsWith("ge-idle-") ? "legal" : "misuse"]));
 
+/** ADR 0961 (PD): the parameter-initializer family. A host's callback calls a function whose parameter's default holds the site. */
+export const PD_FORMS = ["value", "iife", "closure", "helper"];
+export const PD_HOST_CODES = {
+  action: ["FLUSH_IN_ACTION"],
+  apply: ["FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"],
+  tracked: ["FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "CLEANUP_IN_FORBIDDEN_SCOPE"],
+  settled: ["FLUSH_IN_TRACKED_QUEUE_CALLBACK", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "CLEANUP_IN_FORBIDDEN_SCOPE"],
+};
+export const PD_HOSTS = Object.keys(PD_HOST_CODES);
+/**
+ * The contexts of one host: a misuse form each, then the two legal twins. `onCleanup` has no legal handler (NO_OWNER_CLEANUP: a cleanup with no owner is a
+ * defect of its own), so CLEANUP_IN_FORBIDDEN_SCOPE has the twin that passes the argument only.
+ */
+export const pdNames = (host, code = null) => [...PD_FORMS.map((form) => `pd-${form}-${host}`), `pd-passed-${host}`, ...(code === "CLEANUP_IN_FORBIDDEN_SCOPE" ? [] : [`pd-idle-${host}`])];
+const PD_PATTERN = new RegExp(`^pd-(${[...PD_FORMS, "passed", "idle"].join("|")})-(${PD_HOSTS.join("|")})$`);
+export const PD_CONTEXTS = Object.fromEntries(PD_HOSTS.flatMap((host) => pdNames(host)).map((name) => [name, /^pd-(passed|idle)-/.test(name) ? "legal" : "misuse"]));
+/** The twin that passes the argument never runs its site by construction: a legal cell whose site does not run, as the dead-site contexts (misuse.mjs DEAD_CONTEXTS). */
+export const PD_NEVER_RUN = PD_HOSTS.map((host) => `pd-passed-${host}`);
+
 /** `{ [context]: "misuse" | "legal" }`: the side a context is on for the codes it is placed for. */
-export const ENTRY_CONTEXTS = { ...ENTRY_ACTION_CONTEXTS, ...Object.fromEntries(TW_NAMES.map((name) => [name, twParts(name).order === "both" ? "legal" : "misuse"])), ...GE_CONTEXTS };
+export const ENTRY_CONTEXTS = { ...ENTRY_ACTION_CONTEXTS, ...Object.fromEntries(TW_NAMES.map((name) => [name, twParts(name).order === "both" ? "legal" : "misuse"])), ...GE_CONTEXTS, ...PD_CONTEXTS };
 export const ENTRY_CONTEXT_NAMES = Object.keys(ENTRY_CONTEXTS);
 
-/** The contexts each code is placed for: the action family on FLUSH_IN_ACTION, a code's twice-entered shapes in its own tolerant layer. */
-export const ENTRY_CODES = {
-  FLUSH_IN_ACTION: [...Object.keys(ENTRY_ACTION_CONTEXTS), ...GE_ACTION_NAMES],
-  ...Object.fromEntries(Object.entries(TW_LAYERS).map(([code, layer]) => [code, TW_NAMES.filter((name) => twParts(name).layer === layer)])),
-  ...Object.fromEntries(GE_APPLY_CODES.map((code) => [code, GE_APPLY_NAMES])),
-  ...Object.fromEntries(GE_COMPUTE_CODES.map((code) => [code, GE_COMPUTE_NAMES])),
-};
+/** The contexts each code is placed for: the action family on FLUSH_IN_ACTION, a code's twice-entered shapes in its own tolerant layer, the generator-stepped and the parameter-initializer families. */
+export const ENTRY_CODES = (() => {
+  const placed = {};
+  const place = (code, names) => { (placed[code] ??= []).push(...names); };
+  place("FLUSH_IN_ACTION", Object.keys(ENTRY_ACTION_CONTEXTS));
+  place("FLUSH_IN_ACTION", GE_ACTION_NAMES);
+  for (const [code, layer] of Object.entries(TW_LAYERS)) place(code, TW_NAMES.filter((name) => twParts(name).layer === layer));
+  for (const code of GE_APPLY_CODES) place(code, GE_APPLY_NAMES);
+  for (const code of GE_COMPUTE_CODES) place(code, GE_COMPUTE_NAMES);
+  for (const [host, codes] of Object.entries(PD_HOST_CODES)) for (const code of codes) place(code, pdNames(host, code));
+  return placed;
+})();
 
-/** The variants a code's cells of these contexts do not take: under `runWithOwner(null, …)` an effect has no owner and reports NO_OWNER_EFFECT, a code of its own (PL_MEASURED `without`). */
+/** The variants a code's cells of the twice-entered contexts do not take: under `runWithOwner(null, …)` an effect has no owner and reports NO_OWNER_EFFECT, a code of its own (PL_MEASURED `without`). */
 export const ENTRY_NOT_VARIANTS = { PRIMITIVE_IN_FORBIDDEN_SCOPE: ["effect"] };
 
 const generator = (name, stmts) => ({ ...ctl("gstep", stmts), name, mode: "first" });
@@ -189,9 +224,45 @@ function steppedContext(context, stmts, kit) {
   }
 }
 
+/** ADR 0961 (PD): the site in a parameter initializer of `h`, which the host's callback calls (`pd-<form>-<host>`), calls with an argument (`pd-passed-<host>`) or leaves to a handler (`pd-idle-<host>`). */
+function parameterContext(context, stmts, kit) {
+  const [, form, host] = PD_PATTERN.exec(context);
+  // Names of their own: the helper layers write `h1` and `f1`, and a `const h1 = (p0 = h1(…))` would call itself.
+  const h = kit.name("pdf");
+  // A parameter with a default, annotated `unknown` (or the closure's type) so that a call can pass an argument whatever the default's type is.
+  const withDefault = (def, type) => ({ ...param(def), type });
+  const single = stmts.length === 1 && stmts[0].k === "expr" ? stmts[0].e : null;
+  const declared = [];
+  let helper;
+  switch (form) {
+    case "value": helper = fn([ret(ref("p0"))], { params: [withDefault(single ?? iife(fn([...stmts, ret(num(1))])), "unknown")] }); break;
+    case "iife": helper = fn([ret(ref("p0"))], { params: [withDefault(iife(fn([...stmts, ret(num(1))])), "unknown")] }); break;
+    case "closure": helper = fn([expr(call(ref("p0")))], { params: [withDefault(fn(stmts), "() => void")] }); break;
+    case "helper": {
+      const g = kit.name("pdg");
+      declared.push(decl(g, fn(stmts)));
+      helper = fn([ret(ref("p0"))], { params: [withDefault(call(ref(g)), "unknown")] });
+      break;
+    }
+    // The twins: the default holds the site as `value` writes it.
+    default: helper = fn([ret(ref("p0"))], { params: [withDefault(single ?? iife(fn([...stmts, ret(num(1))])), "unknown")] });
+  }
+  declared.push(decl(h, helper));
+  // What the host's callback does: calls `h()`, calls `h(1)` (the default is not evaluated), or nothing (a handler calls it).
+  const idle = form === "idle";
+  const entering = idle ? [] : [expr(call(ref(h), form === "passed" ? [num(1)] : []))];
+  const handler = idle ? [button(kit.name("b"), [expr(call(ref(h)))])] : [];
+  switch (host) {
+    case "action": { const a = kit.name("a"); return { body: [...declared, decl(a, prim("action", fn(entering)))], view: [button(kit.name("b"), [expr(domExpr(`${a}()`))]), ...handler] }; }
+    case "apply": return { body: [...declared, expr(prim("effect", fn([ret(num(1))]), { apply: fn(entering) }))], view: handler };
+    default: return { body: [...declared, expr(prim(host, fn(entering)))], view: handler };
+  }
+}
+
 /** The placement of `stmts` for an entry context (`{ body, view }`), or undefined for any other. */
 export function entryContext(context, stmts, kit) {
   if (!ENTRY_CONTEXTS[context]) return undefined;
+  if (PD_PATTERN.test(context)) return parameterContext(context, stmts, kit);
   if (GE_PATTERN.test(context)) return steppedContext(context, stmts, kit);
   return twParts(context) ? twiceContext(context, stmts, kit) : actionContext(context, stmts, kit);
 }
@@ -206,5 +277,5 @@ export function entryPlacement() {
 
 /** `{ [code]: { [context]: variants } }` for SPEC `recallVariantsNotIn`. */
 export function entryNotVariants() {
-  return Object.fromEntries(Object.entries(ENTRY_NOT_VARIANTS).map(([code, variants]) => [code, Object.fromEntries((ENTRY_CODES[code] ?? []).map((context) => [context, variants]))]));
+  return Object.fromEntries(Object.entries(ENTRY_NOT_VARIANTS).map(([code, variants]) => [code, Object.fromEntries((ENTRY_CODES[code] ?? []).filter((context) => twParts(context)).map((context) => [context, variants]))]));
 }
