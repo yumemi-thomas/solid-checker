@@ -394,8 +394,8 @@ name it was stored under runs on the continuation when the call stands behind th
 object's method iterates. The call resolves to no function the walk knows, so a source read in the stored function is untracked.
 The call is an uncertifiable row of this rule (`unresolved-invocation`; `function-run-unplaced` in a handed async function), never
 a violation: nothing here proves what was stored or that it reads a source. The callee is a parameter, a variable, or the result of
-a call that is no primitive; a `function` declaration, a `const` bound to a function literal, an accessor, a setter, an action and a
-primitive are not this. A method a member route runs holds the invocation
+a call that is no primitive; a `function` declaration, a `const` bound to a function literal, an accessor, a setter, an action, a typed
+candidate (ADR 0294, its own SC9012 row) and a primitive are not this. A method a member route runs holds the invocation
 inside it, so the row stands at that invocation, under the same region premise as members (a tracked async computation and a
 suspension). A parameter whose caller hands a function the walk follows stays a violation (ADR 0669), and the row at the parameter's
 call stands beside it. The row is coarse: it stands whatever the stored value is (a clock a caller injects, a testing library's

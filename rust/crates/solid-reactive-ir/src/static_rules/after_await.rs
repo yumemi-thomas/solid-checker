@@ -509,7 +509,7 @@ struct Speculated {
 /// an obligation at the call, never silence. Three facts decide it, all of the call's own syntax and bindings (a resolved-call fact is
 /// demanded for few calls, so its absence says nothing): the callee is an identifier declared as a parameter, or as a variable whose
 /// value is not a function the walk resolves; or it is the result of a call (`get(k)!()`, `f()()`) that is no primitive's accessor.
-/// A callee that is an accessor, a setter, an action, a primitive, a project function or a function literal is read elsewhere.
+/// A callee that is an accessor, a setter, an action, a typed candidate (ADR 0294), a primitive, a project function or a function literal is read elsewhere.
 fn unresolved_invocation(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact) -> bool {
     let lookup = ctx.semantic_lookup;
     let callee = file.ast.peel_ts_sugar_span(call.callee);
@@ -546,6 +546,9 @@ fn unresolved_invocation(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &Cal
             ctx.accessors.contains_key(symbol)
                 || ctx.setters.contains_key(symbol)
                 || ctx.actions.contains_key(symbol)
+                // ADR 0294: a typed candidate whose implementation is not visible (a parameter typed `Accessor<T>`) has its own row, SC9012
+                // `type-only-source`: its declared type says what it may be, which a stored function's is not.
+                || typed_unknown(ctx, symbol)
         })
 }
 
