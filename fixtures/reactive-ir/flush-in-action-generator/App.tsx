@@ -34,6 +34,62 @@ const viaQuiet = action(function* () {
   yield Promise.resolve();
 });
 
+// ADR 0961 (R1): a generator whose iterator an action's step keeps may be stepped anywhere: `Array.from`, `new Set`,
+// `.next()` on the call or on a stored iterator, a loop over a stored iterator. No walk follows the iterator, so the
+// flush is an uncertifiable row (SC2006), never silence. Chrome fires FLUSH_IN_ACTION at each one when the action starts.
+function* fromBody() {
+  flush();
+  yield 1;
+}
+const viaFrom = action(function* () {
+  void Array.from(fromBody());
+  yield Promise.resolve();
+});
+function* setBody() {
+  flush();
+  yield 1;
+}
+const viaSet = action(function* () {
+  void new Set(setBody());
+  yield Promise.resolve();
+});
+function* directBody() {
+  flush();
+  yield 1;
+}
+const viaDirect = action(function* () {
+  directBody().next();
+  yield Promise.resolve();
+});
+function* storedBody() {
+  flush();
+  yield 1;
+}
+const viaStored = action(function* () {
+  const steps = storedBody();
+  steps.next();
+  yield Promise.resolve();
+});
+function* loopBody() {
+  flush();
+  yield 1;
+}
+const viaLoop = action(function* () {
+  const steps = loopBody();
+  for (const _ of steps) void _;
+  yield Promise.resolve();
+});
+
+// Silent: a generator an action calls and discards runs none of its body, and nothing else steps it.
+function* discardedBody() {
+  flush();
+  yield 1;
+}
+const viaDiscard = action(function* () {
+  discardedBody();
+  yield Promise.resolve();
+});
+
 export function App() {
   return (
     <button
@@ -42,6 +98,12 @@ export function App() {
         void viaDelegate();
         void direct();
         void viaQuiet();
+        void viaFrom();
+        void viaSet();
+        void viaDirect();
+        void viaStored();
+        void viaLoop();
+        void viaDiscard();
       }}
     >
       go

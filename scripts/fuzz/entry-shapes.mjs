@@ -23,10 +23,13 @@
 //     tw-<layer>-<spelling>-both-<host>    legal twin: both entries tolerant, so Chrome reports nothing and no entry is forbidden
 //
 //   a generator STEPPED inside a host callback (ADR 0961, F2: Chrome fires FLUSH_IN_EFFECT_CALLBACK and PRIMITIVE_IN_EFFECT_CALLBACK at the site of a generator an
-//   effect's apply iterates; main 29b3f9312 certified it clean)
+//   effect's apply iterates; main 29b3f9312 certified it clean. R1: Chrome fires FLUSH_IN_ACTION at the site of a generator an action's step drains with
+//   `Array.from`, `.next()` or `new Set`; 588affbf3 certified it clean)
 //     ge-<step>-<host>   the site is the body of `g`, a generator the component declares, and the host's callback steps it
 //       step   forof   `for (const s of g()) void s`       spread  `void [...g()]`      next  `const it = g(); it.next()`      yield  `for (const s of o()) …` with `function* o() { yield* g(); }`
+//              from    `void Array.from(g())`              direct  `g().next()`          set   `void new Set(g())`            stored `const it = g(); for (const s of it) void s`
 //       host   apply   an effect's apply (the codes of the effect phase)    memo   a memo's compute     effect   an effect's compute (the write code)
+//              action  an action's step body, a generator literal written as the action's argument (FLUSH_IN_ACTION)
 //     ge-idle-<host>     legal twin: the host's callback calls `g();` and discards the iterator (none of the body runs there) and a button's handler steps it with a `for…of`, where the site is legal
 //
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is how the site is entered, not the spelling of the site. The census does not cross them
@@ -65,14 +68,16 @@ const TW_PATTERN = new RegExp(`^tw-(${LAYER_NAMES.join("|")})-(${TW_SPELLINGS.jo
 /** `{ layer, spelling, order, host, place }` of a `tw-*` context name (`place` "" for the entries in the host's own text), or null. */
 export const twParts = (context) => { const match = TW_PATTERN.exec(context); return match ? { layer: match[1], spelling: match[2], order: match[3], host: match[4], place: match[5] ?? "" } : null; };
 
-/** ADR 0961 (F2): the generator-stepped family. The effect phase's codes in an apply, the write code in a compute (a memo's or an effect's). */
-export const GE_STEPS = ["forof", "spread", "next", "yield"];
+/** ADR 0961 (F2, R1): the generator-stepped family. The effect phase's codes in an apply, the write code in a compute (a memo's or an effect's), FLUSH_IN_ACTION in an action's step. */
+export const GE_STEPS = ["forof", "spread", "next", "yield", "from", "direct", "set", "stored"];
 export const GE_APPLY_CODES = ["FLUSH_IN_EFFECT_CALLBACK", "PRIMITIVE_IN_EFFECT_CALLBACK"];
 export const GE_COMPUTE_CODES = ["REACTIVE_WRITE_IN_OWNED_SCOPE"];
+export const GE_ACTION_CODES = ["FLUSH_IN_ACTION"];
 const GE_APPLY_NAMES = [...GE_STEPS.map((step) => `ge-${step}-apply`), "ge-idle-apply"];
 const GE_COMPUTE_NAMES = [...["memo", "effect"].flatMap((host) => GE_STEPS.map((step) => `ge-${step}-${host}`)), "ge-idle-memo"];
-const GE_PATTERN = /^ge-(forof|spread|next|yield|idle)-(apply|memo|effect)$/;
-export const GE_CONTEXTS = Object.fromEntries([...GE_APPLY_NAMES, ...GE_COMPUTE_NAMES].map((name) => [name, name.startsWith("ge-idle-") ? "legal" : "misuse"]));
+const GE_ACTION_NAMES = [...GE_STEPS.map((step) => `ge-${step}-action`), "ge-idle-action"];
+const GE_PATTERN = new RegExp(`^ge-(${[...GE_STEPS, "idle"].join("|")})-(apply|memo|effect|action)$`);
+export const GE_CONTEXTS = Object.fromEntries([...GE_APPLY_NAMES, ...GE_COMPUTE_NAMES, ...GE_ACTION_NAMES].map((name) => [name, name.startsWith("ge-idle-") ? "legal" : "misuse"]));
 
 /** `{ [context]: "misuse" | "legal" }`: the side a context is on for the codes it is placed for. */
 export const ENTRY_CONTEXTS = { ...ENTRY_ACTION_CONTEXTS, ...Object.fromEntries(TW_NAMES.map((name) => [name, twParts(name).order === "both" ? "legal" : "misuse"])), ...GE_CONTEXTS };
@@ -80,7 +85,7 @@ export const ENTRY_CONTEXT_NAMES = Object.keys(ENTRY_CONTEXTS);
 
 /** The contexts each code is placed for: the action family on FLUSH_IN_ACTION, a code's twice-entered shapes in its own tolerant layer. */
 export const ENTRY_CODES = {
-  FLUSH_IN_ACTION: Object.keys(ENTRY_ACTION_CONTEXTS),
+  FLUSH_IN_ACTION: [...Object.keys(ENTRY_ACTION_CONTEXTS), ...GE_ACTION_NAMES],
   ...Object.fromEntries(Object.entries(TW_LAYERS).map(([code, layer]) => [code, TW_NAMES.filter((name) => twParts(name).layer === layer)])),
   ...Object.fromEntries(GE_APPLY_CODES.map((code) => [code, GE_APPLY_NAMES])),
   ...Object.fromEntries(GE_COMPUTE_CODES.map((code) => [code, GE_COMPUTE_NAMES])),
@@ -152,7 +157,7 @@ function twiceContext(context, stmts, kit) {
   return place === "in" ? { body: [expr(prim(host, fn([...declared, helper, run])))], view: [] } : { body: [...declared, helper, expr(prim(host, fn([run])))], view: [] };
 }
 
-/** ADR 0961 (F2): the site in a generator the host's callback steps (`ge-<step>-<host>`), or discards (`ge-idle-<host>`). */
+/** ADR 0961 (F2, R1): the site in a generator the host's callback steps (`ge-<step>-<host>`), or discards (`ge-idle-<host>`). */
 function steppedContext(context, stmts, kit) {
   const [, step, host] = GE_PATTERN.exec(context);
   const g = kit.name("g");
@@ -164,6 +169,10 @@ function steppedContext(context, stmts, kit) {
     case "spread": steps = [expr(domExpr(`void [...${g}()]`))]; break;
     case "next": { const it = kit.name("it"); steps = [decl(it, domExpr(`${g}()`)), expr(domExpr(`${it}.next()`))]; break; }
     case "yield": { const o = kit.name("o"); declared.push(expr(domExpr(`function* ${o}() { yield* ${g}(); }`))); steps = [expr(domExpr(`for (const ${s} of ${o}()) void ${s}`))]; break; }
+    case "from": steps = [expr(domExpr(`void Array.from(${g}())`))]; break;
+    case "direct": steps = [expr(domExpr(`${g}().next()`))]; break;
+    case "set": steps = [expr(domExpr(`void new Set(${g}())`))]; break;
+    case "stored": { const it = kit.name("it"); steps = [decl(it, domExpr(`${g}()`)), expr(domExpr(`for (const ${s} of ${it}) void ${s}`))]; break; }
     default: steps = [expr(domExpr(`${g}()`))];
   }
   // The legal twin steps the generator where the site is legal: a button's handler (the host only discards the iterator).
@@ -173,6 +182,7 @@ function steppedContext(context, stmts, kit) {
     idle = [button(kit.name("b"), [expr(domExpr(`for (const ${h} of ${g}()) void ${h}`))])];
   }
   switch (host) {
+    case "action": { const a = kit.name("a"); return { body: [...declared, decl(a, prim("action", fn(steps)))], view: [button(kit.name("b"), [expr(domExpr(`${a}()`))]), ...idle] }; }
     case "apply": return { body: [...declared, expr(prim("effect", fn([ret(num(1))]), { apply: fn(steps) }))], view: idle };
     case "effect": return { body: [...declared, expr(prim("effect", fn([...steps, ret(num(1))]), { apply: fn([]) }))], view: idle };
     default: { const m = kit.name("m"); return { body: [...declared, decl(m, prim("memo", fn([...steps, ret(num(1))])))], view: [child(kit.name("v"), call(ref(m))), ...idle] }; }

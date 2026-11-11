@@ -128,3 +128,58 @@ export function InHandler() {
     </button>
   );
 }
+
+// ADR 0961 (R1): an iterator drained by `Array.from`, `new Set`, `.next()` on the call or a loop over a stored iterator runs the
+// body where that code is: in the apply. Uncertifiable rows (the stepping is not followed), never silence.
+function* fromBody() {
+  flush();
+  yield 1;
+}
+function* setBody() {
+  flush();
+  yield 1;
+}
+function* directBody() {
+  flush();
+  yield 1;
+}
+function* loopBody() {
+  flush();
+  yield 1;
+}
+function* discardBody() {
+  flush();
+  yield 1;
+}
+export function FromDrained() {
+  createEffect(() => n(), () => {
+    void Array.from(fromBody());
+  });
+  return <div />;
+}
+export function SetDrained() {
+  createEffect(() => n(), () => {
+    void new Set(setBody());
+  });
+  return <div />;
+}
+export function DirectNext() {
+  createEffect(() => n(), () => {
+    directBody().next();
+  });
+  return <div />;
+}
+export function StoredLoop() {
+  createEffect(() => n(), () => {
+    const steps = loopBody();
+    for (const _ of steps) void _;
+  });
+  return <div />;
+}
+// Silent: a generator the apply calls and discards runs none of its body.
+export function Discards() {
+  createEffect(() => n(), () => {
+    discardBody();
+  });
+  return <div />;
+}

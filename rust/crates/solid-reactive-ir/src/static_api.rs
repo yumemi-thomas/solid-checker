@@ -1346,9 +1346,10 @@ fn in_generator_step(file: &FileFacts, site: Span, context: &StaticApiContext<'_
 }
 
 /// Whether the body of `function`, a generator, may run at all: it is handed on (a whole argument of a call, or a
-/// reference that is no plain call), or a call of it creates an iterator that is stepped, iterated or delegated to
-/// (`yield*`, `for…of`, `.next()`). A generator a statement calls and discards, or that nothing calls, runs none of
-/// its body.
+/// reference that is no plain call), or a call of it creates an iterator the program keeps (a call whose result a
+/// statement does not discard): the iterator may be stepped, iterated, spread, drained (`Array.from`, `new Set`),
+/// delegated to (`yield*`) or handed on, wherever it goes, and no walk here follows it (ADR 0961). A generator a
+/// statement calls and discards, or that nothing calls, runs none of its body.
 fn generator_may_be_stepped(
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -1377,7 +1378,7 @@ fn generator_may_be_stepped(
                 caller.ast.calls.iter().any(|call| {
                     !call.construct
                         && caller.ast.peel_ts_sugar_span(call.callee) == callee
-                        && caller.ast.iterated_operands.contains(&call.span)
+                        && !call.result_discarded
                 })
             })
 }

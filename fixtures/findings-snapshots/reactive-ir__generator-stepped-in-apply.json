@@ -65,6 +65,61 @@
       "start": 1390,
       "end": 1395,
       "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "generator-step-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 3089,
+      "end": 3094,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "generator-step-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 3135,
+      "end": 3140,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "generator-step-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 3184,
+      "end": 3189,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "generator-step-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 3231,
+      "end": 3236,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/generator-stepped-in-apply/App.tsx",
+      "start": 3617,
+      "end": 3634,
+      "fixes": 0
     }
   ]
 }
