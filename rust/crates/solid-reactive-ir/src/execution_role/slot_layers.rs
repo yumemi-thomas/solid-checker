@@ -246,7 +246,8 @@ pub(crate) struct SlotClimb {
 /// callbacks of primitives, up to the call that runs the outermost of them, which is where `at` ends. The flags
 /// of every segment are merged, so a caller reads one answer.
 ///
-/// `crosses` is the walk's policy and is asked once per slot, innermost first. It matches [`SlotRun`] with no
+/// `crosses` is the walk's policy and is asked once per slot, innermost first, with whether the slot's callback is `async` (what
+/// an async callback throws is its promise's rejection, which a primitive that catches a plain throw does not catch). It matches [`SlotRun`] with no
 /// wildcard and records what it needs of each slot it accepts (the owner, the observer, a thrown error), which
 /// this does not know. A slot that is not accepted ends the climb at the call inside it. A callback with a
 /// parameter, an `async` or generator callback of a slot that runs it in place is crossed and marked `unmodelled` (ADR
@@ -257,7 +258,7 @@ pub(crate) fn climb_through_slots(
     file: &FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
-    mut crosses: impl FnMut(&SlotLayer<'_>) -> bool,
+    mut crosses: impl FnMut(&SlotLayer<'_>, bool) -> bool,
 ) -> Option<SlotClimb> {
     let mut merged = InPlaceClimb {
         exhausted: false,
@@ -314,7 +315,7 @@ pub(crate) fn climb_through_slots(
             stop = ClimbStop::JsxPlaced;
             break;
         }
-        if !crosses(&layer) {
+        if !crosses(&layer, function.r#async) {
             stop = match layer.run {
                 SlotRun::InPlace(_) => ClimbStop::Declined,
                 SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => {

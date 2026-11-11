@@ -54,6 +54,20 @@ const rootDispose = action(function* () {
   });
   yield Promise.resolve();
 });
+// `isPending(async …)`: the callback's synchronous part runs in place, but its throw is the async function's rejection, which
+// `isPending` does not catch (ADR 0960): an obligation. The plain callback's throw is caught: no row.
+const asyncIsPending = action(function* () {
+  void isPending(async () => {
+    flush();
+  });
+  yield Promise.resolve();
+});
+const syncIsPending = action(function* () {
+  void isPending(() => {
+    flush();
+  });
+  yield Promise.resolve();
+});
 // Not in an action: the flush is no SC2006 site.
 export function Handler() {
   return (
@@ -70,6 +84,8 @@ export function Handler() {
         void namespaceUntrack();
         void ownerNullAsync();
         void rootDispose();
+        void asyncIsPending();
+        void syncIsPending();
         void isPending(() => 1);
       }}
     >

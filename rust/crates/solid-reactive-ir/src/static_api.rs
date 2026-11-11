@@ -2616,18 +2616,23 @@ fn action_step_body_at(
     // (`flush(fn)`) never runs the callback: neither is crossed.
     // ADR 0959: the climb crossed a callback with a parameter or an async one: the step it reaches is an obligation.
     let mut unmodelled = false;
-    let at = match crate::execution_role::climb_through_slots(file, site, context.lookup, |slot| {
-        match slot.run {
+    let at = match crate::execution_role::climb_through_slots(
+        file,
+        site,
+        context.lookup,
+        |slot, async_callback| match slot.run {
             SlotRun::InPlace(run) => match run.throws {
                 SlotThrows::Escapes => !context
                     .lookup
                     .dialect
                     .throws_inside_action_step(slot.primitive),
-                SlotThrows::Swallows => false,
+                // An async callback's synchronous part runs in place, but what it throws is its promise's rejection, which
+                // the primitive does not catch (ADR 0960): crossed, as an obligation (the callback is unmodelled).
+                SlotThrows::Swallows => async_callback,
             },
             SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => false,
-        }
-    }) {
+        },
+    ) {
         Some(SlotClimb { climb, stop }) => {
             // A site in a parameter list, or one after an await in its layer, is not claimed.
             if climb.in_list || climb.suspended.is_some() {
