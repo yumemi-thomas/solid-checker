@@ -457,7 +457,7 @@ fn merged_global_fetch_preserves_opaque_and_getter_obligations() {
         let end = source[start + 1..]
             .find("export function ")
             .map_or(source.len(), |offset| start + 1 + offset);
-        let rows = findings
+        let in_case = findings
             .iter()
             .filter(|row| {
                 row["primaryLocation"]["path"]
@@ -469,6 +469,17 @@ fn merged_global_fetch_preserves_opaque_and_getter_obligations() {
                     && matches!(row["id"].as_str(), Some("SC3001" | "SC9012"))
             })
             .collect::<Vec<_>>();
+        // ADR 0963: the SC3001 net's row (`function-run-unplaced`) for code a member route runs stands beside the walk's rows, so it is
+        // asserted apart: one in `FetchWithGetter` (the getter's `onCleanup`, inside the opaque `fetch(...)` call), none elsewhere.
+        let (net, rows): (Vec<_>, Vec<_>) = in_case.into_iter().partition(|row| {
+            row["id"] == "SC3001" && row["blockedBy"]["kind"] == "function-run-unplaced"
+        });
+        if name == "FetchWithGetter" {
+            assert_eq!(net.len(), 1, "{name}: {net:#?}");
+            assert_eq!(net[0]["kind"], "uncertifiable", "{name}");
+        } else {
+            assert!(net.is_empty(), "{name}: {net:#?}");
+        }
         if let Some((code, kind)) = expected {
             assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
             assert_eq!(rows[0]["id"], code, "{name}");
@@ -1830,7 +1841,9 @@ fn solid2_precision_corrections_are_end_to_end() {
     // computation below it; the shadowed project `filter` method, whose exact
     // body calls its callback synchronously (ADR 0485), and an obligation for
     // each of the unresolved and wrapper-built callbacks (ADR 0565: handed where
-    // nothing follows them).
+    // nothing follows them), and the call of the parameter `callback` in the
+    // shadowed project `filter`, an unresolved invocation after the await
+    // (ADR 0964), uncertifiable beside the violation proved at the handed arrow.
     // The cleanup-return *value* rules are gone (every illegal return is a
     // TypeScript error against the real `EffectFunction` signature), so the
     // contextual, explicit, parenthesized, `as`-cast, member, and returned-call
@@ -1849,7 +1862,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
-        ("reactive-read-after-await", 6),
+        ("reactive-read-after-await", 7),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and
