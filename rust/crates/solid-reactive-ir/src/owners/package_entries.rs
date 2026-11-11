@@ -457,7 +457,7 @@ impl<'a, 'f> WalkCtx<'a, 'f> {
                     continue;
                 };
                 let span = Span::new(start, end);
-                if reference_is_not_an_entry(self.lookup, file, span, provider_free) {
+                if reference_is_not_an_entry(self.lookup, file, span, provider_free, true) {
                     continue;
                 }
                 if self
@@ -777,7 +777,7 @@ pub(crate) fn package_entry_table(
             let Some(carried) = carriers.get(declaration) else {
                 continue;
             };
-            if reference_is_not_an_entry(lookup, file, *at, &view.provider_free)
+            if reference_is_not_an_entry(lookup, file, *at, &view.provider_free, false)
                 || walk
                     .node_at(path, *at)
                     .is_some_and(|node| !walk.may_run(node))
@@ -1302,6 +1302,7 @@ fn reference_is_not_an_entry(
     file: &solid_facts::FileFacts,
     span: Span,
     provider_free: &HashMap<Location, ContextVerdict>,
+    exact_decides: bool,
 ) -> bool {
     let ast = &file.ast;
     if ast.imports.iter().any(|import| import.span.contains(span))
@@ -1329,24 +1330,30 @@ fn reference_is_not_an_entry(
     }) {
         return true;
     }
-    // The tag of an element that resolves exactly: sites 1 decides.
-    if ast.jsx_elements.iter().any(|element| {
-        (element.name.span.contains(span) || element.closing_name.is_some_and(|c| c.contains(span)))
-            && (lookup
-                .function_called_at(file.path.as_str(), element.name.span)
-                .is_some()
-                || lookup
-                    .alias_rendered_tag_function(file, element.name.span)
-                    .is_some())
-    }) {
+    // The tag of an element that resolves exactly: sites 1 decides. A use of a carrier (`const Lazy = dynamic(() => Panel)`)
+    // may resolve exactly through the primitive's wrapper too, and stands wherever it is used (`exact_decides` false).
+    if exact_decides
+        && ast.jsx_elements.iter().any(|element| {
+            (element.name.span.contains(span)
+                || element.closing_name.is_some_and(|c| c.contains(span)))
+                && (lookup
+                    .function_called_at(file.path.as_str(), element.name.span)
+                    .is_some()
+                    || lookup
+                        .alias_rendered_tag_function(file, element.name.span)
+                        .is_some())
+        })
+    {
         return true;
     }
     // The callee of a call that resolves exactly: sites 2 and the call walk.
-    if ast.calls.iter().any(|call| {
-        ast.peel_ts_sugar_span(call.callee).contains(span)
-            && crate::execution_role::project_callee_at_parameter(file, call, 0, lookup)
-                .is_some_and(|(_, _, exact)| exact)
-    }) {
+    if exact_decides
+        && ast.calls.iter().any(|call| {
+            ast.peel_ts_sugar_span(call.callee).contains(span)
+                && crate::execution_role::project_callee_at_parameter(file, call, 0, lookup)
+                    .is_some_and(|(_, _, exact)| exact)
+        })
+    {
         return true;
     }
     // A context binding: a read or a provider names it, and neither runs package code.
