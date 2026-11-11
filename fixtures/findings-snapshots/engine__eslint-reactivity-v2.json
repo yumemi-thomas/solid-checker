@@ -358,11 +358,11 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "unresolved-invocation",
-      "severity": "error",
+      "blocker": "type-only-source",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/conditional-await-accessor.tsx",
       "start": 209,
       "end": 213,

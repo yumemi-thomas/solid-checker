@@ -29,7 +29,7 @@
   "SC1002 parameter-initializer-unplaced": 8,
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 82,
-  "SC1002 unresolved-invocation": 30,
+  "SC1002 unresolved-invocation": 28,
   "SC1003 destructure-root-unproven": 29,
   "SC1003 package-finding-at-entry": 14,
   "SC1003 props-callers-unenumerated": 16,
@@ -234,7 +234,7 @@
   "SC9012 standard-member-impostor": 336,
   "SC9012 store-key-undecided": 12,
   "SC9012 tuple-iteration-written": 1379,
-  "SC9012 type-only-source": 85,
+  "SC9012 type-only-source": 86,
   "SC9012 value-as-parameter-default": 9,
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 3,
@@ -2098,16 +2098,6 @@
     "open": "reactive-ir/accessor-provenance"
    },
    "note": "the read in `[1].map(() => w())` is placed once `map` is no longer withheld (it stands as `read-backing-unproven`)"
-  },
-  {
-   "fixture": "engine/eslint-reactivity-v2",
-   "key": "SC9012 type-only-source",
-   "from": 5,
-   "to": 4,
-   "adr": "ADR 0964",
-   "kind": "relabel",
-   "relabeledTo": "SC1002 unresolved-invocation",
-   "note": "`data()` after the conditional await keeps an uncertifiable row at the same span: the claiming rule's own (the parameter is a function value nothing resolves), so the SC9012 row that stood for it is no longer reported"
   }
  ],
  "renames": []

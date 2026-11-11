@@ -19350,6 +19350,6 @@
    "mx-untracked-read-after-await-sf-promise-effect-async-x-direct-none",
    "mx-untracked-read-after-await-sf-promise-memo-async-x-direct-none"
   ],
-  "rediscovered": "the batch-10 head 647b0ccce (release, checker sha256 2fb2a34fa91c\u2026, producer 76fe73f958ae\u2026; fast host): the cells' 14 programs: false-clean 10 (foreach, const, mapget, bus and promise on both hosts), recall-gap 2 (index), agree 2 (param). The fix (release, checker sha256 72ed699f4cb9\u2026; Chrome host and the real oracle, `--runtime-diff all`, no cache): recall-gap 12, agree 2, 0 false clean, and the 28 twins (`-never`, `-before`) 0 false positive; Chrome and the fast host agree on all 42 programs: 0 behaviour, 0 attribution and 0 inconclusive differences."
+  "rediscovered": "the batch-10 head 647b0ccce (release, checker sha256 2fb2a34fa91c\u2026, producer 76fe73f958ae\u2026; fast host): the cells' 14 programs: false-clean 10 (foreach, const, mapget, bus and promise on both hosts), recall-gap 2 (index), agree 2 (param). The fix (release, checker sha256 d5dba3acbd27\u2026; Chrome host and the real oracle, `--runtime-diff all`, no cache): recall-gap 12, agree 2, 0 false clean, and the 28 twins (`-never`, `-before`) 0 false positive; Chrome and the fast host agree on all 42 programs: 0 behaviour, 0 attribution and 0 inconclusive differences."
  }
 ]
