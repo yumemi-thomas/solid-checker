@@ -67,6 +67,11 @@ export const iter = (method, fn) => ({ k: "iter", method, fn });
 /** `concise` (misuse.mjs APPLY_VOID_CONTEXTS): an arrow whose body is its one `return`'s expression, `() => e`. */
 export const fn = (body, { params = [], form = "arrow", async = false, concise = false } = {}) => ({ k: "fn", form, async, params, body, ...(concise ? { concise } : {}) });
 export const param = (def, destructured = false) => ({ k: "param", destructured, default: def });
+/**
+ * ADR 0960: a parameter with no default, `p0?: number` (or `p0: () => void` for `createRoot`'s dispose): a callback that takes an argument its body never
+ * uses. The node keeps a `default` (`0`) only so the tree walks as every parameter does; the printer never writes it.
+ */
+export const bareParam = (type = "number", optional = true) => ({ k: "param", destructured: false, default: { k: "num", n: 0 }, bare: true, type, optional });
 export const prim = (name, f, extra = {}) => ({ k: "prim", name, fn: f, ...extra });
 export const expr = (e) => ({ k: "expr", e });
 export const decl = (name, e, extra = {}) => ({ k: "decl", name, e, ...extra });
@@ -687,6 +692,7 @@ export const isValid = (program) => validate(program).length === 0;
 
 /** A parameter's printed type annotation. A destructured `void` field is `unknown` (TypeScript rejects a void default there). */
 export function paramTsType(p) {
+  if (p.bare) return p.type;
   const type = exprTsType(p.default);
   return p.destructured && type === "void" ? "unknown" : type;
 }

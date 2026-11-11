@@ -41,6 +41,7 @@ import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
   BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption, fireShape } from "./misuse.mjs";
+import { COMPONENT_ENTRIES, parsePkg, pkgShapesOf } from "./package-site.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { PL_CONTEXT_NAMES } from "./primitive-layer-shapes.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
@@ -378,6 +379,34 @@ export const LEAN_DEMOTED = {
   callbacks: ["function", "let"],
 };
 export function recallAxes(code, context, base, variants, options = {}) {
+  return [...recallAxesOf(code, context, base, variants, options), ...packageShapes(code, context, base, options)];
+}
+
+/**
+ * ADR 0957: the package site (package-site.mjs). The plain shape of a cell (direct binding, no layer, root mount, local values) with its site inside a
+ * package, once for each entry, so every context a code has can be reached through a package and every entry reaches it. The base grid's other axes
+ * are not crossed with it: they change how the project reaches the site, and in a package the project reaches only the entry. The four codes of
+ * ADR 0957's cells first (`PACKAGE_SITE_CODES`), on the cells the code lists (`contexts`, `legal`).
+ */
+export const PACKAGE_SITE_FIRST = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "STRICT_READ_UNTRACKED", "NO_OWNER_EFFECT", "CONTEXT_NOT_FOUND"];
+/** Every code with a template (a `call`): the default twin. The four of ADR 0957's first cells lead the list. */
+export const PACKAGE_SITE_CODES = [...PACKAGE_SITE_FIRST, ...Object.keys(SPEC).filter((code) => !PACKAGE_SITE_FIRST.includes(code) && !SPEC[code].typedAway && typeof SPEC[code].call === "function")];
+export const plainShape = (shape) => shape.binding === "direct" && shape.layer === "none" && !shape.mount && !shape.source && !shape.callback && !shape.combo && !shape.pkg;
+/**
+ * What a component entry's site is: it runs in the body of a component the package exports, under that component's own root, wherever the project mounts
+ * it, so the cell's context does not decide it (a write there is owned in a handler too, an effect there has an owner). The component body is the code's
+ * `body` cell: a misuse or a legal one, and a code with neither has no claim for a component entry. A call-like entry keeps the cell's own claim.
+ */
+export const componentSide = (code) => (SPEC[code].contexts?.includes("body") ? "misuse" : SPEC[code].legal?.includes("body") ? "legal" : null);
+export function packageShapes(code, context, base, { legal = false } = {}) {
+  if (!PACKAGE_SITE_CODES.includes(code)) return [];
+  const cells = legal ? SPEC[code].legal ?? [] : SPEC[code].contexts;
+  if (!cells.includes(context)) return [];
+  const component = componentSide(code) === (legal ? "legal" : "misuse");
+  return base.filter(plainShape).flatMap((shape) => pkgShapesOf(SPEC[code].setup(shape.variant, (prefix) => `${prefix}1`))
+    .filter((pkg) => component || !COMPONENT_ENTRIES.includes(parsePkg(pkg).entry)).map((pkg) => ({ ...shape, pkg })));
+}
+function recallAxesOf(code, context, base, variants, options = {}) {
   const shapes = recallShapesOf(code, context, base, variants, options);
   // ASYNC_OUTSIDE_LOADING_BOUNDARY's `memo` cell (misuse.mjs SPEC): the wrapper's boundary around the hole is its question, so the root
   // program and the wrapper mounts, on the direct binding with no layer.
@@ -522,9 +551,9 @@ export function mountsOption(value) {
 }
 
 /** The id suffix of a shape's mount (none for the entry's own render, so a root program keeps its id). */
-export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}${shape.callback ? `-cb-${shape.callback}` : ""}${shape.combo ? "-c" : ""}`;
+export const mountSuffix = (shape) => `${shape.mount ? `-m-${shape.mount}` : ""}${shape.source ? `-s-${shape.source}` : ""}${shape.callback ? `-cb-${shape.callback}` : ""}${shape.pkg ? `-pk-${shape.pkg}` : ""}${shape.combo ? "-c" : ""}`;
 /** The seed key's tail of a shape's mount and source (none for a root, local program, so its seed stays). */
-export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}${shape.callback ? `/cb:${shape.callback}` : ""}${shape.combo ? "/combo" : ""}`;
+export const axesKey = (shape) => `${shape.mount ? `/${shape.mount}` : ""}${shape.source ? `/s:${shape.source}` : ""}${shape.callback ? `/cb:${shape.callback}` : ""}${shape.pkg ? `/pk:${shape.pkg}` : ""}${shape.combo ? "/combo" : ""}`;
 /** `--combine`: each shape's program is a combination program (misuse.mjs `buildCombo`) instead of the shape's own. */
 export const combined = (shapes, combine) => (combine ? shapes.map((shape) => ({ ...shape, combo: true })) : shapes);
 

@@ -77,7 +77,14 @@ export function programPackages(program) {
   const files = packageFiles(usedPackageHelpers(program));
   // ADR 0940: a `use` of the context a dependency exports (misuse.mjs SOURCE_AXES `package`).
   const context = [...walk(program)].some(({ node }) => node.k === "use" && (node.ctx || node.hook || node.component || node.handed || node.holder));
-  return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}) };
+  // ADR 0957: a site moved into a package (package-site.mjs): the package `describeUse` wrote for it.
+  const sites = {};
+  const signals = signalTable(program);
+  for (const component of program.components) {
+    const seen = sourcedSignals(component, signals);
+    for (const { node } of walk(component)) if (node.k === "use" && node.pkg) Object.assign(sites, describeUse(node, seen).pkgFiles ?? {});
+  }
+  return { ...(files ? { "fz-lib": files } : {}), ...(context ? { [CONTEXT_PACKAGE.name]: contextPackageFiles() } : {}), ...sites };
 }
 
 /**
@@ -229,6 +236,7 @@ function render(program, instrument) {
   function params(f, depth) {
     return f.params.map((p, index) => {
       const name = `p${index}`;
+      if (p.bare) return `${name}${p.optional ? "?" : ""}: ${p.type}`;
       const value = expr(p.default, depth);
       return p.destructured ? `{ ${name} = ${value} }: { ${name}?: ${paramTsType(p)} } = {}` : `${name}: ${paramTsType(p)} = ${value}`;
     }).join(", ");

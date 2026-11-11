@@ -8,7 +8,7 @@ import { cellList, censusCells, recallShapes } from "./matrix.mjs";
 import { legalCells, recallLegalShapes } from "./legal.mjs";
 import { BASE_ONLY_CONTEXTS, SOURCES, SPEC, fireShape, parentSource, sourcesOf } from "./misuse.mjs";
 import { validate } from "./model.mjs";
-import { PL_CODES, PL_CONTEXT_NAMES, PL_HOSTS, PL_LAYERS, PL_MEASURED, plParts, plNotVariants, plPlacement } from "./primitive-layer-shapes.mjs";
+import { PL_BASE_LAYERS, PL_CALLBACK_FORMS, PL_CODES, PL_CONTEXT_NAMES, PL_HOSTS, PL_LAYERS, PL_MEASURED, plLayerParts, plParts, plNotVariants, plPlacement } from "./primitive-layer-shapes.mjs";
 import { kindOf, measuredTable, sameTable, tableText } from "./primitive-layer-scan.mjs";
 import { printProgram } from "./print.mjs";
 
@@ -42,11 +42,29 @@ describe("the primitive-layer contexts", () => {
       expect(validate(p), `${layer}/${where}`).toEqual([]);
       const printed = printProgram(p);
       expect(printed.sites, `${layer}/${where}`).toHaveLength(1);
-      expect(printed.text, `${layer}/${where}`).toContain(text[layer]);
+      expect(printed.text, `${layer}/${where}`).toContain(text[plLayerParts(layer).base]);
       expect(printed.text, `${layer}/${where}`).toContain(host[where]);
-      expect(printed.text.indexOf(host[where]), `${layer}/${where}`).toBeLessThan(printed.text.indexOf(text[layer]));
+      expect(printed.text.indexOf(host[where]), `${layer}/${where}`).toBeLessThan(printed.text.indexOf(text[plLayerParts(layer).base]));
       expect(stripInstrumentation(printed.runText), `${layer}/${where}`).toBe(printed.text);
     }
+  });
+  // ADR 0960: the slot climbs ended at a callback with a parameter or an async one; each layer is generated in both forms, the site the callback's body.
+  it("hand the site to a callback that takes an unused parameter, or is async (the forms a slot climb ended at)", () => {
+    expect(PL_CALLBACK_FORMS).toEqual(["param", "async"]);
+    expect(PL_LAYERS).toEqual([...PL_BASE_LAYERS, ...PL_BASE_LAYERS.flatMap((layer) => PL_CALLBACK_FORMS.map((form) => `${layer}-${form}`))]);
+    expect(plLayerParts("owner-null-async")).toEqual({ base: "owner-null", form: "async" });
+    expect(plLayerParts("untrack-param")).toEqual({ base: "untrack", form: "param" });
+    expect(plLayerParts("owner")).toEqual({ base: "owner", form: null });
+    expect(plParts("pl-owner-null-param-tracked")).toEqual({ layer: "owner-null-param", host: "tracked" });
+    expect(plParts("pl-untrack-async-memo-async")).toEqual({ layer: "untrack-async", host: "memo-async" });
+    const text = (code, context) => printProgram(program(code, context)).text;
+    expect(text("FLUSH_IN_ACTION", "pl-untrack-param-action")).toMatch(/untrack\(\(p0\?: number\) => \{\n\s+flush\(\);\n\s+\}\)/);
+    expect(text("FLUSH_IN_ACTION", "pl-untrack-async-action")).toMatch(/untrack\(async \(\) => \{\n\s+flush\(\);\n\s+\}\)/);
+    expect(text("FLUSH_IN_ACTION", "pl-latest-param-action")).toMatch(/latest\(\(p0\?: number\) => \{\n\s+flush\(\);/);
+    // createRoot's callback already takes its dispose: its parameter form names it, with its own type.
+    expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-root-param-body")).toContain("createRoot((p0: () => void) =>");
+    expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-owner-async-tracked")).toMatch(/runWithOwner\(owner, async \(\) =>/);
+    expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-flush-param-body")).toMatch(/flush\(\(p0\?: number\) =>/);
   });
   it("capture the owner before the await of an async host, so `runWithOwner(owner)` restores it", () => {
     const { text } = printProgram(program("NO_OWNER_CLEANUP", "pl-owner-memo-async"));
@@ -77,15 +95,26 @@ describe("the measured table", () => {
   });
   it("lists the layers a leaf owner does not clear, and the ones that catch what Solid only throws", () => {
     // untrack, latest, isPending, flush(fn) and runWithOwner(owner) keep the leaf; runWithOwner(null) leaves it (no owner: NO_OWNER_CLEANUP).
-    expect(PL_MEASURED.CLEANUP_IN_FORBIDDEN_SCOPE.misuse.tracked).toEqual(["untrack", "latest", "ispending", "owner", "flush"]);
-    expect(PL_MEASURED.NO_OWNER_CLEANUP.misuse.tracked).toEqual(["owner-null"]);
+    const base = (layers) => layers.filter((layer) => PL_BASE_LAYERS.includes(layer));
+    expect(base(PL_MEASURED.CLEANUP_IN_FORBIDDEN_SCOPE.misuse.tracked)).toEqual(["untrack", "latest", "ispending", "owner", "flush"]);
+    expect(base(PL_MEASURED.NO_OWNER_CLEANUP.misuse.tracked)).toEqual(["owner-null"]);
     // `isPending(fn)` catches the throw of a code Solid only throws: f2's `isPending(() => resolve(…))` and a `flush()` in an action are legal.
     expect(PL_MEASURED.RESOLVE_IN_REACTIVE_SCOPE.legal.tracked).toContain("ispending");
     expect(PL_MEASURED.RESOLVE_IN_REACTIVE_SCOPE.misuse.tracked).not.toContain("ispending");
-    expect(PL_MEASURED.FLUSH_IN_ACTION.legal.action).toEqual(["ispending"]);
-    expect(PL_MEASURED.FLUSH_IN_TRACKED_QUEUE_CALLBACK.legal.tracked).toEqual(["ispending"]);
+    expect(base(PL_MEASURED.FLUSH_IN_ACTION.legal.action)).toEqual(["ispending"]);
+    expect(base(PL_MEASURED.FLUSH_IN_TRACKED_QUEUE_CALLBACK.legal.tracked)).toEqual(["ispending"]);
     // but not the diagnostic Solid emits before it throws.
     expect(PL_MEASURED.CLEANUP_IN_FORBIDDEN_SCOPE.misuse.tracked).toContain("ispending");
+  });
+  // ADR 0960 (measured on 29b3f9312, Chrome host and real oracle): the callback forms the slot climbs ended at keep the layer's report where the plain layer has one.
+  it("holds the callback forms: the same report behind a parameter or an async callback, except where an async callback escapes the layer's catch", () => {
+    expect(PL_MEASURED.FLUSH_IN_ACTION.misuse.action).toEqual(expect.arrayContaining(["untrack-param", "untrack-async", "latest-param"]));
+    expect(PL_MEASURED.FLUSH_IN_TRACKED_QUEUE_CALLBACK.misuse.tracked).toEqual(expect.arrayContaining(["untrack-param", "untrack-async"]));
+    expect(PL_MEASURED.CLEANUP_IN_FORBIDDEN_SCOPE.misuse.tracked).toEqual(expect.arrayContaining(["untrack-param", "untrack-async"]));
+    // `isPending(fn)` catches what a synchronous `fn` throws (a `flush()` in an action is legal there), and not what an async one returns as a rejection.
+    expect(PL_MEASURED.FLUSH_IN_ACTION.legal.action).toContain("ispending-param");
+    expect(PL_MEASURED.FLUSH_IN_ACTION.misuse.action).toContain("ispending-async");
+    expect(PL_MEASURED.FLUSH_IN_ACTION.legal.action).not.toContain("ispending-async");
   });
   it("puts every cell in the grids, and none in the census", () => {
     const misuse = cellList({ recall: true, codes: PL_CODES }).filter((cell) => plParts(cell.context));
