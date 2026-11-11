@@ -16,21 +16,24 @@ import { PACKAGE_SITE_CODES, cellList, recallShapes, shapeId } from "./matrix.mj
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** `[{ grid, code, ids, contexts }]`: the package-site programs of each (grid, code) of the recall grids, in the grids' order. */
+/** `[{ grid, code, ids, rows, contexts }]`: the package-site programs of each (grid, code) of the recall grids, in the grids' order (`rows`: each id with its context, variant and `pkg`). */
 export function packageCells({ codes = PACKAGE_SITE_CODES, grids = ["mx", "lg"], entries, contexts } = {}) {
   const units = [];
   for (const code of codes) for (const grid of grids) {
     const ids = [];
+    const rows = [];
     const used = new Set();
     for (const cell of grid === "mx" ? cellList({ codes: [code], recall: true }) : legalCells({ codes: [code], recall: true })) {
       if (contexts && !contexts.includes(cell.context)) continue;
       const shapes = grid === "mx" ? recallShapes(code, cell.context, { lean: true }) : recallLegalShapes(code, cell.context, { lean: true });
       for (const shape of shapes.filter((one) => one.pkg && (!entries || entries.includes(one.pkg)))) {
-        ids.push(grid === "mx" ? shapeId(cell, shape) : legalId(cell, { shape }));
+        const id = grid === "mx" ? shapeId(cell, shape) : legalId(cell, { shape });
+        ids.push(id);
+        rows.push({ id, context: cell.context, variant: shape.variant ?? null, pkg: shape.pkg });
         used.add(cell.context);
       }
     }
-    if (ids.length) units.push({ grid: `${grid}-recall`, code, ids, contexts: [...used] });
+    if (ids.length) units.push({ grid: `${grid}-recall`, code, ids, rows, contexts: [...used] });
   }
   return units;
 }

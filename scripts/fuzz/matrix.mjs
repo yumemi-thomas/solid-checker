@@ -388,7 +388,9 @@ export function recallAxes(code, context, base, variants, options = {}) {
  * are not crossed with it: they change how the project reaches the site, and in a package the project reaches only the entry. The four codes of
  * ADR 0957's cells first (`PACKAGE_SITE_CODES`), on the cells the code lists (`contexts`, `legal`).
  */
-export const PACKAGE_SITE_CODES = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "STRICT_READ_UNTRACKED", "NO_OWNER_EFFECT", "CONTEXT_NOT_FOUND"];
+export const PACKAGE_SITE_FIRST = ["REACTIVE_WRITE_IN_OWNED_SCOPE", "STRICT_READ_UNTRACKED", "NO_OWNER_EFFECT", "CONTEXT_NOT_FOUND"];
+/** Every code with a template (a `call`): the default twin. The four of ADR 0957's first cells lead the list. */
+export const PACKAGE_SITE_CODES = [...PACKAGE_SITE_FIRST, ...Object.keys(SPEC).filter((code) => !PACKAGE_SITE_FIRST.includes(code) && !SPEC[code].typedAway && typeof SPEC[code].call === "function")];
 export const plainShape = (shape) => shape.binding === "direct" && shape.layer === "none" && !shape.mount && !shape.source && !shape.callback && !shape.combo && !shape.pkg;
 /**
  * What a component entry's site is: it runs in the body of a component the package exports, under that component's own root, wherever the project mounts
