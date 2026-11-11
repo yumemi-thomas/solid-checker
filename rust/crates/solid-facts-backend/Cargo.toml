@@ -14,6 +14,9 @@ workspace = true
 [features]
 default = ["dialect-v2"]
 dialect-v2 = ["dep:solid-v2-compiler", "dep:solid-v2-rules"]
+# ADR 0950: the what-if build (`--assume <hazard>`, one-shot only, every report tainted); `make build-what-if` alone enables it, into its own target directory, and names the
+# binary `solid-checker-what-if`. Never in `default`. A binary built with it is the what-if checker whatever it is called: it refuses the daemon, `--certify` and every format but the JSON.
+what-if = ["solid-reactive-ir/what-if"]
 
 [dependencies]
 serde.workspace = true

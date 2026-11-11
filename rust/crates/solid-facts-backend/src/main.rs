@@ -1,5 +1,7 @@
 // The daemon's own modules: the daemon (below) is Unix-only, and its
 // resolution witness stamps files with Unix metadata.
+// ADR 0950: the what-if build never reaches the daemon modules below, which stay compiled.
+#![cfg_attr(feature = "what-if", allow(dead_code, unused_imports))]
 #[cfg(unix)]
 mod daemon_cache;
 #[cfg(unix)]
@@ -10,6 +12,31 @@ mod daemon_resolution;
 mod idle_memory;
 mod json_output;
 mod snapshot_emission;
+
+/// ADR 0950: a build with the `what-if` feature is the what-if checker, whatever the binary is called (`make build-what-if` names it `solid-checker-what-if`,
+/// in a target directory of its own). It is one-shot: no daemon, no `--certify`, no `--serve`/`--stop-daemon`, no JSON request on stdin, no format but
+/// the internal JSON; `--assume` is its one flag, and every report it writes is tainted.
+#[cfg(feature = "what-if")]
+const fn what_if_binary() -> bool {
+    true
+}
+
+/// ADR 0950: the report with its taint: a top-level `assumed` naming what was assumed and what flipped, and, when an answer flipped, a typed
+/// `Assumed` premise on every finding (the seam cannot say which finding read the hazard, so all are tainted: a superset). Every consumer refuses it.
+#[cfg(feature = "what-if")]
+fn taint(emission: snapshot_emission::Emission) -> Result<snapshot_emission::Emission, Box<dyn std::error::Error>> {
+    let mut report: serde_json::Value = serde_json::from_slice(&emission.output)?;
+    let flipped = solid_reactive_ir::what_if::flipped();
+    report["assumed"] = serde_json::json!({ "hazards": solid_reactive_ir::what_if::assumed_ids(), "flipped": flipped });
+    if !flipped.is_empty() {
+        for finding in report["findings"].as_array_mut().into_iter().flatten() {
+            finding["premises"] = serde_json::json!([{ "kind": "assumed", "hazards": flipped }]);
+        }
+    }
+    let mut output = serde_json::to_vec(&report)?;
+    output.push(b'\n');
+    Ok(snapshot_emission::Emission { output, ..emission })
+}
 #[cfg(any(target_os = "macos", all(target_os = "linux", target_env = "gnu")))]
 mod unsafe_boundary;
 
@@ -112,7 +139,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // A JSON request arrives on stdin only when the caller passed no
     // arguments; argv invocations must not block waiting for stdin EOF.
     let mut encoded = String::new();
-    if std::env::args().len() <= 1 && !io::stdin().is_terminal() {
+    #[cfg(feature = "what-if")]
+    let stdin_request = !what_if_binary();
+    #[cfg(not(feature = "what-if"))]
+    let stdin_request = true;
+    if stdin_request && std::env::args().len() <= 1 && !io::stdin().is_terminal() {
         io::stdin().read_to_string(&mut encoded)?;
     }
     let mut request: Request = if encoded.trim().is_empty() {
@@ -183,7 +214,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if !request.dependency_sources.is_empty() {
         dependency_program::host(&request.runtime)?;
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(feature = "what-if")))]
     {
         if request.serve {
             return daemon::serve(&request);
@@ -200,7 +231,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             }
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(any(not(unix), feature = "what-if"))]
     if request.serve || request.stop_daemon {
         return Err("--serve and --stop-daemon require a Unix platform".into());
     }
@@ -215,7 +246,7 @@ fn render(
     snapshot: &solid_facts_backend::Snapshot,
     started: Instant,
 ) -> Result<snapshot_emission::Emission, Box<dyn std::error::Error>> {
-    match (request.only_file.as_deref(), request.format.as_str()) {
+    let emission = match (request.only_file.as_deref(), request.format.as_str()) {
         (Some(file), "json") => {
             snapshot_emission::emit_only_file(snapshot, file, request.certify, request.internal)
         }
@@ -228,7 +259,10 @@ fn render(
             request.internal,
             started.elapsed(),
         ),
-    }
+    }?;
+    #[cfg(feature = "what-if")]
+    let emission = taint(emission)?;
+    Ok(emission)
 }
 
 fn check_options(
@@ -450,6 +484,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut help = false;
     let mut serve = false;
     let mut stop_daemon = false;
+    #[cfg(feature = "what-if")]
+    let mut assumed = Vec::<String>::new();
+    #[cfg(feature = "what-if")]
+    let mut format_given = false;
     let mut args = arguments.into_iter();
     while let Some(argument) = args.next() {
         if let Some(value) = argument.strip_prefix("--project=") {
@@ -477,6 +515,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             continue;
         }
         if let Some(value) = argument.strip_prefix("--format=") {
+            #[cfg(feature = "what-if")]
+            {
+                format_given = true;
+            }
             format = value.into();
             continue;
         }
@@ -543,8 +585,23 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--host-suppresses" => {
                 host_suppressions.push(args.next().ok_or("--host-suppresses needs a rule name")?)
             }
-            "--format" => format = args.next().ok_or("--format needs a value")?,
+            "--format" => {
+                #[cfg(feature = "what-if")]
+                {
+                    format_given = true;
+                }
+                format = args.next().ok_or("--format needs a value")?
+            }
             "--only-file" => only_file = Some(args.next().ok_or("--only-file needs a path")?),
+            // ADR 0950: the what-if binary's one flag: the hazard facts to treat as absent (ids of `blockedBy.fired`, comma separated, repeatable).
+            #[cfg(feature = "what-if")]
+            "--assume" if what_if_binary() => assumed.extend(
+                args.next()
+                    .ok_or("--assume needs hazard ids")?
+                    .split(',')
+                    .filter(|id| !id.is_empty())
+                    .map(str::to_owned),
+            ),
             "--certify" => certify = true,
             "--internal" => internal = true,
             "--feedback-facts" => feedback_facts = true,
@@ -636,6 +693,18 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     // selection of ADR 0297.
     if window_realm && runtime.target != Some(RuntimeTarget::Browser) {
         return Err("--runtime-realm window needs --runtime-target browser".into());
+    }
+    #[cfg(feature = "what-if")]
+    if what_if_binary() {
+        if certify || serve || stop_daemon {
+            return Err("the what-if binary is one-shot and uncertified: no --certify, --serve or --stop-daemon".into());
+        }
+        if format_given && format != "json" {
+            return Err("the what-if binary answers the internal JSON only (--format json): no text, no ESLint report".into());
+        }
+        format = "json".into();
+        internal = true;
+        solid_reactive_ir::what_if::assume(&assumed)?;
     }
     if only_file.is_some() && format != "json" {
         return Err("--only-file needs --format json".into());
@@ -821,7 +890,7 @@ fn render_program_error(error: &(dyn std::error::Error + 'static)) -> String {
 #[cfg(unix)]
 mod daemon;
 
-fn main() {
+pub(crate) fn main() {
     match run() {
         Ok(code) => std::process::exit(code),
         Err(error) => {

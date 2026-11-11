@@ -42,6 +42,8 @@ mod argument_values;
 mod attribution;
 mod base;
 pub mod blocked_by;
+#[cfg(feature = "what-if")]
+pub mod what_if;
 mod blockers;
 mod boundary_defects;
 mod cache;

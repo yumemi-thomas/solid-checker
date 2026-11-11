@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint proof-lint ir-edit-fuzz ir-edit-fuzz-corpus corpus-delta fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
+.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-what-if build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint proof-lint ir-edit-fuzz ir-edit-fuzz-corpus corpus-delta fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -85,6 +85,15 @@ build-checker-debug: build-typefacts
 build-checker-release: build-typefacts
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust --bin solid-checker-session-bench
+
+# ADR 0950: the what-if checker (`--assume <hazard>`), the only build with the `what-if` feature: its own target directory (`rust/target-what-if`) and its own binary
+# name, `rust/target-what-if/release/solid-checker-what-if` (a copy of the one cargo builds there: the feature is the binary's identity). Never a dependency of another
+# target, never in CI or a workspace default. It reads the producer `bin/solid-typefacts` the default build makes.
+WHAT_IF_TARGET_DIR ?= $(CURDIR)/rust/target-what-if
+build-what-if:
+	CARGO_TARGET_DIR="$(WHAT_IF_TARGET_DIR)" SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release \
+	  --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --features what-if --bin solid-checker-rust
+	cp "$(WHAT_IF_TARGET_DIR)/release/solid-checker-rust" "$(WHAT_IF_TARGET_DIR)/release/solid-checker-what-if"
 
 package: build-typefacts
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
