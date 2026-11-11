@@ -21,6 +21,12 @@
 //                         arguments or facts ends silently for the case no arm names (ADR 0945, G4). Whether a hit-less walk means
 //                         "clean" or "unknown" is the caller's, so each hit states what the unmatched case is, or becomes an
 //                         uncertifiable result.
+//   finding-filter        a `retain`, `retain_mut`, `extract_if`, a `dedup*` of rows or sites or a rows-assigned-from-`filter` over a collection that holds
+//                         findings, sites, rows or the facts they stand on (ADR 0958): code that discards findings or sites by path,
+//                         kind, rule or location. A finding leaves the report only through the attribution seam
+//                         (`package_drop::hand_off`, `supersede_claims`) or a typed `DropPass` premise written to the proof log;
+//                         every other hit states what the collection is (a memo table, a work list, a row replaced by its own
+//                         duplicate) and why nothing of the report is lost, or becomes a drop with a premise.
 //
 // And two checks of the typed premises themselves (rust/crates/solid-reactive-ir/src/proof_log.rs):
 //
@@ -51,6 +57,8 @@ export const ALLOWLIST = join(ROOT, "scripts", "proof-lint.allowlist.json");
 export const PENDING = "pending-review";
 export const SCANNED = [SOURCE_ROOT, "rust/crates/solid-dialect/src", "rust/dialects/solid-v2/rules/src"];
 export const PROOF_LOG = `${SOURCE_ROOT}/proof_log.rs`;
+/** The backend files where findings leave the report (ADR 0958): scanned for `finding-filter` only, the other kinds are the analysis crates'. */
+export const FINDING_FILTER_ONLY = ["rust/crates/solid-facts-backend/src/diagnostics.rs", "rust/crates/solid-facts-backend/src/package_drop.rs"];
 
 /** The files that produce roles: the classifier and the placement code. The rest read roles, and compare or match them. */
 export const PRODUCERS = [
@@ -94,6 +102,14 @@ const KINDS = {
   "primitive-name-match": [/(?:==|!=)\s*(?:Some\(\s*)?(?:(?:crate::)?solid_dialect::)?\bPrimitive::[A-Z]/, /\bmatches!\s*\([^;]*\bPrimitive::[A-Z]/],
   // ADR 0945 (G4). An arm for the unmatched case (`_`, `None`) whose body ends the walk with no result: empty, `continue`, `break`, `return`, `return None`.
   "silent-unmatched-slot": [/(?:^|[\s{,(])(?:_|None)\s*=>\s*(?:\{\s*\}|continue\b|break\b|return\s*(?:None\b)?\s*(?:[,;}]|$))/],
+  // ADR 0958. A collection loses members by a predicate (`retain`, `retain_mut`, `extract_if`), by equality (`dedup`, `dedup_by`, `dedup_by_key`)
+  // or is rebuilt from a filtered copy of itself (`findings = findings.into_iter().filter(..)`).
+  "finding-filter": [
+    /\.\s*(?:retain|retain_mut|extract_if)\s*\(/,
+    /\b(?:findings|violations|defects|rows|operations|requirements|reads|writes|actions|async_reads|sites|replacements)\s*\.\s*dedup(?:_by(?:_key)?)?\s*\(/,
+    /\.\s*dedup_by(?:_key)?\s*\([^;]*(?:location|finding|\.id\b|\.rule\b|\.kind\b)/,
+    /\b(?:findings|violations|defects|rows|operations|requirements|reads|writes|actions|async_reads)\s*=\s*[^;]*\.\s*filter\s*\(/,
+  ],
 };
 
 export const KIND_NAMES = ["untagged-silent-role", ...Object.keys(KINDS)];
@@ -142,17 +158,18 @@ function taggedLines(lines) {
 }
 
 /** The hits of one source text: `[{ line (1-based), kind, text }]`. Test modules are excluded; `producer` says whether roles are produced here, `owner` whether the file owns the primitive vocabulary. */
-export function hitsOf(text, producer = true, owner = false) {
+export function hitsOf(text, producer = true, owner = false, only = null) {
   const lines = codeLines(text);
   const tagged = taggedLines(lines);
   const hits = [];
   lines.forEach((line, index) => {
     if (!line.trim()) return;
-    if (producer && !tagged.has(index)) {
+    if (producer && !only && !tagged.has(index)) {
       for (const _ of silentRoleValues(line)) hits.push({ line: index + 1, kind: "untagged-silent-role", text: normal(line) });
     }
     for (const [kind, patterns] of Object.entries(KINDS)) {
       if (owner && kind === "primitive-name-match") continue;
+      if (only && kind !== only) continue;
       if (patterns.some((pattern) => pattern.test(line))) hits.push({ line: index + 1, kind, text: normal(line) });
     }
   });
@@ -173,6 +190,15 @@ export function measure(root = ROOT) {
         counts[file][hit.kind] = (counts[file][hit.kind] ?? 0) + 1;
         hits.push({ file, ...hit });
       }
+    }
+  }
+  for (const file of FINDING_FILTER_ONLY) {
+    const path = join(root, file);
+    if (!existsSync(path)) continue;
+    for (const hit of hitsOf(readFileSync(path, "utf8"), false, false, "finding-filter")) {
+      counts[file] ??= {};
+      counts[file][hit.kind] = (counts[file][hit.kind] ?? 0) + 1;
+      hits.push({ file, ...hit });
     }
   }
   return { counts, hits };

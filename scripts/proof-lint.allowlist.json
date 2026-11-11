@@ -6,9 +6,25 @@
         "count": 1,
         "why": "pending-review"
       },
+      "finding-filter": {
+        "count": 1,
+        "why": "`rows.dedup()` over the sorted release triples (solid-js, signals, web) of the installation: equal triples are one release; the gap finding is built from the distinct rows, so nothing is dropped from a report"
+      },
       "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-facts-backend/src/diagnostics.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "ADR 0696: a violation at a site the whole program proves unreached is dropped under DropPass::SiteUnreached (ProofStage, written to the proof log); an uncertifiable row is never dropped here, and a withheld one flips the status"
+      }
+    },
+    "rust/crates/solid-facts-backend/src/package_drop.rs": {
+      "finding-filter": {
+        "count": 2,
+        "why": "the attribution seam itself (ADR 0958): SC80xx findings in a package are dropped under the typed premise PackageStyleNotProject, and supersede_claims drops a handed-value claim only where a violation of the same rule stands inside its span (SupersededByViolation); both are DropPass stages of the proof log"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
@@ -43,6 +59,10 @@
       "default-on-missing": {
         "count": 5,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "`objects.retain` removes the walk-bound placeholder (an empty path) from the work list and the same branch pushes the site itself as a getter location, which stands for what was not walked: an obligation, no finding dropped"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_index.rs": {
@@ -55,6 +75,10 @@
       "default-on-missing": {
         "count": 5,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 3,
+        "why": "incremental resolver state (bindings, census, unkeyed ids) pruned to the ids the current file order still ranks: the entries of files that left the project; no finding is held in it"
       }
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/resolver_queries.rs": {
@@ -94,6 +118,10 @@
         "count": 3,
         "why": "pending-review"
       },
+      "finding-filter": {
+        "count": 1,
+        "why": "SC9012 dispatch obligations of a closed-program export are discharged under the typed premise ClosedProgramExportDischarge (RowStage, ADR 0933) and listed in `discharged` for the proof log"
+      },
       "name-only-match": {
         "count": 4,
         "why": "`keyed` and `when` are the prop names of an element already resolved to the dialect's `Show` (`known_primitive(..) == Some(Show)`, never a lookalike); `arguments` is a spelling used only to refuse a proof (the true branch returns false)"
@@ -121,6 +149,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/base/contributions/blocked_by.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "the sorted hazard site locations of one hazard id, deduplicated: an equal location is one site"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {
       "default-on-missing": {
         "count": 1,
@@ -131,18 +165,32 @@
       "default-on-missing": {
         "count": 1,
         "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "per-file contributions with no entries are dropped from the fold: a file with no rows contributes none"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/memo.rs": {
       "default-on-missing": {
         "count": 1,
         "why": "incremental-engine bookkeeping: a missing previous order, position or reader means 'recompute' or 'treat as changed' or 'append to an empty list', never a verdict about reactivity"
+      },
+      "finding-filter": {
+        "count": 3,
+        "why": "memo table bookkeeping: entries not live in the epoch, the keys of dropped entries and the readers a re-run lost are removed from the tables; no finding is held in them"
       }
     },
     "rust/crates/solid-reactive-ir/src/base/memo/build.rs": {
       "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/blocked_by.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "`rows.dedup()` of identical typed-blocker rows, sorted by location and kind: a duplicate blocker row; the finding it types is untouched"
       }
     },
     "rust/crates/solid-reactive-ir/src/callback_host.rs": {
@@ -201,6 +249,12 @@
         "why": "`effect` is the key of the bundle object a classified effect primitive takes (`v2_effect_function_status(.., slot, ..)` is asked of the primitive's own argument slot): a dialect-defined option key of a resolved call, not an identification of what the call is"
       }
     },
+    "rust/crates/solid-reactive-ir/src/effect_execution.rs": {
+      "finding-filter": {
+        "count": 4,
+        "why": "two caches pruned to the current file paths; the SC6001 rows (directive_creations) are kept only for a proven apply and the drop is the logged stage ApplyExecution::NotProven (an unknown apply drops the row: a review item of ADR 0958, the rule is partly silent); `retain_recording` names each row it removes as SiteSilence::ApplyNeverRuns with its premise (ADR 0936)"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/effect_phase.rs": {
       "default-on-missing": {
         "count": 4,
@@ -211,6 +265,10 @@
       "default-on-missing": {
         "count": 1,
         "why": "loop control of a `retain`: a candidate no arm joins yet (`None`) is kept undecided for the next round, so the default keeps a candidate open and decides nothing silent"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "`undecided.retain` is the fixed point's work list of candidate paths: a candidate that joins an arm moves to `grown`; none is a finding"
       },
       "silent-unmatched-slot": {
         "count": 2,
@@ -391,6 +449,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/findings.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "`findings.dedup()` after the total ordering removes only a finding equal in every field (id, rule, kind, message, location, evidence) to its neighbour: the same row twice"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/hosts.rs": {
       "default-on-missing": {
         "count": 1,
@@ -424,6 +488,10 @@
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/census.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "ADR 0322: a call whose export is redirected is filed under the redirected symbol's key and removed from the one the index filed it under (an index of calls, no finding)"
+      },
       "name-only-match": {
         "count": 2,
         "why": "`component` only takes the value out of `used_as_render_value`: the reference then stays unaccounted unless the dialect's renderer resolves it (ADR 0138), and a project component's `component` prop is just a prop"
@@ -460,6 +528,10 @@
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/flush_census.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "the flush census's site list sorted and deduplicated: an equal (path, span) is one site"
+      },
       "primitive-name-match": {
         "count": 1,
         "why": "pending-review"
@@ -475,6 +547,10 @@
       "default-on-missing": {
         "count": 3,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "the locations of reads before their binding is initialized, sorted and deduplicated: an equal location is one site"
       },
       "silent-unmatched-slot": {
         "count": 1,
@@ -570,9 +646,19 @@
         "count": 1,
         "why": "pending-review"
       },
+      "finding-filter": {
+        "count": 4,
+        "why": "retained caches pruned to the current files and sources; `extract_if` splits the transported calls into the writers and the rest (a partition, nothing lost); `transported_calls.retain` (ADR 0299) removes the call target of an escaped or uninitialized literal, a proof withdrawn so the call is unproven, never a finding"
+      },
       "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/refresh.rs": {
+      "finding-filter": {
+        "count": 2,
+        "why": "the retained per-file state pruned to the current paths; `added.retain` removes owners with no added members from the propagation map"
       }
     },
     "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs": {
@@ -589,6 +675,18 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/interproc/transport_reads.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "the log of reads one transport computation recorded, sorted and deduplicated: an equal read is one entry"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/late_chunks.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "the retained chunk cache keeps only the paths held exactly once in the current files; a dropped chunk is computed again"
       }
     },
     "rust/crates/solid-reactive-ir/src/lib.rs": {
@@ -627,6 +725,10 @@
       "default-on-missing": {
         "count": 17,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 3,
+        "why": "three retained caches (file chunks, dependency states, prop sources) pruned to the current paths and symbols; a dropped entry is computed again"
       },
       "name-only-match": {
         "count": 2,
@@ -716,6 +818,10 @@
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/callback_owners.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "callback-owner sites sorted by their order key and deduplicated: an equal site is one site"
+      },
       "primitive-name-match": {
         "count": 3,
         "why": "pending-review"
@@ -725,6 +831,10 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "ADR 0713: an exported context a namespace or module load may reach leaves the candidates and becomes the verdict Open (`free.insert(.., Open)`), an obligation, in the same closure"
       },
       "name-only-match": {
         "count": 4,
@@ -797,6 +907,22 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 2,
+        "why": "`apply_settled_gates`: an out-of-band `onSettled` (the fixed point's OutOfBand decision: no owner at the call, so the callback is a plain queued function) sheds its leaf operations and an unproven gate keeps them uncertain; a cleanup requirement written in a leaf's own callback whose gate is decided Owned is dropped because SC3001 owns the claim there (ADR 0942). Neither drop is a proof-log line yet (a review item of ADR 0958)"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/owner_state.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "the owner graph's symbol index drops the entry of a node that changed (`entries.retain`): state maintenance, no finding"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/package_entries.rs": {
+      "finding-filter": {
+        "count": 6,
+        "why": "`rows.retain` selects the program rows located in a package for the entry table (a view, nothing removed from the program); the `dedup_by` calls remove a project site, or a claim of the same rule, equal in location to its neighbour in the table and in the handed-value claims, which keep one row per site and rule"
       }
     },
     "rust/crates/solid-reactive-ir/src/package_boundary.rs": {
@@ -809,12 +935,20 @@
       "default-on-missing": {
         "count": 1,
         "why": "an import binding with no entity, or whose symbol is undeclared, sets `source_module_unresolved`, which marks the row uncertain with a blocker: the default adds a blocker, never a clean"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "`reasons.retain` removes a reason (NotRenderEffect) from the list that accounts a read safe when the component's identity is uncertain: fewer reasons, so the claim is accounted less, never more"
       }
     },
     "rust/crates/solid-reactive-ir/src/pipeline.rs": {
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 3,
+        "why": "ADR 0933 `gate_rows!` drops the rows of a compiler-discarded region under the typed premise CompilerDiscardedRegion (RowStage, proof log); the index cache is pruned to the current paths; the SC4001 effect requirement of a JSX site is dropped where SC6002 proves the throw on every run (`jsx_phase_sites`, ADR 0883) and kept uncertain otherwise"
       }
     },
     "rust/crates/solid-reactive-ir/src/project_consumer.rs": {
@@ -835,6 +969,10 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 3,
+        "why": "ADR 0933 drop passes with typed premises written to the proof log: ExecutionPaths (a violation on a path no client run reaches), the unfollowed-dependency-value uncertainty where the value is proven, and SC1001 under a more specific rule at the same span (OwnedByEnabledRule)"
       }
     },
     "rust/crates/solid-reactive-ir/src/proof_universe.rs": {
@@ -849,10 +987,20 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/reachability.rs": {
+      "finding-filter": {
+        "count": 3,
+        "why": "reachability caches pruned to the current paths and to the files recomputed; no finding is held in them"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/reactive_analysis.rs": {
       "default-on-missing": {
         "count": 3,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 4,
+        "why": "`writes.retain(replaced)` swaps a write for its transported version (the same location, kept once); the SC9012 `value-*` dispatch obligation is dropped where an uncaptured-source SC9012 stands at the same span (one obligation stays); a write or an async read whose declaration the producer withdrew is replaced by a named obligation (`held.push(obligation)`, fail closed)"
       }
     },
     "rust/crates/solid-reactive-ir/src/route_components.rs": {
@@ -901,6 +1049,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/site_accounting.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "`premises.retain(at.is_some())`: a silence is recorded only with a premise that names a span; a premise with none is dropped and the site is not ended, so it stays an unaccounted uncertifiable row (ADR 0936)"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/source_discovery/discover_file.rs": {
       "name-only-match": {
         "count": 2,
@@ -911,10 +1065,20 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/source_discovery/discover_sources.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "the identity cache pruned to the current file paths; no finding is held in it"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/source_discovery/post_passes.rs": {
       "default-on-missing": {
         "count": 2,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "pass 9: a runtime source stays a source only while no file writes it; a written source is withdrawn, a proof removed (its readers become unproven), never a finding"
       },
       "silent-unmatched-slot": {
         "count": 1,
@@ -949,6 +1113,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/source_discovery/trace.rs": {
+      "finding-filter": {
+        "count": 1,
+        "why": "the tracker drops the computation's own file from the dependency list it hands to the enclosing computation: dependency bookkeeping, no finding"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/static_api.rs": {
       "default-on-missing": {
         "count": 2,
@@ -971,12 +1141,20 @@
       "default-on-missing": {
         "count": 1,
         "why": "an import binding with no entity, or whose symbol is undeclared, is `unresolved` and yields the unresolved-import defect: the default adds an obligation, never a clean"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "the callback-pattern site spans sorted and deduplicated (`sites.dedup()`) before each is judged: an equal span is one site"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
       "default-on-missing": {
         "count": 11,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "`next.retain(!ahead.holds)` filters the next wave of the continuation walk to members not yet visited: a work list, no row"
       },
       "primitive-name-match": {
         "count": 1,
@@ -1035,6 +1213,10 @@
       "default-on-missing": {
         "count": 4,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 1,
+        "why": "`references.retain(non-empty)` removes a symbol with no reference locations from the reference map; no location is lost"
       }
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/container_root.rs": {
@@ -1057,6 +1239,10 @@
       "default-on-missing": {
         "count": 13,
         "why": "pending-review"
+      },
+      "finding-filter": {
+        "count": 2,
+        "why": "ported from eslint-plugin-solid (ADR 0919): the member-chain links at or inside the root expression are not past it; a link list of the walk, not rows"
       },
       "name-only-match": {
         "count": 7,

@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { describe, test } from "vitest";
 
 import { ROOT } from "./ir-read-lint.mjs";
-import { baselineFor, endIds, hitsOf, PENDING, premiseKinds, problems, SCANNED, seenLists, seenMutators, silentRoleValues, SITE_ACCOUNTING } from "./proof-lint.mjs";
+import { baselineFor, endIds, FINDING_FILTER_ONLY, hitsOf, PENDING, premiseKinds, problems, SCANNED, seenLists, seenMutators, silentRoleValues, SITE_ACCOUNTING } from "./proof-lint.mjs";
 
 const kinds = (text, producer = true) => hitsOf(text, producer).map((hit) => hit.kind);
 
@@ -70,6 +70,30 @@ describe("the other shapes", () => {
     for (const arm of ["_ => Unknown,", "None => Some(role),", "_ => false,", "_ => return Some(x),", "Some(_) => {}", "Foo => {}", "_ => { record(slot); }", "x_ => {}"]) {
       assert.deepEqual(kinds(arm, false), [], arm);
     }
+  });
+
+  // ADR 0958: code that discards findings or sites by predicate or equality.
+  test("a retain, an extract_if and a dedup of rows or sites is a finding-filter hit, a dedup of names is none", () => {
+    for (const line of [
+      "findings.retain(|finding| keep(finding));",
+      "draft.writes.retain_mut(|write| gate(write));",
+      "rows.extract_if(.., |row| row.dropped());",
+      "sites.dedup();",
+      "claims.dedup_by(|left, right| left.location == right.location && left.id == right.id);",
+      "findings = findings.into_iter().filter(|finding| keep(finding)).collect();",
+    ]) {
+      assert.deepEqual(kinds(line, false), ["finding-filter"], line);
+    }
+    for (const line of ["names.dedup();", "symbols.dedup();", "let kept = findings.iter().filter(|f| keep(f));", "findings.sort();", "findings.push(row);"]) {
+      assert.deepEqual(kinds(line, false), [], line);
+    }
+  });
+
+  test("the backend files where findings leave the report are asked for finding-filter only", () => {
+    const text = "findings.retain(|finding| keep(finding));\nif primitive == Primitive::Untrack {}\nx.is_none_or(|y| y);\n_ => {}\n";
+    assert.deepEqual(hitsOf(text, false, false, "finding-filter").map((hit) => hit.kind), ["finding-filter"]);
+    assert.ok(FINDING_FILTER_ONLY.includes("rust/crates/solid-facts-backend/src/package_drop.rs"));
+    assert.ok(FINDING_FILTER_ONLY.includes("rust/crates/solid-facts-backend/src/diagnostics.rs"));
   });
 
   test("test modules and comments are left out", () => {
