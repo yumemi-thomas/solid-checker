@@ -126,8 +126,8 @@ pub struct CodePolicy {
     /// The rules whose *uncertifiable* finding at the site is the checker declining the code without claiming it; a violation of one
     /// of them is still a wrong rule.
     pub declining: &'static [&'static str],
-    /// Solid reports the code from the scheduler, not from the offending call: no authored line belongs to the diagnostic, so it is
-    /// judged by file, never by line.
+    /// Solid reports the code from the scheduler, not from the offending call: the diagnostic names no authored line, so a program is
+    /// held to it by file, never by line.
     pub placeless: bool,
 }
 
