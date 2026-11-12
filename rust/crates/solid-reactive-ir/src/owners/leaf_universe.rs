@@ -55,6 +55,14 @@ pub(super) fn measure(
     }
     let dialect = lookup.dialect;
     let reach = crate::execution_role::SiteReach::new(lookup);
+    // B3 (ADR 0967): whether a package nothing here reads may run the function holding the site: a silence that rests on a census or on the entries the graph
+    // holds (a leaf opener the project names, an owner edge) cannot answer for what such a package runs.
+    let by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> = lookup
+        .files()
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect();
+    let unread = crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path);
     let opener = lookup.project_opens_leaf_scope();
     let defers = lookup.project_defers_callbacks();
     // ADR 0868: the function making a run at `at` holds context zero (no edge reaches it) and is not proven never to run: the emission's question.
@@ -74,10 +82,14 @@ pub(super) fn measure(
                     })
             })
     };
-    for (file, pid) in files.iter().zip(order) {
-        if lookup.in_dependency_source(file.path.as_str()) {
+    for (listed, pid) in files.iter().zip(order) {
+        if lookup.in_dependency_source(listed.path.as_str()) {
             continue;
         }
+        // The file as the lookup holds it (the hand-off question is asked of that one).
+        let Some(file) = by_path.get(listed.path.as_str()).copied() else {
+            continue;
+        };
         let ast = &file.ast;
         for call in &ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
@@ -164,6 +176,7 @@ pub(super) fn measure(
                     ),
                     ("entry-open", yes(open)),
                     ("never", yes(never)),
+                    ("unread-pkg", yes(unread.may_run(file, call.span))),
                     ("opener", yes(opener)),
                     ("defers", yes(defers)),
                     ("proof", &proof),
