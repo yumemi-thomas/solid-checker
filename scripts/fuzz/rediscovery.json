@@ -19705,5 +19705,50 @@
    "mx-flush-in-tracked-queue-callback-nm-wrap-async-settled-x-direct-none"
   ],
   "rediscovered": "main 3b22442d4 (release, checker sha256 96e691ce188b…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 4 misuse programs (an async callback and an async function a sync arrow calls, on `createTrackedEffect` and `onSettled`): false-clean 4; `make fuzz-focus` exits 1. The 8 twins (the flush after an `await`, a sync callback, a sync function a sync arrow calls, a generator, on both hosts): 0 false positive (clean 6, uncertifiable 2: SC2008's `flush-in-effect-callback` row in `onSettled`, as on main). The fix (release, checker sha256 95eef08ff59d…, same host): recall-gap 4, 0 false clean, the twins unchanged; 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site (`flush()` in an effect's apply) in a function assigned to a variable after its declaration (`let h = () => {}; h = () => { <site> }; h();`, a `let` with no initializer, a function that sets it) and called through the name was certified with no row: the calls of the name resolve to the initializer (or to nothing), the assigned function has no binding name, and `runs_unplaced_once` read a nameless function as one nobody calls",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the unprobed slice 5/7 leads of the research briefs (research-b11-briefs/index.md), probed with the real oracle (`unproven-clean` in 6 programs: the action and effect hosts, three forms) and the pattern lane (false clean, the three effect programs); then the cells of la-shapes.mjs (`la-<form>-<host>`: 15 false cleans on 1a87feae8)",
+  "fixed": "ADR 0535 amended (batch 11): `assigned_function` (local_access.rs, was `member_assigned`) answers a function written as the value of any assignment, a variable's too, so every walk that asks who calls a function with no binding name (`function_escapes_unfollowed`, `runs_unplaced_once`, the effect-phase origin, the read nets) reads it as handed where nothing places it: an uncertifiable row (`function-run-unplaced`), never a violation",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-la-let-later-effect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-la-let-noinit-effect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-la-let-other-effect-apply-x-direct-none"
+  ],
+  "rediscovered": "main 1a87feae8 (release build of the fix's tree with the one-line predicate reverted, checker sha256 945672e17f2f…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 6 programs (six forms on the host): false-clean 3, recall-gap 3; `make fuzz-focus` exits 1. The fix (checker sha256 98e63158cb5c…, same host): recall-gap 6, 0 false clean, and the 6 `-never` twins 0 false positive (clean 2, uncertifiable 4 on main; uncertifiable 6 now: a function assigned and never called is not proven never called); 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site (a primitive created in an effect's apply) in a function assigned to a variable after its declaration (`let h = () => {}; h = () => { <site> }; h();`, a `let` with no initializer, a function that sets it) and called through the name was certified with no row: the calls of the name resolve to the initializer (or to nothing), the assigned function has no binding name, and `runs_unplaced_once` read a nameless function as one nobody calls",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the unprobed slice 5/7 leads of the research briefs (research-b11-briefs/index.md), probed with the real oracle (`unproven-clean` in 6 programs: the action and effect hosts, three forms) and the pattern lane (false clean, the three effect programs); then the cells of la-shapes.mjs (`la-<form>-<host>`: 15 false cleans on 1a87feae8)",
+  "fixed": "ADR 0535 amended (batch 11): `assigned_function` (local_access.rs, was `member_assigned`) answers a function written as the value of any assignment, a variable's too, so every walk that asks who calls a function with no binding name (`function_escapes_unfollowed`, `runs_unplaced_once`, the effect-phase origin, the read nets) reads it as handed where nothing places it: an uncertifiable row (`function-run-unplaced`), never a violation",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-la-let-later-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-la-let-later-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-la-let-later-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-la-let-noinit-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-la-let-noinit-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-la-let-noinit-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-la-let-other-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-la-let-other-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-la-let-other-effect-apply-effect-direct-none"
+  ],
+  "rediscovered": "main 1a87feae8 (release build of the fix's tree with the one-line predicate reverted, checker sha256 945672e17f2f…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 18 programs (six forms on the host): false-clean 9, recall-gap 9; `make fuzz-focus` exits 1. The fix (checker sha256 98e63158cb5c…, same host): recall-gap 18, 0 false clean, and the 18 `-never` twins 0 false positive (clean 4, uncertifiable 14 on main; uncertifiable 18 now: a function assigned and never called is not proven never called); 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site (`flush()` in an action's step) in a function assigned to a variable after its declaration (`let h = () => {}; h = () => { <site> }; h();`, a `let` with no initializer, a function that sets it) and called through the name was certified with no row: the calls of the name resolve to the initializer (or to nothing), the assigned function has no binding name, and `runs_unplaced_once` read a nameless function as one nobody calls",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the unprobed slice 5/7 leads of the research briefs (research-b11-briefs/index.md), probed with the real oracle (`unproven-clean` in 6 programs: the action and effect hosts, three forms) and the pattern lane (false clean, the three effect programs); then the cells of la-shapes.mjs (`la-<form>-<host>`: 15 false cleans on 1a87feae8)",
+  "fixed": "ADR 0535 amended (batch 11): `assigned_function` (local_access.rs, was `member_assigned`) answers a function written as the value of any assignment, a variable's too, so every walk that asks who calls a function with no binding name (`function_escapes_unfollowed`, `runs_unplaced_once`, the effect-phase origin, the read nets) reads it as handed where nothing places it: an uncertifiable row (`function-run-unplaced`), never a violation",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-la-let-later-action-x-direct-none",
+   "mx-flush-in-action-la-let-noinit-action-x-direct-none",
+   "mx-flush-in-action-la-let-other-action-x-direct-none"
+  ],
+  "rediscovered": "main 1a87feae8 (release build of the fix's tree with the one-line predicate reverted, checker sha256 945672e17f2f…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 6 programs (six forms on the host): false-clean 3, recall-gap 3; `make fuzz-focus` exits 1. The fix (checker sha256 98e63158cb5c…, same host): recall-gap 6, 0 false clean, and the 6 `-never` twins 0 false positive (clean 2, uncertifiable 4 on main; uncertifiable 6 now: a function assigned and never called is not proven never called); 0 behaviour, 0 attribution and 0 inconclusive differences."
  }
 ]
