@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 743,
+      "end": 753,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
       "kind": "violation",
@@ -12,6 +23,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 968,
+      "end": 980,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
       "kind": "violation",
@@ -19,6 +41,17 @@
       "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
       "start": 992,
       "end": 997,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 1147,
+      "end": 1166,
       "fixes": 0
     },
     {
@@ -39,6 +72,28 @@
       "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
       "start": 1346,
       "end": 1351,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 1513,
+      "end": 1523,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-until-scope/App.tsx",
+      "start": 2171,
+      "end": 2183,
       "fixes": 0
     },
     {

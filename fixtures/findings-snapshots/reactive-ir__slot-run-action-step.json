@@ -66,6 +66,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/slot-run-action-step/App.tsx",
+      "start": 829,
+      "end": 839,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "violation",

@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-prototype-reach/App.tsx",
+      "start": 265,
+      "end": 275,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/impostor-prototype-reach/App.tsx",
       "start": 355,
       "end": 377,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-prototype-reach/App.tsx",
+      "start": 386,
+      "end": 395,
       "fixes": 0
     },
     {

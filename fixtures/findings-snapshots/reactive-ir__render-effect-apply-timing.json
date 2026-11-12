@@ -22,10 +22,21 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "uncertifiable",
-      "blocker": "owner-later-run-unowned",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 652,
+      "end": 670,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
       "start": 709,
@@ -37,6 +48,50 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-later-run-unowned",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 709,
+      "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 803,
+      "end": 821,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 860,
+      "end": 872,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-later-run-unowned",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 860,
+      "end": 872,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
       "start": 860,
@@ -55,6 +110,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 1378,
+      "end": 1402,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 1441,
+      "end": 1456,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -63,6 +140,28 @@
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
       "start": 1441,
       "end": 1456,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 1621,
+      "end": 1633,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 1672,
+      "end": 1681,
       "fixes": 0
     },
     {
@@ -76,6 +175,39 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 1838,
+      "end": 1856,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 1876,
+      "end": 1885,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 2284,
+      "end": 2302,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -84,6 +216,28 @@
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
       "start": 2346,
       "end": 2360,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 2510,
+      "end": 2522,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 2825,
+      "end": 2843,
       "fixes": 0
     },
     {
@@ -107,6 +261,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 3482,
+      "end": 3500,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 3482,
+      "end": 3500,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -125,6 +301,39 @@
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
       "start": 3714,
       "end": 3725,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 3899,
+      "end": 3909,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 4152,
+      "end": 4164,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 4152,
+      "end": 4164,
       "fixes": 0
     },
     {

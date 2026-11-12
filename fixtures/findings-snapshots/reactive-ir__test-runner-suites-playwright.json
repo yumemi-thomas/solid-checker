@@ -11,6 +11,28 @@
       "start": 275,
       "end": 293,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright/App.test.tsx",
+      "start": 275,
+      "end": 293,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright/App.test.tsx",
+      "start": 606,
+      "end": 624,
+      "fixes": 0
     }
   ]
 }

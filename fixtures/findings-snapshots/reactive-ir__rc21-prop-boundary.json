@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
+      "start": 274,
+      "end": 284,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -10,6 +21,17 @@
       "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
       "start": 325,
       "end": 331,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
+      "start": 388,
+      "end": 398,
       "fixes": 0
     },
     {
@@ -35,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
+      "start": 740,
+      "end": 750,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -43,6 +76,17 @@
       "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
       "start": 794,
       "end": 800,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
+      "start": 879,
+      "end": 889,
       "fixes": 0
     },
     {
@@ -57,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
+      "start": 990,
+      "end": 1000,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "violation",
@@ -64,6 +119,17 @@
       "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
       "start": 1030,
       "end": 1036,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-prop-boundary/App.tsx",
+      "start": 1093,
+      "end": 1103,
       "fixes": 0
     },
     {

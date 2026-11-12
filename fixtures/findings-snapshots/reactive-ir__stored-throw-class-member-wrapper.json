@@ -44,6 +44,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-class-member-wrapper/App.tsx",
+      "start": 1501,
+      "end": 1511,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -63,6 +74,28 @@
       "path": "fixtures/reactive-ir/stored-throw-class-member-wrapper/App.tsx",
       "start": 1738,
       "end": 1748,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-class-member-wrapper/App.tsx",
+      "start": 1901,
+      "end": 1911,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-class-member-wrapper/App.tsx",
+      "start": 2190,
+      "end": 2200,
       "fixes": 0
     },
     {
@@ -88,6 +121,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-class-member-wrapper/App.tsx",
+      "start": 2540,
+      "end": 2550,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -96,6 +140,17 @@
       "path": "fixtures/reactive-ir/stored-throw-class-member-wrapper/App.tsx",
       "start": 2662,
       "end": 2672,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-class-member-wrapper/App.tsx",
+      "start": 2700,
+      "end": 2712,
       "fixes": 0
     },
     {

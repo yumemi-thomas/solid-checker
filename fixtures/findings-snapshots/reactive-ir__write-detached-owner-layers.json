@@ -2,6 +2,39 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 1727,
+      "end": 1737,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 1959,
+      "end": 1971,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 2397,
+      "end": 2407,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -9,6 +42,17 @@
       "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
       "start": 2439,
       "end": 2446,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 2678,
+      "end": 2689,
       "fixes": 0
     },
     {
@@ -43,6 +87,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 3452,
+      "end": 3463,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -74,6 +129,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 4291,
+      "end": 4302,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -91,6 +157,17 @@
       "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
       "start": 4563,
       "end": 4570,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 4722,
+      "end": 4733,
       "fixes": 0
     },
     {
@@ -126,6 +203,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 5381,
+      "end": 5391,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -133,6 +221,17 @@
       "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
       "start": 5454,
       "end": 5461,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 6097,
+      "end": 6108,
       "fixes": 0
     },
     {
@@ -144,6 +243,17 @@
       "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
       "start": 6138,
       "end": 6145,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 6295,
+      "end": 6306,
       "fixes": 0
     },
     {
@@ -175,6 +285,17 @@
       "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
       "start": 7152,
       "end": 7159,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-layers/App.tsx",
+      "start": 7343,
+      "end": 7353,
       "fixes": 0
     },
     {

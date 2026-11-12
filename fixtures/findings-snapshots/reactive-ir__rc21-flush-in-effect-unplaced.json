@@ -134,6 +134,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-flush-in-effect-unplaced/App.tsx",
+      "start": 620,
+      "end": 632,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -142,6 +153,17 @@
       "path": "fixtures/reactive-ir/rc21-flush-in-effect-unplaced/App.tsx",
       "start": 714,
       "end": 724,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-flush-in-effect-unplaced/App.tsx",
+      "start": 777,
+      "end": 789,
       "fixes": 0
     },
     {
@@ -175,6 +197,17 @@
       "path": "fixtures/reactive-ir/rc21-flush-in-effect-unplaced/App.tsx",
       "start": 819,
       "end": 826,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-flush-in-effect-unplaced/App.tsx",
+      "start": 904,
+      "end": 916,
       "fixes": 0
     },
     {

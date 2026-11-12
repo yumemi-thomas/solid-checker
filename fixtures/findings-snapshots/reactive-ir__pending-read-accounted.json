@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 465,
+      "end": 475,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 509,
+      "end": 519,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
@@ -32,6 +54,17 @@
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 591,
       "end": 597,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 765,
+      "end": 775,
       "fixes": 0
     },
     {
@@ -90,6 +123,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 1038,
+      "end": 1048,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
@@ -123,6 +167,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 1479,
+      "end": 1489,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
@@ -145,6 +200,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 1971,
+      "end": 1981,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
@@ -164,6 +230,17 @@
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 2028,
       "end": 2037,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 2046,
+      "end": 2058,
       "fixes": 0
     },
     {
@@ -189,6 +266,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 2408,
+      "end": 2418,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -197,6 +285,17 @@
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 2461,
       "end": 2470,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 2535,
+      "end": 2545,
       "fixes": 0
     },
     {
@@ -266,6 +365,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 3101,
+      "end": 3111,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -305,6 +415,17 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 3529,
+      "end": 3539,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 3584,
       "end": 3621,
       "fixes": 0
@@ -329,6 +450,17 @@
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 3604,
       "end": 3613,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 3893,
+      "end": 3904,
       "fixes": 0
     },
     {
@@ -373,6 +505,17 @@
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 4011,
       "end": 4016,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4290,
+      "end": 4300,
       "fixes": 0
     },
     {
@@ -428,6 +571,94 @@
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 4448,
       "end": 4454,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4726,
+      "end": 4736,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4896,
+      "end": 4906,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 5071,
+      "end": 5081,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 5516,
+      "end": 5526,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 5651,
+      "end": 5661,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 5820,
+      "end": 5830,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 6012,
+      "end": 6022,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 6055,
+      "end": 6065,
       "fixes": 0
     },
     {

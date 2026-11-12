@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 417,
+      "end": 435,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -9,6 +20,28 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 468,
       "end": 479,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 730,
+      "end": 740,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 759,
+      "end": 777,
       "fixes": 0
     },
     {
@@ -22,6 +55,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 1183,
+      "end": 1201,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -30,6 +74,17 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 1234,
       "end": 1245,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 1628,
+      "end": 1646,
       "fixes": 0
     },
     {
@@ -65,6 +120,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 2099,
+      "end": 2117,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -76,6 +142,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 2417,
+      "end": 2435,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -84,6 +161,17 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 2468,
       "end": 2479,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 2827,
+      "end": 2845,
       "fixes": 0
     },
     {
@@ -116,6 +204,17 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 3137,
       "end": 3140,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3232,
+      "end": 3250,
       "fixes": 0
     },
     {
@@ -152,6 +251,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3636,
+      "end": 3654,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -182,6 +292,17 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 3903,
       "end": 3906,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
+      "start": 3998,
+      "end": 4016,
       "fixes": 0
     },
     {

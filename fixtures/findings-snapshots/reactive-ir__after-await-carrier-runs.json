@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 357,
+      "end": 367,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -20,6 +31,17 @@
       "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
       "start": 487,
       "end": 490,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 579,
+      "end": 589,
       "fixes": 0
     },
     {
@@ -55,6 +77,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 813,
+      "end": 823,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -87,6 +120,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 1177,
+      "end": 1187,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -106,6 +150,17 @@
       "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
       "start": 1320,
       "end": 1323,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 1407,
+      "end": 1417,
       "fixes": 0
     },
     {
@@ -139,6 +194,17 @@
       "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
       "start": 1569,
       "end": 1572,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 1682,
+      "end": 1692,
       "fixes": 0
     },
     {
@@ -197,6 +263,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 1923,
+      "end": 1933,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -219,6 +296,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 2160,
+      "end": 2170,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -238,6 +326,17 @@
       "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
       "start": 2345,
       "end": 2348,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-carrier-runs/App.tsx",
+      "start": 2527,
+      "end": 2537,
       "fixes": 0
     },
     {

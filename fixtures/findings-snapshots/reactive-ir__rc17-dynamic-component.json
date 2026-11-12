@@ -2,6 +2,19 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 1107,
+      "end": 1119,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -12,6 +25,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 1392,
+      "end": 1404,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "missing-owner",
@@ -26,6 +52,19 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 1530,
+      "end": 1542,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -36,6 +75,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 1731,
+      "end": 1743,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "missing-owner",
@@ -98,6 +150,19 @@
       "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 3539,
+      "end": 3551,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -109,6 +174,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the enclosing callback is written under an owner but is handed on, stored or a class member that solid-checker cannot follow to its calls, so no owner is proven current when it runs",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Call the callback where the owner is current, or create its owner inside it (createRoot, runWithOwner with a captured getOwner())."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 3539,
+      "end": 3551,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "no-write-in-pure-computation",
@@ -124,6 +202,19 @@
       "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive signal only, opt in with { ownedWrite: true } in that signal's creation options; a store setter has no such opt-in."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 3714,
+      "end": 3726,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -135,6 +226,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the enclosing callback is written under an owner but is handed on, stored or a class member that solid-checker cannot follow to its calls, so no owner is proven current when it runs",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Call the callback where the owner is current, or create its owner inside it (createRoot, runWithOwner with a captured getOwner())."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
+      "start": 3714,
+      "end": 3726,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "no-write-in-pure-computation",

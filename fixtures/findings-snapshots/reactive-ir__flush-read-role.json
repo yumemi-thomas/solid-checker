@@ -45,6 +45,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 590,
+      "end": 600,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -78,6 +89,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 729,
+      "end": 741,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -108,6 +130,17 @@
       "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
       "start": 753,
       "end": 773,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 995,
+      "end": 1005,
       "fixes": 0
     },
     {

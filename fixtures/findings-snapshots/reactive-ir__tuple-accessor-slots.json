@@ -2,6 +2,28 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
+      "start": 114,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
+      "start": 114,
+      "end": 124,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -10,6 +32,28 @@
       "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
       "start": 269,
       "end": 272,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-slot.tsx",
+      "start": 88,
+      "end": 98,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-slot.tsx",
+      "start": 88,
+      "end": 98,
       "fixes": 0
     },
     {
@@ -31,6 +75,50 @@
       "path": "fixtures/reactive-ir/tuple-accessor-slots/body-read.tsx",
       "start": 178,
       "end": 181,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/covered.tsx",
+      "start": 78,
+      "end": 88,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/covered.tsx",
+      "start": 78,
+      "end": 88,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
+      "start": 114,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
+      "start": 114,
+      "end": 124,
       "fixes": 0
     },
     {
@@ -85,6 +173,72 @@
       "path": "fixtures/reactive-ir/tuple-accessor-slots/helper-read.tsx",
       "start": 216,
       "end": 224,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/hole.tsx",
+      "start": 114,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/hole.tsx",
+      "start": 114,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/sync-of-mixed.tsx",
+      "start": 123,
+      "end": 133,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/sync-of-mixed.tsx",
+      "start": 123,
+      "end": 133,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/two-returns.tsx",
+      "start": 124,
+      "end": 134,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/two-returns.tsx",
+      "start": 124,
+      "end": 134,
       "fixes": 0
     },
     {

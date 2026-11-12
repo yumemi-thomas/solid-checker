@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 696,
+      "end": 706,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -43,6 +54,17 @@
       "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
       "start": 946,
       "end": 953,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1085,
+      "end": 1095,
       "fixes": 0
     },
     {
@@ -112,6 +134,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1492,
+      "end": 1502,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -120,6 +153,17 @@
       "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
       "start": 1623,
       "end": 1626,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1773,
+      "end": 1783,
       "fixes": 0
     },
     {
@@ -178,6 +222,28 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 2135,
+      "end": 2145,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 2186,
+      "end": 2198,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -208,6 +274,17 @@
       "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
       "start": 2429,
       "end": 2430,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 2539,
+      "end": 2551,
       "fixes": 0
     },
     {

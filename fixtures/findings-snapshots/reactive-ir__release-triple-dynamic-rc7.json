@@ -2,6 +2,28 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/release-triple-dynamic-rc7/App.tsx",
+      "start": 926,
+      "end": 938,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/release-triple-dynamic-rc7/App.tsx",
+      "start": 1050,
+      "end": 1062,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -29,6 +51,17 @@
       "path": "fixtures/reactive-ir/release-triple-dynamic-rc7/App.tsx",
       "start": 1544,
       "end": 1556,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/release-triple-dynamic-rc7/App.tsx",
+      "start": 1716,
+      "end": 1728,
       "fixes": 0
     },
     {

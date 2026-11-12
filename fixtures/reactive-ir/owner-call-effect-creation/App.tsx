@@ -29,6 +29,18 @@ export function RootInApply() {
   return <p>root</p>;
 }
 
+// A root inside a computation's compute (an owner is set there, so the root is no creation on an apply's stack), and what the root's callback creates: it runs under
+// the owner the root creates (`EffectCreationOwnerSetAround`).
+export function RootInMemo() {
+  const outer = createMemo(() =>
+    createRoot(() => {
+      const inner = createMemo(() => 9);
+      return inner;
+    }),
+  );
+  return <p>{outer()}</p>;
+}
+
 // A component body: rendering runs it under the owner its render sets (the role engine's `EffectCreationRunsOffApply`, or the graph's `OwnerCurrent`).
 export function Body() {
   const memo = createMemo(() => 3);
@@ -64,6 +76,30 @@ function dead() {
   return createMemo(() => 7);
 }
 
+// An instance field's initializer runs at each construction, which may be anywhere: it is no module scope, and nothing else answers for it.
+class Holder {
+  memo = createMemo(() => 11);
+}
+export function Fielded() {
+  const holder = new Holder();
+  return <p>{holder.memo()}</p>;
+}
+
+// A helper a component body and a timer callback both call: an owner is current on one entry only (the timer's is none), and no role places the helper's own code.
+function shared() {
+  return createMemo(() => 12);
+}
+export function SharedBody() {
+  const memo = shared();
+  return <p>{memo()}</p>;
+}
+export function SharedTimer() {
+  setTimeout(() => {
+    shared();
+  });
+  return <p>shared</p>;
+}
+
 // A helper stored in an array: it is entered by a reference that is no direct call, so nothing proves where it runs: an uncertifiable row.
 const registry: Array<() => unknown> = [];
 function stored() {
@@ -76,9 +112,13 @@ function App() {
     <p>
       <InApply />
       <RootInApply />
+      <RootInMemo />
       <Body />
       <Handler />
       <Timer />
+      <Fielded />
+      <SharedBody />
+      <SharedTimer />
       {top()}
     </p>
   );

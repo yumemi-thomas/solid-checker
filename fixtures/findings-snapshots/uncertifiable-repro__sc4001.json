@@ -145,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-after-await.tsx",
+      "start": 355,
+      "end": 364,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -546,6 +557,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
       "start": 412,
       "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/exported-lazy-route.tsx",
+      "start": 456,
+      "end": 475,
       "fixes": 0
     },
     {
@@ -2385,6 +2407,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-call-expression.ts",
+      "start": 440,
+      "end": 459,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2415,6 +2448,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-call-expression.ts",
       "start": 492,
       "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
+      "start": 381,
+      "end": 400,
       "fixes": 0
     },
     {
@@ -2473,6 +2517,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
+      "start": 374,
+      "end": 393,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2503,6 +2558,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
       "start": 420,
       "end": 425,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-namespace-member.ts",
+      "start": 454,
+      "end": 473,
       "fixes": 0
     },
     {
@@ -2924,6 +2990,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+      "start": 449,
+      "end": 461,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -3007,6 +3084,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
       "start": 594,
       "end": 610,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+      "start": 624,
+      "end": 633,
       "fixes": 0
     },
     {

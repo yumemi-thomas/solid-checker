@@ -30,6 +30,17 @@
       "start": 366,
       "end": 375,
       "fixes": 1
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/realistic-topology/lib/hooks.ts",
+      "start": 384,
+      "end": 396,
+      "fixes": 0
     }
   ]
 }

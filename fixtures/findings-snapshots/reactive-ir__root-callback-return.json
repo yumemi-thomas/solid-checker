@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
+      "start": 595,
+      "end": 605,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",

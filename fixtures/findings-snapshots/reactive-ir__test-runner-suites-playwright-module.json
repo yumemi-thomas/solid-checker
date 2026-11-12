@@ -20,6 +20,17 @@
       "start": 521,
       "end": 539,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright-module/App.test.tsx",
+      "start": 521,
+      "end": 539,
+      "fixes": 0
     }
   ]
 }

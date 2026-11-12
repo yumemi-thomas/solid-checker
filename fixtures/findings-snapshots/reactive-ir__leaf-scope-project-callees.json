@@ -36,6 +36,17 @@
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
+      "start": 827,
+      "end": 846,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
@@ -118,6 +129,17 @@
       "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
       "start": 1895,
       "end": 1903,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-project-callees/App.tsx",
+      "start": 2064,
+      "end": 2083,
       "fixes": 0
     },
     {

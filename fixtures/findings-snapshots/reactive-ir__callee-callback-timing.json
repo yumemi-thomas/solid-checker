@@ -108,6 +108,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 331,
+      "end": 341,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -141,6 +152,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 520,
+      "end": 530,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -171,6 +193,17 @@
       "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
       "start": 564,
       "end": 572,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 698,
+      "end": 708,
       "fixes": 0
     },
     {
@@ -184,6 +217,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 863,
+      "end": 873,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -223,6 +267,17 @@
       "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
       "start": 988,
       "end": 996,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1123,
+      "end": 1139,
       "fixes": 0
     },
     {
@@ -268,6 +323,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1381,
+      "end": 1391,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -286,6 +352,17 @@
       "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
       "start": 1487,
       "end": 1495,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1631,
+      "end": 1641,
       "fixes": 0
     },
     {
@@ -319,6 +396,17 @@
       "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
       "start": 1735,
       "end": 1743,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "start": 1889,
+      "end": 1899,
       "fixes": 0
     },
     {

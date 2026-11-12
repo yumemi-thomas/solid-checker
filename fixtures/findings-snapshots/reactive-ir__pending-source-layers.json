@@ -289,6 +289,28 @@
       "start": 6836,
       "end": 6846,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/hooks.ts",
+      "start": 161,
+      "end": 171,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/hooks.ts",
+      "start": 328,
+      "end": 338,
+      "fixes": 0
     }
   ]
 }

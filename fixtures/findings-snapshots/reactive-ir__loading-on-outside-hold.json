@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
+      "start": 415,
+      "end": 425,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-outside-hold",
       "code": "SC5006",
       "kind": "uncertifiable",
@@ -35,6 +46,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
+      "start": 1109,
+      "end": 1119,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
+      "start": 1483,
+      "end": 1493,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -43,6 +76,17 @@
       "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
       "start": 1650,
       "end": 1653,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
+      "start": 1873,
+      "end": 1883,
       "fixes": 0
     },
     {
@@ -131,6 +175,17 @@
       "path": "fixtures/reactive-ir/loading-on-outside-hold/App.tsx",
       "start": 2472,
       "end": 2479,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/loading-on-outside-hold/hooks.ts",
+      "start": 200,
+      "end": 210,
       "fixes": 0
     },
     {

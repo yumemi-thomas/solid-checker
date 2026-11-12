@@ -54,6 +54,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/carried-call/App.tsx",
+      "start": 850,
+      "end": 860,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -171,6 +182,17 @@
       "path": "fixtures/reactive-ir/carried-call/App.tsx",
       "start": 2059,
       "end": 2070,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/carried-call/App.tsx",
+      "start": 2235,
+      "end": 2247,
       "fixes": 0
     },
     {

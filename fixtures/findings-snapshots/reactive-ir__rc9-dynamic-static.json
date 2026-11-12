@@ -2,10 +2,11 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
       "start": 964,
       "end": 976,
@@ -17,8 +18,40 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 964,
+      "end": 976,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
       "start": 1242,
       "end": 1254,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 1242,
+      "end": 1254,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 1443,
+      "end": 1455,
       "fixes": 0
     },
     {
@@ -72,6 +105,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 3480,
+      "end": 3492,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -91,6 +135,17 @@
       "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
       "start": 3522,
       "end": 3534,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-dynamic-static/App.tsx",
+      "start": 3646,
+      "end": 3658,
       "fixes": 0
     },
     {

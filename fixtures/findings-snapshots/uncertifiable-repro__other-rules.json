@@ -65,6 +65,39 @@
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/clean-children-helper.tsx",
+      "start": 411,
+      "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/clean-children-helper.tsx",
+      "start": 458,
+      "end": 466,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/other-rules/src/clean-loading-boundary.tsx",
+      "start": 380,
+      "end": 390,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/other-rules/src/cleanup-in-on-settled.tsx",

@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-created-label/App.tsx",
+      "start": 252,
+      "end": 264,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",

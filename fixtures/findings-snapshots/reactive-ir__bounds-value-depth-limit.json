@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-value-depth-limit/handed.tsx",
+      "start": 402,
+      "end": 412,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/bounds-value-depth-limit/handed.tsx",
       "start": 497,
       "end": 500,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-value-depth-limit/handed.tsx",
+      "start": 567,
+      "end": 577,
       "fixes": 0
     },
     {

@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 568,
+      "end": 578,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -9,6 +20,17 @@
       "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
       "start": 603,
       "end": 611,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 926,
+      "end": 937,
       "fixes": 0
     },
     {
@@ -23,6 +45,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 1347,
+      "end": 1357,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "violation",
@@ -30,6 +63,17 @@
       "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
       "start": 1382,
       "end": 1386,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 1609,
+      "end": 1619,
       "fixes": 0
     },
     {
@@ -43,6 +87,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 1958,
+      "end": 1968,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -50,6 +105,50 @@
       "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
       "start": 2029,
       "end": 2037,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 3164,
+      "end": 3174,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 3483,
+      "end": 3493,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 3763,
+      "end": 3773,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-stepped-generator-in-root/App.tsx",
+      "start": 4435,
+      "end": 4445,
       "fixes": 0
     },
     {

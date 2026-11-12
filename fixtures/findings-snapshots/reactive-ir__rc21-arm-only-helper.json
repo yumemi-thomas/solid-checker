@@ -32,6 +32,17 @@
       "start": 761,
       "end": 765,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-arm-only-helper/App.tsx",
+      "start": 929,
+      "end": 939,
+      "fixes": 0
     }
   ]
 }

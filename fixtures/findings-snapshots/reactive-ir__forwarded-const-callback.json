@@ -77,6 +77,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 2251,
+      "end": 2263,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -85,6 +96,17 @@
       "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
       "start": 2278,
       "end": 2287,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-const-callback/App.tsx",
+      "start": 2573,
+      "end": 2585,
       "fixes": 0
     },
     {

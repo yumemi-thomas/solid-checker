@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
+      "start": 701,
+      "end": 711,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
       "start": 822,
       "end": 831,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
+      "start": 1318,
+      "end": 1334,
       "fixes": 0
     },
     {

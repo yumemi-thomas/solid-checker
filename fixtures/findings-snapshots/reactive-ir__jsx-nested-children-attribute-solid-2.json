@@ -44,6 +44,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 11422,
+      "end": 11434,
+      "fixes": 0
+    },
+    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",

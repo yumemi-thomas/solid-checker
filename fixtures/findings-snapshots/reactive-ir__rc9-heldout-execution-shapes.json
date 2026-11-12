@@ -57,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-heldout-execution-shapes/App.tsx",
+      "start": 1645,
+      "end": 1655,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -65,6 +76,17 @@
       "path": "fixtures/reactive-ir/rc9-heldout-execution-shapes/App.tsx",
       "start": 1703,
       "end": 1733,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-heldout-execution-shapes/App.tsx",
+      "start": 1740,
+      "end": 1749,
       "fixes": 0
     },
     {

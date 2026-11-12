@@ -2,6 +2,32 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1340,
+      "end": 1352,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1340,
+      "end": 1352,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -12,6 +38,84 @@
       "fixes": 0,
       "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1603,
+      "end": 1615,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1603,
+      "end": 1615,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1630,
+      "end": 1642,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1630,
+      "end": 1642,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1981,
+      "end": 1993,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1981,
+      "end": 1993,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "missing-effect-function",
@@ -26,6 +130,19 @@
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2029,
+      "end": 2041,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -39,6 +156,19 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2029,
+      "end": 2041,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -49,6 +179,32 @@
       "fixes": 0,
       "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2097,
+      "end": 2109,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2097,
+      "end": 2109,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "missing-effect-function",
@@ -63,6 +219,19 @@
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2166,
+      "end": 2178,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -76,6 +245,19 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2166,
+      "end": 2178,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -86,6 +268,32 @@
       "fixes": 0,
       "message": "an effect is created without a callable effect function; createEffect(compute, apply) and createRenderEffect(compute, apply) take it second and createReaction(apply) first, and the runtime calls it: compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2718,
+      "end": 2730,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2718,
+      "end": 2730,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "missing-effect-function",
@@ -101,6 +309,19 @@
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument. Prove the effective client/server entry through project compiler facts before treating this as a violation."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2988,
+      "end": 3000,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -112,6 +333,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2988,
+      "end": 3000,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "async-outside-loading-boundary",
@@ -213,6 +447,19 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 5769,
+      "end": 5781,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -226,6 +473,19 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 5769,
+      "end": 5781,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -236,6 +496,58 @@
       "fixes": 0,
       "message": "reactive accessor \"seed\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"seed\" changes",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 6866,
+      "end": 6878,
+      "fixes": 0,
+      "message": "this creation (`createSignal`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 6866,
+      "end": 6878,
+      "fixes": 0,
+      "message": "this creation (`createSignal`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 7159,
+      "end": 7169,
+      "fixes": 0,
+      "message": "this creation (`createMemo`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 7159,
+      "end": 7169,
+      "fixes": 0,
+      "message": "this creation (`createMemo`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     }
   ]
 }

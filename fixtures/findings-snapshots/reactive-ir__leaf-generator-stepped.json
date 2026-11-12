@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 713,
+      "end": 723,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -10,6 +21,17 @@
       "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
       "start": 713,
       "end": 723,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-generator-stepped/App.tsx",
+      "start": 824,
+      "end": 834,
       "fixes": 0
     },
     {

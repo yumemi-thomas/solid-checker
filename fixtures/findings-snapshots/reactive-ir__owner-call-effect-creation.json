@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
+      "start": 745,
+      "end": 755,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
+      "start": 1058,
+      "end": 1068,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
+      "start": 2283,
+      "end": 2293,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
+      "start": 2283,
+      "end": 2302,
+      "fixes": 0
+    }
+  ]
+}

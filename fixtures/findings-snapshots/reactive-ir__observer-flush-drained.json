@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/observer-flush-drained/App.tsx",
+      "start": 169,
+      "end": 181,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "uncertifiable",
@@ -10,6 +21,17 @@
       "path": "fixtures/reactive-ir/observer-flush-drained/App.tsx",
       "start": 203,
       "end": 210,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/observer-flush-drained/App.tsx",
+      "start": 263,
+      "end": 273,
       "fixes": 0
     },
     {

@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 311,
+      "end": 329,
+      "fixes": 0
+    },
+    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -9,6 +20,17 @@
       "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
       "start": 311,
       "end": 329,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 411,
+      "end": 429,
       "fixes": 0
     },
     {
@@ -22,6 +44,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 592,
+      "end": 610,
+      "fixes": 0
+    },
+    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -29,6 +62,17 @@
       "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
       "start": 592,
       "end": 610,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 873,
+      "end": 887,
       "fixes": 0
     },
     {
@@ -40,6 +84,39 @@
       "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
       "start": 873,
       "end": 887,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 1046,
+      "end": 1064,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 1142,
+      "end": 1156,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-effect-function-slots/App.tsx",
+      "start": 1170,
+      "end": 1184,
       "fixes": 0
     }
   ]

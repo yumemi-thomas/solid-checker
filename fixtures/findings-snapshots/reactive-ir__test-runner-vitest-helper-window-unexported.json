@@ -1,4 +1,16 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-window-unexported/App.test.tsx",
+      "start": 349,
+      "end": 359,
+      "fixes": 0
+    }
+  ]
 }

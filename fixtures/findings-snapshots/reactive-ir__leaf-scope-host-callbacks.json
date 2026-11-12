@@ -155,6 +155,17 @@
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/AugmentedTimers.tsx",
+      "start": 758,
+      "end": 777,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/AugmentedTimers.tsx",
@@ -171,6 +182,17 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
       "start": 574,
       "end": 586,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
+      "start": 753,
+      "end": 772,
       "fixes": 0
     },
     {
@@ -247,6 +269,17 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
       "start": 286,
       "end": 298,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 603,
+      "end": 612,
       "fixes": 0
     },
     {

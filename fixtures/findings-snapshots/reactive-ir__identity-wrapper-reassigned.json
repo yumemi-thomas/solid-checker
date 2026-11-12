@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 323,
+      "end": 332,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -41,6 +52,17 @@
       "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
       "start": 557,
       "end": 571,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 583,
+      "end": 592,
       "fixes": 0
     },
     {

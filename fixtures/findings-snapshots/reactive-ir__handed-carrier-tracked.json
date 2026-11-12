@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2a.tsx",
+      "start": 151,
+      "end": 161,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -10,6 +21,17 @@
       "path": "fixtures/reactive-ir/handed-carrier-tracked/g2a.tsx",
       "start": 199,
       "end": 203,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2b.tsx",
+      "start": 151,
+      "end": 161,
       "fixes": 0
     },
     {
@@ -35,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2d-apply.tsx",
+      "start": 75,
+      "end": 85,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -53,6 +86,17 @@
       "path": "fixtures/reactive-ir/handed-carrier-tracked/g2d-apply.tsx",
       "start": 121,
       "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2d-map.tsx",
+      "start": 75,
+      "end": 85,
       "fixes": 0
     },
     {
@@ -95,6 +139,17 @@
       "path": "fixtures/reactive-ir/handed-carrier-tracked/g2d-module.tsx",
       "start": 93,
       "end": 96,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-carrier-tracked/g2f-sort.tsx",
+      "start": 151,
+      "end": 161,
       "fixes": 0
     },
     {
