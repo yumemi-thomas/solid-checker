@@ -19984,5 +19984,11 @@
    "mx-flush-in-tracked-queue-callback-ph-call-leaf-x-direct-none"
   ],
   "rediscovered": "`rel-n45` (release, the previous head 879c33e05's N4/N5 fix as built by runn45.sh; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-literal-leaf, ph-ref-leaf, ph-alias-leaf, ph-member-leaf, ph-method-leaf, ph-holder-leaf, ph-array-leaf, ph-jsx-leaf, ph-children-leaf, ph-wrap-leaf, ph-caller-leaf, ph-return-leaf, ph-call-leaf); the code's 13 ph programs: false-clean 13. `rel-b3a` (release, the fix of this PR, the code the first commit holds): recall-gap 13"
+ },
+ {
+  "finding": "A flush written in a callback a reviewed scheduler runs (`setTimeout`, `queueMicrotask`, `Promise.prototype.then`) was certified on `FlushSafe::FreshStack` in a program that installs fake timers (`vi.useFakeTimers()`, `jest.useFakeTimers()`), where a test advances the clock inside an action's step and the callback runs on the step's stack: FLUSH_IN_ACTION (SC2006), with the effect's apply and a leaf callback the same way (SC2008, SC3001)",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): F1 of the Fable review of #213, owner ruling; confirmed in a vitest 4.1.7 run on solid-js 2.0.0-rc.21 (development build, jsdom): a real `setTimeout` callback flushes on an empty stack (no error), the same callback run by `vi.advanceTimersByTime(10)` inside an `action(function* () { … })` step throws `[FLUSH_IN_ACTION]`",
+  "fixed": "ADR 0967 (F1): a program that installs fake timers (a member or destructured key that resolves to the installer's declaration in vitest, @types/jest, @jest/environment, @jest/globals or bun-types, called or read as a value) gets no `FreshStack` reason, so every flush a scheduler's callback holds keeps its uncertifiable row of each code",
+  "outside": "the grids' programs run in the page of the Chrome oracle, where vitest and jest cannot load (they need their own Node runner and the generator names no test library), so no program the fuzzer generates installs the reviewed libraries' fake clock; fixture flush-universe-fake-timers holds it (the vitest program: nine rows, its `real` twin: none, the `jest`, `bun` and `destructured` variants: three each) and the `FakeTimers` census reads the declaration, which a unit test (`a_fake_timer_installer_is_a_reviewed_library_declaration`) pins"
  }
 ]

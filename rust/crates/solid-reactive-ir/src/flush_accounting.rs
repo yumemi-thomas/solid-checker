@@ -78,7 +78,7 @@ enum FlushSafe {
     /// A callback a reviewed host scheduler runs from an empty stack, written directly in it (the census's `FreshStack`): no step, apply or leaf
     /// callback is below it. Only for code that runs when the callback runs ([`callback_runs_it`]: no parameter default, no generator, no named function expression
     /// its own code calls again, no class field initializer, no JSX or tracked region written in the call), and for a call that does not reach the callback through its
-    /// receiver's `then` (`catch` and `finally`).
+    /// receiver's `then` (`catch` and `finally`), and only in a program that installs no fake timers ([`FakeTimers`]: a test advances a fake clock on the stack it is on).
     FreshStack,
     /// Code an `await` of its own async function dominates (the census's `AwaitContinuation`): it resumes from the microtask queue on an empty stack.
     /// Only for a call in a function's body: a parameter default runs wherever its function is called.
@@ -137,6 +137,104 @@ impl FlushSafe {
     }
 }
 
+/// F1 of the review of #213 (the owner's ruling): whether the program installs fake timers, asked at most once per build and only when a scheduler's callback would end a
+/// flush. A fake clock replaces the host's `setTimeout`, `setInterval`, `requestAnimationFrame` and their kin with timers the test advances (`vi.advanceTimersByTime`,
+/// `jest.runAllTimers`): the callback a reviewed scheduler runs from an empty stack runs on the stack of whoever advances the clock, which may be an action's step or an effect's
+/// apply. The clock is global to the run, so the question is the program's, not the file's: a test file reaches it through a helper another file declares, and the flush is
+/// written in the code under test.
+struct FakeTimers<'l, 'a> {
+    lookup: &'l crate::indexes::SemanticLookup<'a>,
+    /// The files of the program by path (`SemanticLookup::files`, read once by the pass).
+    files: &'l HashMap<&'l str, &'a FileFacts>,
+    installed: std::cell::OnceCell<bool>,
+}
+
+impl<'l, 'a> FakeTimers<'l, 'a> {
+    fn new(
+        lookup: &'l crate::indexes::SemanticLookup<'a>,
+        files: &'l HashMap<&'l str, &'a FileFacts>,
+    ) -> Self {
+        Self {
+            lookup,
+            files,
+            installed: std::cell::OnceCell::new(),
+        }
+    }
+
+    /// Whether some file of the program names a function a reviewed test library declares for installing fake timers.
+    fn installed(&self) -> bool {
+        *self.installed.get_or_init(|| {
+            self.files
+                .values()
+                .any(|file| names_fake_timer_installer(self.lookup, file))
+        })
+    }
+}
+
+/// Whether the file names a fake-timer installer, by one of three facts, each the compiler's resolution and never the spelling at the use alone:
+///
+/// - a member's or a destructured key's property resolves to the installer's declaration in a reviewed library ([`crate::runtime_semantics::fake_timer_installer_declaration`]):
+///   a call through any typed handle (`vi.useFakeTimers()`, `clock.useFakeTimers()`, `vi["useFakeTimers"]()`, `const { useFakeTimers: install } = vi`);
+/// - a member names the installer's property of an object a reviewed library declares, read as a value or called through a reflective call: the entity of a property
+///   that is not called is not in the table, so the object decides (`const install = vi.useFakeTimers`, `vi.useFakeTimers.call(vi)`, `(vi as any).useFakeTimers()`, `t.vi.useFakeTimers`
+///   of a namespace import);
+/// - a key the pattern destructures names it, from such an object (`const { useFakeTimers } = vi`: the entity a shorthand key names is the local binding).
+///
+/// What is not recognized, named in `docs/open-work.md`: a value read through a handle no reviewed library declares (`const clock = vi; const install = clock.useFakeTimers`), a
+/// destructured parameter, a reassigned pattern, a receiver the compiler types `any` that is not written as a reviewed object, and every other library's installer.
+fn names_fake_timer_installer(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &FileFacts,
+) -> bool {
+    let path = file.path.as_str();
+    let declares_installer = |property: Span| {
+        lookup.entities().at(path, property).is_some_and(|symbol| {
+            lookup.note_symbol_declarations(symbol.as_str());
+            lookup
+                .symbol_declarations(symbol.as_str())
+                .into_iter()
+                .flatten()
+                .any(|declaration| {
+                    crate::runtime_semantics::fake_timer_installer_declaration(
+                        declaration.location.path.as_ref(),
+                        declaration.name.as_ref(),
+                    )
+                })
+        })
+    };
+    let from_reviewed_object = |source: Span| lookup.declared_by_fake_timer_library(file, source);
+    file.ast.members.iter().any(|member| {
+        declares_installer(member.property)
+            || (crate::installed_members::member_name(file, member)
+                .is_some_and(crate::runtime_semantics::fake_timer_installer_property)
+                && from_reviewed_object(chain_root(file, member.object)))
+    }) || file
+        .ast
+        .pattern_elements
+        .iter()
+        .filter_map(|element| element.key)
+        .any(declares_installer)
+        || file.ast.bindings.iter().any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Object
+                && binding.object_slots.iter().any(|slot| {
+                    crate::runtime_semantics::fake_timer_installer_property(slot.property.as_str())
+                })
+                && binding
+                    .initializer_identifier
+                    .as_ref()
+                    .is_some_and(|source| from_reviewed_object(source.span))
+        })
+}
+
+/// The expression a member chain starts at, under TypeScript's wrappers: `vi` of `(vi as any).config.useFakeTimers`, `t` of `t.vi.useFakeTimers`.
+fn chain_root(file: &FileFacts, object: Span) -> Span {
+    let mut root = file.ast.peel_ts_sugar_span(object);
+    while let Some(member) = file.ast.member_at(root) {
+        root = file.ast.peel_ts_sugar_span(member.object);
+    }
+    root
+}
+
 /// The reasons the program and the site hold, before any row is asked: the three program censuses, the census class of the caller, and reach.
 fn reasons<'a>(
     ctx: &AnalysisContext<'a>,
@@ -144,6 +242,7 @@ fn reasons<'a>(
     site: &crate::indexes::FlushSite,
     census: (bool, bool, bool),
     hand_off: &crate::package_hand_off::UnreadPackageHandOff<'_, 'a>,
+    fake_timers: &FakeTimers<'_, 'a>,
 ) -> Vec<FlushSafe> {
     use crate::indexes::DispatchCaller;
     let lookup = ctx.semantic_lookup;
@@ -167,9 +266,11 @@ fn reasons<'a>(
     // function: a default value in a parameter list runs wherever that function is called, which the class of the code around it does not say (the review of #213, B2).
     let in_body = !crate::owners::in_parameter_list(&file.ast, site.span);
     let class = match site.caller {
-        Some(DispatchCaller::FreshStack) => {
-            callback_runs_it(lookup, file, site.span).then_some(FlushSafe::FreshStack)
-        }
+        // A program that installs fake timers runs the scheduler's callbacks on the stack of whatever advances the clock (F1 of the review of #213): no reason, so the
+        // site keeps its row. A test runner's callback is run by the runner whatever the clock is, so the next arm does not ask.
+        Some(DispatchCaller::FreshStack) => (callback_runs_it(lookup, file, site.span)
+            && !fake_timers.installed())
+        .then_some(FlushSafe::FreshStack),
         Some(DispatchCaller::AwaitContinuation) => in_body.then_some(FlushSafe::AwaitContinuation),
         // Module top level is evaluated before any callback runs. A site in a function body has this class only through the suite body a runner runs inside the
         // registration call (ADR 0438): the census asked the class, the parameter list, JSX and tracked region questions of the registration call, not of the flush, so
@@ -374,6 +475,7 @@ pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program) {
         .collect();
     let rows = row_index(program);
     let hand_off = crate::package_hand_off::UnreadPackageHandOff::new(lookup, &files);
+    let fake_timers = FakeTimers::new(lookup, &files);
     let logging = crate::proof_log::enabled();
     let mut filed: Vec<StaticViolation> = Vec::new();
     let mut seen: HashSet<(String, u32, u32, FlushCode)> = HashSet::new();
@@ -415,7 +517,8 @@ pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program) {
             if !asked || discarded || row_at(&rows, &site.path, site.span, code) {
                 continue;
             }
-            let reasons = held.get_or_insert_with(|| reasons(ctx, file, site, census, &hand_off));
+            let reasons = held
+                .get_or_insert_with(|| reasons(ctx, file, site, census, &hand_off, &fake_timers));
             let ending = reasons
                 .iter()
                 .copied()

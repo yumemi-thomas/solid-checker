@@ -138,31 +138,7 @@ impl SemanticLookup<'_> {
         root: Span,
     ) -> Option<(bool, crate::runtime_semantics::SuiteBodyRun)> {
         use crate::runtime_semantics::SuiteBodyRun;
-        // The symbol's alias target and declarations, in any file (a project
-        // script merging a declaration into a runner's global, a module
-        // augmentation, a re-export edited elsewhere), are read from the
-        // TypeScript table: a recorded read of each symbol visited, the root
-        // included, as `intrinsic_tag_prop` does.
-        let note = |id: &str| {
-            self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
-                Self::symbol_key(id)
-            });
-        };
-        let mut symbol = self.symbol_at(file.path.as_str(), root)?;
-        for _ in 0..MAX_ALIAS_HOPS {
-            note(symbol.id());
-            if symbol.alias_target().is_empty() {
-                break;
-            }
-            // An absent target is an answer too.
-            note(symbol.alias_target());
-            let target = self.symbols_by_id().get(symbol.alias_target()).copied()?;
-            symbol = target;
-        }
-        note(symbol.id());
-        if !symbol.alias_target().is_empty() {
-            return None;
-        }
+        let symbol = self.alias_root_at(file, root)?;
         let declarations = symbol.declarations();
         if declarations.is_empty() {
             return None;
@@ -186,6 +162,54 @@ impl SemanticLookup<'_> {
             });
         }
         Some((suite?, bodies?))
+    }
+
+    /// Whether the identifier at `span` is an object a reviewed fake-timer library declares (`vi` of `import { vi } from "vitest"`, the global `jest` of `@types/jest`,
+    /// `jest` of `import { jest } from "bun:test"`): the symbol, followed through its alias chain ([`Self::alias_root_at`]), has a declaration in an installed declaration
+    /// file of such a library ([`crate::runtime_semantics::fake_timer_library_declaration`]). Some declaration is enough: a project file that merges into the library's
+    /// global (`declare namespace jest { … }`) does not make `jest` the project's.
+    pub(crate) fn declared_by_fake_timer_library(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> bool {
+        self.alias_root_at(file, span).is_some_and(|symbol| {
+            symbol.declarations().iter().any(|declaration| {
+                crate::runtime_semantics::fake_timer_library_declaration(
+                    declaration.location.path.as_ref(),
+                )
+            })
+        })
+    }
+}
+
+impl<'a> SemanticLookup<'a> {
+    /// The symbol at `span`, followed through its alias chain to the one that is no alias. Its alias target and declarations, in any file (a project script merging a
+    /// declaration into a runner's global, a module augmentation, a re-export edited elsewhere), are read from the TypeScript table: a recorded read of each symbol
+    /// visited, the root included, as `intrinsic_tag_prop` does. `None` when nothing resolves at `span`, a target is absent (an absent target is an answer too), the
+    /// chain is longer than [`MAX_ALIAS_HOPS`] or it ends on an alias.
+    fn alias_root_at(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<solid_facts::TypeScriptSymbol<'a>> {
+        let note = |id: &str| {
+            self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
+                Self::symbol_key(id)
+            });
+        };
+        let mut symbol = self.symbol_at(file.path.as_str(), span)?;
+        for _ in 0..MAX_ALIAS_HOPS {
+            note(symbol.id());
+            if symbol.alias_target().is_empty() {
+                break;
+            }
+            note(symbol.alias_target());
+            let target = self.symbols_by_id().get(symbol.alias_target()).copied()?;
+            symbol = target;
+        }
+        note(symbol.id());
+        symbol.alias_target().is_empty().then_some(symbol)
     }
 }
 

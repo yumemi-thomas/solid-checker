@@ -38,7 +38,10 @@ fn global_receiver(file: &FileFacts, span: Span) -> Option<&str> {
 }
 
 /// The key a member names: its property, or a computed member's literal key.
-fn member_name<'f>(file: &'f FileFacts, member: &solid_facts::ast::MemberFact) -> Option<&'f str> {
+pub(crate) fn member_name<'f>(
+    file: &'f FileFacts,
+    member: &solid_facts::ast::MemberFact,
+) -> Option<&'f str> {
     if file
         .ast
         .computed_members
