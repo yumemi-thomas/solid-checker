@@ -207,7 +207,9 @@ const inFile = (path, file) => file === undefined || path === file || path.endsW
  */
 export const atRecordedSite = (finding, stacks = [], code = null) => {
   const place = { ...placeOf(finding), rule: finding.rule };
-  return stacks.some((stack) => withheldAtStack(place, stack.map((frame) => (inFile(place.path, frame.file) ? frame : { ...frame, line: -1 })), (frame) => frame.mount === true, code));
+  // A frame of another file is blanked as the grids' `appStack` does (codes.mjs): it keeps its depth and places nothing, its starts included
+  // (a compiled or call start in App.tsx at the same line and column is not this finding's place; the review of #224, N1).
+  return stacks.some((stack) => withheldAtStack(place, stack.map((frame) => (inFile(place.path, frame.file) ? frame : { file: frame.file, line: -1 })), (frame) => frame.mount === true, code));
 };
 
 /**

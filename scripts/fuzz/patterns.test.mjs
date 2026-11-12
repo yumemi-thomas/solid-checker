@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AssumedReportError } from "../lib/assumed.mjs";
 import { TAINTED, cleanReport, fakeChecker, finding } from "../lib/assumed-fixtures.mjs";
-import { mapStacks, runChecker } from "./patterns.mjs";
+import { atRecordedSite, mapStacks, runChecker } from "./patterns.mjs";
 
 // ADR 0950: the pattern lane judges each program's checker report against what Chrome reported. A what-if report is a prediction, so the lane
 // stops on it; it is never a "no checker report" row (`no-run`), which a person reads past.
@@ -81,4 +81,19 @@ describe("the pattern lane's stacks (mapStacks)", () => {
     const stacks = await mapStacks(bare, lookup, dir, { sites: [{ code: "NO_OWNER_EFFECT", frames }] });
     expect(stacks.NO_OWNER_EFFECT).toEqual([[]]);
   }));
+});
+
+// The review of #224, N1: a finding in another module at the same line and column as an App.tsx frame's start (its own, a call start or a
+// compiled start) is not at that frame; before, only the frame's `line` was blanked and its `starts` still matched.
+describe("the pattern lane's recorded site (atRecordedSite)", () => {
+  const frame = { file: "App.tsx", line: 4, column: 14, compiled: [{ line: 4, column: 20 }], starts: [{ line: 4, column: 14 }, { line: 4, column: 20, compiled: true }] };
+  const row = (path, column) => ({ rule: "missing-owner", primaryLocation: { path, line: 4, column } });
+  it("covers at the frame's own and compiled starts in its file", () => {
+    expect(atRecordedSite(row("/w/cases/a/App.tsx", 14), [[frame]], "NO_OWNER_EFFECT")).toBe(true);
+    expect(atRecordedSite(row("/w/cases/a/App.tsx", 20), [[frame]], "NO_OWNER_EFFECT")).toBe(true);
+  });
+  it("does not cover from another file at the same line and column", () => {
+    expect(atRecordedSite(row("/w/cases/a/helpers.ts", 14), [[frame]], "NO_OWNER_EFFECT")).toBe(false);
+    expect(atRecordedSite(row("/w/cases/a/helpers.ts", 20), [[frame]], "NO_OWNER_EFFECT")).toBe(false);
+  });
 });
