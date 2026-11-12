@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are forty-seven routes on three hosts (dynref on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref"]);
+  it("are fifty-five routes on three hosts (dynref, spreadref, spreadvar, childfn, framechild and framebare on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(278);
+    expect(PH_CONTEXT_NAMES).toHaveLength(306);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -139,7 +139,23 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(then.some((line) => /^\.then\(\(\) => cb\d+\)$/.test(line))).toBe(true);
     expect(textOf("FLUSH_IN_ACTION", "ph-thenreturn-step-never")).toContain("skipRun(each);");
     expect(textOf("FLUSH_IN_ACTION", "ph-refprop-step").some((line) => /^void \(<div ref=\{cb\d+\} \/>\);$/.test(line))).toBe(true);
-    expect(textOf("FLUSH_IN_ACTION", "ph-dynref-step").some((line) => /^void \(<Dynamic component="div" ref=\{cb\d+\} \/>\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-dynref-step").some((line) => /^void \(<Dynamic component="div" ref=\{cb\d+\} \/>\);$/.test(line))).toBe(true);  });
+  it("print the review of #222's routes: an assignment expression's own value, an intrinsic element's spread and function child, a component under a package's component", () => {
+    const chain = textOf("FLUSH_IN_ACTION", "ph-chainconst-step");
+    expect(chain.some((line) => /^const first\d+ = \(last\d+ = cb\d+\);$/.test(line))).toBe(true);
+    expect(chain.some((line) => /^runStep\(first\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-chainassign-apply").some((line) => /^first\d+ = last\d+ = cb\d+;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-chainrecv-leaf").some((line) => /^const rs\d+ = \[\(last\d+ = cb\d+\)\]\.map\(\(each\) => runLeaf\w*\(each\)\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-spreadref-step").some((line) => /^void \(<div \{\.\.\.\{ ref: cb\d+ \}\} \/>\);$/.test(line))).toBe(true);
+    const spreadvar = textOf("FLUSH_IN_ACTION", "ph-spreadvar-step");
+    expect(spreadvar.some((line) => /^const props\d+ = \{ ref: cb\d+ \};$/.test(line))).toBe(true);
+    expect(spreadvar.some((line) => /^void \(<div \{\.\.\.props\d+\} \/>\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-childfn-step").some((line) => /^void \(<div>\{cb\d+ as never\}<\/div>\);$/.test(line))).toBe(true);
+    const frame = textOf("FLUSH_IN_ACTION", "ph-framechild-step");
+    expect(frame.some((line) => /^const Own\d+ = \(\(_props: \{ children\?: unknown \}\) => \{$/.test(line))).toBe(true);
+    expect(frame.some((line) => /^document\.body\.append\(\(<StepView>\{\(<Own\d+>x<\/Own\d+>\) as never\}<\/StepView>\) as unknown as Node\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-framebare-step-never").some((line) => /^document\.body\.append\(\(<SkipView>\{\(<Own\d+ \/>\) as never\}<\/SkipView>\) as unknown as Node\);$/.test(line))).toBe(true);
+    for (const route of ["spreadref", "spreadvar", "childfn", "framechild", "framebare"]) expect(PH_CONTEXT_NAMES.filter((name) => phParts(name).route === route)).toEqual([`ph-${route}-step`, `ph-${route}-step-never`]);
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(phShape("ph-literal-step", { binding: "alias", layer: "none" })).toBe(false);

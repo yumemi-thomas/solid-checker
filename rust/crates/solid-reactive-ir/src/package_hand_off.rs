@@ -16,11 +16,13 @@
 //!   arguments are shifted by the thisArg; a function that names `arguments` hands every argument); the rest (a collection's insertion, a package, a callee nothing
 //!   resolves, a spread) is handed;
 //! - a substitution of a tagged template, a JSX prop, a spread attribute, a child expression or a `use:` directive: the same question of what the element is (an
-//!   intrinsic element is the DOM's; `Dynamic` is the component its `component` prop names; a package the build does not read is handed). The `ref` callback of an
-//!   intrinsic element (or of `Dynamic` with a string tag) is applied where the element is created, on the stack of the function the element is written in;
+//!   intrinsic element is the DOM's; `Dynamic` is the component its `component` prop names; a package the build does not read is handed). The `ref` callback and the
+//!   children (a function child is called as an accessor) of an intrinsic element (or of `Dynamic` with a string tag) are applied where the element is created, on the
+//!   stack of the function the element is written in, and so are its spreads and every attribute the compiler does not record as an event handler;
 //! - the initializer of a binding, the value of an assignment, or a function's `return`: the value goes on in every read of that holder (in the file and in the files that
 //!   import it), of the function's calls, and in the function itself when a package may run it (`pkg(() => cb)`); a callback given literally or by an exact reference returns
 //!   the value to its receiving call too (`p.then(() => cb)`, `p.then(give)`). Copies use a separate return-flow walk; an unresolved target retains the obligation.
+//!   An assignment expression's own value is asked as any value is (`const first = (last = cb)`).
 //!   An assignment into an object nothing here declares (an import, `this`, a call's
 //!   result) is handed, one into a property of a local holder goes on in the holder's reads (the table has no row for a property that is only written, so
 //!   `el.onclick = f` is followed through `el`);
@@ -240,13 +242,14 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         {
             return self.runs_where_written(file, template.span, walk);
         }
-        // A component named as a tag (`<Own />`) runs where the element is written (the call graph's render site). The closing tag of `<Own>…</Own>` names the same component and
-        // is a reference of it too: answered as the opening name is, so a component written with children is not handed for it (the review of #217, E: Mac 4's finding).
+        // A component named as a tag (`<Own />`) runs where the element is created (the call graph's render site). The closing tag of `<Own>…</Own>` names the same component and
+        // is a reference of it too: answered as the opening name is (the review of #217, E: Mac 4's finding). An element written as a child or a prop of another element is
+        // created where that element evaluates it: `<Pkg><Own>x</Own></Pkg>` runs `Own` when `Pkg` reads its children (the review of #222, E).
         if let Some(element) = ast
             .jsx_containing(at)
             .find(|element| element.name.span == at || element.closing_name == Some(at))
         {
-            return self.runs_where_written(file, element.span, walk);
+            return self.element_created_in(file, element.span, walk);
         }
         // The property of a member (`NS.step`, `holder.run`) names the function the member reads: the member is the value there.
         if ast.reference_declaration(at).is_none()
@@ -319,6 +322,20 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             }
             placed = true;
             if self.assignment_hands(file, assignment.target, walk) {
+                return true;
+            }
+            // The assignment expression's own value is the value it writes (a plain `=`; a logical one's value is the target's or this one): `const first = (last = cb)`,
+            // `first = last = cb` and `[(last = cb)].map(f)` take it on from there, so the expression is asked as any value is, and one written as a statement is an operand
+            // nothing takes (the review of #222, B1). An arithmetic assignment computes another value. The expression is the target's start to the value's end: a span that
+            // is no expression (a parenthesized target) is in no context, so it is handed.
+            if (!assignment.reads_target || assignment.logical.is_some())
+                && !assignment.value_span.contains(assignment.target)
+                && self.position(
+                    file,
+                    Span::new(assignment.target.start, assignment.value_span.end),
+                    walk,
+                )
+            {
                 return true;
             }
         }
@@ -437,6 +454,23 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                     .any(|spread| direct(spread.span) && self.carries(file, spread.argument, at));
         }
         false
+    }
+
+    /// Whether a package may run the code that creates the JSX element at `span`: the function it is written in, and, when it is written inside another element with no
+    /// function between (a child, a prop's value), wherever that element evaluates it, which is the question of the element's own value there (the review of #222, E).
+    fn element_created_in(&self, file: &'a FileFacts, span: Span, walk: &mut Walk) -> bool {
+        let ast = &file.ast;
+        if self.runs_where_written(file, span, walk) {
+            return true;
+        }
+        let nested = ast.jsx_elements.iter().any(|outer| {
+            outer.span != span
+                && outer.span.contains(span)
+                && !ast
+                    .functions_containing(span)
+                    .any(|function| outer.span.contains(function.span))
+        });
+        nested && self.position(file, span, walk)
     }
 
     /// Whether a function that owns `at` (a call, a tag, a carrier) may be run by a package: what is called there runs on its stack.
@@ -1070,8 +1104,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 .or(attribute.value)
                 .is_some_and(carried)
         };
-        // A child is its expression container, braces included: the expression inside is what carries the value.
+        // A child is its expression container, braces included: the expression inside is what carries the value. A child that is an element is the value when the value
+        // is that element (the question of where a nested element is created).
         let child_holds = |container: Span| {
+            if container == at {
+                return true;
+            }
             let expression = ast
                 .jsx_child_expressions
                 .iter()
@@ -1098,15 +1136,27 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         }
         // An intrinsic element's `ref` callback is applied where the element is created: `ref` of `@solidjs/web` (rc.21) resolves its accessor and calls `applyRef` at once, on the
         // stack of the code that creates the element (the review of #217, D; Chrome, the `ph-refprop` and `ph-dynref` cells). `Dynamic` with a string tag creates one.
+        // Every other attribute, its children and its spreads are applied there too: rc.21 inserts the children (a function child is called as an accessor: `<div>{cb}</div>`,
+        // `children={cb}`), and `spread`'s apply calls the spread's `ref` and inserts its `children` (Chrome, FLUSH_IN_ACTION in a step). Only an attribute the compiler
+        // records as an event handler is the DOM's, run on its own stack; a spread's keys are not read here (the review of #222, D).
+        let applied_at_creation = |attribute: &&JsxAttributeFact| {
+            !directive(attribute)
+                && !compiled_operation(file, attribute, CompilerOperationKind::EventHandler)
+        };
         if (is_intrinsic_tag(file, element) || self.dynamic_string_tag(file, element))
-            && element
+            && (element
                 .attributes
                 .iter()
-                .filter(|attribute| compiled_ref(file, attribute))
+                .filter(applied_at_creation)
                 .any(attribute_holds)
+                || element.children.iter().any(|child| child_holds(*child))
+                || element
+                    .spreads
+                    .iter()
+                    .any(|spread| carried(spread.argument)))
         {
             placed = true;
-            if self.runs_where_written(file, element.span, walk) {
+            if self.element_created_in(file, element.span, walk) {
                 return Some(true);
             }
         }
@@ -1269,17 +1319,19 @@ fn ast_member_property(ast: &AstFacts, callee: Span) -> Option<Span> {
         .map(|member| member.property)
 }
 
-/// Whether the pinned compiler's semantic trace names the attribute's expression as a `ref` callback (an `ExecutionSiteKind::Ref` operation at the expression: the compiler
-/// reads the attribute's own name, for a native element and for a component alike), so no spelling is read here.
-fn compiled_ref(file: &FileFacts, attribute: &JsxAttributeFact) -> bool {
+/// Whether the pinned compiler's semantic trace records an operation of `kind` at the attribute's expression (a `ref` callback, an event handler: the compiler reads the
+/// attribute's own name, for a native element and for a component alike), so no spelling is read here.
+fn compiled_operation(
+    file: &FileFacts,
+    attribute: &JsxAttributeFact,
+    kind: CompilerOperationKind,
+) -> bool {
     attribute.expression.is_some_and(|expression| {
         file.compiler
             .semantic_model
             .operations
             .iter()
-            .any(|operation| {
-                operation.kind == CompilerOperationKind::Ref && operation.span == expression
-            })
+            .any(|operation| operation.kind == kind && operation.span == expression)
     })
 }
 

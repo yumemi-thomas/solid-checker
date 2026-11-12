@@ -8,8 +8,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1268,
-      "end": 1275,
+      "start": 1275,
+      "end": 1282,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1268,
-      "end": 1275,
+      "start": 1275,
+      "end": 1282,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1268,
-      "end": 1275,
+      "start": 1275,
+      "end": 1282,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1381,
-      "end": 1388,
+      "start": 1388,
+      "end": 1395,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1381,
-      "end": 1388,
+      "start": 1388,
+      "end": 1395,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1381,
-      "end": 1388,
+      "start": 1388,
+      "end": 1395,
       "fixes": 0
     },
     {
@@ -74,8 +74,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1514,
-      "end": 1521,
+      "start": 1521,
+      "end": 1528,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1514,
-      "end": 1521,
+      "start": 1521,
+      "end": 1528,
       "fixes": 0
     },
     {
@@ -96,8 +96,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1514,
-      "end": 1521,
+      "start": 1521,
+      "end": 1528,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1689,
-      "end": 1696,
+      "start": 1696,
+      "end": 1703,
       "fixes": 0
     },
     {
@@ -118,8 +118,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1689,
-      "end": 1696,
+      "start": 1696,
+      "end": 1703,
       "fixes": 0
     },
     {
@@ -129,8 +129,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1689,
-      "end": 1696,
+      "start": 1696,
+      "end": 1703,
       "fixes": 0
     },
     {
@@ -140,8 +140,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1851,
-      "end": 1858,
+      "start": 1858,
+      "end": 1865,
       "fixes": 0
     },
     {
@@ -151,8 +151,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1851,
-      "end": 1858,
+      "start": 1858,
+      "end": 1865,
       "fixes": 0
     },
     {
@@ -162,8 +162,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1851,
-      "end": 1858,
+      "start": 1858,
+      "end": 1865,
       "fixes": 0
     },
     {
@@ -173,8 +173,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1973,
-      "end": 1980,
+      "start": 1980,
+      "end": 1987,
       "fixes": 0
     },
     {
@@ -184,8 +184,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1973,
-      "end": 1980,
+      "start": 1980,
+      "end": 1987,
       "fixes": 0
     },
     {
@@ -195,8 +195,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 1973,
-      "end": 1980,
+      "start": 1980,
+      "end": 1987,
       "fixes": 0
     },
     {
@@ -206,8 +206,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2103,
-      "end": 2110,
+      "start": 2110,
+      "end": 2117,
       "fixes": 0
     },
     {
@@ -217,8 +217,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2103,
-      "end": 2110,
+      "start": 2110,
+      "end": 2117,
       "fixes": 0
     },
     {
@@ -228,8 +228,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2103,
-      "end": 2110,
+      "start": 2110,
+      "end": 2117,
       "fixes": 0
     },
     {
@@ -239,8 +239,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2303,
-      "end": 2310,
+      "start": 2310,
+      "end": 2317,
       "fixes": 0
     },
     {
@@ -250,8 +250,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2303,
-      "end": 2310,
+      "start": 2310,
+      "end": 2317,
       "fixes": 0
     },
     {
@@ -261,8 +261,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2303,
-      "end": 2310,
+      "start": 2310,
+      "end": 2317,
       "fixes": 0
     },
     {
@@ -272,8 +272,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2419,
-      "end": 2426,
+      "start": 2426,
+      "end": 2433,
       "fixes": 0
     },
     {
@@ -283,8 +283,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2419,
-      "end": 2426,
+      "start": 2426,
+      "end": 2433,
       "fixes": 0
     },
     {
@@ -294,8 +294,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2419,
-      "end": 2426,
+      "start": 2426,
+      "end": 2433,
       "fixes": 0
     },
     {
@@ -305,8 +305,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2552,
-      "end": 2559,
+      "start": 2559,
+      "end": 2566,
       "fixes": 0
     },
     {
@@ -316,8 +316,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2552,
-      "end": 2559,
+      "start": 2559,
+      "end": 2566,
       "fixes": 0
     },
     {
@@ -327,8 +327,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2552,
-      "end": 2559,
+      "start": 2559,
+      "end": 2566,
       "fixes": 0
     },
     {
@@ -338,8 +338,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2702,
-      "end": 2709,
+      "start": 2709,
+      "end": 2716,
       "fixes": 0
     },
     {
@@ -349,8 +349,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2702,
-      "end": 2709,
+      "start": 2709,
+      "end": 2716,
       "fixes": 0
     },
     {
@@ -360,8 +360,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2702,
-      "end": 2709,
+      "start": 2709,
+      "end": 2716,
       "fixes": 0
     },
     {
@@ -371,8 +371,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2889,
-      "end": 2896,
+      "start": 2896,
+      "end": 2903,
       "fixes": 0
     },
     {
@@ -382,8 +382,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2889,
-      "end": 2896,
+      "start": 2896,
+      "end": 2903,
       "fixes": 0
     },
     {
@@ -393,8 +393,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 2889,
-      "end": 2896,
+      "start": 2896,
+      "end": 2903,
       "fixes": 0
     },
     {
@@ -404,8 +404,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3249,
-      "end": 3256,
+      "start": 3256,
+      "end": 3263,
       "fixes": 0
     },
     {
@@ -415,8 +415,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3249,
-      "end": 3256,
+      "start": 3256,
+      "end": 3263,
       "fixes": 0
     },
     {
@@ -426,8 +426,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3249,
-      "end": 3256,
+      "start": 3256,
+      "end": 3263,
       "fixes": 0
     },
     {
@@ -437,8 +437,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3406,
-      "end": 3413,
+      "start": 3413,
+      "end": 3420,
       "fixes": 0
     },
     {
@@ -448,8 +448,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3406,
-      "end": 3413,
+      "start": 3413,
+      "end": 3420,
       "fixes": 0
     },
     {
@@ -459,8 +459,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3406,
-      "end": 3413,
+      "start": 3413,
+      "end": 3420,
       "fixes": 0
     },
     {
@@ -470,8 +470,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3650,
-      "end": 3657,
+      "start": 3657,
+      "end": 3664,
       "fixes": 0
     },
     {
@@ -481,8 +481,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3650,
-      "end": 3657,
+      "start": 3657,
+      "end": 3664,
       "fixes": 0
     },
     {
@@ -492,8 +492,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3650,
-      "end": 3657,
+      "start": 3657,
+      "end": 3664,
       "fixes": 0
     },
     {
@@ -503,8 +503,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3817,
-      "end": 3824,
+      "start": 3824,
+      "end": 3831,
       "fixes": 0
     },
     {
@@ -514,8 +514,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3817,
-      "end": 3824,
+      "start": 3824,
+      "end": 3831,
       "fixes": 0
     },
     {
@@ -525,8 +525,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 3817,
-      "end": 3824,
+      "start": 3824,
+      "end": 3831,
       "fixes": 0
     },
     {
@@ -536,8 +536,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4176,
-      "end": 4183,
+      "start": 4183,
+      "end": 4190,
       "fixes": 0
     },
     {
@@ -547,8 +547,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4176,
-      "end": 4183,
+      "start": 4183,
+      "end": 4190,
       "fixes": 0
     },
     {
@@ -558,8 +558,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4176,
-      "end": 4183,
+      "start": 4183,
+      "end": 4190,
       "fixes": 0
     },
     {
@@ -569,8 +569,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4657,
-      "end": 4664,
+      "start": 4664,
+      "end": 4671,
       "fixes": 0
     },
     {
@@ -580,8 +580,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4657,
-      "end": 4664,
+      "start": 4664,
+      "end": 4671,
       "fixes": 0
     },
     {
@@ -591,8 +591,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4657,
-      "end": 4664,
+      "start": 4664,
+      "end": 4671,
       "fixes": 0
     },
     {
@@ -602,8 +602,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4806,
-      "end": 4813,
+      "start": 4813,
+      "end": 4820,
       "fixes": 0
     },
     {
@@ -613,8 +613,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4806,
-      "end": 4813,
+      "start": 4813,
+      "end": 4820,
       "fixes": 0
     },
     {
@@ -624,8 +624,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 4806,
-      "end": 4813,
+      "start": 4813,
+      "end": 4820,
       "fixes": 0
     },
     {
@@ -635,8 +635,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 5053,
-      "end": 5060,
+      "start": 5060,
+      "end": 5067,
       "fixes": 0
     },
     {
@@ -646,8 +646,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 5053,
-      "end": 5060,
+      "start": 5060,
+      "end": 5067,
       "fixes": 0
     },
     {
@@ -657,8 +657,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 5053,
-      "end": 5060,
+      "start": 5060,
+      "end": 5067,
       "fixes": 0
     },
     {
@@ -668,8 +668,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 6833,
-      "end": 6840,
+      "start": 6840,
+      "end": 6847,
       "fixes": 0
     },
     {
@@ -679,8 +679,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 6833,
-      "end": 6840,
+      "start": 6840,
+      "end": 6847,
       "fixes": 0
     },
     {
@@ -690,8 +690,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 6833,
-      "end": 6840,
+      "start": 6840,
+      "end": 6847,
       "fixes": 0
     },
     {
@@ -701,8 +701,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 6917,
-      "end": 6924,
+      "start": 6924,
+      "end": 6931,
       "fixes": 0
     },
     {
@@ -712,8 +712,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 6917,
-      "end": 6924,
+      "start": 6924,
+      "end": 6931,
       "fixes": 0
     },
     {
@@ -723,8 +723,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 6917,
-      "end": 6924,
+      "start": 6924,
+      "end": 6931,
       "fixes": 0
     },
     {
@@ -734,8 +734,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7236,
-      "end": 7243,
+      "start": 7243,
+      "end": 7250,
       "fixes": 0
     },
     {
@@ -745,8 +745,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7236,
-      "end": 7243,
+      "start": 7243,
+      "end": 7250,
       "fixes": 0
     },
     {
@@ -756,8 +756,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7236,
-      "end": 7243,
+      "start": 7243,
+      "end": 7250,
       "fixes": 0
     },
     {
@@ -767,8 +767,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7615,
-      "end": 7622,
+      "start": 7622,
+      "end": 7629,
       "fixes": 0
     },
     {
@@ -778,8 +778,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7615,
-      "end": 7622,
+      "start": 7622,
+      "end": 7629,
       "fixes": 0
     },
     {
@@ -789,8 +789,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7615,
-      "end": 7622,
+      "start": 7622,
+      "end": 7629,
       "fixes": 0
     },
     {
@@ -800,8 +800,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7992,
-      "end": 7999,
+      "start": 7999,
+      "end": 8006,
       "fixes": 0
     },
     {
@@ -811,8 +811,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7992,
-      "end": 7999,
+      "start": 7999,
+      "end": 8006,
       "fixes": 0
     },
     {
@@ -822,8 +822,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 7992,
-      "end": 7999,
+      "start": 7999,
+      "end": 8006,
       "fixes": 0
     },
     {
@@ -833,8 +833,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 8435,
-      "end": 8442,
+      "start": 8442,
+      "end": 8449,
       "fixes": 0
     },
     {
@@ -844,8 +844,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 8435,
-      "end": 8442,
+      "start": 8442,
+      "end": 8449,
       "fixes": 0
     },
     {
@@ -855,8 +855,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 8435,
-      "end": 8442,
+      "start": 8442,
+      "end": 8449,
       "fixes": 0
     },
     {
@@ -866,8 +866,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 8622,
-      "end": 8629,
+      "start": 8629,
+      "end": 8636,
       "fixes": 0
     },
     {
@@ -877,8 +877,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 8622,
-      "end": 8629,
+      "start": 8629,
+      "end": 8636,
       "fixes": 0
     },
     {
@@ -888,8 +888,360 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
-      "start": 8622,
-      "end": 8629,
+      "start": 8629,
+      "end": 8636,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 8964,
+      "end": 8971,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 8964,
+      "end": 8971,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 8964,
+      "end": 8971,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9116,
+      "end": 9123,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9116,
+      "end": 9123,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9116,
+      "end": 9123,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9314,
+      "end": 9321,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9314,
+      "end": 9321,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9314,
+      "end": 9321,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9469,
+      "end": 9476,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9469,
+      "end": 9476,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9469,
+      "end": 9476,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9974,
+      "end": 9981,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9974,
+      "end": 9981,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 9974,
+      "end": 9981,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10028,
+      "end": 10051,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10134,
+      "end": 10141,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10134,
+      "end": 10141,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10134,
+      "end": 10141,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10233,
+      "end": 10249,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10339,
+      "end": 10346,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10339,
+      "end": 10346,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10339,
+      "end": 10346,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10393,
+      "end": 10415,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10589,
+      "end": 10596,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10589,
+      "end": 10596,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10589,
+      "end": 10596,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10648,
+      "end": 10677,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 10652,
+      "end": 10676,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 11457,
+      "end": 11464,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 11457,
+      "end": 11464,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 11457,
+      "end": 11464,
       "fixes": 0
     }
   ]

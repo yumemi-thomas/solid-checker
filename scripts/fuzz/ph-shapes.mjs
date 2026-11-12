@@ -53,6 +53,20 @@
 //             refprop    `function step1() { void (<div ref={cb1} />); }`, `runStep(step1)`: an intrinsic element's `ref` callback is applied where the element is created
 //             dynref     `function step1() { void (<Dynamic component="div" ref={cb1} />); }`, `runStep(step1)`: the same through `Dynamic` with a string tag (the step host only: `Dynamic`
 //                        creates a memo, which an effect's apply and a leaf owner's callback refuse before the `ref` is applied)
+//           and the review of #222 (an assignment expression's own value is the value it writes; an intrinsic element applies its `ref`, its children and its spreads where
+//           it is created):
+//             chainconst `let last1: unknown; const first1 = (last1 = cb1); runStep(first1)`: the value of an assignment expression, a binding's initializer
+//             chainassign `first1 = last1 = cb1; runStep(first1)`: a chained assignment
+//             chainrecv  `const r1 = [(last1 = cb1)].map((f) => runStep(f))`: an assignment expression that is an element of a receiver
+//             spreadref  `function step1() { void (<div {...{ ref: cb1 }} />); }`, `runStep(step1)`: a `ref` reaching an intrinsic element through a spread (step host only: the
+//                        spread creates an effect, which an effect's apply and a leaf owner's callback refuse)
+//             spreadvar  `const p1 = { ref: cb1 }; function step1() { void (<div {...p1} />); }`: the same through a binding, whose keys are not read (step host only)
+//             childfn    `function step1() { void (<div>{cb1 as never}</div>); }`, `runStep(step1)`: a function child of an intrinsic element, called as an accessor where the
+//                        element is created (step host only: the insertion creates an effect)
+//             framechild `const Own1 = ((_props) => { <site> }) as unknown as …; <StepView>{(<Own1>x</Own1>) as never}</StepView>`: a component written as a child of the
+//                        package's component, created when that component reads its children (both tag names; step host only: Chrome never runs the component
+//                        when the view reads its children in an effect's apply or a tracked compute)
+//             framebare  the same with `<Own1 />`
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -65,7 +79,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -74,8 +88,8 @@ export const PH_CODES = {
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
-/** The routes that exist on some hosts only: `Dynamic` creates a memo, which an effect's apply and a leaf owner's callback refuse (PRIMITIVE_IN_EFFECT_CALLBACK, before the `ref` is applied). */
-const ROUTE_HOSTS = { dynref: ["step"] };
+/** The routes that exist on some hosts only: `Dynamic` creates a memo, and a spread or an inserted child an effect, which an effect's apply and a leaf owner's callback refuse (PRIMITIVE_IN_EFFECT_CALLBACK, before the callback is applied). */
+const ROUTE_HOSTS = { dynref: ["step"], spreadref: ["step"], spreadvar: ["step"], childfn: ["step"], framechild: ["step"], framebare: ["step"] };
 export const PH_CONTEXTS = Object.fromEntries(PH_ROUTES.flatMap((route) => PH_HOSTS.filter((host) => (ROUTE_HOSTS[route] ?? PH_HOSTS).includes(host)).flatMap((host) => [[`ph-${route}-${host}`, "misuse"], [`ph-${route}-${host}-never`, "legal"]])));
 export const PH_CONTEXT_NAMES = Object.keys(PH_CONTEXTS);
 
@@ -94,7 +108,7 @@ export function phShape(context, shape) {
 const UPPER = { step: "Step", apply: "Apply", leaf: "Leaf" };
 /** The package function a route calls for a host: its name, the import it needs. */
 const callee = (route, host, never) => {
-  if (["jsx", "children", "props", "dynamic"].includes(route)) return never ? "SkipView" : `${UPPER[host]}View`;
+  if (["jsx", "children", "props", "dynamic", "framechild", "framebare"].includes(route)) return never ? "SkipView" : `${UPPER[host]}View`;
   if (route === "getter") return never ? "skipRunGet" : `run${UPPER[host]}Get`;
   if (route === "assign") return never ? "skipRunConfig" : `run${UPPER[host]}Config`;
   const kind = ["member", "method", "holder", "class"].includes(route) ? "With" : route === "array" ? "All" : "";
@@ -296,10 +310,52 @@ const ROUTE_FRAMES = {
     const step = n("step");
     return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  void (<div ref={${cb}} />);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
   },
+  chainconst: (f, n) => {
+    const cb = n("cb");
+    const last = n("last");
+    const first = n("first");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${last}: unknown;\nsetTimeout(() => {\n  const ${first} = (${last} = ${cb});\n  ${f}(${first});\n});` };
+  },
+  chainassign: (f, n) => {
+    const cb = n("cb");
+    const last = n("last");
+    const first = n("first");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${first}: () => void = () => {};\nlet ${last}: unknown;\nsetTimeout(() => {\n  ${first} = ${last} = ${cb};\n  ${f}(${first});\n});` };
+  },
+  chainrecv: (f, n) => {
+    const cb = n("cb");
+    const last = n("last");
+    const rs = n("rs");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${last}: unknown;\nsetTimeout(() => {\n  const ${rs} = [(${last} = ${cb})].map((each) => ${f}(each));\n});` };
+  },
+  spreadref: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  void (<div {...{ ref: ${cb} }} />);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  spreadvar: (f, n) => {
+    const cb = n("cb");
+    const props = n("props");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${props} = { ref: ${cb} };\nfunction ${step}() {\n  void (<div {...${props}} />);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  childfn: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  void (<div>{${cb} as never}</div>);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  framechild: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{(<${own}>x</${own}>) as never}</${f}>) as unknown as Node);\n});` };
+  },
+  framebare: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{(<${own} />) as never}</${f}>) as unknown as Node);\n});` };
+  },
 };
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };

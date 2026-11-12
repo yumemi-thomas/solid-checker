@@ -20195,5 +20195,49 @@
    "mx-flush-in-tracked-queue-callback-ph-thenmember-leaf-x-direct-none"
   ],
   "rediscovered": "Pre-extension b635745c2939: make fuzz-focus on the four added ph routes fails (make exit 2, focus exit 1): 12 false cleans across three codes, 12 legal twins clean; Chrome all 24 agrees. Final a2529de9413e: full mx-recall 14,418 and lg-recall 32,660, exit 0, 0 false clean/positive; 1,642 Chrome comparisons, 0 behaviour/attribution differences or inconclusive runs. Exactly these 12 misuse programs gain the three U rows, and their 12 twins become U; all other rows identical to the pre-extension build."
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as an action's step), was certified with no row by routes #222's build answered \"not handed\": an assignment expression's own value (`const first = (last = cb); runStep(first)`, `first = last = cb`, `[(last = cb)].map((f) => runStep(f))`: the inner assignment placed the value and only its target was followed); a `ref` reaching an intrinsic element through a spread (`<div {...{ ref: cb }} />`, `<div {...props} />`) and a function child of an intrinsic element (`<div>{cb}</div>`, called as an accessor where the element is created), in a step the package runs; and a component written as a child of the package's component (`<StepView><Own>x</Own></StepView>`, `<StepView><Own /></StepView>`), created when that component reads its children. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Mac 5, 2026-11-13: the review of #222 (B1 by reading; D residual and E by reading), confirmed by probes on main 56aa6c126, on #222's head 9b8fc91b1 and in Chrome (the pattern lane, `pkghand/chain-*`, `spread-ref*`, `child-*`, `frame-*`); `first = last = cb` and `const first = (last = cb)` kept their rows on main and lost them with cause A, the closing-name change (E) silenced `<Pkg><Own>x</Own></Pkg>`, the rest were silent on main too",
+  "fixed": "ADR 0967 amended (the review of #222, `package_hand_off.rs`): after an assignment's target is followed, a plain or logical assignment expression is asked as any value is; an intrinsic element's (and `Dynamic` with a string tag's) children, spreads (their keys are not read) and every attribute the compiler does not record as an event handler are applied where the element is created; an element written as a child or a prop of another element, with no function between, is created where that element evaluates it (`element_created_in`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-chainconst-step-x-direct-none",
+   "mx-flush-in-action-ph-chainassign-step-x-direct-none",
+   "mx-flush-in-action-ph-chainrecv-step-x-direct-none",
+   "mx-flush-in-action-ph-spreadref-step-x-direct-none",
+   "mx-flush-in-action-ph-spreadvar-step-x-direct-none",
+   "mx-flush-in-action-ph-childfn-step-x-direct-none",
+   "mx-flush-in-action-ph-framechild-step-x-direct-none",
+   "mx-flush-in-action-ph-framebare-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 28 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 28 of 28 agree on each build): #222's head 9b8fc91b1 fails `make fuzz-focus` (focus exit 1, 14 false clean, the 14 twins clean); main 56aa6c126 fails it too (7 false clean: chainrecv on three hosts, spreadref, spreadvar, childfn, framebare; chainconst, chainassign and framechild keep their rows there); the fix exits 0, \"nothing needs a look\" (14 recall-gap, the 14 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the ten new `pkghand` programs false clean on #222's head, 41 of 41 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as an effect's apply), was certified with no row by routes #222's build answered \"not handed\": an assignment expression's own value (`const first = (last = cb); runStep(first)`, `first = last = cb`, `[(last = cb)].map((f) => runStep(f))`: the inner assignment placed the value and only its target was followed). Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "Mac 5, 2026-11-13: the review of #222 (B1 by reading; D residual and E by reading), confirmed by probes on main 56aa6c126, on #222's head 9b8fc91b1 and in Chrome (the pattern lane, `pkghand/chain-*`, `spread-ref*`, `child-*`, `frame-*`); `first = last = cb` and `const first = (last = cb)` kept their rows on main and lost them with cause A, the closing-name change (E) silenced `<Pkg><Own>x</Own></Pkg>`, the rest were silent on main too",
+  "fixed": "ADR 0967 amended (the review of #222, `package_hand_off.rs`): after an assignment's target is followed, a plain or logical assignment expression is asked as any value is; an intrinsic element's (and `Dynamic` with a string tag's) children, spreads (their keys are not read) and every attribute the compiler does not record as an event handler are applied where the element is created; an element written as a child or a prop of another element, with no function between, is created where that element evaluates it (`element_created_in`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-chainconst-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-chainassign-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-chainrecv-apply-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 28 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 28 of 28 agree on each build): #222's head 9b8fc91b1 fails `make fuzz-focus` (focus exit 1, 14 false clean, the 14 twins clean); main 56aa6c126 fails it too (7 false clean: chainrecv on three hosts, spreadref, spreadvar, childfn, framebare; chainconst, chainassign and framechild keep their rows there); the fix exits 0, \"nothing needs a look\" (14 recall-gap, the 14 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the ten new `pkghand` programs false clean on #222's head, 41 of 41 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as a leaf owner's callback (`createTrackedEffect`)), was certified with no row by routes #222's build answered \"not handed\": an assignment expression's own value (`const first = (last = cb); runStep(first)`, `first = last = cb`, `[(last = cb)].map((f) => runStep(f))`: the inner assignment placed the value and only its target was followed). Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "Mac 5, 2026-11-13: the review of #222 (B1 by reading; D residual and E by reading), confirmed by probes on main 56aa6c126, on #222's head 9b8fc91b1 and in Chrome (the pattern lane, `pkghand/chain-*`, `spread-ref*`, `child-*`, `frame-*`); `first = last = cb` and `const first = (last = cb)` kept their rows on main and lost them with cause A, the closing-name change (E) silenced `<Pkg><Own>x</Own></Pkg>`, the rest were silent on main too",
+  "fixed": "ADR 0967 amended (the review of #222, `package_hand_off.rs`): after an assignment's target is followed, a plain or logical assignment expression is asked as any value is; an intrinsic element's (and `Dynamic` with a string tag's) children, spreads (their keys are not read) and every attribute the compiler does not record as an event handler are applied where the element is created; an element written as a child or a prop of another element, with no function between, is created where that element evaluates it (`element_created_in`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-chainconst-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-chainassign-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-chainrecv-leaf-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 28 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 28 of 28 agree on each build): #222's head 9b8fc91b1 fails `make fuzz-focus` (focus exit 1, 14 false clean, the 14 twins clean); main 56aa6c126 fails it too (7 false clean: chainrecv on three hosts, spreadref, spreadvar, childfn, framebare; chainconst, chainassign and framechild keep their rows there); the fix exits 0, \"nothing needs a look\" (14 recall-gap, the 14 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the ten new `pkghand` programs false clean on #222's head, 41 of 41 fine on the fix"
  }
 ]

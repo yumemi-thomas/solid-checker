@@ -1,6 +1,6 @@
 import { flush } from "solid-js";
 import { Dynamic } from "@solidjs/web";
-import { runStep } from "steplib";
+import { Frame, runStep } from "steplib";
 
 // Batch 11, the review of #217 (causes A to E): a context places a value only when it CARRIES it. The program names no action, effect or leaf primitive, so the program censuses say
 // the three flush codes cannot arise; `steplib` (its source is not read: its manifest names no Solid package) calls `action` itself and runs what it is handed as a step. Each
@@ -318,3 +318,86 @@ setTimeout(() => { void Promise.resolve().then(boxMember.give).then(f => runStep
 const twinReturnedMember = () => { flush(); };
 const twinBoxMember = { give: () => twinReturnedMember };
 setTimeout(() => { void Promise.resolve().then(twinBoxMember.give); });
+
+// ---- the review of #222, B1: an assignment expression's own value is the value it writes, so the binding, the target and the receiver it is written in take it on
+const chainConst = () => { flush(); };
+let chainLast: unknown;
+setTimeout(() => {
+  const first = (chainLast = chainConst);
+  void runStep(first);
+});
+const chainAssign = () => { flush(); };
+let chainFirst: () => void = () => {};
+let chainOther: unknown;
+setTimeout(() => {
+  chainFirst = chainOther = chainAssign;
+  void runStep(chainFirst);
+});
+const chainReceiver = () => { flush(); };
+let chainHeld: unknown;
+setTimeout(() => {
+  const rs = [(chainHeld = chainReceiver)].map((f) => runStep(f));
+});
+const chainNullish = () => { flush(); };
+let chainMaybe: (() => void) | undefined;
+setTimeout(() => {
+  void runStep((chainMaybe ??= chainNullish));
+});
+// twin: the binding and the target hold it, and nothing reads either
+const twinChain = () => { flush(); };
+let twinChainLast: unknown;
+setTimeout(() => {
+  const kept = (twinChainLast = twinChain);
+});
+
+// ---- the review of #222, D: an intrinsic element applies a spread's `ref` and inserts its children (a function child is called) where it is created
+const spreadRef = () => { flush(); };
+function stepSpread() {
+  const el = <div {...{ ref: spreadRef }} />;
+}
+setTimeout(() => { void runStep(stepSpread); });
+const spreadHeld = () => { flush(); };
+const spreadProps = { ref: spreadHeld };
+function stepSpreadHeld() {
+  const el = <div {...spreadProps} />;
+}
+setTimeout(() => { void runStep(stepSpreadHeld); });
+const childFunction = () => { flush(); };
+function stepChild() {
+  const el = <div>{childFunction as never}</div>;
+}
+setTimeout(() => { void runStep(stepChild); });
+// a spread's keys are not read: the same `onClick` written in a spread keeps its rows
+const spreadOther = () => { flush(); };
+function stepSpreadOther() {
+  const el = <div {...{ onClick: spreadOther }} />;
+}
+setTimeout(() => { void runStep(stepSpreadOther); });
+// twins: an attribute the compiler records as an event handler (the DOM runs it, on its own stack), and a spread and a child in a function nothing runs
+const twinListener = () => { flush(); };
+function stepListener() {
+  const el = <div onClick={twinListener} />;
+}
+setTimeout(() => { void runStep(stepListener); });
+const twinSpreadRef = () => { flush(); };
+const twinChildFunction = () => { flush(); };
+function neverCreates() {
+  const el = <div {...{ ref: twinSpreadRef }}>{twinChildFunction as never}</div>;
+}
+
+// ---- the review of #222, E: a component written with children under an unread component's children; both tag names get the render site's answer
+function UnderFrame(props: { children?: unknown }) {
+  flush();
+  return <div>{props.children as never}</div>;
+}
+setTimeout(() => {
+  void (<Frame><UnderFrame>x</UnderFrame></Frame>);
+});
+// twin: the same element written as a child of an intrinsic element in a timer's callback: created there, where no package runs it
+function TwinUnderDiv(props: { children?: unknown }) {
+  flush();
+  return <div>{props.children as never}</div>;
+}
+setTimeout(() => {
+  void (<div><TwinUnderDiv>{"x"}</TwinUnderDiv></div>);
+});

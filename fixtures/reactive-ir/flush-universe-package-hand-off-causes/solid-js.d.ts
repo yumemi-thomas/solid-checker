@@ -6,7 +6,7 @@ declare namespace JSX {
   type Ref<T> = T | RefCallback<T> | undefined | Ref<T>[];
   interface IntrinsicElements {
     button: { onClick?: EventHandler<HTMLButtonElement, MouseEvent>; children?: unknown; [attribute: string]: unknown };
-    div: { children?: unknown; ref?: Ref<HTMLDivElement> };
+    div: { children?: unknown; ref?: Ref<HTMLDivElement>; onClick?: EventHandler<HTMLDivElement, MouseEvent> };
     p: { children?: unknown };
   }
   type RenderedElement = object & {
