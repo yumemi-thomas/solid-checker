@@ -184,3 +184,5 @@ Every flush the flush census lists ends, for this code, in a row of this rule at
   action guard
 - [no-await-primitive-in-tracked-scope](no-await-primitive-in-tracked-scope.md) — a release-keyed dev
   throw in the same family
+
+ADR 0967, review causes A–E: containment alone does not place a callback. A receiver inside an initializer, an iterable, a template part or an operand of `yield` or `await` stays handed; a project function naming `arguments` hands every argument, and a callback's returned value follows its receiving call whether it is given literally or by an exact current named reference (an unresolved member remains uncertifiable). An intrinsic element's compiler-recorded `ref` (also `Dynamic` with a string tag) runs on the creating stack. Opening and closing JSX names ask the same render owner. Unproved hand-offs retain the uncertifiable row.

@@ -1,0 +1,33 @@
+# flush-universe-package-hand-off-causes
+
+**Claim (batch 11, causes A to E of the review of #217; ADR 0967 amended).** A flush in a function that a package the build does not read as source may run as an action's step, an effect's apply or a leaf callback keeps its three uncertifiable rows (SC2006 `flush-in-action-unaccounted`, SC2008 `flush-in-effect-unaccounted`, SC3001 `leaf-operation-unaccounted`): never silence, never a violation. `package_hand_off.rs` says "handed" or "not handed" per position of the function, and a "not handed" must rest on a positive fact of the program. #217's build said "not handed" for the review's seventeen programs (A 14, B 2, C 1) and for the two of D, all of them certified clean on `main` too. `steplib` (the package that runs what it is handed as an action's step) is as in `flush-universe-package-hand-off-flip`; each callback below is its own flush site, written at module scope, each line in a timer's callback.
+
+**A. A context placed a value it merely contained.** An initializer, an assignment, an argument, a JSX child or a `return` "placed" the value when the callback was anywhere inside its expression, so `const rs = [cb].map((f) => runStep(f))` was a binding nothing reads, and the callback went nowhere. A context now places a value only when the path from its expression to the value is transparent: parentheses and TypeScript's wrappers, a conditional's arms, a logical expression's operands, a comma's last operand, an array literal's elements and a spread's argument, an object literal's property values. A literal that is itself a receiver, a callee's object, an iterable, a `yield` or `await` operand or a template's part is a value nothing here follows: handed.
+
+| site | the path from the context to the callback |
+|---|---|
+| `mapInit`, `forEachInit` | `const rs = [cb].map(…)`, `const n = [cb].forEach(…)`: the literal is the receiver of a call |
+| `mapDestr` | `const [first] = list` where `list = [cb]`, then `[first].map(…)` |
+| `mapParam` | the same behind a project function's parameter |
+| `mapFlat` | `[[cb]].flat().map(…)`: a nested literal |
+| `mapTemplate` | `` `${[cb].map(…).length}` ``: a template's part |
+| `mapLogical` | `{ a: cb }.a.name.length > 0 && [cb].some(…)` |
+| `mapAwait` | `await [cb].map(…)[0]` |
+| `mapAssign`, `mapArg` | `assigned = [cb].map(…)`, `use([cb].map(…))` |
+| `MapJsx` | `<div>{[cb].map(…)}</div>`: a JSX child expression |
+| `yielded` | `const x = yield cb`, `for (const f of generate()) runStep(f)` |
+| `mapCalled`, `objectCalled` | the review's N-B: the step the package runs calls the literal's elements, `[cb].map((f) => f())`, `{ run: cb }.run()` (a receiver too) |
+
+**B. `arguments`.** A non-arrow project function that names `arguments` reads every argument through it, and no declared name shows that: `argsIndex` (`runStep(arguments[0])`), `argsApply` (`takesRest.apply(null, arguments)`).
+
+**C. A returned function's call.** A function written as an argument returns its value to the call: `thenReturn` (`Promise.resolve().then(() => cb).then((f) => runStep(f))`).
+
+**D. An intrinsic element's `ref`.** A `ref` callback on an intrinsic element is applied where the element is created: `ref` of `@solidjs/web` (rc.21) resolves its accessor and calls `applyRef` at once, on the stack of the code that makes the element. A step the package runs that writes `<div ref={cb} />` therefore runs `cb` (Chrome: FLUSH_IN_ACTION at the flush; the `ph-refprop` and `ph-dynref` cells judge it). `refProp` (`<div ref={refProp} />`) and `refDynamic` (`<Dynamic component="div" ref={refDynamic} />`: a string tag creates the element it names) are handed where the element is written in a function a package may run; `twinRef` (the same element in `neverRuns`, which nothing runs) stays silent. The stub types `div`'s `ref` as the published `Ref<HTMLDivElement>` (`solid-js.d.ts`, lines 243-244 and 250 of rc.21's `types/jsx.d.ts`); `ref={cb}` is accepted by `tsc`.
+
+**E. The closing tag.** `position` answered a component named as a JSX tag at the opening tag's name only; the closing tag's name (`JsxElementFact::closing_name`, a reference of the same component) fell through to "anything else: handed", so `<Card>body</Card>` handed Card to the package while `<Card />` did not (every proof gated on this answer was withheld for a component written with children). Both names are answered the same way now: the render site's. `WithChildren` and `Bare` (rendered by `Uses`, which nothing runs): the same answer, silent. `HandedChildren` and `HandedBare` (rendered by `RendersBoth`, which the package runs): the same answer, handed (three rows each).
+
+`control` is #216's own route (the callback named as the package's argument). Twins, silent by a fact of the program: `twinConditional`, `twinLogical`, `twinObject` (the callback goes into a holder through a transparent path, and nothing reads the holder), `twinParameter` (a project function reads its declared name and takes nothing out of it), `twinThen` (`then(() => cb)` as a statement: its value is an operand nothing takes).
+
+Published bytes: `node_modules/steplib` is synthetic, as in the flip fixture; `@solidjs/web/types/index.d.ts` is the same excerpt. `.solid-checker/runtime.json` closes the program boundary.
+
+C by reference: `returnedConst`, `returnedLet`, `returnedDeclaration`, and `returnedMember` pass the returning callback through a const, an unwritten let, a function declaration, and a closed object's member. Each keeps three rows. Discarded-result twins of the first three are silent. The closed-member twin remains uncertifiable: selection of the member is closed, but its anonymous function has no exactly resolved function target through the current exact-function index. Missing identity never proves its returned value discarded. The ph routes `thenconst`, `thenlet`, `thenfn`, and `thenmember` retain all four spellings and their never-run twins.

@@ -9,19 +9,29 @@
 //! of a function (and of every holder it is copied into) is read at its position, and a position is one of
 //!
 //! - a call (`f()`, `new C()`, a tag, `f.call(…)`, a method of a holder the project declares): the value runs on the stack of the function the call is written in, so it
-//!   is handed when a package may run *that* function (the same question, asked of the owner);
+//!   is handed when a package may run *that* function (the same question, asked of the owner). A component's closing tag (`</Card>`) names it as the opening one does;
 //! - an argument of a call: the receiver decides ([`Receiver`]): a dialect primitive and the standard library's inline callbacks run it before they return, on the stack
 //!   of the function the call is written in; a reviewed fresh-stack scheduler, a DOM listener registration and a reviewed test runner's registration run it elsewhere and
 //!   keep nothing; a project function the call graph resolves exactly goes on in its parameter (a component's props are its first parameter, a reflective call's forwarded
-//!   arguments are shifted by the thisArg); the rest (a collection's insertion, a package, a callee nothing resolves, a spread) is handed;
+//!   arguments are shifted by the thisArg; a function that names `arguments` hands every argument); the rest (a collection's insertion, a package, a callee nothing
+//!   resolves, a spread) is handed;
 //! - a substitution of a tagged template, a JSX prop, a spread attribute, a child expression or a `use:` directive: the same question of what the element is (an
-//!   intrinsic element is the DOM's; `Dynamic` is the component its `component` prop names; a package the build does not read is handed);
+//!   intrinsic element is the DOM's; `Dynamic` is the component its `component` prop names; a package the build does not read is handed). The `ref` callback of an
+//!   intrinsic element (or of `Dynamic` with a string tag) is applied where the element is created, on the stack of the function the element is written in;
 //! - the initializer of a binding, the value of an assignment, or a function's `return`: the value goes on in every read of that holder (in the file and in the files that
-//!   import it), of the function's calls, and in the function itself when a package may run it (`pkg(() => cb)`); an assignment into an object nothing here declares (an
-//!   import, `this`, a call's result) is handed, one into a property of a local holder goes on in the holder's reads (the table has no row for a property that is only
-//!   written, so `el.onclick = f` is followed through `el`);
+//!   import it), of the function's calls, and in the function itself when a package may run it (`pkg(() => cb)`); a callback given literally or by an exact reference returns
+//!   the value to its receiving call too (`p.then(() => cb)`, `p.then(give)`). Copies use a separate return-flow walk; an unresolved target retains the obligation.
+//!   An assignment into an object nothing here declares (an import, `this`, a call's
+//!   result) is handed, one into a property of a local holder goes on in the holder's reads (the table has no row for a property that is only written, so
+//!   `el.onclick = f` is followed through `el`);
 //! - an operand nothing takes (`typeof f`, `f === g`, an expression statement): not handed;
 //! - **anything else** (an iterable, a receiver, a `yield`, a default value, a class field): handed.
+//!
+//! A context *places* the value only when it carries it (`carries`): nothing between the context and the value computes another value from it, so parentheses,
+//! TypeScript's wrappers, a conditional's arms, a logical expression's operands, a comma's last operand, an array literal's elements, an object literal's property values,
+//! a spread's argument and the arguments of a dialect primitive's call (`action(step)` returns the function that runs the step) carry it, and nothing else does. In
+//! `[cb].map(f)` the literal is the receiver of a call, whose value is another one: no context places `cb`, so it is **handed**, as is a value in a callee's object, an
+//! iterable, an operand of `await` or `yield` or a part of a template (the review of #217, A).
 //!
 //! A function is also handed when it is written in a class (an instance, a subclass or `this` may hand it from where nothing here follows), when it is exported by name
 //! from a module a namespace import hands whole (`runNs(NS)`), and when it is exported from a program whose boundary is open.
@@ -40,9 +50,10 @@ use std::sync::Arc;
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{
-    AstFacts, CallFact, FunctionFact, FunctionKind, JsxAttributeFact, JsxAttributeValueKind,
-    JsxElementFact,
+    ArrayElementKind, AstFacts, CallFact, FunctionFact, FunctionKind, JsxAttributeFact,
+    JsxAttributeValueKind, JsxElementFact,
 };
+use solid_facts::compiler::CompilerOperationKind;
 use solid_facts::core::Span;
 
 use crate::indexes::SemanticLookup;
@@ -70,6 +81,8 @@ type Key = (Arc<str>, Span);
 struct Walk {
     positions: HashSet<Key>,
     functions: HashSet<Key>,
+    returned_positions: HashSet<(Key, Key)>,
+    returned_bindings: HashSet<(Key, Key)>,
 }
 
 /// How a reflective call forwards its arguments to its target.
@@ -227,10 +240,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         {
             return self.runs_where_written(file, template.span, walk);
         }
-        // A component named as a tag (`<Own />`) runs where the element is written (the call graph's render site).
+        // A component named as a tag (`<Own />`) runs where the element is written (the call graph's render site). The closing tag of `<Own>…</Own>` names the same component and
+        // is a reference of it too: answered as the opening name is, so a component written with children is not handed for it (the review of #217, E: Mac 4's finding).
         if let Some(element) = ast
             .jsx_containing(at)
-            .find(|element| element.name.span == at)
+            .find(|element| element.name.span == at || element.closing_name == Some(at))
         {
             return self.runs_where_written(file, element.span, walk);
         }
@@ -246,7 +260,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         // Whether a context the analysis follows holds the value: the contexts decide, and a value in none of them is handed unless it is an operand nothing takes.
         let mut placed = false;
         for (call, index) in ast.arguments_containing(at) {
-            if crosses(ast, call.arguments[index].span, at) {
+            if crosses(ast, call.arguments[index].span, at)
+                || !self.carries(file, call.arguments[index].span, at)
+            {
                 continue;
             }
             placed = true;
@@ -256,11 +272,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             }
         }
         for template in &ast.tagged_templates {
-            if template
-                .substitutions
-                .iter()
-                .any(|substitution| substitution.contains(at) && !crosses(ast, *substitution, at))
-            {
+            if template.substitutions.iter().any(|substitution| {
+                substitution.contains(at)
+                    && !crosses(ast, *substitution, at)
+                    && self.carries(file, *substitution, at)
+            }) {
                 placed = true;
                 let receiver = self.tag_receiver(file, template.tag);
                 if self.receiver_hands(file, receiver, walk) {
@@ -281,7 +297,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         }
         for binding in &ast.bindings {
             let held = binding.initializer.is_some_and(|initializer| {
-                initializer.contains(at) && !crosses(ast, initializer, at)
+                initializer.contains(at)
+                    && !crosses(ast, initializer, at)
+                    && self.carries(file, initializer, at)
             });
             if held {
                 placed = true;
@@ -296,7 +314,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         }
         for assignment in &ast.assignments {
             let value = ast.peel_ts_sugar_span(assignment.value_span);
-            if !value.contains(at) || crosses(ast, value, at) {
+            if !value.contains(at) || crosses(ast, value, at) || !self.carries(file, value, at) {
                 continue;
             }
             placed = true;
@@ -339,6 +357,86 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .iter()
             .any(|operand| ast.peel_ts_sugar_span(*operand) == at);
         !inert
+    }
+
+    /// Whether the expression `outer` is, or holds as an element or a property value, the value written at `at`, through nothing that computes another value from it:
+    /// parentheses and TypeScript's wrappers, a conditional's arms, a logical expression's operands, a comma's last operand, an array literal's elements and a spread's
+    /// argument, an object literal's property values, and the arguments of a call of a dialect primitive. A context places the value only when it carries it: `[cb].map(f)`
+    /// does not (the literal is the receiver of a call, and the call's value is another one), and neither does a template's part, an operand of `await` or `yield`, nor an
+    /// iterable: the value there is handed (the review of #217, A).
+    ///
+    /// A dialect primitive's call carries what it is handed because the dialect's table does not say whether the call returns something that runs the callback later
+    /// ([`Self::call_receiver`] asks the stack of the call): `action(function* () { … })` returns the function that runs the step, on the stack of whoever calls it, so
+    /// `const run = action(step)` places `step` in `run` and a function that returns `action(step)` returns it.
+    fn carries(&self, file: &'a FileFacts, outer: Span, at: Span) -> bool {
+        let ast = &file.ast;
+        let outer = ast.peel_ts_sugar_span(outer);
+        let at = ast.peel_ts_sugar_span(at);
+        if outer == at {
+            return true;
+        }
+        if !outer.contains(at) {
+            return false;
+        }
+        if let Some(array) = ast
+            .array_literal_elements
+            .iter()
+            .find(|array| array.span == outer)
+        {
+            return array.elements.iter().any(|element| {
+                element.kind != ArrayElementKind::Hole && self.carries(file, element.span, at)
+            });
+        }
+        if let Some(conditional) = ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == outer)
+        {
+            return self.carries(file, conditional.consequent, at)
+                || self.carries(file, conditional.alternate, at);
+        }
+        if let Some(logical) = ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == outer)
+        {
+            return self.carries(file, logical.left, at) || self.carries(file, logical.right, at);
+        }
+        if let Some(sequence) = ast.sequences.iter().find(|sequence| sequence.span == outer) {
+            return self.carries(file, sequence.tail, at);
+        }
+        if let Some(call) = ast.calls.iter().find(|call| call.span == outer) {
+            return self.lookup.primitive_at_call(file, call.span).is_some()
+                && call
+                    .arguments
+                    .iter()
+                    .any(|argument| !argument.spread && self.carries(file, argument.span, at));
+        }
+        // An object literal: the values of the properties written directly in it, and the argument of a spread written directly in it.
+        if ast
+            .object_get_shapes
+            .iter()
+            .any(|shape| shape.span == outer)
+        {
+            let direct = |inner: Span| {
+                outer.contains(inner)
+                    && inner != outer
+                    && !ast.object_properties.iter().any(|property| {
+                        property.span != inner
+                            && property.span.contains(inner)
+                            && outer.contains(property.span)
+                    })
+            };
+            return ast
+                .object_properties
+                .iter()
+                .any(|property| direct(property.span) && self.carries(file, property.value, at))
+                || ast
+                    .spreads
+                    .iter()
+                    .any(|spread| direct(spread.span) && self.carries(file, spread.argument, at));
+        }
+        false
     }
 
     /// Whether a function that owns `at` (a call, a tag, a carrier) may be run by a package: what is called there runs on its stack.
@@ -455,7 +553,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let returns = |ret: &solid_facts::ast::ReturnFact| {
             ret.argument.is_some_and(|argument| {
                 let argument = ast.peel_ts_sugar_span(argument);
-                argument.contains(at) && !crosses(ast, argument, at)
+                argument.contains(at)
+                    && !crosses(ast, argument, at)
+                    && self.carries(file, argument, at)
             })
         };
         let mut any = false;
@@ -483,6 +583,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 .calls_with_peeled_callee(function.span)
                 .map(|call| (file, call.span))
                 .collect();
+            if self.callback_return_hands(file, function, walk) {
+                return Some(true);
+            }
             for (caller_file, callee) in self
                 .lookup
                 .function_call_sites(file.path.as_str(), function.span)
@@ -499,6 +602,195 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             }
         }
         any.then_some(false)
+    }
+
+    /// A callback's return reaches its receiving call whether the callback is a literal, a named binding, or a closed object's member. Follow its value copies with a
+    /// separate visited set: asking where the function runs and asking where its return goes are different questions at the same reference.
+    fn callback_return_hands(
+        &self,
+        file: &'a FileFacts,
+        function: &'a FunctionFact,
+        walk: &mut Walk,
+    ) -> bool {
+        let target = (file.path.shared(), function.span);
+        if function.kind == FunctionKind::Declaration
+            && !function.name.as_ref().is_some_and(|name| {
+                self.lookup
+                    .entities()
+                    .exact(&name.span.location(file.path.shared()))
+                    .is_some()
+            })
+        {
+            return true;
+        }
+        let mut positions = Vec::new();
+        if function.kind != FunctionKind::Declaration {
+            positions.push((file, function.span));
+        }
+        if let Some(references) =
+            crate::local_access::function_reference_hand_offs(file, function, self.lookup)
+        {
+            positions.extend(references.into_iter().map(|(at, _)| (file, at)));
+        }
+        positions.extend(
+            crate::local_access::foreign_reference_hand_offs(file, function, self.lookup)
+                .into_iter()
+                .map(|(holder, at, _)| (holder, at)),
+        );
+        positions
+            .into_iter()
+            .any(|(holder, at)| self.callback_return_at(holder, at, &target, walk))
+    }
+
+    fn callback_return_at(
+        &self,
+        file: &'a FileFacts,
+        at: Span,
+        target: &Key,
+        walk: &mut Walk,
+    ) -> bool {
+        let ast = &file.ast;
+        let at = ast.peel_ts_sugar_span(at);
+        if !walk
+            .returned_positions
+            .insert((target.clone(), (file.path.shared(), at)))
+            || ast.type_queries.iter().any(|query| query.contains(at))
+        {
+            return false;
+        }
+        let exact_target = |value| {
+            let value = ast.peel_ts_sugar_span(value);
+            self.callback_target(file, value)
+                .is_some_and(|(holder, function)| {
+                    holder.path.as_str() == target.0.as_ref() && function.span == target.1
+                })
+        };
+        if let Some(call) = ast.calls_with_peeled_callee(at).next() {
+            return !exact_target(at) || self.position(file, call.span, walk);
+        }
+        let mut placed = false;
+        for (call, index) in ast.arguments_containing(at) {
+            let argument = &call.arguments[index];
+            if crosses(ast, argument.span, at) || !self.carries(file, argument.span, at) {
+                continue;
+            }
+            placed = true;
+            // A parameter's later consumers are not the enclosing call's result. Without that return-flow proof, retain the obligation.
+            if argument.spread
+                || !exact_target(argument.span)
+                || matches!(
+                    self.call_receiver(file, call, index),
+                    Receiver::Parameter(..)
+                )
+                || self.position(file, call.span, walk)
+            {
+                return true;
+            }
+        }
+        for binding in &ast.bindings {
+            if binding.initializer.is_some_and(|initializer| {
+                !crosses(ast, initializer, at) && self.carries(file, initializer, at)
+            }) {
+                placed = true;
+                if binding
+                    .names
+                    .iter()
+                    .any(|name| self.callback_return_binding(file, name.span, target, walk))
+                {
+                    return true;
+                }
+            }
+        }
+        for member in ast.members_with_peeled_object(at) {
+            placed = true;
+            if !exact_target(member.span)
+                || self.callback_return_at(file, member.span, target, walk)
+            {
+                return true;
+            }
+        }
+        !placed
+            && !ast
+                .inert_operands
+                .iter()
+                .any(|operand| ast.peel_ts_sugar_span(*operand) == at)
+    }
+
+    fn callback_return_binding(
+        &self,
+        file: &'a FileFacts,
+        name: Span,
+        target: &Key,
+        walk: &mut Walk,
+    ) -> bool {
+        if !walk
+            .returned_bindings
+            .insert((target.clone(), (file.path.shared(), name)))
+        {
+            return false;
+        }
+        if self
+            .lookup
+            .entities()
+            .exact(&name.location(file.path.shared()))
+            .is_none()
+            || (!self.lookup.program_closed && crate::indexes::binding_exported(file, name))
+        {
+            return true;
+        }
+        file.ast.references_to(name).iter().any(|reference| {
+            !file
+                .ast
+                .write_targets
+                .iter()
+                .any(|written| file.ast.peel_ts_sugar_span(*written) == *reference)
+                && self.callback_return_at(file, *reference, target, walk)
+        }) || self
+            .foreign_references(file, name)
+            .into_iter()
+            .any(|(holder, at, import)| {
+                if import {
+                    self.callback_return_binding(holder, at, target, walk)
+                } else {
+                    self.callback_return_at(holder, at, target, walk)
+                }
+            })
+    }
+
+    /// Resolve the whole callback value. A structural property declaration alone does not prove which function a mutable object holds.
+    fn callback_target(
+        &self,
+        file: &'a FileFacts,
+        value: Span,
+    ) -> Option<(&'a FileFacts, &'a FunctionFact)> {
+        let value = file.ast.peel_ts_sugar_span(value);
+        if let Some(function) = file.ast.function_at(value) {
+            return Some((file, function));
+        }
+        if let Some(member) = file.ast.member_at(value) {
+            let property = self
+                .lookup
+                .ast_file_index(file.path.as_str())?
+                .member_property(value)?;
+            let name = file.source_text(property)?;
+            let mut consulted = Vec::new();
+            let symbols = self.lookup.member_value_symbols_at_tracked(
+                file,
+                member.object,
+                name,
+                &mut consulted,
+            );
+            for (path, _) in consulted {
+                let consulted_file = self.files.get(path.as_str()).copied()?;
+                self.lookup.note_file_read(consulted_file);
+            }
+            return match symbols.as_slice() {
+                [symbol] => self.lookup.function_for_symbol(symbol.as_str()),
+                _ => None,
+            };
+        }
+        self.project_function_at(file, value)
+            .filter(|(holder, function)| self.lookup.function_value_is_current(holder, function))
     }
 
     /// Every read of the binding named at `name`: in the file, and in the files that import it. A binding the module exports from a program whose boundary is open is
@@ -576,8 +868,8 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         out
     }
 
-    /// The parameter at `index` of a project function the value is passed to: every read of the names it binds (a rest parameter takes the tail). An index past the
-    /// list of a function that has an `arguments` object is read through it, which nothing here follows.
+    /// The parameter at `index` of a project function the value is passed to: every read of the names it binds (a rest parameter takes the tail). A function that names
+    /// `arguments` hands every argument, and an index past the list of a function that has an `arguments` object is read through it, which nothing here follows.
     fn parameter(
         &self,
         file: &'a FileFacts,
@@ -585,6 +877,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         index: usize,
         walk: &mut Walk,
     ) -> bool {
+        // A function that names `arguments` reads every argument through it, and no declared name shows that (the review of #217, B).
+        if names_arguments(file, function) {
+            return true;
+        }
         let names: Vec<Span> = match function.parameters.get(index) {
             Some(parameter) => parameter.names.iter().map(|name| name.span).collect(),
             None if function.rest_parameter => function
@@ -765,9 +1061,27 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         walk: &mut Walk,
     ) -> Option<bool> {
         let ast = &file.ast;
-        let holds = |outer: Span| outer.contains(at) && !crosses(ast, outer, at);
+        let carried = |outer: Span| {
+            outer.contains(at) && !crosses(ast, outer, at) && self.carries(file, outer, at)
+        };
         let attribute_holds = |attribute: &JsxAttributeFact| {
-            attribute.value.or(attribute.expression).is_some_and(holds)
+            attribute
+                .expression
+                .or(attribute.value)
+                .is_some_and(carried)
+        };
+        // A child is its expression container, braces included: the expression inside is what carries the value.
+        let child_holds = |container: Span| {
+            let expression = ast
+                .jsx_child_expressions
+                .iter()
+                .copied()
+                .filter(|child| container.contains(*child) && *child != container)
+                .max_by_key(|child| child.end - child.start)
+                .unwrap_or(container);
+            expression.contains(at)
+                && !crosses(ast, container, at)
+                && self.carries(file, expression, at)
         };
         // A `use:name` directive is the one namespaced attribute whose local name the binder resolves to a declaration (`directive_binding`), and a call of the function the
         // name resolves to with the attribute's value as its accessor: argument 1.
@@ -782,13 +1096,30 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 }
             }
         }
+        // An intrinsic element's `ref` callback is applied where the element is created: `ref` of `@solidjs/web` (rc.21) resolves its accessor and calls `applyRef` at once, on the
+        // stack of the code that creates the element (the review of #217, D; Chrome, the `ph-refprop` and `ph-dynref` cells). `Dynamic` with a string tag creates one.
+        if (is_intrinsic_tag(file, element) || self.dynamic_string_tag(file, element))
+            && element
+                .attributes
+                .iter()
+                .filter(|attribute| compiled_ref(file, attribute))
+                .any(attribute_holds)
+        {
+            placed = true;
+            if self.runs_where_written(file, element.span, walk) {
+                return Some(true);
+            }
+        }
         let component_gets_it = element
             .attributes
             .iter()
             .filter(|attribute| !directive(attribute))
             .any(attribute_holds)
-            || element.spreads.iter().any(|spread| holds(spread.argument))
-            || element.children.iter().any(|child| holds(*child));
+            || element
+                .spreads
+                .iter()
+                .any(|spread| carried(spread.argument))
+            || element.children.iter().any(|child| child_holds(*child));
         if component_gets_it {
             placed = true;
             let receiver = self.element_receiver(file, index, element);
@@ -825,14 +1156,8 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         element: &JsxElementFact,
     ) -> Receiver<'a> {
         let lookup = self.lookup;
-        let name = file.source_text(element.name.span).unwrap_or_default();
         // The language's own rule of a tag: a plain name that starts with a lowercase letter is an intrinsic element, anything else is a value.
-        if element.member_object.is_none()
-            && name
-                .chars()
-                .next()
-                .is_some_and(|first| first.is_ascii_lowercase())
-        {
+        if is_intrinsic_tag(file, element) {
             return Receiver::Known;
         }
         // `<Dynamic component={…}/>` renders what its `component` prop names, and hands it every other prop: a string names an intrinsic element, a component is that
@@ -866,6 +1191,19 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             }
             _ => Receiver::Unread,
         }
+    }
+
+    /// Whether the element is a `Dynamic` (the dialect's component that renders what its `component` prop names) whose prop is a string: an intrinsic element's tag.
+    fn dynamic_string_tag(&self, file: &'a FileFacts, element: &JsxElementFact) -> bool {
+        self.lookup
+            .intrinsic_tag_prop(file, element.name.span)
+            .is_some_and(|prop| {
+                element.attributes.iter().any(|attribute| {
+                    attribute.namespace.is_none()
+                        && file.source_text(attribute.name) == Some(prop)
+                        && attribute.value_kind == JsxAttributeValueKind::String
+                })
+            })
     }
 
     /// The receiver of a `Dynamic` element's props: the component its `prop` attribute names. A string attribute is an intrinsic element's tag (the DOM's), an
@@ -929,6 +1267,37 @@ fn forwarding(
 fn ast_member_property(ast: &AstFacts, callee: Span) -> Option<Span> {
     ast.member_at(ast.peel_ts_sugar_span(callee))
         .map(|member| member.property)
+}
+
+/// Whether the pinned compiler's semantic trace names the attribute's expression as a `ref` callback (an `ExecutionSiteKind::Ref` operation at the expression: the compiler
+/// reads the attribute's own name, for a native element and for a component alike), so no spelling is read here.
+fn compiled_ref(file: &FileFacts, attribute: &JsxAttributeFact) -> bool {
+    attribute.expression.is_some_and(|expression| {
+        file.compiler
+            .semantic_model
+            .operations
+            .iter()
+            .any(|operation| {
+                operation.kind == CompilerOperationKind::Ref && operation.span == expression
+            })
+    })
+}
+
+/// Whether the element's tag is an intrinsic element's: a plain name that starts with a lowercase letter (the language's own rule of a tag).
+fn is_intrinsic_tag(file: &FileFacts, element: &JsxElementFact) -> bool {
+    element.member_object.is_none()
+        && file
+            .source_text(element.name.span)
+            .unwrap_or_default()
+            .chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_lowercase())
+}
+
+/// Whether a function that has an `arguments` object of its own (any but an arrow, which reads its enclosing function's) reads it: the object holds every argument, which no
+/// parameter's references show (`value_use::reads_arguments`: a reference the binder finds, in the function's text).
+fn names_arguments(file: &FileFacts, function: &FunctionFact) -> bool {
+    function.kind != FunctionKind::Arrow && crate::value_use::reads_arguments(file, function.span)
 }
 
 /// Whether a function or a JSX element lies between `outer` (an argument, an initializer, a prop's value) and `at`: the value at `at` is that function's or that element's

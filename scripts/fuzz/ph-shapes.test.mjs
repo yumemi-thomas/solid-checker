@@ -7,8 +7,8 @@ import { censusCells, recallShapes } from "./matrix.mjs";
 import { isValid } from "./model.mjs";
 import { PH_CODES, PH_CONTEXTS, PH_CONTEXT_NAMES, PH_HOSTS, PH_PACKAGE, PH_ROUTES, phPackageFiles, phParts, phShape } from "./ph-shapes.mjs";
 
-// The B3 PR after #213 and its flip (the review of #216): a flush in a function a package the build does not read as source may run, by every route a function reaches the package
-// (twenty-six), with the twins that never run it.
+// The B3 PR after #213 and its flip (the review of #216, and the review of #217's causes A to E): a flush in a function a package the build does not read as source may run, by
+// every route a function reaches the package (forty-seven), with the twins that never run it.
 
 const built = (code, context) => {
   const side = PH_CONTEXTS[context];
@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are twenty-six routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic"]);
+  it("are forty-seven routes on three hosts (dynref on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(156);
+    expect(PH_CONTEXT_NAMES).toHaveLength(278);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -114,6 +114,32 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     const dynamic = textOf("FLUSH_IN_ACTION", "ph-dynamic-step");
     expect(dynamic).toContain('import { Dynamic } from "@solidjs/web";');
     expect(dynamic.some((line) => line.startsWith("document.body.append((<Dynamic component={StepView} render={() => {"))).toBe(true);
+  });
+  it("print the review of #217's routes: a literal inside a receiver in a context, `arguments`, a returned function's call, an intrinsic ref", () => {
+    expect(textOf("FLUSH_IN_ACTION", "ph-mapinit-step").some((line) => /^const rs\d+ = \[cb\d+\]\.map\(\(each\) => runStep\(each\)\);$/.test(line))).toBe(true);
+    const destr = textOf("FLUSH_IN_ACTION", "ph-mapdestr-step");
+    expect(destr.some((line) => /^const \[first\d+\] = fs\d+;$/.test(line))).toBe(true);
+    expect(destr.some((line) => /^const rs\d+ = \[first\d+\]\.map\(\(each\) => runStep\(each\)\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-mapparam-step").some((line) => /^const rs\d+ = \[g\]\.map\(\(each\) => runStep\(each\)\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-mapflat-step").some((line) => /\[\[cb\d+\]\]\.flat\(\)\.map\(/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-maptemplate-step").some((line) => /^const text\d+ = `\$\{\[cb\d+\]\.map\(\(each\) => runStep\(each\)\)\.length\}`;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-maplogical-step").some((line) => /^const ok\d+ = \{ a: cb\d+ \}\.a\.name\.length > 0 && \[cb\d+\]\.some\(\(each\) => \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-mapawait-step").some((line) => /^await \[cb\d+\]\.map\(\(each\) => runStep\(each\)\)\[0\];$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-mapassign-step").some((line) => /^kept\d+ = \[cb\d+\]\.map\(\(each\) => runStep\(each\)\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-maparg-step").some((line) => /^use\d+\(\[cb\d+\]\.map\(\(each\) => runStep\(each\)\)\);$/.test(line))).toBe(true);
+    const gen = textOf("FLUSH_IN_ACTION", "ph-yieldof-step");
+    expect(gen.some((line) => /^const x\d+ = yield cb\d+;$/.test(line))).toBe(true);
+    expect(gen.some((line) => /^for \(const each of gen\d+\(\)\) \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-nbmap-step").some((line) => /^const rs\d+ = \[cb\d+\]\.map\(\(each\) => each\(\)\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-nbobj-step").some((line) => /^const r\d+ = \{ run: cb\d+ \}\.run\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-argsindex-step")).toContain("runStep(arguments[0]);");
+    const apply = textOf("FLUSH_IN_ACTION", "ph-argsapply-step");
+    expect(apply.some((line) => /^rest\d+\.apply\(null, arguments as unknown as Array<\(\) => void>\);$/.test(line))).toBe(true);
+    const then = textOf("FLUSH_IN_ACTION", "ph-thenreturn-step");
+    expect(then.some((line) => /^\.then\(\(\) => cb\d+\)$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-thenreturn-step-never")).toContain("skipRun(each);");
+    expect(textOf("FLUSH_IN_ACTION", "ph-refprop-step").some((line) => /^void \(<div ref=\{cb\d+\} \/>\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-dynref-step").some((line) => /^void \(<Dynamic component="div" ref=\{cb\d+\} \/>\);$/.test(line))).toBe(true);
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(phShape("ph-literal-step", { binding: "alias", layer: "none" })).toBe(false);

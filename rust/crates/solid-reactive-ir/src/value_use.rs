@@ -3202,7 +3202,7 @@ fn literal_reads_this(file: &FileFacts, literal: Span) -> bool {
 }
 
 /// `arguments` reads what no parameter's references show.
-fn reads_arguments(file: &FileFacts, function: Span) -> bool {
+pub(crate) fn reads_arguments(file: &FileFacts, function: Span) -> bool {
     file.ast.identifiers_within(function).any(|identifier| {
         identifier.role == IdentifierRole::Reference
             && file.source_text(identifier.span) == Some("arguments")
