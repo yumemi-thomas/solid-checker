@@ -185,14 +185,25 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
+      "start": 2935,
+      "end": 2942,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 2866,
-      "end": 2874,
+      "start": 3013,
+      "end": 3021,
       "fixes": 0
     },
     {
@@ -202,8 +213,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 2906,
-      "end": 2912,
+      "start": 3053,
+      "end": 3059,
       "fixes": 0
     },
     {
@@ -213,8 +224,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 3162,
-      "end": 3169,
+      "start": 3309,
+      "end": 3316,
       "fixes": 0
     },
     {
@@ -224,8 +235,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 3162,
-      "end": 3169,
+      "start": 3309,
+      "end": 3316,
       "fixes": 0
     },
     {
@@ -235,8 +246,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 3319,
-      "end": 3325,
+      "start": 3466,
+      "end": 3472,
       "fixes": 0
     },
     {
@@ -246,8 +257,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 3629,
-      "end": 3636,
+      "start": 3776,
+      "end": 3783,
       "fixes": 0
     },
     {
@@ -257,8 +268,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 3764,
-      "end": 3770,
+      "start": 3911,
+      "end": 3917,
       "fixes": 0
     },
     {
@@ -268,8 +279,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4030,
-      "end": 4037,
+      "start": 4177,
+      "end": 4184,
       "fixes": 0
     },
     {
@@ -279,8 +290,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4157,
-      "end": 4163,
+      "start": 4304,
+      "end": 4310,
       "fixes": 0
     },
     {
@@ -290,8 +301,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4394,
-      "end": 4401,
+      "start": 4541,
+      "end": 4548,
       "fixes": 0
     },
     {
@@ -301,8 +312,8 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4485,
-      "end": 4493,
+      "start": 4632,
+      "end": 4640,
       "fixes": 0
     },
     {
@@ -312,8 +323,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4525,
-      "end": 4531,
+      "start": 4672,
+      "end": 4678,
       "fixes": 0
     },
     {
@@ -323,8 +334,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4797,
-      "end": 4804,
+      "start": 4944,
+      "end": 4951,
       "fixes": 0
     },
     {
@@ -334,8 +345,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4797,
-      "end": 4804,
+      "start": 4944,
+      "end": 4951,
       "fixes": 0
     },
     {
@@ -345,8 +356,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 4916,
-      "end": 4922,
+      "start": 5063,
+      "end": 5069,
       "fixes": 0
     },
     {
@@ -356,8 +367,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 5113,
-      "end": 5126,
+      "start": 5260,
+      "end": 5273,
       "fixes": 0
     },
     {
@@ -367,8 +378,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 5113,
-      "end": 5126,
+      "start": 5260,
+      "end": 5273,
       "fixes": 0
     },
     {
@@ -378,8 +389,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-after-await-reach/variants/member-helpers/App.tsx",
-      "start": 5311,
-      "end": 5317,
+      "start": 5458,
+      "end": 5464,
       "fixes": 0
     }
   ]

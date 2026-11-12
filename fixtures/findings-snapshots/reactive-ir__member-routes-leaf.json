@@ -146,11 +146,67 @@
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 2509,
-      "end": 2519,
+      "start": 2557,
+      "end": 2567,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
+      "start": 2786,
+      "end": 2795,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
+      "start": 2786,
+      "end": 2795,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
+      "start": 3010,
+      "end": 3020,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
+      "start": 3176,
+      "end": 3181,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
+      "start": 3445,
+      "end": 3455,
       "fixes": 0
     },
     {
@@ -159,8 +215,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
-      "start": 2655,
-      "end": 2659,
+      "start": 3881,
+      "end": 3891,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/member-routes-leaf/App.tsx",
+      "start": 4027,
+      "end": 4031,
       "fixes": 0
     },
     {

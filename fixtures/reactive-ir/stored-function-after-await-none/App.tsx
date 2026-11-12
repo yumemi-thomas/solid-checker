@@ -21,3 +21,27 @@ export function Sync() {
   });
   return <div>{m()}</div>;
 }
+
+// Batch 10c: the other forms of invocation (a slot the program assigned, `.call`, a stored tag, a stored constructor) in a synchronous
+// memo: the same, no continuation, no SC1002 row.
+const slot: { cb: () => unknown } = { cb: () => {} };
+slot.cb = () => count();
+const held: Array<() => unknown> = [];
+held.push(() => count());
+const heldTags: Array<(strings: TemplateStringsArray) => unknown> = [];
+heldTags.push(() => count());
+const constructors: Array<new () => object> = [];
+constructors.push((function () {
+  count();
+}) as unknown as new () => object);
+export function SyncForms() {
+  const m = createMemo(() => {
+    slot.cb();
+    held[0].call(undefined);
+    void heldTags[0]`x`;
+    const Stored = constructors[0];
+    new Stored();
+    return 1;
+  });
+  return <div>{m()}</div>;
+}

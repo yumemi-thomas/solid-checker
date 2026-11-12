@@ -146,6 +146,120 @@ export function ThroughHelper() {
   return <div />;
 }
 
+// Batch 10c (B2): the same routes written as function VALUES. A function stored under a key the host calls by itself (a coercion, the
+// promise or iterator protocol, a computed key, a trap of a `new Proxy` handler, the `get` or `set` of a descriptor) runs the same way,
+// however it is written: an arrow or a `function`, a name the function is bound to, an assignment, a `defineProperty` descriptor. Each
+// read is an uncertifiable row of SC1002 (`function-run-unplaced`), as the method's is above. Each stores its own function.
+const coercedArrow = { toString: () => String(count()) };
+export function ArrowCoercion() {
+  const m = createMemo(async () => {
+    await pause();
+    void `${coercedArrow}`;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const valued = {
+  valueOf: function () {
+    return count();
+  },
+};
+export function ValueOfFunction() {
+  const m = createMemo(async () => {
+    await pause();
+    void +valued;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const trappedArrow = new Proxy({} as { value: number }, { get: () => count() });
+export function ArrowTrap() {
+  const m = createMemo(async () => {
+    await pause();
+    void trappedArrow.value;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const thenable = {
+  then: (resolve: (value: number) => void) => {
+    resolve(count());
+  },
+};
+export function ArrowThenable() {
+  const m = createMemo(async () => {
+    await pause();
+    await thenable;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const iterableFunction: Iterable<number> = {
+  [Symbol.iterator]: function* () {
+    count();
+    yield 1;
+  },
+};
+export function FunctionIteration() {
+  const m = createMemo(async () => {
+    await pause();
+    for (const item of iterableFunction) void item;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const named = () => String(count());
+const byName = { toString: named };
+export function NamedFunction() {
+  const m = createMemo(async () => {
+    await pause();
+    void `${byName}`;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const assigned: { toString(): string } = {};
+assigned.toString = () => String(count());
+export function AssignedMember() {
+  const m = createMemo(async () => {
+    await pause();
+    void `${assigned}`;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+class Prototyped {}
+Prototyped.prototype.toString = function () {
+  return String(count());
+};
+export function PrototypeMember() {
+  const m = createMemo(async () => {
+    await pause();
+    void `${new Prototyped()}`;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const described = {} as { value: number };
+Object.defineProperty(described, "value", { get: () => count() });
+export function DescriptorGetter() {
+  const m = createMemo(async () => {
+    await pause();
+    void described.value;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
 // Silent for SC1002: an ordinary handler closure (a call or an event runs it, never the continuation's access), a class no one
 // constructs or names (no member of it runs), and a function a call places.
 export function Handler() {

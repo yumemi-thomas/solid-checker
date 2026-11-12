@@ -643,6 +643,25 @@ fn function_prototype_dispatch_placing(
         .is_some_and(function_prototype_declaration)
 }
 
+/// Batch 10c (ADR 0964, B1): the receiver of `f.call(…)` and `f.apply(…)`, the value those run, when the call is exactly
+/// `Function.prototype`'s (a withheld standard call opens the row it would have: this only opens obligations, as ADR 0876's
+/// placing answer does). `f.bind(…)` runs nothing here: the function it returns runs where that value is called.
+pub(crate) fn dispatch_receiver(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<solid_facts::core::Span> {
+    if call.construct {
+        return None;
+    }
+    let member = file
+        .ast
+        .member_at(file.ast.peel_ts_sugar_span(call.callee))?;
+    (matches!(file.source_text(member.property), Some("call" | "apply"))
+        && function_prototype_dispatch_placing(lookup, file, call))
+    .then_some(member.object)
+}
+
 fn function_prototype_declaration(declaration: &typefacts::ResolvedDeclaration) -> bool {
     matches!(
         declaration.qualified_name.as_ref(),

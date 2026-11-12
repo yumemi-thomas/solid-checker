@@ -91,6 +91,68 @@ export function Tagged() {
   return <div />;
 }
 
+// Batch 10c (B2): the same routes written as function values (an arrow or a `function`, a name the function is bound to, an assignment, a
+// `defineProperty` descriptor, a Proxy trap written as an arrow): the key decides which are run by the host (see `member-routes-after-await`).
+const coercedArrow = {
+  toString: () => {
+    createMemo(() => 1);
+    return "";
+  },
+};
+export function ArrowCoercion() {
+  onSettled(() => {
+    void `${coercedArrow}`;
+  });
+  return <div />;
+}
+const trappedArrow = new Proxy({} as { value: number }, {
+  get: () => {
+    onCleanup(() => {});
+    return 1;
+  },
+});
+export function ArrowTrap() {
+  onSettled(() => {
+    void trappedArrow.value;
+  });
+  return <div />;
+}
+const assigned: { toString(): string } = {};
+assigned.toString = () => {
+  createMemo(() => 1);
+  return "";
+};
+export function AssignedMember() {
+  onSettled(() => {
+    void `${assigned}`;
+  });
+  return <div />;
+}
+const named = () => {
+  flush();
+  return "";
+};
+const byName = { toString: named };
+export function NamedFunction() {
+  onSettled(() => {
+    void `${byName}`;
+  });
+  return <div />;
+}
+const described = {} as { value: number };
+Object.defineProperty(described, "value", {
+  get: () => {
+    createMemo(() => 1);
+    return 1;
+  },
+});
+export function DescriptorGetter() {
+  onSettled(() => {
+    void described.value;
+  });
+  return <div />;
+}
+
 // Unchanged: a creation written in the leaf callback is the leaf walk's own violation, and a helper the leaf calls is read through
 // its call (the violation stands at the call). Silent: a function a call places and no leaf runs.
 export function Direct() {

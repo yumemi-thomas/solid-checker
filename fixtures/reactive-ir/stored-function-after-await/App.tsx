@@ -129,6 +129,168 @@ export function Parameter() {
   return <div />;
 }
 
+// Batch 10c (B1): the same fact written another way. Each form below invokes a function the program stored, and was silent for SC1002
+// (Chrome rc.21 warns at the read in each). Each stores its own function.
+
+// A slot the program assigned: a member of a typed object, an optional one, and the slot run through `.call`.
+const slot: { cb: () => unknown } = { cb: () => {} };
+slot.cb = () => count();
+export function Slot() {
+  const m = createMemo(async () => {
+    await pause();
+    slot.cb();
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const optionalSlot: { cb?: () => unknown } = {};
+optionalSlot.cb = () => count();
+export function OptionalSlot() {
+  const m = createMemo(async () => {
+    await pause();
+    optionalSlot.cb?.();
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const slotCalled: { cb: () => unknown } = { cb: () => {} };
+slotCalled.cb = () => count();
+export function SlotCall() {
+  const m = createMemo(async () => {
+    await pause();
+    slotCalled.cb.call(undefined);
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
+// An interface's method signature has no body: what runs is whatever object the program made to fit it (here a function the object
+// names; a closed literal with the arrow written in place is a function the walk follows, a violation).
+interface Service {
+  run(): unknown;
+}
+function runCount() {
+  return count();
+}
+const service: Service = { run: runCount };
+export function InterfaceSlot() {
+  const m = createMemo(async () => {
+    await pause();
+    service.run();
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
+// `.call` and `.apply` run the value they are read from: an element held in a variable, an element read in place.
+const dispatched: Array<() => unknown> = [];
+dispatched.push(() => count());
+export function Dispatch() {
+  const m = createMemo(async () => {
+    await pause();
+    const callback = dispatched[0];
+    callback.call(undefined);
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const applied: Array<() => unknown> = [];
+applied.push(() => count());
+export function Apply() {
+  const m = createMemo(async () => {
+    await pause();
+    applied[0].apply(undefined, []);
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
+// A `let` the program assigns again holds the later function, not its initializer.
+let reassigned: () => unknown = () => {};
+reassigned = () => count();
+export function Reassigned() {
+  const m = createMemo(async () => {
+    await pause();
+    reassigned();
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
+// A tag the program stored (a tagged template calls its tag where it is written): in a variable, and an element read in place.
+const heldTags: Array<(strings: TemplateStringsArray) => unknown> = [];
+heldTags.push(() => count());
+export function StoredTag() {
+  const m = createMemo(async () => {
+    await pause();
+    const held = heldTags[0];
+    void held`x`;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+const indexedTags: Array<(strings: TemplateStringsArray) => unknown> = [];
+indexedTags.push(() => count());
+export function StoredTagIndexed() {
+  const m = createMemo(async () => {
+    await pause();
+    void indexedTags[0]`x`;
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
+// A function the program stored as a constructor: `new` runs it.
+const constructors: Array<new () => object> = [];
+constructors.push((function () {
+  count();
+}) as unknown as new () => object);
+export function StoredNew() {
+  const m = createMemo(async () => {
+    await pause();
+    const Stored = constructors[0];
+    new Stored();
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
+// Silent. Nothing was stored: a `let` nothing writes again holds its initializer, a class and a tag function the program declared are
+// read where they are, `Math.max.apply` is the standard function, and `ownedMethods.run` is a method with a body the walk follows.
+let steady = () => 3;
+class Local {}
+function localTag(_strings: TemplateStringsArray) {
+  return 4;
+}
+const ownedMethods = {
+  run() {
+    return 5;
+  },
+};
+export function Declared() {
+  const m = createMemo(async () => {
+    await pause();
+    steady();
+    new Local();
+    void localTag`x`;
+    Math.max.apply(null, [1, 2]);
+    ownedMethods.run();
+    return 1;
+  });
+  createEffect(() => m(), () => {});
+  return <div />;
+}
+
 // Silent. Invoked before the await: the read is a dependency of the computation, tracked.
 const early: Array<() => unknown> = [];
 early.push(() => count());
