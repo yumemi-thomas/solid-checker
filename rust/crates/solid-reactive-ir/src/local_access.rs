@@ -11051,7 +11051,7 @@ pub(crate) fn unreached_write_may_run(
 
 /// Whether `span` is in the initializer of an instance field, which runs when
 /// an instance is constructed.
-fn in_instance_field_initializer(
+pub(crate) fn in_instance_field_initializer(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
 ) -> bool {

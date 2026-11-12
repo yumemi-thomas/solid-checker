@@ -184,6 +184,26 @@ site_silences! {
     /// `onFlush` where the write role allows it (an effect's apply, a leaf, a
     /// handler): no owner rejects the call.
     OnFlushRoleAllows => "static_api.on-flush.role-allows",
+    /// An owner-call site (`onCleanup`, a creation) that ADR 0458's query proves no execution runs (batch 11, slice 6).
+    OwnerCallNeverRuns => "leaf_universe.account.never-runs",
+    /// An owner-call site outside every function (and no instance field's initializer): module evaluation runs it on a stack of its own, in no leaf
+    /// owner's callback and on no effect's apply.
+    OwnerCallModuleScope => "leaf_universe.account.module-scope",
+    /// An owner-call site the owner graph proves no leaf owner runs: the function's context has an edge, no leaf bit, every entry is held, and no package the
+    /// build does not read may run it.
+    LeafOwnerAbsent => "leaf_universe.account.owner-context-no-leaf",
+    /// A creation the dialect says throws on an effect's apply, in a function the owner graph gives an owner on every entry, under the same conditions: the
+    /// callback's guard needs no owner.
+    OwnerCurrent => "leaf_universe.account.owner-context-current",
+    /// The project names no primitive that opens a leaf scope (and no package the build does not read may run the function), so no leaf owner exists to
+    /// forbid the call.
+    LeafNoOpenerInProgram => "leaf_universe.account.no-opener-in-program",
+    /// A creation the dialect says throws on an effect's apply, written where the role engine places it off every effect's apply (a handler, a deferred
+    /// callback, a directive apply, rendering, module code, discarded code).
+    EffectCreationRunsOffApply => "static_api.primitive-in-effect-callback.runs-off-apply",
+    /// A creation the dialect says throws on an effect's apply, inside the callback of an exact owner-setting primitive (`runWithOwner`, `createRoot`, a
+    /// computation's compute): an owner is current.
+    EffectCreationOwnerSetAround => "static_api.primitive-in-effect-callback.owner-set-around",
 }
 
 impl SiteSilence {
@@ -191,7 +211,10 @@ impl SiteSilence {
     /// shares the span (batch 11, slice 4). One arm per variant, no wildcard: a new silence names its codes or the build fails. A silence that removes a
     /// row (`removed`, `removed_with`) names none here: it answers the codes the removed row's ending answered ([`SiteEnd::answers`]).
     pub(crate) const fn codes(self) -> &'static [SiteCode] {
-        use SiteCode::{ActionCall, OnFlush, ReactiveWrite, StoreWrite, StrictRead};
+        use SiteCode::{
+            ActionCall, CleanupForbidden, EffectCreation, OnFlush, PrimitiveForbidden,
+            ReactiveWrite, StoreWrite, StrictRead,
+        };
         match self {
             // The reads: an accessor's call, a store or props member Get.
             Self::AsyncSitesDormantCallbackArgument
@@ -247,6 +270,17 @@ impl SiteSilence {
             | Self::FlowShallowStoreRoot
             | Self::FlowTscNullishLink => &[StoreWrite],
             Self::OnFlushRoleAllows => &[OnFlush],
+            // The owner-call universe (slice 6): a site no execution runs, or outside every function, ends every code it can raise; the owner-graph and
+            // census proofs answer the leaf owner's two codes, the effect proofs the effect callback's.
+            Self::OwnerCallNeverRuns | Self::OwnerCallModuleScope => {
+                &[CleanupForbidden, PrimitiveForbidden, EffectCreation]
+            }
+            Self::LeafOwnerAbsent | Self::LeafNoOpenerInProgram => {
+                &[CleanupForbidden, PrimitiveForbidden]
+            }
+            Self::OwnerCurrent
+            | Self::EffectCreationRunsOffApply
+            | Self::EffectCreationOwnerSetAround => &[EffectCreation],
             // The passes that remove a row: the codes the removed row's ending answered.
             Self::ApplyNeverRuns
             | Self::ClosedProgramExportDischarge
@@ -739,7 +773,7 @@ mod tests {
     }
 
     /// The sources that name silences, by the module a silence's id begins with.
-    const PRODUCERS: [(&str, &str); 5] = [
+    const PRODUCERS: [(&str, &str); 6] = [
         ("local_access", include_str!("local_access.rs")),
         (
             "shared_reactivity",
@@ -748,6 +782,7 @@ mod tests {
         ("static_api", include_str!("static_api.rs")),
         ("effect_execution", include_str!("effect_execution.rs")),
         ("attribution", include_str!("attribution.rs")),
+        ("leaf_universe", include_str!("owners/leaf_universe.rs")),
     ];
 
     /// ADR 0886's test of its emission arms, for these: every silence is named

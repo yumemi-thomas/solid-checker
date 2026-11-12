@@ -193,6 +193,31 @@ impl EmissionInputs<'_, '_, '_> {
     }
 }
 
+/// ADR 0868: whether the function making a run at `at` holds context zero (no owner edge reaches it) and is not proven never to run: the caller whose run
+/// the graph has no edge for. The emission asks it of every layer around a site, and so does the owner-call universe's leaf-owner proof (batch 11, slice 6).
+pub(super) fn caller_holds_no_context(
+    graph: &OwnerGraph,
+    reach: &crate::execution_role::SiteReach<'_, '_>,
+    lookup: &SemanticLookup<'_>,
+    caller_file: &solid_facts::FileFacts,
+    at: Span,
+) -> bool {
+    lookup.note_file_read(caller_file);
+    graph
+        .path_id(caller_file.path.as_str())
+        .is_some_and(|caller_pid| {
+            caller_file
+                .ast
+                .innermost_function_owning(at)
+                .is_some_and(|caller| {
+                    graph
+                        .node_context(caller_pid, caller.span)
+                        .is_some_and(|(_, context)| context == 0)
+                        && reach.function_runs(caller_file, caller)
+                })
+        })
+}
+
 /// The starts of the calls in `path` that run after an `await` on every path
 /// through their async function's own body (the producer's
 /// `calls_after_await` dominance fact, the one `reactive-read-after-await`
@@ -246,20 +271,7 @@ pub(super) fn emit_file(
     // ADR 0868: the function making a run at `at` holds context zero (no
     // edge reaches it) and is not proven never to run.
     let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
-        lookup.note_file_read(caller_file);
-        graph
-            .path_id(caller_file.path.as_str())
-            .is_some_and(|caller_pid| {
-                caller_file
-                    .ast
-                    .innermost_function_owning(at)
-                    .is_some_and(|caller| {
-                        graph
-                            .node_context(caller_pid, caller.span)
-                            .is_some_and(|(_, context)| context == 0)
-                            && reach.function_runs(caller_file, caller)
-                    })
-            })
+        caller_holds_no_context(graph, &reach, lookup, caller_file, at)
     };
     for candidate in &entry.fragment.requirements {
         if let Some(read) =

@@ -1,92 +1,65 @@
-//! Batch 11, slice 6 (measurement stage): the owner-graph facts of the owner-call universe's sites.
+//! Batch 11, slice 6: the owner-graph and census silences of the owner-call universe.
 //!
 //! The universe ([`crate::proof_universe`], table `owner-call`) lists every call of `onCleanup` and of a creation the dialect refuses under a leaf owner
-//! (SC3001: CLEANUP_IN_FORBIDDEN_SCOPE, PRIMITIVE_IN_FORBIDDEN_SCOPE) or on an effect apply's stack with no owner set (SC6002:
-//! PRIMITIVE_IN_EFFECT_CALLBACK). A site no row, SC9012, discard or named silence ends gets the code's uncertifiable row. Which silences are provable is a
-//! question of the owner graph: the function that holds the site has a context (the owners every entry into it gives: owned, unowned, leaf, ...), and a
-//! context that is exactly owned, with every entry the graph holds, says no leaf owner runs the site and an owner is current at it.
+//! (SC3001: CLEANUP_IN_FORBIDDEN_SCOPE, PRIMITIVE_IN_FORBIDDEN_SCOPE) or on an effect apply's stack with no owner set (SC6002: PRIMITIVE_IN_EFFECT_CALLBACK).
+//! A site no row, SC9012, discard or named silence ends gets the code's own uncertifiable row ([`crate::site_accounting`]). The silences named here rest on
+//! the owner graph, the one analysis that holds every entry into a function and the owner each gives, and on one census:
 //!
-//! This pass writes nothing but the proof log's `candidate` lines (with `SOLID_CHECKER_IR_PROOF_CANDIDATES`), one per site of the universe, so the number of
-//! sites each fact would end is read off before any silence is named: the function's context bits, whether it is exported or a component (proven or by
-//! convention), whether the site is in a parameter list, after a suspension or in a generator, whether an entry into a layer around it is open
-//! ([`super::owner_emission::named_layer_entry_open`]), whether ADR 0458's query proves it never runs, and the program's census (a leaf opener, a deferred
-//! callback). A cleanup site also says what the SC4001 emission already proved at it (`ContextProof`).
+//! - [`SiteSilence::OwnerCallNeverRuns`]: ADR 0458's query proves no execution runs the site (every code);
+//! - [`SiteSilence::OwnerCallModuleScope`]: no function owns the site and no instance field's initializer holds it, so module evaluation runs it on a
+//!   stack of its own: in no leaf owner's callback and on no effect's apply (every code);
+//! - [`SiteSilence::LeafNoOpenerInProgram`]: the project names no primitive that opens a leaf scope, so there is no leaf owner to forbid the call
+//!   (SC3001's two codes);
+//! - [`SiteSilence::LeafOwnerAbsent`]: the context of the function that holds the site has an edge, no leaf bit, and is not the bare open-world seed of an
+//!   export (SC3001's two codes);
+//! - [`SiteSilence::OwnerCurrent`]: the same context gives an owner on every entry (owned, a leaf owner, or both: no unowned bit), so the effect callback's
+//!   guard (`inEffectCallback && context === null`) does not meet the creation (SC6002).
+//!
+//! The graph's contexts are the entries it holds, so the last two answer only where those are every entry the program can make, and each rests on all of
+//! these facts of the site (a missing one is no silence, the site keeps its uncertifiable row):
+//!
+//! - the site is written directly in a function (not a parameter list, which runs when its argument is omitted; not after a suspension of an async function,
+//!   which runs from a later task; not in a generator, whose body runs where an iterator is stepped);
+//! - no layer around it is entered by a route the graph has no edge for ([`super::owner_emission::named_layer_entry_open`], ADR 0868: a function stored,
+//!   assigned, handed on or a method), a reference that is not a direct call or an inline run;
+//! - no package the build does not read may run the function ([`crate::package_hand_off::UnreadPackageHandOff`], ADR 0967): such a package may call it
+//!   under a leaf owner, or on an effect's apply, through an entry no edge shows. The census silence rests on this too: a package may open the leaf scope the
+//!   project's own primitives do not.
+//!
+//! Nothing here ever files a row; a silence names the fact it rests on ([`PremiseKind`], each with the span of the code it is about).
 
 use super::*;
-use crate::proof_log::{self, CandidateRecord};
+use crate::proof_log::PremiseKind;
+use crate::site_accounting::{SiteEnds, SiteSilence};
 
-const fn yes(flag: bool) -> &'static str {
-    if flag { "yes" } else { "no" }
-}
-
-/// The bits of a context, as the log spells them: `owned+leaf`, `unowned`, `0`.
-fn bits(context: u8) -> String {
-    let parts = [
-        (OWNER_CONTEXT_OWNED, "owned"),
-        (OWNER_CONTEXT_UNOWNED, "unowned"),
-        (OWNER_CONTEXT_LEAF, "leaf"),
-        (OWNER_CONTEXT_COMPONENT_UNCERTAIN, "component-uncertain"),
-        (OWNER_CONTEXT_PROVEN_UNOWNED, "proven-unowned"),
-        (OWNER_CONTEXT_LATER_RUN_UNOWNED, "later-run"),
-        (OWNER_CONTEXT_LEAF_OWNED, "leaf-owned"),
-        (OWNER_CONTEXT_MAY_RESUME_UNOWNED, "may-resume"),
-    ]
-    .into_iter()
-    .filter(|(bit, _)| context & bit != 0)
-    .map(|(_, name)| name)
-    .collect::<Vec<_>>();
-    if parts.is_empty() {
-        "0".to_owned()
-    } else {
-        parts.join("+")
-    }
-}
-
-/// Writes the facts of every owner-call site of the project's files (a build with the proof log and the dry run on); files no row and ends no site.
-pub(super) fn measure(
+/// Records the silences of every owner-call site of the project's files in `ends`. `client_build` is the build SC6002's creation sites are asked on
+/// ([`crate::static_api::client_build`]).
+pub(super) fn silences(
     files: &[&solid_facts::FileFacts],
     order: &[PathId],
     graph: &OwnerGraph,
-    emissions: &HashMap<PathId, Emission>,
     lookup: &SemanticLookup<'_>,
+    client_build: bool,
+    ends: &mut SiteEnds,
 ) {
-    if !crate::proof_candidates::enabled() {
-        return;
-    }
+    use crate::proof_universe::{SiteCode, owner_call_codes};
     let dialect = lookup.dialect;
     let reach = crate::execution_role::SiteReach::new(lookup);
-    // B3 (ADR 0967): whether a package nothing here reads may run the function holding the site: a silence that rests on a census or on the entries the graph
-    // holds (a leaf opener the project names, an owner edge) cannot answer for what such a package runs.
+    // The files as the lookup holds them (the package hand-off question is asked of those).
     let by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> = lookup
         .files()
         .iter()
         .map(|file| (file.path.as_str(), file))
         .collect();
     let unread = crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path);
-    let opener = lookup.project_opens_leaf_scope();
-    let defers = lookup.project_defers_callbacks();
-    // ADR 0868: the function making a run at `at` holds context zero (no edge reaches it) and is not proven never to run: the emission's question.
+    let no_leaf_opener = !lookup.project_opens_leaf_scope();
     let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
-        lookup.note_file_read(caller_file);
-        graph
-            .path_id(caller_file.path.as_str())
-            .is_some_and(|caller_pid| {
-                caller_file
-                    .ast
-                    .innermost_function_owning(at)
-                    .is_some_and(|caller| {
-                        graph
-                            .node_context(caller_pid, caller.span)
-                            .is_some_and(|(_, context)| context == 0)
-                            && reach.function_runs(caller_file, caller)
-                    })
-            })
+        super::owner_emission::caller_holds_no_context(graph, &reach, lookup, caller_file, at)
     };
     for (listed, pid) in files.iter().zip(order) {
         if lookup.in_dependency_source(listed.path.as_str()) {
             continue;
         }
-        // The file as the lookup holds it (the hand-off question is asked of that one).
         let Some(file) = by_path.get(listed.path.as_str()).copied() else {
             continue;
         };
@@ -95,93 +68,105 @@ pub(super) fn measure(
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;
             };
-            let cleanup = primitive == Primitive::OnCleanup
-                && crate::cleanup::leaf_forbids(dialect, file, call, primitive);
-            let creation = primitive != Primitive::OnCleanup
-                && crate::cleanup::creates_forbidden_primitive(dialect, file, call, primitive);
-            let effect = dialect.throws_creating_in_effect_callback(
-                primitive,
-                crate::static_api::first_argument_is_function(call),
-            );
-            if !(cleanup || creation || effect) {
+            let codes = owner_call_codes(dialect, file, call, primitive, client_build);
+            if codes.is_empty() {
                 continue;
             }
-            let codes = [
-                cleanup.then_some("cleanup"),
-                creation.then_some("creation"),
-                effect.then_some("effect"),
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join("+");
-            let function = ast.innermost_function_owning(call.span);
-            let node = function.and_then(|function| graph.node_context(*pid, function.span));
-            let (kind, context, exported) = match (function, node) {
-                (None, _) => ("module", "-".to_owned(), "-"),
-                (Some(_), None) => ("no-node", "-".to_owned(), "-"),
-                (Some(_), Some((node, context))) => (
-                    if node.component {
-                        "component"
-                    } else if node.component_uncertain {
-                        "component-uncertain"
-                    } else if node.generator {
-                        "generator"
-                    } else {
-                        "function"
-                    },
-                    bits(context),
-                    yes(node.exported),
-                ),
-            };
-            let in_list = crate::owners::in_parameter_list(ast, call.span);
-            let open = function.is_some()
-                && super::owner_emission::named_layer_entry_open(
-                    file,
-                    call.span,
-                    None,
-                    lookup,
-                    &caller_unplaced,
-                );
-            let never = matches!(
+            let leaf = codes.iter().any(|code| {
+                matches!(
+                    code,
+                    SiteCode::CleanupForbidden | SiteCode::PrimitiveForbidden
+                )
+            });
+            let effect = codes.contains(&SiteCode::EffectCreation);
+            let site = call.callee;
+            // No execution runs the site: no code of it can be raised.
+            if matches!(
                 reach.site(file, call.span),
                 crate::execution_role::Reach::Unreached(_)
-            );
-            // What the SC4001 emission proved at the site, for an `onCleanup` call (its operation span is the callee).
-            let proof = emissions
-                .get(pid)
-                .and_then(|emission| {
-                    emission
-                        .accounted
-                        .iter()
-                        .find(|(span, _)| *span == call.callee)
-                })
-                .map_or_else(|| "none".to_owned(), |(_, proof)| format!("{proof:?}"));
-            proof_log::candidate(&CandidateRecord {
-                rule: "SC3001",
-                table: "owner-call-ctx",
-                path: file.path.as_str(),
-                at: call.callee,
-                alternates: &[call.span],
-                facts: &[
-                    ("prim", &format!("{primitive:?}")),
-                    ("codes", &codes),
-                    ("fn", kind),
-                    ("ctx", &context),
-                    ("exported", exported),
-                    ("param", yes(in_list)),
-                    (
-                        "await",
-                        yes(crate::execution_role::may_follow_suspension(file, call.span)),
-                    ),
-                    ("entry-open", yes(open)),
-                    ("never", yes(never)),
-                    ("unread-pkg", yes(unread.may_run(file, call.span))),
-                    ("opener", yes(opener)),
-                    ("defers", yes(defers)),
-                    ("proof", &proof),
-                ],
-            });
+            ) {
+                ends.end_at(
+                    file,
+                    site,
+                    SiteSilence::OwnerCallNeverRuns,
+                    PremiseKind::SiteReach,
+                    || Some(call.span),
+                );
+                continue;
+            }
+            // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere).
+            let Some(function) = ast.innermost_function_owning(call.span) else {
+                if !crate::local_access::in_instance_field_initializer(file, call.span) {
+                    ends.end_at(
+                        file,
+                        site,
+                        SiteSilence::OwnerCallModuleScope,
+                        PremiseKind::ModuleScope,
+                        || Some(site),
+                    );
+                }
+                continue;
+            };
+            // A package the build does not read may run the function (B3): no census and no entry the graph holds answers for it.
+            if unread.may_run(file, call.span) {
+                continue;
+            }
+            if leaf && no_leaf_opener {
+                ends.end_at(
+                    file,
+                    site,
+                    SiteSilence::LeafNoOpenerInProgram,
+                    PremiseKind::ProgramCensus,
+                    || Some(site),
+                );
+                continue;
+            }
+            // The graph's context answers for the site only where the site is plain and no entry into a layer around it is one the graph has no edge for.
+            if crate::owners::in_parameter_list(ast, call.span)
+                || function.generator
+                || crate::execution_role::may_follow_suspension(file, call.span)
+            {
+                continue;
+            }
+            let Some((node, context)) = graph.node_context(*pid, function.span) else {
+                continue;
+            };
+            let leaf_free = context != 0
+                && context & (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED) == 0
+                && !open_world_unowned_only(context, node);
+            let owner_current = context != 0
+                && context & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED)
+                    == 0;
+            if !((leaf && leaf_free) || (effect && owner_current)) {
+                continue;
+            }
+            if super::owner_emission::named_layer_entry_open(
+                file,
+                call.span,
+                None,
+                lookup,
+                &caller_unplaced,
+            ) {
+                continue;
+            }
+            if leaf && leaf_free {
+                ends.end_at(
+                    file,
+                    site,
+                    SiteSilence::LeafOwnerAbsent,
+                    PremiseKind::OwnerContextNoLeaf,
+                    || Some(function.span),
+                );
+            }
+            if effect && owner_current {
+                ends.end_at(
+                    file,
+                    site,
+                    SiteSilence::OwnerCurrent,
+                    PremiseKind::OwnerContextCurrent,
+                    || Some(function.span),
+                );
+            }
         }
     }
 }

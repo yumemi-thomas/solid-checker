@@ -70,7 +70,7 @@ pub(crate) fn collect_project(
     timings: &mut BuildTimings,
 ) {
     if let Some(cache) = cache {
-        let (requirements, gates, owner_timings, static_violations, owner_view) =
+        let (requirements, gates, owner_timings, static_violations, owner_view, owner_call_ends) =
             find_missing_owners_incremental(
                 ctx.facts,
                 ctx.semantic_lookup,
@@ -79,8 +79,10 @@ pub(crate) fn collect_project(
                 unchanged_paths,
                 &mut cache.owners,
                 &draft.leaf_operations,
+                crate::static_api::client_build(ctx),
             );
         draft.owner_view = owner_view;
+        draft.site_ends.append(owner_call_ends);
         draft.missing_owners.extend(requirements);
         // ADR 0713: open context reads.
         draft.static_violations.extend(static_violations);
@@ -92,7 +94,7 @@ pub(crate) fn collect_project(
         // A build with no retained cache runs the same pass over a scratch
         // state: one owner analysis, so a fresh and a retained build cannot
         // disagree (the duplicate batch pass drifted, S7f-0).
-        let (requirements, gates, owner_timings, static_violations, owner_view) =
+        let (requirements, gates, owner_timings, static_violations, owner_view, owner_call_ends) =
             find_missing_owners_incremental(
                 ctx.facts,
                 ctx.semantic_lookup,
@@ -101,8 +103,10 @@ pub(crate) fn collect_project(
                 unchanged_paths,
                 &mut OwnerState::default(),
                 &draft.leaf_operations,
+                crate::static_api::client_build(ctx),
             );
         draft.owner_view = owner_view;
+        draft.site_ends.append(owner_call_ends);
         draft.missing_owners.extend(requirements);
         // ADR 0713: open context reads.
         draft.static_violations.extend(static_violations);

@@ -1012,12 +1012,14 @@ pub(crate) fn find_missing_owners_incremental(
     unchanged_paths: &HashSet<String>,
     state: &mut OwnerState,
     leaf_operations: &[crate::LeafOwnerOperation],
+    client_build: bool,
 ) -> (
     Vec<OwnerRequirement>,
     SettledGateDecisions,
     OwnerIncrementalTimings,
     Vec<crate::StaticViolation>,
     Option<OwnerView>,
+    crate::site_accounting::SiteEnds,
 ) {
     let entities = lookup.entities();
     let mut timings = OwnerIncrementalTimings::default();
@@ -1141,8 +1143,16 @@ pub(crate) fn find_missing_owners_incremental(
         lookup,
         leaf_operations,
     );
-    // Batch 11, slice 6 (measurement only): the owner-graph facts of the owner-call universe's sites, in the proof log's candidate lines.
-    super::leaf_universe::measure(&files, &order, graph, emissions, lookup);
+    // Batch 11, slice 6: the silences of the owner-call universe that rest on the graph (ends only; no row).
+    let mut owner_call_ends = crate::site_accounting::SiteEnds::default();
+    super::leaf_universe::silences(
+        &files,
+        &order,
+        graph,
+        lookup,
+        client_build,
+        &mut owner_call_ends,
+    );
     let mut owner_view = None;
     if !facts.dependency_source_roots.is_empty() {
         let (nodes, contexts, outgoing) = graph.dense_view(&order);
@@ -1204,6 +1214,7 @@ pub(crate) fn find_missing_owners_incremental(
         },
         static_violations,
         owner_view,
+        owner_call_ends,
     )
 }
 

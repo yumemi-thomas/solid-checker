@@ -911,8 +911,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     crate::site_accounting::account(&analysis, &mut program, &site_ends);
     // Batch 11 (slice 5): every flush site ends, per code, in a row, an SC9012, the discard or a typed reason, or gets the code's uncertifiable row.
     crate::flush_accounting::account(&analysis, &mut program);
-    // Batch 11 (slice 6, measurement only): the facts of the effect-creation sites of the owner-call universe, in the proof log's candidate lines.
-    crate::static_api::log_effect_creation_facts(&analysis);
     // ADR 0458: after every producer and gate, over the rows that may be
     // reported, while the lookup's memos are still open.
     program.unreached_sites = crate::execution_role::unreached_report_sites(

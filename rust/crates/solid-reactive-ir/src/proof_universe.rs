@@ -1078,12 +1078,42 @@ fn on_flush_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts,
     }
 }
 
+/// The codes of the owner-call universe a call may raise, the empty list when the call is no site (batch 11, slice 6): `onCleanup` raises
+/// CLEANUP_IN_FORBIDDEN_SCOPE, a creation a leaf owner refuses ([`crate::cleanup::creates_forbidden_primitive`]) PRIMITIVE_IN_FORBIDDEN_SCOPE, and, on a
+/// client build, a creation the dialect says throws on an effect's apply ([`solid_dialect::Dialect::throws_creating_in_effect_callback`]: the argument test is
+/// [`crate::static_api::first_argument_is_function`], the one the SC6002 producer asks) PRIMITIVE_IN_EFFECT_CALLBACK; a call of the second kind that is also
+/// of the first has both. One definition: the universe lists the sites by it and the owner stage's silences ask it of the same calls.
+pub(crate) fn owner_call_codes(
+    dialect: &dyn Dialect,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: solid_dialect::Primitive,
+    client_build: bool,
+) -> &'static [SiteCode] {
+    let leaf = if primitive == solid_dialect::Primitive::OnCleanup {
+        crate::cleanup::leaf_forbids(dialect, file, call, primitive)
+            .then_some(SiteCode::CleanupForbidden)
+    } else {
+        crate::cleanup::creates_forbidden_primitive(dialect, file, call, primitive)
+            .then_some(SiteCode::PrimitiveForbidden)
+    };
+    let effect = client_build
+        && dialect.throws_creating_in_effect_callback(
+            primitive,
+            crate::static_api::first_argument_is_function(call),
+        );
+    match (leaf, effect) {
+        (Some(SiteCode::CleanupForbidden), _) => CLEANUP_CODES,
+        (Some(_), true) => CREATION_AND_EFFECT_CODES,
+        (Some(_), false) => CREATION_CODES,
+        (None, true) => EFFECT_CREATION_CODES,
+        (None, false) => &[],
+    }
+}
+
 /// The owner-call universe (batch 11, slice 6): each call whose resolved primitive the dialect refuses under a leaf owner or on an effect apply's stack,
-/// outside dependency source, whatever its callee is spelled (found from the calls, like [`on_flush_sites`] and ADR 0886's owner sites): `onCleanup`
-/// (CLEANUP_IN_FORBIDDEN_SCOPE), a creation a leaf owner refuses (PRIMITIVE_IN_FORBIDDEN_SCOPE, [`crate::cleanup::creates_forbidden_primitive`]) and,
-/// on a client build, a creation the dialect says throws on an effect's apply (PRIMITIVE_IN_EFFECT_CALLBACK,
-/// [`solid_dialect::Dialect::throws_creating_in_effect_callback`]: the argument test is [`crate::static_api::first_argument_is_function`], the one the
-/// SC6002 producer asks). A call of the second kind that is also of the first has both codes.
+/// outside dependency source, whatever its callee is spelled (found from the calls, like [`on_flush_sites`] and ADR 0886's owner sites), with the codes
+/// [`owner_call_codes`] gives it.
 fn owner_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
     let lookup = ctx.semantic_lookup;
     let dialect = ctx.dialect;
@@ -1096,25 +1126,10 @@ fn owner_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFact
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;
             };
-            let leaf = if primitive == solid_dialect::Primitive::OnCleanup {
-                crate::cleanup::leaf_forbids(dialect, file, call, primitive)
-                    .then_some(SiteCode::CleanupForbidden)
-            } else {
-                crate::cleanup::creates_forbidden_primitive(dialect, file, call, primitive)
-                    .then_some(SiteCode::PrimitiveForbidden)
-            };
-            let effect = client_build
-                && dialect.throws_creating_in_effect_callback(
-                    primitive,
-                    crate::static_api::first_argument_is_function(call),
-                );
-            let codes = match (leaf, effect) {
-                (Some(SiteCode::CleanupForbidden), _) => CLEANUP_CODES,
-                (Some(_), true) => CREATION_AND_EFFECT_CODES,
-                (Some(_), false) => CREATION_CODES,
-                (None, true) => EFFECT_CREATION_CODES,
-                (None, false) => continue,
-            };
+            let codes = owner_call_codes(dialect, file, call, primitive, client_build);
+            if codes.is_empty() {
+                continue;
+            }
             found.push((
                 file,
                 Site {

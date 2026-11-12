@@ -927,10 +927,8 @@ impl StaticApiContext<'_> {
             // apply before this one; otherwise the claim is uncertifiable.
             if let Some(created) = kind
                 && self.client_build()
-                && dialect.throws_creating_in_effect_callback(
-                    created,
-                    first_argument_is_function(call),
-                )
+                && dialect
+                    .throws_creating_in_effect_callback(created, first_argument_is_function(call))
                 && let Some(root) = self.lookup.callee_package_root(file, call.callee)
                 && let Some(origin) = crate::effect_phase::ownerless_effect_phase_origin(
                     file,
@@ -1037,6 +1035,39 @@ impl StaticApiContext<'_> {
                     fixes: vec![],
                     uncertain: true,
                 });
+            }
+            // Batch 11 (slice 6): the owner-call universe lists every creation the dialect says throws on an effect's apply, and a creation no row stands at
+            // names why it cannot: the role engine places it off every effect's apply (a handler, a deferred callback, a directive apply, rendering, module
+            // code, discarded code), or an exact primitive's callback that creates an owner wraps it. Never a row; a creation with neither stays unaccounted
+            // for (the universe's uncertifiable row).
+            if let Some(created) = kind
+                && self.client_build()
+                && dialect
+                    .throws_creating_in_effect_callback(created, first_argument_is_function(call))
+                && !result.violations.iter().any(|violation| {
+                    violation.id == "SC6002"
+                        && violation.location == location(file.path.shared(), call.callee)
+                })
+            {
+                if self.runs_off_every_apply(file, call.span, &allowed) {
+                    result.ends.end_at(
+                        file,
+                        call.callee,
+                        crate::site_accounting::SiteSilence::EffectCreationRunsOffApply,
+                        crate::proof_log::PremiseKind::RoleDoesNotReport,
+                        || Some(call.callee),
+                    );
+                } else if let Some(wrapper) =
+                    owner_created_around_call(file, call.span, self.lookup)
+                {
+                    result.ends.end_at(
+                        file,
+                        call.callee,
+                        crate::site_accounting::SiteSilence::EffectCreationOwnerSetAround,
+                        crate::proof_log::PremiseKind::OwnerSetAround,
+                        || Some(wrapper),
+                    );
+                }
             }
             // ADR 0963: the leaf scope's net. A call a leaf owner's callback forbids (a creation, `onCleanup`,
             // `flush`) written where a route no call shows runs it (a getter or setter, a coercion method, an
@@ -2810,6 +2841,40 @@ fn owner_set_around(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -
     false
 }
 
+/// Batch 11 (slice 6): the call of the exact primitive whose callback runs `site` under an owner that primitive creates (`createRoot`, a computation's
+/// compute), through the layers that run in place and add no owner (`untrack`, `latest`: as owned as their call), or `None`. [`owner_set_around`] answers "sets
+/// or may set an owner", enough to decline an obligation; this is the proof an owner is current, so a `runWithOwner` whose owner is a value (it may be null) and
+/// one that detaches (it is null) are not.
+fn owner_created_around_call(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut at = site;
+    for _ in 0..16 {
+        let function = file.ast.innermost_function_owning(at)?;
+        let (call, index) =
+            file.ast
+                .arguments_containing(function.span)
+                .find(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+                })?;
+        let primitive = lookup.primitive_at_call(file, call.span)?;
+        match lookup
+            .dialect
+            .slot_run(primitive, index, call.arguments.len())
+        {
+            SlotRun::InPlace(run) => match run.owner {
+                SlotOwner::Inherits => at = call.span,
+                SlotOwner::Creates => return Some(call.span),
+                SlotOwner::Supplied { .. } | SlotOwner::Detached => return None,
+            },
+            SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => return None,
+        }
+    }
+    None
+}
+
 #[deny(clippy::wildcard_enum_match_arm)]
 fn action_step_body_at(
     file: &FileFacts,
@@ -2928,131 +2993,6 @@ fn member_chain_root(file: &FileFacts, span: Span) -> Option<Span> {
         return Some(current);
     }
     None
-}
-
-/// The first exit [`runs_unplaced_once`] takes at `site` with `ownerless` and [`Routes::Every`], without following a caller: why its answer is none (or which
-/// give-up it is), for the slice 6 measurement.
-fn placement_exit(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -> &'static str {
-    if owner_set_around(file, site, lookup) {
-        return "owner-set-around";
-    }
-    let owning = crate::owners::owning_function(&file.ast, site);
-    if owning.is_some_and(|function| lookup.function_may_be_component(file, function)) {
-        return "may-be-component";
-    }
-    if parameter_initializer_on_the_way(file, site, lookup) {
-        return "parameter-initializer";
-    }
-    if crate::execution_role::unplaced_run(file, site, lookup) {
-        return "unplaced-run";
-    }
-    match crate::execution_role::climb_in_place_layers(file, site, lookup) {
-        Some(climb) if climb.in_list || climb.suspended.is_some() => {
-            return "in-list-or-suspended";
-        }
-        Some(climb) if climb.exhausted => return "climb-exhausted",
-        Some(climb) if climb.at != site => return "in-place-layer",
-        Some(_) | None => {}
-    }
-    let Some(function) = owning.filter(|function| function.body.contains(site)) else {
-        return "no-function-body";
-    };
-    if function.generator {
-        return "generator";
-    }
-    if crate::owners::function_binding_name(file, function).is_none() {
-        return "unnamed";
-    }
-    if lookup
-        .function_call_sites(file.path.as_str(), function.span)
-        .is_empty()
-    {
-        return "no-calls";
-    }
-    "via-callers"
-}
-
-/// Batch 11, slice 6 (measurement only): the facts of every creation site of the owner-call universe that the dialect says throws on an effect's apply,
-/// as `candidate` lines (`SOLID_CHECKER_IR_PROOF_CANDIDATES`): what the effect-phase walk and the placement walk answered, and why the placement walk's
-/// answer is none. Files no row.
-pub(crate) fn log_effect_creation_facts(ctx: &AnalysisContext<'_>) {
-    if !crate::proof_candidates::enabled() {
-        return;
-    }
-    let checker = context_of(ctx);
-    let lookup = ctx.semantic_lookup;
-    let mut allowed: crate::HashMap<&str, Vec<Span>> = crate::HashMap::default();
-    for (file, site) in crate::proof_universe::sites(ctx) {
-        if site.table != "owner-call"
-            || !site
-                .codes
-                .contains(&crate::proof_universe::SiteCode::EffectCreation)
-        {
-            continue;
-        }
-        let call = site.alternates.first().copied().unwrap_or(site.at);
-        let root = lookup.callee_package_root(file, site.at);
-        let origin = root.as_ref().and_then(|root| {
-            crate::effect_phase::ownerless_effect_phase_origin(
-                file,
-                call,
-                root,
-                checker.package_instances,
-                lookup,
-            )
-        });
-        let origin_text = match (&root, &origin) {
-            (None, _) => "no-root".to_owned(),
-            (Some(_), None) => "none".to_owned(),
-            (Some(_), Some(origin)) => format!(
-                "some{}{}{}",
-                if origin.undecided.is_some() {
-                    "+undecided"
-                } else {
-                    ""
-                },
-                if origin.mixed { "+mixed" } else { "" },
-                if origin.earlier_call {
-                    "+earlier-call"
-                } else {
-                    ""
-                },
-            ),
-        };
-        let blocker = unplaced_blocker(file, call, lookup, true).unwrap_or("none");
-        let allowed = allowed
-            .entry(file.path.as_str())
-            .or_insert_with(|| crate::execution_role::allowed_callback_spans(file, lookup));
-        let owning = crate::owners::owning_function(&file.ast, call);
-        let yes = |flag: bool| if flag { "yes" } else { "no" };
-        crate::proof_log::candidate(&crate::proof_log::CandidateRecord {
-            rule: "SC6002",
-            table: "effect-creation-facts",
-            path: file.path.as_str(),
-            at: site.at,
-            alternates: &site.alternates,
-            facts: &[
-                ("origin", &origin_text),
-                ("blocker", blocker),
-                ("exit", placement_exit(file, call, lookup)),
-                (
-                    "off-apply",
-                    yes(checker.runs_off_every_apply(file, call, allowed)),
-                ),
-                ("set-around", yes(owner_set_around(file, call, lookup))),
-                (
-                    "may-component",
-                    yes(owning
-                        .is_some_and(|function| lookup.function_may_be_component(file, function))),
-                ),
-                (
-                    "proven-component",
-                    yes(owning
-                        .is_some_and(|function| lookup.function_proven_component(file, function))),
-                ),
-            ],
-        });
-    }
 }
 
 #[cfg(test)]
