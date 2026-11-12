@@ -502,6 +502,10 @@ pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program, ends: &S
     }
     if logging {
         ends.log();
+        // Batch 11, slice 0 (measurement only): the candidate sites of the rules with no universe, written beside the endings above; it returns nothing.
+        if crate::proof_candidates::enabled() {
+            crate::proof_candidates::log(ctx, &universe);
+        }
     }
     if rows.is_empty() {
         return;

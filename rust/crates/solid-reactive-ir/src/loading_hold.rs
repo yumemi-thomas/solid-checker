@@ -414,3 +414,82 @@ fn unproven_hold(
     }
     None
 }
+
+/// Batch 11, slice 0 (measurement only, [`crate::proof_candidates`]): the sites SC5006 and SC5007 start from, as the proof log's `candidate` lines. The first tests are the producers'
+/// own (`loading_on_outside_hold_obligations`, `loading_on_accessor_violations`) read again, and nothing here is read by them or returned: SC5006's is a boundary element with `on`
+/// (or a spread that may carry it), at the `on` attribute; SC5007's every form that hands `on` (the attribute, a spread, the props object of a `Loading({ on })` call), at the value, with
+/// what the value is proven to be (`not-function` is the one answer that states nothing about the rule).
+pub(crate) fn log_candidates(file: &solid_facts::FileFacts, lookup: &SemanticLookup<'_>) {
+    use crate::proof_log::{self, CandidateRecord};
+    let primitives = lookup.primitives(file);
+    let on_boundary = |primitive| {
+        super::known_primitive(primitive)
+            .is_some_and(|primitive| lookup.dialect.boundary_on_may_hold_outside(primitive))
+    };
+    let named = |value: OnValue| match value {
+        OnValue::NotFunction => "not-function",
+        OnValue::Function => "function",
+        OnValue::Open => "open",
+    };
+    let path = file.path.as_str();
+    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+        if !on_boundary(&primitives.jsx[index]) {
+            continue;
+        }
+        let on = element.attributes.iter().find(|attribute| {
+            attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("on")
+        });
+        if on.is_some() || !element.spreads.is_empty() {
+            proof_log::candidate(&CandidateRecord {
+                rule: RULE_ID,
+                table: "loading-on",
+                path,
+                at: on.map_or(element.name.span, |attribute| attribute.span),
+                alternates: &[],
+                facts: &[("on", if on.is_some() { "attribute" } else { "spread" })],
+            });
+        }
+        if let Some((at, value)) = jsx_on_value(file, lookup, element) {
+            proof_log::candidate(&CandidateRecord {
+                rule: "SC5007",
+                table: "loading-on-value",
+                path,
+                at,
+                alternates: &[],
+                facts: &[("value", named(value)), ("form", "element")],
+            });
+        }
+    }
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        if !on_boundary(&primitives.calls[index]) {
+            continue;
+        }
+        let Some(argument) = call.arguments.first() else {
+            continue;
+        };
+        let (at, value) = if argument.exact_object_literal {
+            let Some(property) =
+                file.ast
+                    .object_properties_within(argument.span)
+                    .find(|property| {
+                        argument.property_names.contains(&property.key)
+                            && file.source_text(property.key) == Some("on")
+                    })
+            else {
+                continue;
+            };
+            let value = file.ast.peel_ts_sugar_span(property.value);
+            (value, on_value(file, lookup, value))
+        } else {
+            (argument.span, OnValue::Open)
+        };
+        proof_log::candidate(&CandidateRecord {
+            rule: "SC5007",
+            table: "loading-on-value",
+            path,
+            at,
+            alternates: &[],
+            facts: &[("value", named(value)), ("form", "call")],
+        });
+    }
+}

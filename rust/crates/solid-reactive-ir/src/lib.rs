@@ -84,6 +84,7 @@ pub mod package_boundary;
 mod pending_accounting;
 mod pipeline;
 mod projection;
+mod proof_candidates;
 mod proof_log;
 mod proof_universe;
 mod reachability;
@@ -923,6 +924,12 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// …)`): the calls it reaches are not followed. Its `callee` is the
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
+/// Batch 11 (ADR 0825 amended): the `analysis_context` of the companion of a `primitive-value` row, at the start of the call the primitive is
+/// handed to as an argument (`untrack(flush)`, `run(flush)`, `[1].forEach(flush)`, `run(...[flush])`). The runtime's frame for what the callee
+/// does with the primitive stands at that call, the reference's row at the argument, and the judges cover a withholding at a frame's position
+/// only. It is no row of the call's other arguments (the census does not count it). Producer: `static_rules.rs`; consumers: `projection.rs`,
+/// `reactive_analysis.rs`.
+pub const PRIMITIVE_HANDED: &str = "primitive-handed";
 /// ADR 0645: a listener whose code a dispatch may run under an owner or in a
 /// strict-read window, and which calls what no rule follows from it.
 pub const LISTENER_REACH: &str = "listener-reach";

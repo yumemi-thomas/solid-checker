@@ -721,8 +721,8 @@
         "why": "pending-review"
       },
       "name-only-match": {
-        "count": 4,
-        "why": "`on` and `children` are the prop names of a boundary the code has already resolved: every element and call reaches them only through `known_primitive(&primitives.jsx[index])` or `primitives.calls[index]` with `boundary_on_may_hold_outside`, so the spelling is the primitive's own prop, not an identification of what the element is"
+        "count": 6,
+        "why": "`on` and `children` are the prop names of a boundary the code has already resolved: every element and call reaches them only through `known_primitive(&primitives.jsx[index])` or `primitives.calls[index]` with `boundary_on_may_hold_outside`, so the spelling is the primitive's own prop, not an identification of what the element is; the candidate log of batch-11 slice 0 (`log_candidates`, measurement only) reads the same two props through the same resolved boundary (`known_primitive` / `primitives.calls[index]`)"
       }
     },
     "rust/crates/solid-reactive-ir/src/local_access.rs": {
@@ -977,6 +977,20 @@
       "finding-filter": {
         "count": 3,
         "why": "ADR 0933 drop passes with typed premises written to the proof log: ExecutionPaths (a violation on a path no client run reaches), the unfollowed-dependency-value uncertainty where the value is proven, and SC1001 under a more specific rule at the same span (OwnedByEnabledRule)"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/proof_candidates.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "`nested` labels a candidate line of the dry-run log: yes (nested) when no innermost function is found; the label silences nothing and decides no finding (measurement only)"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`sync` is the option name of the options object of a call already resolved to a primitive that supports it (`dialect.supports_sync_option(kind)`): the producer's own reading of the option, repeated for the candidate log (measurement only, decides no finding)"
+      },
+      "primitive-name-match": {
+        "count": 3,
+        "why": "the dry-run candidate list of batch-11 slice 0 (measurement only: behind SOLID_CHECKER_IR_PROOF_CANDIDATES, written to the proof log, decides no finding) names the primitive each of SC2004 `resolve`, SC2005 `until` and SC2007 `dynamic` is about; `kind` is the dialect classification of an exactly resolved call, the first test the matching static_api.rs arm applies; the rule-owned universes of slice 8 replace this list, and the dialect names the primitive there"
       }
     },
     "rust/crates/solid-reactive-ir/src/proof_universe.rs": {

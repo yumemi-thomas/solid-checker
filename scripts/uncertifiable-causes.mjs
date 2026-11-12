@@ -76,6 +76,7 @@ export function messageFamily(message) {
     [/destructuring props unwraps each property once/, "destructured-props"],
     [/is passed to .*, whose reactive behaviour is not described/, "package-callee"],
     [/is used as a value here, so the calls that reach it are not followed/, "primitive-value"],
+    [/is handed to this call as a value, so what the call does with it is not followed/, "primitive-handed"],
     [/is called on the result of \S+, so the value it returns is not/, "primitive-result-method"],
     [/is a reactive props object and is written through directly/, "props-write"],
     [/the Solid compiler refused/, "compiler-refused"],
