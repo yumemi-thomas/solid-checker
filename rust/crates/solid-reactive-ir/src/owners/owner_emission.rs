@@ -1116,7 +1116,7 @@ fn returned_unreached_function(
 /// renders, and at the innermost owner-creating region around `span`. A function that only may be a component is a layer like any other.
 /// `caller_unplaced` answers whether the function making a run at a span holds
 /// no owner context and may run (the emission's ADR 0534 question).
-fn named_layer_entry_open(
+pub(super) fn named_layer_entry_open(
     file: &solid_facts::FileFacts,
     span: Span,
     region: Option<Span>,

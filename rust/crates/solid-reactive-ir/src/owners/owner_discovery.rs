@@ -1141,6 +1141,8 @@ pub(crate) fn find_missing_owners_incremental(
         lookup,
         leaf_operations,
     );
+    // Batch 11, slice 6 (measurement only): the owner-graph facts of the owner-call universe's sites, in the proof log's candidate lines.
+    super::leaf_universe::measure(&files, &order, graph, emissions, lookup);
     let mut owner_view = None;
     if !facts.dependency_source_roots.is_empty() {
         let (nodes, contexts, outgoing) = graph.dense_view(&order);

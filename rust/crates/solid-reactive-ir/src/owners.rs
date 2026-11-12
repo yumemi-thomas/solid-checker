@@ -47,6 +47,7 @@ pub(crate) use jsx_sites::{JsxSiteKind, aliased_primitive, control_flow_parent, 
 use jsx_sites::{control_flow_child, is_control_flow_child, runs_as_child};
 mod owner_discovery;
 pub(crate) use owner_discovery::*;
+mod leaf_universe;
 mod owner_context;
 pub(crate) use owner_context::*;
 mod async_context;
