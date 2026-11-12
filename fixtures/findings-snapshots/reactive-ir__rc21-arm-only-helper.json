@@ -43,6 +43,17 @@
       "start": 929,
       "end": 939,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-arm-only-helper/App.tsx",
+      "start": 929,
+      "end": 939,
+      "fixes": 0
     }
   ]
 }

@@ -105,6 +105,19 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 2840,
+      "end": 2858,
+      "fixes": 0,
+      "message": "this creation (`createRenderEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -121,6 +134,19 @@
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 2994,
+      "end": 3018,
+      "fixes": 0,
+      "message": "this creation (`Solid.createRenderEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 2994,
@@ -167,10 +193,36 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3208,
+      "end": 3226,
+      "fixes": 0,
+      "message": "this creation (`createRenderEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3305,
+      "end": 3317,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 3305,
@@ -217,6 +269,19 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3589,
+      "end": 3601,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -230,10 +295,36 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3624,
+      "end": 3642,
+      "fixes": 0,
+      "message": "this creation (`createRenderEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3895,
+      "end": 3907,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 3895,
@@ -268,6 +359,19 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4062,
+      "end": 4086,
+      "fixes": 0,
+      "message": "this creation (`Solid.createRenderEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -284,6 +388,19 @@
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4309,
+      "end": 4321,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 4309,
@@ -330,6 +447,19 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4557,
+      "end": 4569,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -355,10 +485,36 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4858,
+      "end": 4870,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4897,
+      "end": 4915,
+      "fixes": 0,
+      "message": "this creation (`createRenderEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 4897,
@@ -393,10 +549,36 @@
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 5194,
+      "end": 5206,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 5512,
+      "end": 5524,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 5512,
@@ -435,6 +617,19 @@
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 5741,
+      "end": 5753,
+      "fixes": 0,
+      "message": "this creation (`createEffect`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 5741,

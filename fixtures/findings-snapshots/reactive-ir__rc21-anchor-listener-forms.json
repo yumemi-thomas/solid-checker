@@ -99,6 +99,17 @@
       "start": 462,
       "end": 474,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-anchor-listener-forms/App.tsx",
+      "start": 462,
+      "end": 474,
+      "fixes": 0
     }
   ]
 }

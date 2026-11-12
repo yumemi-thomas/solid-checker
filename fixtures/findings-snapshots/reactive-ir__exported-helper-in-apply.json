@@ -64,6 +64,17 @@
       "start": 148,
       "end": 158,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/exported-helper-in-apply/helper.ts",
+      "start": 217,
+      "end": 227,
+      "fixes": 0
     }
   ]
 }

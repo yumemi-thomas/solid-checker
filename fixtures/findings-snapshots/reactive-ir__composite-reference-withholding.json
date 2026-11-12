@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/composite-reference-withholding/App.tsx",
+      "start": 801,
+      "end": 813,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
@@ -16,6 +27,17 @@
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/composite-reference-withholding/App.tsx",
+      "start": 1103,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/composite-reference-withholding/App.tsx",
       "start": 1103,
       "end": 1115,

@@ -11,6 +11,17 @@
       "start": 226,
       "end": 238,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-render-shadowed/App.tsx",
+      "start": 226,
+      "end": 238,
+      "fixes": 0
     }
   ]
 }

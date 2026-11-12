@@ -75,6 +75,17 @@
       "start": 517,
       "end": 527,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-member-call-edge/App.tsx",
+      "start": 517,
+      "end": 527,
+      "fixes": 0
     }
   ]
 }

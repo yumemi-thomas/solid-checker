@@ -25,11 +25,22 @@
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
+      "start": 2247,
+      "end": 2257,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
-      "start": 2639,
-      "end": 2649,
+      "start": 2879,
+      "end": 2889,
       "fixes": 0
     },
     {
@@ -39,8 +50,8 @@
       "blocker": "value-in-class-field",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
-      "start": 2639,
-      "end": 2659,
+      "start": 2879,
+      "end": 2899,
       "fixes": 0
     },
     {
@@ -50,8 +61,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
-      "start": 2951,
-      "end": 2961,
+      "start": 3191,
+      "end": 3201,
       "fixes": 0
     },
     {
@@ -61,8 +72,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
-      "start": 3371,
-      "end": 3381,
+      "start": 3611,
+      "end": 3621,
       "fixes": 0
     },
     {
@@ -72,8 +83,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
-      "start": 3371,
-      "end": 3390,
+      "start": 3611,
+      "end": 3630,
       "fixes": 0
     }
   ]

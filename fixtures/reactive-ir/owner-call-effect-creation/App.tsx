@@ -47,7 +47,8 @@ export function Body() {
   return <p>{memo()}</p>;
 }
 
-// An event handler: it runs on the browser's own stack, never on an effect's apply (no synchronous dispatch in this program).
+// An event handler: it runs on the browser's own stack, never on an effect's apply (no synchronous dispatch in this program). The role silence also asks that no layer around the
+// site is entered by a reference that is no direct call, and an inline handler is a function value no binding names that is no whole argument of a call: the row stands (Chrome is quiet).
 export function Handler() {
   return (
     <button

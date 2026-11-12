@@ -1449,3 +1449,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-effect-creation/variants/sync-dispatch/node_modules/**
 !fixtures/reactive-ir/owner-call-effect-creation-unresolved-package/node_modules/
 !fixtures/reactive-ir/owner-call-effect-creation-unresolved-package/node_modules/**
+!fixtures/reactive-ir/owner-call-component-by-reference/node_modules/
+!fixtures/reactive-ir/owner-call-component-by-reference/node_modules/**
+!fixtures/reactive-ir/owner-call-saved-callback/node_modules/
+!fixtures/reactive-ir/owner-call-saved-callback/node_modules/**
+!fixtures/reactive-ir/owner-call-root-generator/node_modules/
+!fixtures/reactive-ir/owner-call-root-generator/node_modules/**

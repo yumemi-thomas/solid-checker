@@ -45,10 +45,32 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 521,
+      "end": 531,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 730,
+      "end": 740,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 730,
@@ -78,10 +100,32 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 1039,
+      "end": 1049,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 1075,
+      "end": 1085,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 1075,
@@ -132,6 +176,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 1474,
+      "end": 1484,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -153,10 +208,32 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 1531,
+      "end": 1541,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 1680,
+      "end": 1690,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 1680,
@@ -186,6 +263,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 1905,
+      "end": 1915,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -202,6 +290,17 @@
       "kind": "uncertifiable",
       "blocker": "directive-owner-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2062,
+      "end": 2072,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 2062,
       "end": 2072,
@@ -273,6 +372,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2445,
+      "end": 2455,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -306,6 +416,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2675,
+      "end": 2685,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -322,6 +443,17 @@
       "kind": "uncertifiable",
       "blocker": "directive-owner-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2852,
+      "end": 2862,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 2852,
       "end": 2862,
@@ -344,6 +476,17 @@
       "kind": "uncertifiable",
       "blocker": "directive-owner-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 3023,
+      "end": 3033,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
       "start": 3023,
       "end": 3033,
@@ -393,6 +536,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 206,
+      "end": 216,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -409,6 +563,17 @@
       "kind": "uncertifiable",
       "blocker": "directive-owner-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 273,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
       "start": 273,
       "end": 289,
@@ -437,10 +602,32 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 420,
+      "end": 430,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 439,
+      "end": 449,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
       "start": 439,
@@ -469,6 +656,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 670,
+      "end": 680,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -485,6 +683,17 @@
       "kind": "uncertifiable",
       "blocker": "directive-owner-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 745,
+      "end": 755,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
       "start": 745,
       "end": 755,

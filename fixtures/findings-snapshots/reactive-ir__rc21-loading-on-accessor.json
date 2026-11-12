@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 217,
+      "end": 227,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-accessor",
       "code": "SC5007",
       "kind": "violation",

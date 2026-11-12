@@ -7,7 +7,8 @@
 | `createMemo` in `InApply`'s apply | SC6002 violation | the effect-phase walk proves it: no owner is set on the way |
 | `createRoot` in `RootInApply`'s apply | SC6002 violation; what its callback creates: no site that runs | a refused creation enters nothing (ADR 0475) |
 | `createMemo` in `RootInMemo`'s root callback | silent, `effect-creation-owner-set-around` | an exact primitive that creates an owner (`createRoot`) wraps it, itself inside a computation's compute |
-| `Body`, `Handler`, `Timer` | silent, `effect-creation-runs-off-apply` | the role engine places the code off every apply: rendering, an event handler (no synchronous dispatch in this program), a deferred callback |
+| `Body`, `Timer` | silent, `effect-creation-runs-off-apply` | the role engine places the code off every apply (rendering, a deferred callback), and no layer around it is entered by a reference that is no direct call (a component only a tag renders; a timer callback that is a whole argument of the call), and no package the build does not read may run it |
+| `Handler`'s inline `onClick={() => …}` | `effect-creation-unaccounted` | the role engine places it off every apply (no synchronous dispatch in this program), but the entry test reads a function value no binding names that is not a whole argument of a call as an object slot or an array element: the cost of asking the entry test of the role (the review of #220, F2; Chrome is quiet there). The proof batch's refinement: a literal the compiler binds as the element's event handler is entered only by the event |
 | `top` at module scope | silent, `module-scope` | module evaluation runs it once, on a stack of its own |
 | `dead` | silent, `never-runs` | a private function nothing references: ADR 0458's query proves no execution runs it |
 | `Holder.memo`, a class field's initializer | no silence (the ADR 0710 row stands) | the initializer runs at each construction, which may be anywhere: it is no module scope |

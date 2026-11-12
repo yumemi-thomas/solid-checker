@@ -35,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 796,
+      "end": 806,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
