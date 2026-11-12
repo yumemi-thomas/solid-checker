@@ -1,0 +1,68 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx",
+      "start": 762,
+      "end": 773,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx",
+      "start": 762,
+      "end": 773,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx",
+      "start": 1004,
+      "end": 1012,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx",
+      "start": 1004,
+      "end": 1012,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx",
+      "start": 1871,
+      "end": 1879,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "blocker": "optimistic-write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx",
+      "start": 1871,
+      "end": 1879,
+      "fixes": 0
+    }
+  ]
+}

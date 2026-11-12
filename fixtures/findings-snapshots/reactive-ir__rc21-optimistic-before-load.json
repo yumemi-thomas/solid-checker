@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 340,
+      "end": 351,
+      "fixes": 0
+    },
+    {
       "rule": "optimistic-write-before-load",
       "code": "SC2009",
       "kind": "violation",
@@ -9,6 +20,17 @@
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 340,
       "end": 351,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 355,
+      "end": 398,
       "fixes": 0
     },
     {
@@ -54,6 +76,17 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 977,
+      "end": 988,
+      "fixes": 0
+    },
+    {
       "rule": "optimistic-write-before-load",
       "code": "SC2009",
       "kind": "violation",
@@ -75,9 +108,10 @@
       "fixes": 0
     },
     {
-      "rule": "optimistic-write-before-load",
-      "code": "SC2009",
-      "kind": "violation",
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 1026,
@@ -90,8 +124,40 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 1026,
+      "end": 1037,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 1159,
       "end": 1168,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 1159,
+      "end": 1168,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 1398,
+      "end": 1409,
       "fixes": 0
     },
     {

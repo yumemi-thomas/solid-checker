@@ -29,3 +29,7 @@ A call whose reach the walk cannot finish (512 nodes) is uncertifiable too (ADR 
 
 Keep pending items in a separate list until the source loads, disable the action until
 it has, or declare a `loadingValue`.
+
+## Endings by code (ADR 0968)
+
+A setter call is accounted for, for this rule's Chrome code, only by an ending that answers that code: a row of its own table, an SC9012, the compiler's discard, a finding of a rule the dialect says claims the code, or a named silence that names it. A row of another table or a finding of another rule at the same place answers another code and ends nothing here, so this rule's own uncertifiable row (`optimistic-write-unaccounted`) stands beside it: never a violation, and it yields to any row of the rule that stands. A site whose rule claims no code here, or whose code has no policy in the dialect, is not ended by what stands at it.

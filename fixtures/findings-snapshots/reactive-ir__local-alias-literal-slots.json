@@ -42,6 +42,17 @@
       "fixes": 0
     },
     {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "blocker": "optimistic-write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
+      "start": 1131,
+      "end": 1139,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",

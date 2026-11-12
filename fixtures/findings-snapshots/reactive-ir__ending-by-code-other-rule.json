@@ -1,0 +1,59 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
+      "start": 822,
+      "end": 831,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-caught",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
+      "start": 822,
+      "end": 831,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
+      "start": 822,
+      "end": 831,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
+      "start": 1353,
+      "end": 1364,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx",
+      "start": 1353,
+      "end": 1364,
+      "fixes": 0
+    }
+  ]
+}

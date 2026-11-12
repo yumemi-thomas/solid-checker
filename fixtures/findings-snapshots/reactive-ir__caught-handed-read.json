@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 548,
+      "end": 557,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -24,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 873,
+      "end": 882,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -43,6 +65,17 @@
       "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
       "start": 873,
       "end": 882,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-handed-read/App.tsx",
+      "start": 1265,
+      "end": 1274,
       "fixes": 0
     },
     {

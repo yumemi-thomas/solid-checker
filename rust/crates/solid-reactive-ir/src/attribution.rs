@@ -169,7 +169,14 @@ pub(crate) fn discharge_closed_program_export_dispatch(
     });
     // ADR 0936: a site whose obligation the closed program discharged ends here, on the facts its branch showed.
     for (location, discharge) in &discharged {
-        ends.removed_with(location, discharge.silence, discharge.kinds);
+        // The rows a discharge removes are SC9012 obligations (`ReactiveDispatchUnresolved`): the census, which answered every code that names a line
+        // at its position, so the site ends for those codes and no other (batch 11, slice 4).
+        ends.removed_with(
+            location,
+            discharge.silence,
+            discharge.kinds,
+            crate::proof_universe::RemovedBy::Census,
+        );
     }
     if let Some(stage) = stage {
         // Each removed row is written under its own branch's proof: the rows at one place are asked in the order they were removed.

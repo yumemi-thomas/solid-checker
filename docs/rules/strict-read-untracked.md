@@ -393,3 +393,7 @@ A function every reference of which lies in an `isServer` arm never runs on a cl
 A member tag of a same-file `const` holder ADR 0342 accounts is one of the stored component's call sites (ADR 0823): `<Ui.Card title={label()} />` with `Card` reading `props.title` in its body is proved; an imported or escaping holder keeps the component's callers open.
 
 A named `Show` or `Match` function child with runtime `length` 0 is a value. Its child position proves no untracked invocation; reads remain uncertifiable when their callers are unknown. An inline one runs in the insert's tracked effect only where the element is itself inserted (a child or child expression's value of an intrinsic element or of an inserted fragment, or a proven component's return); held and called elsewhere, its read is uncertifiable.
+
+## Endings by code (ADR 0968)
+
+A read is accounted for, for this rule's Chrome code, only by an ending that answers that code: a row of its own table, an SC9012, the compiler's discard, a finding of a rule the dialect says claims the code, or a named silence that names it. A row of another table or a finding of another rule at the same place answers another code and ends nothing here, so this rule's own uncertifiable row (`strict-read-unaccounted`) stands beside it: never a violation, and it yields to any row of the rule that stands. A site whose rule claims no code here, or whose code has no policy in the dialect, is not ended by what stands at it.
