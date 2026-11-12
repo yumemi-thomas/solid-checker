@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 365,
+      "end": 404,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -90,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 560,
+      "end": 566,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -131,6 +153,17 @@
       "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
       "start": 734,
       "end": 737,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 769,
+      "end": 808,
       "fixes": 0
     },
     {
@@ -276,6 +309,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 1430,
+      "end": 1433,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -350,6 +394,17 @@
       "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
       "start": 1834,
       "end": 1842,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-flush-layer-placed/App.tsx",
+      "start": 1861,
+      "end": 1864,
       "fixes": 0
     }
   ]

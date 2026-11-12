@@ -88,6 +88,17 @@
       "start": 488,
       "end": 503,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-freeze-write/App.tsx",
+      "start": 531,
+      "end": 532,
+      "fixes": 0
     }
   ]
 }

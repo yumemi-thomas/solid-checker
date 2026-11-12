@@ -56,6 +56,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 349,
+      "end": 355,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -108,6 +119,17 @@
       "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
       "start": 491,
       "end": 501,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 607,
+      "end": 613,
       "fixes": 0
     },
     {
@@ -199,6 +221,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 1007,
+      "end": 1028,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -284,6 +317,17 @@
       "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
       "start": 1352,
       "end": 1358,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 1420,
+      "end": 1446,
       "fixes": 0
     },
     {
@@ -468,6 +512,17 @@
       "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
       "start": 1925,
       "end": 1929,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-caught-read/App.tsx",
+      "start": 1987,
+      "end": 2017,
       "fixes": 0
     },
     {

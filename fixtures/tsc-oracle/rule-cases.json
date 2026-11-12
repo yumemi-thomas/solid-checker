@@ -276,7 +276,7 @@
         2322,
         2538
       ],
-      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"a\");\nconst [isActive] = createSignal(false);\nconst table: Record<string, number> = { a: 1 };\nexport const Attr = () => <div title={label} />;\nexport const ClassObj = () => <div class={{ active: isActive }} />;\nexport const Computed = () => <div>{table[label]}</div>;\n"
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"a\");\nconst [isActive] = createSignal(false);\nconst table: Record<string, number> = { a: 1 };\nexport const Attr = () => <div title={label} />;\nexport const ClassObj = () => <div class={{ active: isActive }} />;\nexport const Computed = () => <div>{table[label]}</div>;\nexport const Root = () => (\n  <>\n    <Attr />\n    <ClassObj />\n    <Computed />\n  </>\n);\n"
     },
     {
       "rule": "uncalled-accessor",
@@ -297,7 +297,7 @@
         2362,
         2365
       ],
-      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nexport const Case = () => <div>{count + 1}{count - 1}{count | 0}</div>;\n"
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nexport const Case = () => <div>{count + 1}{count - 1}{count | 0}</div>;\nexport const Root = () => <Case />;\n"
     },
     {
       "rule": "uncalled-accessor",
@@ -787,7 +787,7 @@
       "checker": "reports",
       "checkerKind": "uncertifiable",
       "why": "createRenderEffect runs its first apply during the call, under the component's owner, so the cleanup registers there; only a later run, from the flush, has no owner, and whether one happens depends on the compute's sources changing. The published signature accepts both callbacks, so the ownership claim is the checker's own and stays an obligation rather than a violation.",
-      "code": "import { createRenderEffect, createSignal, onCleanup } from \"solid-js\";\nconst [count] = createSignal(0);\nexport function App() {\n  createRenderEffect(() => count(), () => {\n    onCleanup(() => {});\n  });\n  return <div />;\n}\n"
+      "code": "import { createRenderEffect, createSignal, onCleanup } from \"solid-js\";\nconst [count] = createSignal(0);\nexport function App() {\n  createRenderEffect(() => count(), () => {\n    onCleanup(() => {});\n  });\n  return <div />;\n}\nexport const Root = () => <App />;\n"
     },
     {
       "rule": "missing-owner",

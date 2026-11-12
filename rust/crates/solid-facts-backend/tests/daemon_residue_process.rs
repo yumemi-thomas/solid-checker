@@ -439,7 +439,15 @@ fn a_file_in_a_new_directory_under_a_source_less_one_is_seen() {
     fs::create_dir_all(directory.join("deep/b")).unwrap();
     fs::write(directory.join("deep/b/Added.tsx"), component("Added")).unwrap();
     let fresh = project.check(false, None);
-    let count = |run: &Run| run.json()["findings"].as_array().unwrap().len();
+    // ADR 0970: each exported component no tag renders also holds an SC4001 owner obligation, which is not this test's subject.
+    let count = |run: &Run| {
+        run.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|finding| finding["id"] != "SC4001")
+            .count()
+    };
     assert_eq!(count(&fresh), count(&before) + 1);
     let retained = project.check(true, None);
     assert_eq!(count(&retained), count(&fresh), "{}", retained.stderr);

@@ -91,7 +91,11 @@ fn the_requirement_boundary_survives_without_any_package_source() {
         false,
     ));
     assert_eq!(disabled["status"], "uncertifiable");
-    let rows = findings(&disabled);
+    // ADR 0970: the fixture's exported component no tag renders keeps an owner obligation (SC4001), which is not this test's subject.
+    let rows = findings(&disabled)
+        .into_iter()
+        .filter(|row| row.0 != "SC4001")
+        .collect::<Vec<_>>();
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(
         (rows[0].0.as_str(), rows[0].1.as_str()),

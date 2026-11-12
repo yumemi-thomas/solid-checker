@@ -113,6 +113,16 @@ member has another entry with no edge, so an owner operation in it is uncertifia
 (`owner-callers-unenumerated`, ADR 0868). Only direct calls, inline runs and
 primitive positions, each from placed code, keep the proof.
 
+A function that returns JSX is no exception (ADR 0970): it is entered by renders
+alone only where every reference of its binding is a JSX tag. One a reference also
+enters (`pick = view`, a prop, an array element, a router's `component={Home}`, the
+module a `lazy` loader hands back) is a layer like any other, so an owner operation
+or a render effect in it is uncertifiable: the timer, handler or apply that calls it
+through the reference runs it with no owner. The same walk opens a generator's body
+and any function it calls (a body runs where an iterator is stepped), and keeps an
+owner-creating callback's stop only where nothing references the callback (a named
+function expression that saves itself is run by whoever calls it).
+
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
 `createEffect` apply, an ownerless event handler, a `createReaction` invalidation, a

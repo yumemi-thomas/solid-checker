@@ -297,6 +297,17 @@
       "start": 2306,
       "end": 2311,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 2348,
+      "end": 2351,
+      "fixes": 0
     }
   ]
 }

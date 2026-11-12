@@ -35,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
+      "start": 247,
+      "end": 252,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -65,6 +76,17 @@
       "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
       "start": 341,
       "end": 347,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
+      "start": 362,
+      "end": 367,
       "fixes": 0
     },
     {
@@ -109,6 +131,17 @@
       "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
       "start": 477,
       "end": 483,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
+      "start": 498,
+      "end": 503,
       "fixes": 0
     },
     {

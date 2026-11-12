@@ -108,18 +108,17 @@
   "SC4001 async-flight-error-unobserved": 4,
   "SC4001 component-identity-unproven": 14,
   "SC4001 computation-error-unobserved": 1,
-  "SC4001 execution-context-unaccounted": 1,
-  "SC4001 function-run-unplaced": 253,
+  "SC4001 function-run-unplaced": 254,
   "SC4001 function-unentered": 3,
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 58,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 168,
+  "SC4001 owner-callers-unenumerated": 2759,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
   "SC4001 owner-varies-by-caller": 84,
-  "SC4001 package-finding-at-entry": 39,
+  "SC4001 package-finding-at-entry": 68,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 1,
   "SC4002 computation-error-unobserved": 14,
@@ -170,7 +169,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 1687,
+  "SC6002 effect-creation-unaccounted": 1688,
   "SC6002 effect-owner-unproven": 30,
   "SC6002 function-run-unplaced": 37,
   "SC6002 generator-step-unplaced": 1,
@@ -2105,6 +2104,16 @@
     "open": "reactive-ir/accessor-provenance"
    },
    "note": "the read in `[1].map(() => w())` is placed once `map` is no longer withheld (it stands as `read-backing-unproven`)"
+  },
+  {
+   "fixture": "reactive-ir/leaf-scope-helper-completion",
+   "key": "SC4001 execution-context-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0970",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 owner-callers-unenumerated",
+   "note": "the `onCleanup` in `Immediate.tsx`'s IIFE keeps its SC4001 row at the same span: the owner emission now asks the entry of the layer around it first (a function a reference enters is a layer like any other), so the row names that reason"
   }
  ],
  "renames": []

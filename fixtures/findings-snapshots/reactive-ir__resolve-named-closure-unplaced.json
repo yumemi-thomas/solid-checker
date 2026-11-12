@@ -89,6 +89,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 515,
+      "end": 518,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2005",
       "kind": "violation",
@@ -140,6 +151,17 @@
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
       "start": 805,
       "end": 815,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 844,
+      "end": 847,
       "fixes": 0
     },
     {
@@ -231,6 +253,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 1186,
+      "end": 1189,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -272,6 +305,17 @@
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
       "start": 1557,
       "end": 1567,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 1596,
+      "end": 1599,
       "fixes": 0
     },
     {
@@ -326,6 +370,17 @@
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
       "start": 1813,
       "end": 1823,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 1852,
+      "end": 1855,
       "fixes": 0
     },
     {
@@ -384,6 +439,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 2091,
+      "end": 2094,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -414,6 +480,17 @@
       "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
       "start": 2488,
       "end": 2498,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-named-closure-unplaced/App.tsx",
+      "start": 2527,
+      "end": 2530,
       "fixes": 0
     },
     {

@@ -1124,8 +1124,10 @@ fn returned_unreached_function(
 /// - any layer at all when the program calls direct `eval`, which reaches a
 ///   binding by name.
 ///
-/// The walk ends at a function a tag is proven to render, whose entries are
-/// renders, and at the innermost owner-creating region around `span`. A function that only may be a component is a layer like any other.
+/// The walk ends at a function a tag is proven to render and nothing else references (a component a reference also enters is a layer like any other: the
+/// graph's owned context for it is no proof of a run a reference makes, ADR 0970), and at the innermost owner-creating region around `span` that its
+/// primitive alone enters (a named function expression that hands itself on is no such region, N2). A generator's body runs where an iterator is stepped, so a
+/// layer that is one, or a function its body calls, is an open entry (B1, N1). A function that only may be a component is a layer like any other.
 /// `caller_unplaced` answers whether the function making a run at a span holds
 /// no owner context and may run (the emission's ADR 0534 question).
 pub(super) fn named_layer_entry_open(
@@ -1144,14 +1146,14 @@ pub(super) fn named_layer_entry_open(
         &caller_unplaced,
         &mut walked,
         LAYER_CALLER_DEPTH,
-        Premises::Emission,
     )
 }
 
-/// [`named_layer_entry_open`] without the component-render premise, for the owner-call universe's silences (batch 11, slice 6, the review of #220, F1): a function
-/// that returns JSX is entered by renders alone only where every reference of its binding is a JSX tag, and one a reference enters (`pick = view`, a prop, an
-/// array element) is a layer like any other, whose references decide. A package that renders a component is no more trusted than one that calls it (the ruling:
-/// no component-render premise; a render by a package whose source is read is the proof batch's).
+/// [`named_layer_entry_open`] with no region, for the owner-call universe's silences (batch 11, slice 6): the same walk, whose premises the emission adopted
+/// with the universe's (a component is entered by renders alone only where every reference of its binding is a JSX tag, F1; a generator's body, or a function
+/// it calls, is an open entry, B1 and N1; an owner-creating callback is entered by its primitive alone only where nothing references it, N2). A package that
+/// renders a component is no more trusted than one that calls it (the ruling: no component-render premise; a render by a package whose source is read is the
+/// proof batch's).
 pub(super) fn layer_entry_open_by_reference(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -1167,23 +1169,7 @@ pub(super) fn layer_entry_open_by_reference(
         &caller_unplaced,
         &mut walked,
         LAYER_CALLER_DEPTH,
-        Premises::Universe,
     )
-}
-
-/// What the walk takes for granted where a layer's entry is not shown. The emission (SC4001) keeps the premises ADR 0868 gave it; the owner-call universe (SC3001,
-/// SC6002) asks for each of them to be proven (the reviews of #220: F1, B1, N1, N2), and a change to the emission's own proofs is a slice of its own with grid diffs.
-#[derive(Clone, Copy)]
-enum Premises {
-    /// A function the census proves a component ([`SemanticLookup::function_proven_component`]: it returns JSX, and no call enters it) is entered by renders alone,
-    /// whatever else references its binding (an escaped component keeps it); a callback an owner-creating primitive runs, or a control-flow child, is entered by
-    /// that position alone; a generator's body is a layer like any other.
-    Emission,
-    /// A function that returns JSX is entered by renders alone only where every reference of its binding is a JSX tag (F1); a callback an owner-creating primitive
-    /// runs or a control-flow child is entered by that position alone only where nothing references it (N2: a named function expression can hand itself on,
-    /// `createRoot(function f() { saved = f; … })`, and a run the primitive does not make has no owner); and a generator's body runs where an iterator is stepped,
-    /// which no edge shows, so a layer that is one is an open entry, and so is any function a generator's body calls (B1's lexical test was the first half; N1).
-    Universe,
 }
 
 /// Whether nothing references `function` but the position that enters it (N2): a callback with no binding (an arrow, an anonymous function) cannot be, and a
@@ -1289,7 +1275,6 @@ fn layer_entry_open(
     caller_unplaced: &dyn Fn(&solid_facts::FileFacts, Span) -> bool,
     walked: &mut HashSet<(String, Span)>,
     depth: usize,
-    premises: Premises,
 ) -> bool {
     use crate::local_access::HandOff;
     let escapes = |hand_off: &HandOff| !matches!(hand_off, HandOff::Call | HandOff::Inline(_));
@@ -1304,22 +1289,21 @@ fn layer_entry_open(
         if region.is_some_and(|region| !region.contains(function.span)) {
             return false;
         }
-        let universe = matches!(premises, Premises::Universe);
         // N1: a generator's body runs where an iterator is stepped, not where the generator is called, so a layer that is one (and, through the caller walk
         // below, any function its body calls) is entered by a route no edge shows. It comes before the owner-creating stop: a root's generator callback is no
         // owned run either.
-        if universe && function.generator {
+        if function.generator {
             return true;
         }
         if lookup.function_proven_component(file, function)
-            && (!universe || entered_by_tags_only(file, function, lookup))
+            && entered_by_tags_only(file, function, lookup)
         {
             return false;
         }
         // Reached through a caller, no candidate names the region.
         if (creates_owner_for(file, function.span, lookup)
             || is_control_flow_child(file, function, lookup))
-            && (!universe || referenced_only_by_entry(file, function, lookup))
+            && referenced_only_by_entry(file, function, lookup)
         {
             return false;
         }
@@ -1405,16 +1389,7 @@ fn layer_entry_open(
         }
         for reference in &local {
             let run = run_at(reference);
-            if layer_entry_open(
-                file,
-                run,
-                None,
-                lookup,
-                caller_unplaced,
-                walked,
-                depth - 1,
-                premises,
-            ) {
+            if layer_entry_open(file, run, None, lookup, caller_unplaced, walked, depth - 1) {
                 return true;
             }
         }
@@ -1431,7 +1406,6 @@ fn layer_entry_open(
                         caller_unplaced,
                         walked,
                         depth - 1,
-                        premises,
                     ))
             {
                 return true;

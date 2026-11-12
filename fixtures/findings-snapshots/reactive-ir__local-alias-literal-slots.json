@@ -75,6 +75,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
+      "start": 1176,
+      "end": 1180,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
+      "start": 1182,
+      "end": 1185,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -191,6 +213,17 @@
       "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
       "start": 2502,
       "end": 2512,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx",
+      "start": 2544,
+      "end": 2547,
       "fixes": 0
     }
   ]

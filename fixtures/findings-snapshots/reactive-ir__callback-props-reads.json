@@ -211,6 +211,17 @@
       "start": 2451,
       "end": 2458,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 2829,
+      "end": 2837,
+      "fixes": 0
     }
   ]
 }

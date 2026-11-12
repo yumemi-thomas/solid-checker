@@ -66,6 +66,17 @@
       "start": 374,
       "end": 379,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-shadowed/App.tsx",
+      "start": 396,
+      "end": 403,
+      "fixes": 0
     }
   ]
 }

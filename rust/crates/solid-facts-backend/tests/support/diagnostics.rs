@@ -26,6 +26,15 @@ pub fn diagnostic_fixture(name: &str) -> Option<Vec<serde_json::Value>> {
     Some(decode_findings(&output.stdout))
 }
 
+/// ADR 0970: the owner emission takes a function a reference enters for a layer like any other, so an owner operation or a render effect in an exported component no
+/// tag renders is an uncertifiable SC4001 row (`owner-callers-unenumerated`). A test whose subject is another rule leaves those rows out of its count.
+#[allow(dead_code)] // the other test binaries that include this module leave those rows in
+pub fn owner_entry_row(finding: &serde_json::Value) -> bool {
+    finding["id"] == "SC4001"
+        && finding["kind"] == "uncertifiable"
+        && finding["blockedBy"]["kind"] == "owner-callers-unenumerated"
+}
+
 pub fn findings_for_rule<'a>(
     findings: &'a [serde_json::Value],
     rule: &str,

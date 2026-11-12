@@ -2,10 +2,32 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
+      "start": 386,
+      "end": 400,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
+      "start": 490,
+      "end": 502,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
       "start": 490,
@@ -21,6 +43,17 @@
       "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
       "start": 490,
       "end": 502,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
+      "start": 584,
+      "end": 591,
       "fixes": 0
     },
     {
@@ -85,6 +118,17 @@
       "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
       "start": 905,
       "end": 912,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-on-flush/App.tsx",
+      "start": 974,
+      "end": 980,
       "fixes": 0
     }
   ]

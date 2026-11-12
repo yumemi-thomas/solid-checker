@@ -1459,3 +1459,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-generator-layer/node_modules/**
 !fixtures/reactive-ir/owner-call-layer-stops/node_modules/
 !fixtures/reactive-ir/owner-call-layer-stops/node_modules/**
+!fixtures/reactive-ir/owner-emission-component-by-reference/node_modules/
+!fixtures/reactive-ir/owner-emission-component-by-reference/node_modules/**
+!fixtures/reactive-ir/owner-emission-layer-stops/node_modules/
+!fixtures/reactive-ir/owner-emission-layer-stops/node_modules/**

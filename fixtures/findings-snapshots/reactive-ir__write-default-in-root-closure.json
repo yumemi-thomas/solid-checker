@@ -35,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 580,
+      "end": 583,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -65,6 +76,17 @@
       "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
       "start": 737,
       "end": 744,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 925,
+      "end": 928,
       "fixes": 0
     },
     {
@@ -101,6 +123,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 1193,
+      "end": 1196,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -112,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 1412,
+      "end": 1415,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -120,6 +164,17 @@
       "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
       "start": 1557,
       "end": 1564,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 1674,
+      "end": 1677,
       "fixes": 0
     },
     {
@@ -156,6 +211,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 2128,
+      "end": 2131,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -189,6 +255,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 2293,
+      "end": 2296,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -197,6 +274,17 @@
       "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
       "start": 2419,
       "end": 2426,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 2458,
+      "end": 2461,
       "fixes": 0
     },
     {
@@ -233,6 +321,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 2821,
+      "end": 2824,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -262,6 +361,17 @@
       "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
       "start": 2956,
       "end": 2963,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 2995,
+      "end": 2998,
       "fixes": 0
     },
     {
@@ -297,6 +407,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 3171,
+      "end": 3174,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -304,6 +425,17 @@
       "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
       "start": 3281,
       "end": 3288,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 3311,
+      "end": 3314,
       "fixes": 0
     },
     {
@@ -337,6 +469,17 @@
       "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
       "start": 3578,
       "end": 3585,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-default-in-root-closure/App.tsx",
+      "start": 3637,
+      "end": 3640,
       "fixes": 0
     }
   ]

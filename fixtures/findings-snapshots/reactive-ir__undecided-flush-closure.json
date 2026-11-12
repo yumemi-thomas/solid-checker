@@ -350,6 +350,17 @@
       "start": 2235,
       "end": 2244,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 2747,
+      "end": 2762,
+      "fixes": 0
     }
   ]
 }

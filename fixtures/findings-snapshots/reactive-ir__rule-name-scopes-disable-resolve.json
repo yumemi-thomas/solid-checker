@@ -32,6 +32,17 @@
       "start": 484,
       "end": 489,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rule-name-scopes/variants/disable-resolve/App.tsx",
+      "start": 547,
+      "end": 562,
+      "fixes": 0
     }
   ]
 }

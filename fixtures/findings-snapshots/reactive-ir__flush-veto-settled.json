@@ -101,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 615,
+      "end": 618,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -175,6 +186,17 @@
       "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
       "start": 1039,
       "end": 1046,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 1082,
+      "end": 1085,
       "fixes": 0
     }
   ]

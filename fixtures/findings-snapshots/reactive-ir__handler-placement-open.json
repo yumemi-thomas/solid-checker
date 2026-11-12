@@ -66,6 +66,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
+      "start": 657,
+      "end": 670,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
+      "start": 790,
+      "end": 907,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -145,6 +167,17 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
+      "start": 1627,
+      "end": 1637,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
       "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
@@ -197,6 +230,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
+      "start": 2158,
+      "end": 2255,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -227,6 +271,17 @@
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
       "start": 2205,
       "end": 2223,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
+      "start": 2371,
+      "end": 2465,
       "fixes": 0
     },
     {
@@ -325,6 +380,17 @@
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
       "start": 2939,
       "end": 2957,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
+      "start": 3007,
+      "end": 3020,
       "fixes": 0
     },
     {
