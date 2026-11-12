@@ -1429,3 +1429,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/ending-by-code-other-rule-crediting/node_modules/**
 !fixtures/reactive-ir/optimistic-write-site-code/node_modules/
 !fixtures/reactive-ir/optimistic-write-site-code/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-flip/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-flip/node_modules/**

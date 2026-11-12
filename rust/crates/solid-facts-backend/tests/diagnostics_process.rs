@@ -2463,9 +2463,11 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             1,
         ),
         // ADR 0966: rc.8's `asyncAfterAwait` flush (23, a generator body the census's continuation class excludes) is one uncertifiable
-        // SC2006 row, and each flush of the two older triples has SC2008's (`beside`: 3); rc.3 has no SC2006 guard to account.
-        ("release-triple-flush-rc8", &[9, 15][..], &[23][..], 3, 1),
-        ("release-triple-flush-rc3", &[][..], &[][..], 3, 1),
+        // SC2006 row, and each flush of the two older triples has SC2008's and, since the flip of ADR 0967's default, SC3001's: the flush
+        // is written in the generator an exported constant's `action` holds, and an export of an open program (the fixture names no
+        // boundary) may be entered by code that runs it in a leaf owner's callback (`beside`: 6); rc.3 has no SC2006 guard to account.
+        ("release-triple-flush-rc8", &[9, 15][..], &[23][..], 6, 1),
+        ("release-triple-flush-rc3", &[][..], &[][..], 6, 1),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             continue;

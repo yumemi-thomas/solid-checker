@@ -19990,5 +19990,86 @@
   "found": "batch 11 (mac-b10-4, 2026-11-12): F1 of the Fable review of #213, owner ruling; confirmed in a vitest 4.1.7 run on solid-js 2.0.0-rc.21 (development build, jsdom): a real `setTimeout` callback flushes on an empty stack (no error), the same callback run by `vi.advanceTimersByTime(10)` inside an `action(function* () { … })` step throws `[FLUSH_IN_ACTION]`",
   "fixed": "ADR 0967 (F1): a program that installs fake timers (a member or destructured key that resolves to the installer's declaration in vitest, @types/jest, @jest/environment, @jest/globals or bun-types, called or read as a value) gets no `FreshStack` reason, so every flush a scheduler's callback holds keeps its uncertifiable row of each code",
   "outside": "the grids' programs run in the page of the Chrome oracle, where vitest and jest cannot load (they need their own Node runner and the generator names no test library), so no program the fuzzer generates installs the reviewed libraries' fake clock; fixture flush-universe-fake-timers holds it (the vitest program: nine rows, its `real` twin: none, the `jest`, `bun` and `destructured` variants: three each) and the `FakeTimers` census reads the declaration, which a unit test (`a_fake_timer_installer_is_a_reviewed_library_declaration`) pins"
- }
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source, by a route the previous default did not follow, was certified with no row where the package runs it as an effect's apply: kept in a `Set` and read elsewhere, an iterable's element, an array literal that is a method's receiver, `Promise.resolve(cb)`, a method of a class whose instance is handed, an assignment into an object the package exports, through a project component's props, returned by a function the package runs, a reflective call whose target is a project function, run inline by the standard library, by a project function's parameter and by a dialect primitive on the stack of a step the package runs, and through `<Dynamic component={…}/>`. Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #216 (B3, ADR 0967), BLOCKED with fourteen probed programs that stay silent where the package runs the flush as a step, all false cleans on main too (`position` defaulted to \"not handed\" for a context it did not recognize); owner ruling: flip the default; confirmed in Chrome with the real oracle on the previous head's release build `rel-f1c` (the thirteen new ph-* routes)",
+  "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs` classifies each position: a call asks the owner's stack, an argument asks its receiver by the standard library's reviewed argument behavior, a collection's insertion, a standard call the table does not list, an iterable, a receiver array, an assignment into an import or `this`, a class's functions, a project component's props, `Dynamic`'s component, a reflective call's project target, what a handed function returns and a namespace that escapes are handed)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-set-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-forof-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-recv-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-resolve-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-class-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-assign-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-props-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-getter-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-reflect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-inline-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-param-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-untrack-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-dynamic-apply-x-direct-none"
+  ],
+  "rediscovered": "`rel-f1c` (release, #216's head bda149308; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-set-apply, ph-forof-apply, ph-recv-apply, ph-resolve-apply, ph-class-apply, ph-assign-apply, ph-props-apply, ph-getter-apply, ph-reflect-apply, ph-inline-apply, ph-param-apply, ph-untrack-apply, ph-dynamic-apply); the thirteen new routes' 13 programs: false-clean 13. `rel-flip10` (release, the flip): recall-gap 13"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function the project hands to an installed package the build does not read as source, by a route the previous default did not follow, was certified with no row where the package runs it as an action's step: kept in a `Set` and read elsewhere, an iterable's element, an array literal that is a method's receiver, `Promise.resolve(cb)`, a method of a class whose instance is handed, an assignment into an object the package exports, through a project component's props, returned by a function the package runs, a reflective call whose target is a project function, run inline by the standard library, by a project function's parameter and by a dialect primitive on the stack of a step the package runs, and through `<Dynamic component={…}/>`. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #216 (B3, ADR 0967), BLOCKED with fourteen probed programs that stay silent where the package runs the flush as a step, all false cleans on main too (`position` defaulted to \"not handed\" for a context it did not recognize); owner ruling: flip the default; confirmed in Chrome with the real oracle on the previous head's release build `rel-f1c` (the thirteen new ph-* routes)",
+  "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs` classifies each position: a call asks the owner's stack, an argument asks its receiver by the standard library's reviewed argument behavior, a collection's insertion, a standard call the table does not list, an iterable, a receiver array, an assignment into an import or `this`, a class's functions, a project component's props, `Dynamic`'s component, a reflective call's project target, what a handed function returns and a namespace that escapes are handed)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-set-step-x-direct-none",
+   "mx-flush-in-action-ph-forof-step-x-direct-none",
+   "mx-flush-in-action-ph-recv-step-x-direct-none",
+   "mx-flush-in-action-ph-resolve-step-x-direct-none",
+   "mx-flush-in-action-ph-class-step-x-direct-none",
+   "mx-flush-in-action-ph-assign-step-x-direct-none",
+   "mx-flush-in-action-ph-props-step-x-direct-none",
+   "mx-flush-in-action-ph-getter-step-x-direct-none",
+   "mx-flush-in-action-ph-reflect-step-x-direct-none",
+   "mx-flush-in-action-ph-inline-step-x-direct-none",
+   "mx-flush-in-action-ph-param-step-x-direct-none",
+   "mx-flush-in-action-ph-untrack-step-x-direct-none",
+   "mx-flush-in-action-ph-dynamic-step-x-direct-none"
+  ],
+  "rediscovered": "`rel-f1c` (release, #216's head bda149308; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-set-step, ph-forof-step, ph-recv-step, ph-resolve-step, ph-class-step, ph-assign-step, ph-props-step, ph-getter-step, ph-reflect-step, ph-inline-step, ph-param-step, ph-untrack-step, ph-dynamic-step); the thirteen new routes' 13 programs: false-clean 13. `rel-flip10` (release, the flip): recall-gap 13"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source, by a route the previous default did not follow, was certified with no row where the package runs it as a leaf owner's callback (`createTrackedEffect`): kept in a `Set` and read elsewhere, an iterable's element, an array literal that is a method's receiver, `Promise.resolve(cb)`, a method of a class whose instance is handed, an assignment into an object the package exports, through a project component's props, returned by a function the package runs, a reflective call whose target is a project function, run inline by the standard library, by a project function's parameter and by a dialect primitive on the stack of a step the package runs, and through `<Dynamic component={…}/>`. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #216 (B3, ADR 0967), BLOCKED with fourteen probed programs that stay silent where the package runs the flush as a step, all false cleans on main too (`position` defaulted to \"not handed\" for a context it did not recognize); owner ruling: flip the default; confirmed in Chrome with the real oracle on the previous head's release build `rel-f1c` (the thirteen new ph-* routes)",
+  "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs` classifies each position: a call asks the owner's stack, an argument asks its receiver by the standard library's reviewed argument behavior, a collection's insertion, a standard call the table does not list, an iterable, a receiver array, an assignment into an import or `this`, a class's functions, a project component's props, `Dynamic`'s component, a reflective call's project target, what a handed function returns and a namespace that escapes are handed)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-set-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-forof-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-recv-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-resolve-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-class-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-assign-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-props-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-getter-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-reflect-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-inline-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-param-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-untrack-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-dynamic-leaf-x-direct-none"
+  ],
+  "rediscovered": "`rel-f1c` (release, #216's head bda149308; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-set-leaf, ph-forof-leaf, ph-recv-leaf, ph-resolve-leaf, ph-class-leaf, ph-assign-leaf, ph-props-leaf, ph-getter-leaf, ph-reflect-leaf, ph-inline-leaf, ph-param-leaf, ph-untrack-leaf, ph-dynamic-leaf); the thirteen new routes' 13 programs: false-clean 13. `rel-flip10` (release, the flip): recall-gap 13"
+ },
+  {
+   "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function a module exports, was certified with no row where a namespace import of that module is handed whole to an installed package the build does not read as source (`runStepNs(NS)`: the package runs every member of the namespace as an action's step): no reference names the function, so no hand-off followed it. Chrome reports FLUSH_IN_ACTION at the flush",
+   "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #216 (B3, ADR 0967), BLOCKED with fourteen probed programs that stay silent where the package runs the flush as a step, all false cleans on main too; owner ruling: flip the default, and exports a framework enters fail closed too",
+   "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs`): a module whose namespace escapes with no readable name hands out every export it has (the namespace census, ADR 0347), so the exported function has no census reason",
+   "outside": "the cells place the site in App.tsx and cannot express a second module's export reached through a namespace import; patterns/pkghand/namespace-step holds it (the lane: a false clean on #216's build, fine on the flip's), and fixture flush-universe-package-hand-off-flip pins it (`Namespaced`, three rows; `NamespaceCalled`, silent)"
+  },
+  {
+   "finding": "A `flush()` written in a function a program with an open boundary exports was certified on the program censuses: an export may be entered by code this build cannot see (a framework, a consumer package: an action's step among it), and the censuses read only the primitives the program names",
+   "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #216 (B3, ADR 0967), BLOCKED with fourteen probed programs that stay silent where the package runs the flush as a step, all false cleans on main too; owner ruling: flip the default, and exports a framework enters fail closed too",
+   "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs`): a function exported from an open program (or a binding it exports) gets no program-wide census reason, so it keeps its uncertifiable row of each code; a closed program (the owner's declared boundary, ADR 0193) keeps the reason, an export nothing in it enters never runs",
+   "outside": "an export's caller lies outside the program, and the oracle's page renders the program itself (its entry is the page's own main), so Chrome cannot enter an export from outside; fixture flush-universe-package-hand-off-flip/variants/open holds it (three rows) with the closed parent's `Unreferenced` silent"
+  }
 ]
