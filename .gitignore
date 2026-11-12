@@ -1431,3 +1431,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/optimistic-write-site-code/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-flip/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-flip/node_modules/**
+!fixtures/reactive-ir/owner-call-leaf-universe/node_modules/
+!fixtures/reactive-ir/owner-call-leaf-universe/node_modules/**
+!fixtures/reactive-ir/owner-call-no-leaf-opener/node_modules/
+!fixtures/reactive-ir/owner-call-no-leaf-opener/node_modules/**
+!fixtures/reactive-ir/owner-call-no-leaf-opener/variants/with-opener/node_modules/
+!fixtures/reactive-ir/owner-call-no-leaf-opener/variants/with-opener/node_modules/**
+!fixtures/reactive-ir/owner-call-effect-creation/node_modules/
+!fixtures/reactive-ir/owner-call-effect-creation/node_modules/**
