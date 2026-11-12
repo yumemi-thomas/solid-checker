@@ -520,4 +520,40 @@ mod tests {
         assert_eq!(Rule::HttpResponseAfterFlush.metadata().severity, "warning");
         assert!(Rule::HttpResponseAfterFlush.metadata().uncertifiable);
     }
+
+    /// Batch 11, slice 3: the runtime-code policy of Solid 2.0 names rules by their catalog name. An exact name, never a spelling that
+    /// might match (AGENTS.md invariant 3): a renamed or removed rule must fail here, not leave a code that nothing claims.
+    #[test]
+    fn code_policy_names_exact_catalog_rules_for_every_runtime_code() {
+        use solid_dialect::{Dialect, RuntimeCode, Solid2};
+
+        let catalog = Rule::ALL
+            .into_iter()
+            .map(|rule| rule.metadata().name)
+            .collect::<HashSet<_>>();
+        for code in RuntimeCode::ALL {
+            let policy = Solid2
+                .code_policy(code)
+                .unwrap_or_else(|| panic!("{} has no policy in Solid 2.0", code.name()));
+            assert!(
+                !policy.claiming.is_empty(),
+                "{} has no claiming rule",
+                code.name()
+            );
+            for name in policy.claiming.iter().chain(policy.declining) {
+                assert!(
+                    catalog.contains(name),
+                    "{} names `{name}`, which is not a rule of the catalog",
+                    code.name()
+                );
+            }
+            for name in policy.declining {
+                assert!(
+                    !policy.claiming.contains(name),
+                    "{} both claims and declines `{name}`",
+                    code.name()
+                );
+            }
+        }
+    }
 }

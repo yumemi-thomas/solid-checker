@@ -11,10 +11,12 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, ContextRole, Dialect, Execution, OwnerRequirementRole,
-    Primitive, ReactiveRole, ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, CodePolicy, ContextRole, Dialect, Execution,
+    OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode, TrackedCallbackTiming,
+    Version, lookup, reverse,
 };
 
+mod code_policy;
 mod releases;
 
 #[path = "../../../dialects/solid-v2/runtime_configuration.rs"]
@@ -2919,6 +2921,12 @@ impl Dialect for Solid2 {
     /// releases that have it (`Solid2::flush_in_action`).
     fn throws_inside_action_step(&self, primitive: Primitive) -> bool {
         self.flush_in_action && primitive == Primitive::Flush
+    }
+
+    /// The runtime-code policy of Solid 2.0 (`solid_2/code_policy.rs`): the same on every release, since it names checker rules,
+    /// not runtime bytes.
+    fn code_policy(&self, code: RuntimeCode) -> Option<CodePolicy> {
+        code_policy::policy(code)
     }
 
     /// `createEffect(compute, apply)`'s apply, argument 1: queued on the effect
