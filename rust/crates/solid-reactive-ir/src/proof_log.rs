@@ -1062,18 +1062,34 @@ pub(crate) fn candidate(record: &CandidateRecord<'_>) {
 /// it rests on. The accounting passes of ADRs 0886 and 0838 and
 /// [`crate::site_accounting`] (the producers' named ends, ADR 0936) write it.
 pub(crate) fn silent(rule: &str, location: &Location, proof: &str, premises: &[Premise]) {
+    silent_codes(rule, location, proof, premises, &[]);
+}
+
+/// [`silent`] for a producer's named end, with the runtime codes it is a proof for (batch 11, slice 4): the gate asks of a site's code that a silence at
+/// its span names it. An empty list writes none (the other accounting passes' silences are not about a code of the site universe).
+pub(crate) fn silent_codes(
+    rule: &str,
+    location: &Location,
+    proof: &str,
+    premises: &[Premise],
+    codes: &[&str],
+) {
     if !enabled() {
         return;
+    }
+    let mut line = json!({
+        "k": "silent",
+        "rule": rule,
+        "proof": proof,
+        "premises": premises_value(premises),
+    });
+    if !codes.is_empty() {
+        line["codes"] = json!(codes);
     }
     emit(
         location.path.as_ref(),
         Some(location_pair(location)),
-        object(json!({
-            "k": "silent",
-            "rule": rule,
-            "proof": proof,
-            "premises": premises_value(premises),
-        })),
+        object(line),
     );
 }
 

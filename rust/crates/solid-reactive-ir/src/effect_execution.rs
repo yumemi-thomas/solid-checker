@@ -703,15 +703,6 @@ pub(crate) fn gate_diagnostics(
                 &mut draft.$table,
                 |row| &row.location,
                 &mut draft.site_ends,
-                matches!(
-                    $name,
-                    "reads"
-                        | "writes"
-                        | "action_invocations"
-                        | "async_reads"
-                        | "static_defects"
-                        | "static_violations"
-                ),
                 $closure,
             );
             if let Some(stage) = stage {
@@ -833,20 +824,22 @@ pub(crate) fn gate_diagnostics(
 
 /// `rows.retain_mut(keep)`, naming the rows `keep` removes as sites an apply
 /// proven absent ends with no row (ADR 0936), when `record`.
-fn retain_recording<T>(
+fn retain_recording<T: crate::site_accounting::RemovedRow>(
     rows: &mut Vec<T>,
     location: impl Fn(&T) -> &crate::Location,
     ends: &mut crate::site_accounting::SiteEnds,
-    record: bool,
     mut keep: impl FnMut(&mut T) -> bool,
 ) {
     rows.retain_mut(|row| {
         let kept = keep(row);
-        if !kept && record {
+        if !kept && let Some(by) = row.ended_by() {
+            // The site ends for the codes the removed row answered (a read's STRICT_READ_UNTRACKED, a violation's rule's codes), not for every code at
+            // its span (batch 11, slice 4).
             ends.removed(
                 location(row),
                 crate::site_accounting::SiteSilence::ApplyNeverRuns,
                 crate::proof_log::PremiseKind::ApplyNeverRuns,
+                by,
             );
         }
         kept
