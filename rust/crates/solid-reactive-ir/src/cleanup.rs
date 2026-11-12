@@ -323,6 +323,7 @@ fn push_reached(
                     identity_unproven,
                     sites,
                     computation_error_unobserved: false,
+                    stop: None,
                 }
             };
         for stepper in steppers.into_iter().filter(|stepper| *stepper != at) {
@@ -353,6 +354,7 @@ fn push_reached(
             identity_unproven: false,
             sites: Vec::new(),
             computation_error_unobserved: false,
+            stop: None,
         });
     }
 }
@@ -551,6 +553,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         identity_unproven,
                         sites,
                         computation_error_unobserved: false,
+                        stop: None,
                     });
                 }
                 if complete {
@@ -568,6 +571,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     identity_unproven: false,
                     sites: Vec::new(),
                     computation_error_unobserved: false,
+                    stop: None,
                 });
                 continue;
             }
@@ -599,6 +603,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 identity_unproven: false,
                 sites: Vec::new(),
                 computation_error_unobserved: false,
+                stop: None,
             });
             continue;
         };
@@ -809,6 +814,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     identity_unproven: false,
                     sites: Vec::new(),
                     computation_error_unobserved: false,
+                    stop: None,
                 },
                 crossed.as_ref(),
                 false,
@@ -936,6 +942,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     identity_unproven: false,
                     sites: Vec::new(),
                     computation_error_unobserved: false,
+                    stop: None,
                 });
                 continue;
             }
@@ -953,7 +960,8 @@ pub(super) fn leaf_owner_operations_for_file(
                 // unless the call is one no operation can come from (a primitive the leaf owner never refuses);
                 // every other stop is the dialect's or the compiler's proof that the code runs elsewhere, or a
                 // layer other walks own (an ordinary function, an IIFE, a direct site).
-                let obligation = path.err().is_some_and(ClimbStop::owes_obligation);
+                let stop = path.err();
+                let obligation = stop.is_some_and(ClimbStop::owes_obligation);
                 if obligation {
                     // A call of a primitive the leaf owner never refuses cannot operate; a call that is no
                     // primitive (a helper, a member) may, which is the polarity of an obligation.
@@ -993,6 +1001,20 @@ pub(super) fn leaf_owner_operations_for_file(
                             identity_unproven: false,
                             sites: Vec::new(),
                             computation_error_unobserved: false,
+                            // The two stops that owe an obligation (`owes_obligation`), named for the cause a what-if run can assume.
+                            stop: stop.and_then(|stop| match stop {
+                                ClimbStop::UnmodelledInPlace => {
+                                    Some(crate::LeafStop::UnmodelledInPlace)
+                                }
+                                ClimbStop::Bound => Some(crate::LeafStop::Bound),
+                                ClimbStop::NoFunction
+                                | ClimbStop::NotSlot
+                                | ClimbStop::NoSlot
+                                | ClimbStop::UnmodelledElsewhere
+                                | ClimbStop::JsxPlaced
+                                | ClimbStop::RunsElsewhere
+                                | ClimbStop::Declined => None,
+                            }),
                         });
                     }
                 }
@@ -1123,6 +1145,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     identity_unproven: !identity_proven,
                     sites: Vec::new(),
                     computation_error_unobserved: false,
+                    stop: None,
                 },
                 crossed.as_ref(),
                 false,
@@ -1172,6 +1195,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     identity_unproven,
                     sites,
                     computation_error_unobserved: false,
+                    stop: None,
                 });
             }
             if !complete {
@@ -1187,6 +1211,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     identity_unproven: false,
                     sites: Vec::new(),
                     computation_error_unobserved: false,
+                    stop: None,
                 });
             }
         }

@@ -1363,6 +1363,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-in-generator-without-action/node_modules/**
 !fixtures/reactive-ir/leaf-unmodelled-slot/node_modules/
 !fixtures/reactive-ir/leaf-unmodelled-slot/node_modules/**
+!fixtures/reactive-ir/leaf-slot-climb-bound/node_modules/
+!fixtures/reactive-ir/leaf-slot-climb-bound/node_modules/**
 !fixtures/reactive-ir/flush-in-action-unmodelled-slot/node_modules/
 !fixtures/reactive-ir/flush-in-action-unmodelled-slot/node_modules/**
 !fixtures/reactive-ir/flush-in-tracked-named-async/node_modules/

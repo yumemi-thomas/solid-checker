@@ -10,7 +10,7 @@ import { AssumedReportError } from "./lib/assumed.mjs";
 import { cleanReport, flippedReport } from "./lib/assumed-fixtures.mjs";
 import {
   addOutcomes, calibration, canonical, chromeRecords, finishFold, finishJudge, fold, foldOne, groupOf, judgeMoves, judgeOne, judgeReport, label, liftingSetsOf, newFold, newJudge, parseSet,
-  chromeOf, premiseOf, premiseSetsFromBaselines, programOutcomes, programWantsSet, rankSets, rankText, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
+  chromeOf, PREMISE_PARENT, premiseOf, premiseSelectionKind, premiseSetsFromBaselines, programOutcomes, programWantsSet, rankSets, rankText, readBaseline, readWhatIf, resultLines, rowOutcomes, sameReport, setsFromBaselines, slim, standsAt, summaryText, untainted,
 } from "./what-if.mjs";
 
 const HERE = "/p";
@@ -402,6 +402,32 @@ test("premise sets: one per typed cause with enough uncertifiable rows, the bigg
   assert.deepEqual(premiseSetsFromBaselines(baselines, [], 5), []);
   // a kind is kebab-case or no cause: a row whose blocker names something else asks for no set
   assert.deepEqual(premiseSetsFromBaselines([baseline("NotAKind", "NotAKind")], [], 1), []);
+});
+
+// ADR 0965, what-if slice 2: the two climb stops that owe an obligation (ADR 0959) are causes of their own in the what-if build, and `leaf-owner-unproven` is the rest.
+test("the climb stops are premise sets of their own, asked beside the kind they share, and a program is selected for one by that kind", () => {
+  const stops = ["leaf-owner-climb-unmodelled-in-place", "leaf-owner-climb-bound"];
+  assert.deepEqual(Object.keys(PREMISE_PARENT), stops);
+  for (const stop of stops) {
+    assert.equal(premiseOf(`Premise(${stop})`), stop, "the id is a blocker-kind shape the build reads");
+    assert.equal(premiseSelectionKind(stop), "leaf-owner-unproven");
+  }
+  assert.equal(premiseSelectionKind("function-run-unplaced"), "function-run-unplaced");
+  const baseline = (kind, count) => ({ findings: Array.from({ length: count }, (_, at) => finding({ line: at + 1, blockedBy: { kind } })) });
+  // the shipped checker's rows hold only the shared kind: the stops are asked when it has rows enough, after the derived sets, and never twice
+  const sets = premiseSetsFromBaselines([baseline("leaf-owner-unproven", 3), baseline("function-run-unplaced", 2)], [], 2);
+  assert.deepEqual(sets.map(({ name }) => name), ["premise:leaf-owner-unproven", "premise:function-run-unplaced", ...stops.map((stop) => `premise:${stop}`)]);
+  assert.deepEqual(sets.at(-1).ids, ["Premise(leaf-owner-climb-bound)"]);
+  assert.deepEqual(premiseSetsFromBaselines([baseline("leaf-owner-unproven", 1)], [], 2), [], "a kind with too few rows asks for no stop either");
+  assert.deepEqual(premiseSetsFromBaselines([baseline("function-run-unplaced", 5)], [], 2).map(({ name }) => name), ["premise:function-run-unplaced"], "no stop without the kind they share");
+  assert.deepEqual(
+    premiseSetsFromBaselines([baseline("leaf-owner-unproven", 3)], [{ name: "mine", ids: [`Premise(${stops[1]})`] }], 2).map(({ name }) => name),
+    ["premise:leaf-owner-unproven", `premise:${stops[0]}`],
+    "a stop asked already is not asked twice",
+  );
+  const program = { formulas: [], kinds: ["leaf-owner-unproven"] };
+  for (const stop of stops) assert.equal(programWantsSet(program, { name: "s", ids: [`Premise(${stop})`] }), true, stop);
+  assert.equal(programWantsSet({ formulas: [], kinds: ["function-run-unplaced"] }, { name: "s", ids: [`Premise(${stops[0]})`] }), false);
 });
 
 test("the ranking of a corpus report: the sets by the rows they lift, the share of the corpus's rows, a set that moves nothing last", () => {

@@ -102,7 +102,7 @@
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 4,
   "SC3001 leaf-operation-unaccounted": 376,
-  "SC3001 leaf-owner-unproven": 65,
+  "SC3001 leaf-owner-unproven": 66,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
   "SC4001 async-flight-error-unobserved": 4,
