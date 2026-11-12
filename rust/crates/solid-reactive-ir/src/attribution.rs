@@ -30,6 +30,44 @@ struct ShowChild {
     keyed: bool,
 }
 
+/// What a removed row rested on: the silence its site ends in, the proof its row stage is written under, and the typed facts
+/// (each about the code of the row itself). Every discharge rests on the closed program; the branches differ in what they
+/// show about the argument.
+#[derive(Clone, Copy)]
+struct Discharge {
+    silence: crate::site_accounting::SiteSilence,
+    proof: &'static str,
+    kinds: &'static [crate::proof_log::PremiseKind],
+}
+
+/// An exported helper's dispatch obligation: every way into the helper is a call expression the graph resolves (ADR 0203).
+const CLOSED_CALLERS: Discharge = Discharge {
+    silence: crate::site_accounting::SiteSilence::ClosedProgramExportDischarge,
+    proof: "ClosedProgramExportDischarge",
+    kinds: &[crate::proof_log::PremiseKind::ClosedProgramCallers],
+};
+
+/// A use of a parameter nothing resolves, at an argument that holds a primitive on every run, followed back through at most
+/// [`PASS_THROUGH_DEPTH`] functions (ADR 0320).
+const ARGUMENT_PRIMITIVE: Discharge = Discharge {
+    silence: crate::site_accounting::SiteSilence::ArgumentPrimitiveDischarge,
+    proof: "ArgumentPrimitiveDischarge",
+    kinds: &[
+        crate::proof_log::PremiseKind::ClosedProgramCallers,
+        crate::proof_log::PremiseKind::ArgumentPrimitive,
+    ],
+};
+
+/// A member dispatch on an argument that is a built-in value, or a literal whose own member is a primitive (ADRs 0211-0214).
+const ARGUMENT_MEMBER_PRIMITIVE: Discharge = Discharge {
+    silence: crate::site_accounting::SiteSilence::ArgumentMemberPrimitiveDischarge,
+    proof: "ArgumentMemberPrimitiveDischarge",
+    kinds: &[
+        crate::proof_log::PremiseKind::ClosedProgramCallers,
+        crate::proof_log::PremiseKind::ArgumentMemberPrimitive,
+    ],
+};
+
 /// Discharges, in a closed program, the obligation an exported helper raises
 /// for invoking a member of its own parameter (ADR 0203).
 ///
@@ -80,24 +118,27 @@ pub(crate) fn discharge_closed_program_export_dispatch(
     let stage = crate::proof_log::RowStage::begin("static_defects", defects.as_slice(), |row| {
         &row.location
     });
-    let mut discharged = Vec::new();
+    let mut discharged: Vec<(Location, Discharge)> = Vec::new();
     defects.retain(|defect| {
-        let kept = (|| {
-            let Some(file) = graph.file(defect.location.path.as_ref()) else {
-                return true;
-            };
+        // The branch that removes the row, or none when the row stays.
+        let removed = (|| {
+            let file = graph.file(defect.location.path.as_ref())?;
             let span = Span::new(
                 u32::try_from(defect.location.start_byte).unwrap_or(u32::MAX),
                 u32::try_from(defect.location.end_byte).unwrap_or(u32::MAX),
             );
             if exported_dispatch(defect) {
-                return !graph.entered_only_through_call_expressions(file.path.as_str(), span);
+                return graph
+                    .entered_only_through_call_expressions(file.path.as_str(), span)
+                    .then_some(CLOSED_CALLERS);
             }
             // ADR 0320: an argument that holds a primitive on every run carries
             // no project member (`unmodeled`); a fresh literal whose handed-on
             // member does carries none at that member.
             if unmodeled(defect) {
-                return !graph.value_is_primitive(file, span, PASS_THROUGH_DEPTH, None);
+                return graph
+                    .value_is_primitive(file, span, PASS_THROUGH_DEPTH, None)
+                    .then_some(ARGUMENT_PRIMITIVE);
             }
             if passed_parameter(defect)
                 && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
@@ -105,8 +146,9 @@ pub(crate) fn discharge_closed_program_export_dispatch(
                     ..
                 } = &defect.kind
             {
-                return !graph.value_holds_builtin(file, span, member, PASS_THROUGH_DEPTH)
-                    && !graph.literal_member_is_primitive(file, span, member);
+                return (graph.value_holds_builtin(file, span, member, PASS_THROUGH_DEPTH)
+                    || graph.literal_member_is_primitive(file, span, member))
+                .then_some(ARGUMENT_MEMBER_PRIMITIVE);
             }
             if diverging(defect)
                 && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
@@ -114,27 +156,40 @@ pub(crate) fn discharge_closed_program_export_dispatch(
                     ..
                 } = &defect.kind
             {
-                return !graph.literal_member_is_primitive(file, span, member);
+                return graph
+                    .literal_member_is_primitive(file, span, member)
+                    .then_some(ARGUMENT_MEMBER_PRIMITIVE);
             }
-            true
+            None
         })();
-        if !kept {
-            discharged.push(defect.location.clone());
+        if let Some(discharge) = removed {
+            discharged.push((defect.location.clone(), discharge));
         }
-        kept
+        removed.is_none()
     });
-    // ADR 0936: a site whose obligation the closed program discharged ends here.
-    for location in &discharged {
-        ends.removed(
-            location,
-            crate::site_accounting::SiteSilence::ClosedProgramExportDischarge,
-            crate::proof_log::PremiseKind::ClosedProgramCallers,
-        );
+    // ADR 0936: a site whose obligation the closed program discharged ends here, on the facts its branch showed.
+    for (location, discharge) in &discharged {
+        ends.removed_with(location, discharge.silence, discharge.kinds);
     }
     if let Some(stage) = stage {
-        stage.end(
-            "ClosedProgramExportDischarge",
-            &[crate::proof_log::PremiseKind::ClosedProgramCallers],
+        // Each removed row is written under its own branch's proof: the rows at one place are asked in the order they were removed.
+        let mut by_location: HashMap<&Location, std::collections::VecDeque<Discharge>> =
+            HashMap::default();
+        for (location, discharge) in &discharged {
+            by_location
+                .entry(location)
+                .or_default()
+                .push_back(*discharge);
+        }
+        stage.end_by(
+            |location| {
+                let discharge = by_location
+                    .get_mut(location)
+                    .and_then(std::collections::VecDeque::pop_front);
+                debug_assert!(discharge.is_some(), "a removed row names its branch");
+                let discharge = discharge.unwrap_or(CLOSED_CALLERS);
+                (discharge.proof, discharge.kinds)
+            },
             defects.as_slice(),
             |row| &row.location,
         );
