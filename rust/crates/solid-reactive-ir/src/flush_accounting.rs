@@ -135,23 +135,28 @@ impl FlushSafe {
 }
 
 /// The reasons the program and the site hold, before any row is asked: the three program censuses, the census class of the caller, and reach.
-fn reasons(
-    ctx: &AnalysisContext<'_>,
-    file: &FileFacts,
+fn reasons<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a FileFacts,
     site: &crate::indexes::FlushSite,
     census: (bool, bool, bool),
+    hand_off: &crate::package_hand_off::UnreadPackageHandOff<'_, 'a>,
 ) -> Vec<FlushSafe> {
     use crate::indexes::DispatchCaller;
     let lookup = ctx.semantic_lookup;
     let (steps, defers, leaf) = census;
     let mut reasons = Vec::new();
-    if !steps {
+    // The program censuses read the primitives the build's own table names. A package the build does not read as source can run a function the project hands it as an
+    // action's step, an effect's apply or a leaf callback, none of which the table shows: a flush in a function such a package may run gets no census reason (B3 of the
+    // review of #213, ADR 0967), so it keeps its uncertifiable row. [`crate::package_hand_off`] says which functions those are.
+    let unread = (!steps || !defers || !leaf) && hand_off.may_run(file, site.span);
+    if !steps && !unread {
         reasons.push(FlushSafe::NoSteppedAction);
     }
-    if !defers {
+    if !defers && !unread {
         reasons.push(FlushSafe::NoDeferringPrimitive);
     }
-    if !leaf {
+    if !leaf && !unread {
         reasons.push(FlushSafe::NoLeafScope);
     }
     // The census class says where the function around the call runs; it is a statement about this call's stack only when facts of the call's own syntax hold
@@ -331,6 +336,7 @@ pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program) {
         .map(|file| (file.path.as_str(), file))
         .collect();
     let rows = row_index(program);
+    let hand_off = crate::package_hand_off::UnreadPackageHandOff::new(lookup, &files);
     let logging = crate::proof_log::enabled();
     let mut filed: Vec<StaticViolation> = Vec::new();
     let mut seen: HashSet<(String, u32, u32, FlushCode)> = HashSet::new();
@@ -372,7 +378,7 @@ pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program) {
             if !asked || discarded || row_at(&rows, &site.path, site.span, code) {
                 continue;
             }
-            let reasons = held.get_or_insert_with(|| reasons(ctx, file, site, census));
+            let reasons = held.get_or_insert_with(|| reasons(ctx, file, site, census, &hand_off));
             let ending = reasons
                 .iter()
                 .copied()
