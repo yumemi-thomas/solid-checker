@@ -19817,5 +19817,29 @@
    "mx-untracked-read-after-await-then-unplaced-chain-identity-x-direct-none-s-prop-value-cast"
   ],
   "rediscovered": "main 743ce7c89 (release, checker sha256 3bfc62ad721d\u2026, producer 76fe73f958ae\u2026; Chrome host and the real oracle, `--runtime-diff all`): the five contexts' 3,530 programs (706 shapes each): false-clean 2,367, recall-gap 1,163 (the base shape of each context: false-clean 9 of 9 variants, 45 ids); `make fuzz-focus` exits 1. The fix (release, checker sha256 742da075ce80\u2026, same host): recall-gap 3,530, 0 false clean, 0 behaviour, 0 attribution and 0 inconclusive differences; corpus (34 projects) 0 rows moved."
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` the census class of the code around it said ran on an empty stack, was certified with no row: a named function expression entered again by its own name from an effect's apply (`setTimeout(function tick(again) { flush(); … createEffect(…, () => { tick(true); }) })`), and a default value written in a timer's callback or after an `await` and called by an effect's apply (`late = (x = flush()) => x;`, `late()` in the apply). The flush accounting (slice 5) ended it on `FlushSafe::FreshStack` or `AwaitContinuation` (on main no producer accounted for it): the class of the code around a flush says where the function around it runs, not where a function that is entered again by name, or whose default is evaluated by its caller, runs the flush. Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #213 (2026-11-12, review-slice5-u, blockers B1 and B2, read from the rc.21 source), confirmed in Chrome with the real oracle: the pattern lane (flushclass/named-action, named-effect, named-carrier-action, param-default-effect: 4 false cleans) and the cells `fc-*` (scripts/fuzz/fc-shapes.mjs)",
+  "fixed": "ADR 0966 amended (the review of #213): the census class ends a flush's codes only when it describes the flush's own stack: the call is written in the body of its function (owners::in_parameter_list refuses a parameter default), and, for FreshStack and TestRunner, no function around it is a named function expression whose name is used (the name is bound inside, so the code using it enters the function again on its own stack); otherwise no reason, so the site's uncertifiable row",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-fc-named-effect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-fc-pdefault-effect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-fc-pdefault-await-effect-apply-x-direct-none"
+  ],
+  "rediscovered": "PR head e70b560f2 (release, checker sha256 d88e382a010d…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the three misuse cells of the code (named, pdefault, pdefault-await in an effect's apply) (the base shape of each context): false-clean 3, 0 recall-gap; `make fuzz-focus` exits 1 (the code's other `fc-*` cells are covered by uncertifiable rows, recall-gap). The fix f1a8fb411 (release, checker sha256 360f3e981b80…, same host): recall-gap on every misuse cell, 0 false clean, 0 behaviour, 0 attribution and 0 inconclusive differences; the nine legal twins clean or uncertifiable (0 false positive); corpus (34 projects, standard and development builds) 0 rows moved."
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` the census class of the scheduler's callback said ran on an empty stack, was certified with no row: a named function expression entered again by its own name from an action's step (`setTimeout(function tick(again) { flush(); if (!again) { action(function* () { tick(true); })(); } })`). The flush accounting (slice 5) ended it on `FlushSafe::FreshStack` (on main no producer accounted for it): `tick(true)` runs the flush inside the step. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #213 (2026-11-12, review-slice5-u, blockers B1 and B2, read from the rc.21 source), confirmed in Chrome with the real oracle: the pattern lane (flushclass/named-action, named-effect, named-carrier-action, param-default-effect: 4 false cleans) and the cells `fc-*` (scripts/fuzz/fc-shapes.mjs)",
+  "fixed": "ADR 0966 amended (the review of #213): the census class ends a flush's codes only when it describes the flush's own stack: the call is written in the body of its function (owners::in_parameter_list refuses a parameter default), and, for FreshStack and TestRunner, no function around it is a named function expression whose name is used (the name is bound inside, so the code using it enters the function again on its own stack); otherwise no reason, so the site's uncertifiable row",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-fc-named-action-x-direct-none"
+  ],
+  "rediscovered": "PR head e70b560f2 (release, checker sha256 d88e382a010d…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the `fc-named-action` cell (the default forms in an action's step are covered by `parameter-initializer-unplaced`, recall-gap) (the base shape of each context): false-clean 1, 0 recall-gap; `make fuzz-focus` exits 1 (the code's other `fc-*` cells are covered by uncertifiable rows, recall-gap). The fix f1a8fb411 (release, checker sha256 360f3e981b80…, same host): recall-gap on every misuse cell, 0 false clean, 0 behaviour, 0 attribution and 0 inconclusive differences; the nine legal twins clean or uncertifiable (0 false positive); corpus (34 projects, standard and development builds) 0 rows moved."
  }
 ]

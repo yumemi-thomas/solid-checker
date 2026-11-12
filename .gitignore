@@ -1405,3 +1405,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-bare/node_modules/**
 !fixtures/reactive-ir/flush-universe-test-runner/node_modules/
 !fixtures/reactive-ir/flush-universe-test-runner/node_modules/**
+!fixtures/reactive-ir/flush-universe-class/node_modules/
+!fixtures/reactive-ir/flush-universe-class/node_modules/**

@@ -76,14 +76,17 @@ enum FlushSafe {
     /// The program names no primitive that runs a callback under a leaf owner (`project_opens_leaf_scope`): no tracked queue callback runs.
     NoLeafScope,
     /// A callback a reviewed host scheduler runs from an empty stack, written directly in it (the census's `FreshStack`): no step, apply or leaf
-    /// callback is below it.
+    /// callback is below it. Only for a call in a function's body (not a parameter default) and when no function around it is a named function
+    /// expression that its own code calls again by name.
     FreshStack,
     /// Code an `await` of its own async function dominates (the census's `AwaitContinuation`): it resumes from the microtask queue on an empty stack.
+    /// Only for a call in a function's body: a parameter default runs wherever its function is called.
     AwaitContinuation,
     /// Module top level, outside every function, class and JSX element (the census's `ModuleInitialization`): evaluated before any callback runs.
     ModuleInitialization,
     /// A callback a reviewed test runner schedules, the flush written directly in it (the census's `TestRunner`: `direct_callback_contains`): the
-    /// runner's own stack. A flush in a helper the callback calls is a `TestHelper` to the census, a class no reason below names.
+    /// runner's own stack, on the same two conditions as [`Self::FreshStack`]. A flush in a helper the callback calls is a `TestHelper` to the census,
+    /// a class no reason below names.
     TestRunner,
     /// No execution of the program runs the site (`SiteReach`).
     NeverRuns,
@@ -151,11 +154,25 @@ fn reasons(
     if !leaf {
         reasons.push(FlushSafe::NoLeafScope);
     }
+    // The census class says where the function around the call runs; it is a statement about this call's stack only when two facts of the call's own
+    // syntax hold. The call is written in the body of its function: a default value in a parameter list runs wherever that function is called, which the
+    // class of the code around it does not say (the review of #213, B2). And, for the classes that name a scheduler's or a runner's own call, no function around
+    // the call can be entered again by its own name: `setTimeout(function tick() { flush(); … tick(true) })` runs `tick` a second time on the stack of whatever
+    // calls the name, an action's step or an effect's apply (B1). A site that fails either gets no reason, so its uncertifiable row.
+    let in_body = !crate::owners::in_parameter_list(&file.ast, site.span);
+    let named_again = file
+        .ast
+        .functions_owning(site.span)
+        .any(|function| reentered_by_name(file, function));
     let class = match site.caller {
-        Some(DispatchCaller::FreshStack) => Some(FlushSafe::FreshStack),
-        Some(DispatchCaller::AwaitContinuation) => Some(FlushSafe::AwaitContinuation),
+        Some(DispatchCaller::FreshStack) => {
+            (in_body && !named_again).then_some(FlushSafe::FreshStack)
+        }
+        Some(DispatchCaller::AwaitContinuation) => in_body.then_some(FlushSafe::AwaitContinuation),
         Some(DispatchCaller::ModuleInitialization) => Some(FlushSafe::ModuleInitialization),
-        Some(DispatchCaller::TestRunner) => Some(FlushSafe::TestRunner),
+        Some(DispatchCaller::TestRunner) => {
+            (in_body && !named_again).then_some(FlushSafe::TestRunner)
+        }
         // No reason, so the site gets its uncertifiable row: `DetachedOwner` keeps the stack's action depth, `TestHelper` may be called from a step
         // inside a test, an event handler's delivery may be dispatched from a step, `EffectApply` is the apply itself, and no census class (`None`)
         // is a site the census could not place (owner ruling 5a).
@@ -175,6 +192,17 @@ fn reasons(
         reasons.push(FlushSafe::NeverRuns);
     }
     reasons
+}
+
+/// A named function expression whose name is used: `setTimeout(function tick() { … tick(true) })`. The name is bound inside the function only, so the code that
+/// uses it is written in it, and calls it from the stack that code runs on (an action's step, an effect's apply, a leaf callback), never the one the scheduler
+/// or the runner gave the first run. A name nothing uses cannot be called again: the function runs only as often as its host calls it.
+fn reentered_by_name(file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
+    function.kind == solid_facts::ast::FunctionKind::Expression
+        && function
+            .name
+            .as_ref()
+            .is_some_and(|name| !file.ast.references_to(name.span).is_empty())
 }
 
 /// `SOLID_CHECKER_IR_ABLATE_SILENCE`: whether the reason is dropped (a test and measurement hook, shared with the site accounting's silences).
