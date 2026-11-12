@@ -125,6 +125,26 @@ fn literal_text(text: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
 }
 
+/// Batch 11, B2 (the re-review of #220): the JSX creation sites the owner-call universe lists, each as `(span, anchor)`: the sites [`jsx_sites`] finds minus the two
+/// kinds that prove no creation (a child the compiler left static that may hold a function, a component getter's JSX), once each by span. JSX creates a render
+/// effect, a memo or a root (a component tag runs `createComponent`, which dev builds run under `createRoot`) as a creating call does, so on an effect's apply stack
+/// with no owner set it throws like one (SC6002, ADR 0883), and under a leaf owner it is a forbidden creation (SC3001).
+pub(crate) fn universe_jsx_sites(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<(Span, Span)> {
+    // Keyed by span, in span order: a span's first site is its entry.
+    let mut by_span = std::collections::BTreeMap::new();
+    for site in jsx_sites(file, lookup) {
+        if site.kind != JsxSiteKind::MaybeRenderEffect && !site.in_getter {
+            by_span
+                .entry((site.span.start, site.span.end))
+                .or_insert((site.span, site.anchor));
+        }
+    }
+    by_span.into_values().collect()
+}
+
 pub(crate) fn jsx_sites(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,

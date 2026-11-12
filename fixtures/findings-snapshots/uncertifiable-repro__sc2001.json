@@ -1751,6 +1751,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-also-handed-to-callback.tsx",
+      "start": 451,
+      "end": 465,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-also-handed-to-callback.tsx",
+      "start": 451,
+      "end": 465,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2004,6 +2026,50 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-omit-rest.tsx",
+      "start": 584,
+      "end": 598,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-omit-rest.tsx",
+      "start": 584,
+      "end": 598,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-omit-rest.tsx",
+      "start": 699,
+      "end": 767,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-omit-rest.tsx",
+      "start": 699,
+      "end": 767,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2144,6 +2210,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
       "start": 754,
       "end": 778,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 762,
+      "end": 775,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 762,
+      "end": 775,
       "fixes": 0
     },
     {
@@ -2375,6 +2463,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
       "start": 751,
       "end": 790,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 759,
+      "end": 787,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 759,
+      "end": 787,
       "fixes": 0
     },
     {
@@ -2741,6 +2851,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-presence-in-show.tsx",
+      "start": 742,
+      "end": 940,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-presence-in-show.tsx",
+      "start": 742,
+      "end": 940,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2958,6 +3090,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-typeof-guard-spread.tsx",
       "start": 480,
       "end": 640,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-typeof-guard-spread.tsx",
+      "start": 622,
+      "end": 633,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-typeof-guard-spread.tsx",
+      "start": 622,
+      "end": 633,
       "fixes": 0
     },
     {

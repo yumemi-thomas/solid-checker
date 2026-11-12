@@ -101,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 282,
+      "end": 289,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -117,6 +128,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 282,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 282,
       "end": 289,
@@ -233,6 +255,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 545,
+      "end": 552,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -249,6 +282,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 545,
+      "end": 552,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 545,
       "end": 552,
@@ -354,6 +398,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 785,
+      "end": 792,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -370,6 +425,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 785,
+      "end": 792,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 785,
       "end": 792,
@@ -475,6 +541,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1019,
+      "end": 1026,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -491,6 +568,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1019,
+      "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 1019,
       "end": 1026,
@@ -618,6 +706,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1257,
+      "end": 1264,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -634,6 +733,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1257,
+      "end": 1264,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 1257,
       "end": 1264,
@@ -739,6 +849,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1557,
+      "end": 1564,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -755,6 +876,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
+      "start": 1557,
+      "end": 1564,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-installed-accessor-wrapper/App.tsx",
       "start": 1557,
       "end": 1564,

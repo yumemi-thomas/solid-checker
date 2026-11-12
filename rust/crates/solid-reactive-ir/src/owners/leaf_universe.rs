@@ -166,14 +166,23 @@ pub(super) fn silences(
         let ast = &file.ast;
         // The callback positions the role engine takes as placed, for the role question (computed at the first creation that asks it).
         let mut allowed: Option<Vec<Span>> = None;
+        // The sites of the file this pass answers for, as (the span the role, the entry and the graph are asked about, the span the site is reported at, its codes): the
+        // calls of the owner-call universe, and (B2, the re-review of #220) its JSX creation sites.
+        let mut candidates: Vec<(Span, Span, &'static [SiteCode])> = Vec::new();
         for call in &ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;
             };
             let codes = owner_call_codes(dialect, file, call, primitive, client_build);
-            if codes.is_empty() {
-                continue;
+            if !codes.is_empty() {
+                candidates.push((call.span, call.callee, codes));
             }
+        }
+        let jsx_codes = crate::proof_universe::jsx_site_codes(client_build);
+        for (span, _anchor) in crate::owners::universe_jsx_sites(file, lookup) {
+            candidates.push((span, span, jsx_codes));
+        }
+        for (span, site, codes) in candidates {
             let leaf = codes.iter().any(|code| {
                 matches!(
                     code,
@@ -181,7 +190,6 @@ pub(super) fn silences(
                 )
             });
             let effect = codes.contains(&SiteCode::EffectCreation);
-            let site = call.callee;
             // What a group of codes is declined for: written to the proof log only.
             let decline = |group: Group, reason: Decline| {
                 if !logging {
@@ -204,7 +212,7 @@ pub(super) fn silences(
             };
             // No execution runs the site: no code of it can be raised.
             if matches!(
-                reach.site(file, call.span),
+                reach.site(file, span),
                 crate::execution_role::Reach::Unreached(_)
             ) {
                 ends.end_at(
@@ -212,13 +220,13 @@ pub(super) fn silences(
                     site,
                     SiteSilence::OwnerCallNeverRuns,
                     PremiseKind::SiteReach,
-                    || Some(call.span),
+                    || Some(span),
                 );
                 continue;
             }
             // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere).
-            let Some(function) = ast.innermost_function_owning(call.span) else {
-                if crate::local_access::in_instance_field_initializer(file, call.span) {
+            let Some(function) = ast.innermost_function_owning(span) else {
+                if crate::local_access::in_instance_field_initializer(file, span) {
                     for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
                         if open {
                             decline(group, Decline::InstanceFieldInitializer);
@@ -236,7 +244,7 @@ pub(super) fn silences(
                 continue;
             };
             // A package the build does not read may run the function (B3): no census and no entry the graph holds answers for it.
-            if unread.may_run(file, call.span) {
+            if unread.may_run(file, span) {
                 for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
                     if open {
                         decline(group, Decline::UnreadPackageMayRun);
@@ -262,11 +270,11 @@ pub(super) fn silences(
             }
             // Every answer below speaks for the site only where it is plain: the graph's context and the role engine's placement say where code written
             // directly in a function runs, not a parameter list, a generator's body or a later task.
-            let plain = if crate::owners::in_parameter_list(ast, call.span) {
+            let plain = if crate::owners::in_parameter_list(ast, span) {
                 Err(Decline::ParameterList)
-            } else if generator_layer_around(file, call.span, lookup) {
+            } else if generator_layer_around(file, span, lookup) {
                 Err(Decline::GeneratorBody)
-            } else if crate::execution_role::may_follow_suspension(file, call.span) {
+            } else if crate::execution_role::may_follow_suspension(file, span) {
                 Err(Decline::AfterSuspension)
             } else {
                 Ok(())
@@ -286,7 +294,7 @@ pub(super) fn silences(
                 *entry_open_known.get_or_insert_with(|| {
                     super::owner_emission::layer_entry_open_by_reference(
                         file,
-                        call.span,
+                        span,
                         lookup,
                         caller_unplaced,
                     )
@@ -302,7 +310,7 @@ pub(super) fn silences(
                 });
                 if crate::static_api::runs_off_every_apply(
                     file,
-                    call.span,
+                    span,
                     allowed,
                     entities,
                     symbol_names,
@@ -318,7 +326,7 @@ pub(super) fn silences(
                     );
                     open_effect = false;
                 } else if let Some(wrapper) =
-                    crate::static_api::owner_created_around_call(file, call.span, lookup)
+                    crate::static_api::owner_created_around_call(file, span, lookup)
                 {
                     ends.end_at(
                         file,

@@ -54,6 +54,28 @@
       "start": 309,
       "end": 316,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/variants/effect-child/App.tsx",
+      "start": 405,
+      "end": 414,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/child-mount-first-run/variants/effect-child/App.tsx",
+      "start": 405,
+      "end": 414,
+      "fixes": 0
     }
   ]
 }

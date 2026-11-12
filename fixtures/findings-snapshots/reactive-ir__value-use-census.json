@@ -691,6 +691,17 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
       "start": 682,
+      "end": 703,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
+      "start": 682,
       "end": 692,
       "fixes": 0
     },
@@ -699,6 +710,17 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
+      "start": 682,
+      "end": 703,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
       "start": 682,
@@ -772,6 +794,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1015,
+      "end": 1026,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -780,6 +813,28 @@
       "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
       "start": 1015,
       "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1015,
+      "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1036,
+      "end": 1039,
       "fixes": 0
     },
     {
@@ -794,6 +849,28 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1036,
+      "end": 1039,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1048,
+      "end": 1055,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -802,6 +879,28 @@
       "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
       "start": 1048,
       "end": 1055,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1048,
+      "end": 1055,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1064,
+      "end": 1073,
       "fixes": 0
     },
     {
@@ -816,10 +915,43 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1064,
+      "end": 1073,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1082,
+      "end": 1094,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
+      "start": 1082,
+      "end": 1094,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-census/Followed.tsx",
       "start": 1082,
@@ -923,6 +1055,28 @@
       "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
       "start": 965,
       "end": 968,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 987,
+      "end": 1138,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 987,
+      "end": 1138,
       "fixes": 0
     },
     {
@@ -1113,10 +1267,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 320,
+      "end": 329,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
+      "start": 320,
+      "end": 329,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-census/HeldUses.tsx",
       "start": 320,
@@ -1146,10 +1322,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Importer.tsx",
+      "start": 514,
+      "end": 526,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Importer.tsx",
+      "start": 514,
+      "end": 526,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-census/Importer.tsx",
       "start": 514,
@@ -3432,6 +3630,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 1247,
+      "end": 1250,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -3448,6 +3657,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
+      "start": 1247,
+      "end": 1250,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/value-use-census/Review.tsx",
       "start": 1247,
       "end": 1250,
@@ -3640,10 +3860,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 981,
+      "end": 993,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 981,
+      "end": 993,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
       "start": 981,
@@ -3725,6 +3967,28 @@
       "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
       "start": 1533,
       "end": 1543,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 1643,
+      "end": 1658,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+      "start": 1643,
+      "end": 1658,
       "fixes": 0
     }
   ]

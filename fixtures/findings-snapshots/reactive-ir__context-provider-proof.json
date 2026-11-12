@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-proof/App.tsx",
+      "start": 821,
+      "end": 854,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-proof/App.tsx",
+      "start": 821,
+      "end": 854,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -21,6 +43,28 @@
       "path": "fixtures/reactive-ir/context-provider-proof/App.tsx",
       "start": 1386,
       "end": 1396,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-proof/App.tsx",
+      "start": 1629,
+      "end": 1662,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-proof/App.tsx",
+      "start": 1629,
+      "end": 1662,
       "fixes": 0
     },
     {

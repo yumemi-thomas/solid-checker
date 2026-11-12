@@ -1469,3 +1469,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-emission-open-export/node_modules/**
 !fixtures/reactive-ir/exported-specifier-open-read/node_modules/
 !fixtures/reactive-ir/exported-specifier-open-read/node_modules/**
+!fixtures/reactive-ir/owner-call-jsx-sites/node_modules/
+!fixtures/reactive-ir/owner-call-jsx-sites/node_modules/**

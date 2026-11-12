@@ -42,7 +42,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // ADR 0969 (batch 11, slice 6): six more, the uncertifiable `leaf-operation-unaccounted` rows of the owner-call universe at a creation in an exported
         // function of this open program (every export is handed: B3), in `after-await-valid.tsx`, `await-control-flow-valid.tsx`, `effect-apply-valid.tsx`,
         // `effect-apply-invalid.tsx`, `effect-apply-extended-invalid.tsx` and `props-valid.tsx`, pinned below. No violation moved.
-        ("leaf-owner-forbidden-call", 15),
+        // ADR 0971 (batch 11, B2): 21 more, the uncertifiable `leaf-operation-unaccounted` rows at the JSX creation sites (a component element, an
+        // expression container's insert) of the corpus's exported functions, in seven files, pinned per file below. No violation moved.
+        ("leaf-owner-forbidden-call", 36),
     ] {
         assert_rule_findings(&findings, rule, count);
     }
@@ -88,17 +90,31 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "after-await-extended-invalid.tsx",
             [("reactive-read-after-await", 6)].as_slice(),
         ),
+        // ADR 0971: each file's JSX creation sites (`leaf-operation-unaccounted`, uncertifiable; checked below).
         (
             "props-invalid.tsx",
-            [("strict-read-untracked", 3), ("no-destructure", 1)].as_slice(),
+            [
+                ("strict-read-untracked", 3),
+                ("no-destructure", 1),
+                ("leaf-owner-forbidden-call", 1),
+            ]
+            .as_slice(),
         ),
         (
             "control-flow-invalid.tsx",
-            [("strict-read-untracked", 5)].as_slice(),
+            [
+                ("strict-read-untracked", 5),
+                ("leaf-owner-forbidden-call", 6),
+            ]
+            .as_slice(),
         ),
         (
             "props-extended-invalid.tsx",
-            [("strict-read-untracked", 3)].as_slice(),
+            [
+                ("strict-read-untracked", 3),
+                ("leaf-owner-forbidden-call", 1),
+            ]
+            .as_slice(),
         ),
         (
             "component-return-invalid.tsx",
@@ -209,9 +225,28 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "after-await-valid.tsx",
             [("cleanup-return-unresolved", 0)].as_slice(),
         ),
+        // ADR 0971: the JSX creation site of the returned expression (`leaf-operation-unaccounted`, uncertifiable; checked below).
         (
             "component-return-valid.tsx",
-            [("strict-read-untracked", 1)].as_slice(),
+            [
+                ("strict-read-untracked", 1),
+                ("leaf-owner-forbidden-call", 1),
+            ]
+            .as_slice(),
+        ),
+        // ADR 0971: the JSX creation sites of these files (`leaf-operation-unaccounted`, uncertifiable; checked below). The match is a suffix:
+        // `control-flow-valid.tsx` is seven rows of its own and the one of `await-control-flow-valid.tsx` (ADR 0969).
+        (
+            "control-flow-valid.tsx",
+            [("leaf-owner-forbidden-call", 8)].as_slice(),
+        ),
+        (
+            "props-extended-valid.tsx",
+            [("leaf-owner-forbidden-call", 2)].as_slice(),
+        ),
+        (
+            "props-valid.tsx",
+            [("leaf-owner-forbidden-call", 4)].as_slice(),
         ),
         // ADR 0452: the closure an async memo returns is built in the memo, so
         // its read has no placement (an uncertifiable result, no violation).
@@ -313,8 +348,8 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         }
     }
 
-    // ADR 0966, 0969: the leaf rows of these files are internal uncertifiables (`leaf-operation-unaccounted`: the flush accounting's, the owner-call
-    // universe's), none a violation; the violations are the two `leaf-invalid` and `owned-leaf-extended-invalid` files'.
+    // ADR 0966, 0969, 0971: the leaf rows of these files are internal uncertifiables (`leaf-operation-unaccounted`: the flush accounting's, the owner-call
+    // universe's, the JSX creation sites'), none a violation; the violations are the two `leaf-invalid` and `owned-leaf-extended-invalid` files'.
     for finding in findings_for_rule(&findings, "leaf-owner-forbidden-call")
         .into_iter()
         .filter(|finding| {
@@ -329,6 +364,13 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                         "effect-apply-invalid.tsx",
                         "effect-apply-extended-invalid.tsx",
                         "props-valid.tsx",
+                        // ADR 0971: the JSX creation sites.
+                        "component-return-valid.tsx",
+                        "control-flow-invalid.tsx",
+                        "control-flow-valid.tsx",
+                        "props-extended-invalid.tsx",
+                        "props-extended-valid.tsx",
+                        "props-invalid.tsx",
                     ]
                     .iter()
                     .any(|file| path.ends_with(file))

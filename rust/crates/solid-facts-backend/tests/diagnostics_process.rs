@@ -22,7 +22,10 @@ mod context_census_workers_process;
 #[path = "server_rules_workers_process.rs"]
 mod server_rules_workers_process;
 
-use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule, owner_entry_row};
+use support::{
+    assert_rule_findings, diagnostic_fixture, findings_for_rule, owner_entry_row,
+    partition_creation_rows,
+};
 
 #[test]
 fn conditional_package_getters_require_every_alternative() {
@@ -698,6 +701,9 @@ fn routed_options_callbacks_compose_source_contexts() {
         })
         .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
+    // ADR 0971 (batch 11, B2): an SC3001 and an SC6002 uncertifiable row at each of the five `count()` creations in the exported components; no other row moved.
+    let (creations, rows) = partition_creation_rows(rows);
+    assert_eq!(creations.len(), 10, "{creations:#?}");
     // ADR 0321: each `read` arrow is written in the argument literal, so its
     // dispatch resolves to it; the read keeps the source context proven here.
     assert_eq!(rows.len(), 4, "{rows:#?}");
@@ -754,6 +760,9 @@ fn returned_literal_body_facts_project_reads_only_at_invocation() {
         })
         .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
+    // ADR 0971 (batch 11, B2): an SC3001 and an SC6002 uncertifiable row at the one JSX creation of the exported component; no other row moved.
+    let (creations, rows) = partition_creation_rows(rows);
+    assert_eq!(creations.len(), 2, "{creations:#?}");
     assert_eq!(rows.len(), 1, "{rows:#?}");
     let start = source.find("const value = read()").unwrap() + "const value = ".len();
     assert_eq!(
@@ -993,6 +1002,9 @@ fn member_dispatch_keeps_the_source_invocation_context() {
         .collect::<Vec<_>>();
     open_at.sort_unstable();
     assert_eq!(open_at, [7, 13, 31], "{open:#?}");
+    // ADR 0971 (batch 11, B2): an SC3001 and an SC6002 uncertifiable row at each of the three `count()` creations in the exported components; no other row moved.
+    let (creations, rows) = partition_creation_rows(rows);
+    assert_eq!(creations.len(), 6, "{creations:#?}");
     assert_eq!(rows.len(), 3, "{rows:#?}");
     for (name, helper, unresolved) in [
         ("TrackedMember", "trackedMember", false),
@@ -1040,6 +1052,10 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
                 .is_some_and(|path| path.ends_with("/NamedHandlers.tsx"))
         })
         .collect::<Vec<_>>();
+    // ADR 0971 (batch 11, B2): an SC3001 and an SC6002 uncertifiable row at each of the twenty JSX creations (component elements) of the exported components;
+    // no other row moved.
+    let (creations, rows) = partition_creation_rows(rows);
+    assert_eq!(creations.len(), 40, "{creations:#?}");
     // Seven SC1001 rows below, and ADR 0509's obligation at `NamedCycle`'s
     // `props.onPress()`: the component renders itself passing a named
     // handler, a value pass 10 cannot follow.
@@ -1117,6 +1133,15 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
                 Some(start),
                 Some(start + 7)
             ),
+            // ADR 0971 (batch 11, B2): the creation of `<EvalHandler .. />` in the exported `UsesEvalHandler`: an SC3001 and an SC6002 uncertifiable row.
+            (
+                "SC3001",
+                "uncertifiable",
+                "leaf-operation-unaccounted",
+                true,
+                Some(start - 30),
+                Some(start + 14)
+            ),
             // ADR 0926: the withdrawn slot may be pending, and the SC9012 at
             // the read no longer stands for SC5003's claim.
             (
@@ -1126,6 +1151,14 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
                 true,
                 Some(start),
                 Some(start + 7)
+            ),
+            (
+                "SC6002",
+                "uncertifiable",
+                "effect-creation-unaccounted",
+                true,
+                Some(start - 30),
+                Some(start + 14)
             ),
             (
                 "SC9012",
@@ -1391,6 +1424,9 @@ fn typed_options_wrappers_preserve_source_callback_execution() {
     // what they return may be pending (patterns net/wrapped-later-tracked).
     // ADR 0860: the escaped return also leaves a row at each options() read
     // whose execution role is not proven tracked.
+    // ADR 0971 (batch 11, B2): an SC3001 and an SC6002 uncertifiable row at each of the five JSX creations in the exported components; no other row moved.
+    let (creations, rows) = partition_creation_rows(rows);
+    assert_eq!(creations.len(), 10, "{creations:#?}");
     assert_eq!(rows.len(), 8, "{rows:#?}");
     for start in [369_u64, 627] {
         assert!(
@@ -1559,8 +1595,15 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
     // `useQuery(...)`, an SC9012 at `useWindowQuery(...)`.
     for (fixture, expected, flags) in [
         (
+            // ADR 0971 (batch 11, B2): an SC3001 and an SC6002 uncertifiable row at each of the eighteen JSX creations of the exported components, and the
+            // seventeen SC9012 rows as before.
             "returned-store-proxy",
-            vec![("uncertifiable", "SC9012"); 17],
+            [
+                vec![("uncertifiable", "SC3001"); 18],
+                vec![("uncertifiable", "SC6002"); 18],
+                vec![("uncertifiable", "SC9012"); 17],
+            ]
+            .concat(),
             Vec::new(),
         ),
         (
@@ -1709,7 +1752,9 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // an unread package may run the export under a leaf owner (B3, policy A), the out-of-band `onSettled`'s `onCleanup`
                 // and `createMemo` (56, 57; its `flush()` is the row above), and the `onCleanup` in the handler arrow only built and
                 // returned by `buildTeardownHandler` (102), which no call edge places.
-                ("leaf-owner-forbidden-call", 33),
+                // ADR 0971 (batch 11, B2): three more, the uncertifiable `leaf-operation-unaccounted` rows at the JSX creations in the exported components'
+                // returns, so sixteen violations and twenty uncertifiable in all.
+                ("leaf-owner-forbidden-call", 36),
                 // Three inline (the function-seeded createSignal, createMemo,
                 // createRoot) plus the dynamic-extent trackDouble() reached
                 // through its helper.
@@ -1862,9 +1907,10 @@ fn settled_leaf_rules_follow_call_site_ownership() {
             )
         })
         .collect::<Vec<_>>();
+    // ADR 0971 (batch 11, B2): a fourth, the JSX creation `{count()}` of the exported component's return.
     assert_eq!(
         kept,
-        [(Some("uncertifiable"), Some("leaf-operation-unaccounted")); 3],
+        [(Some("uncertifiable"), Some("leaf-operation-unaccounted")); 4],
         "{findings:#?}"
     );
     // The exported helper's call sites are unknowable, so its onSettled leaf
@@ -1970,7 +2016,9 @@ fn solid2_precision_corrections_are_end_to_end() {
         // silence holds: the 29 `createMemo` and `createEffect` creations written in the exported component bodies (an unread package
         // may run an export under a leaf owner: B3, policy A) and the four `onCleanup(dispose)` calls in the wrapped, referenced,
         // nested and handed-on callbacks (lines 249, 259, 271, 281) that no proven leaf scope places. None is a violation.
-        ("leaf-owner-forbidden-call", 34),
+        // ADR 0971 (batch 11, B2): eight more, the uncertifiable `leaf-operation-unaccounted` rows at the JSX creations in the exported components, all before
+        // the landmark below, so forty-two in all and one violation.
+        ("leaf-owner-forbidden-call", 42),
         // One fewer than before ADR 0345 review D: the wrapper-built callback is
         // no longer named, so its cleanup is not reported. Two more since ADR
         // 0534: the wrapped and handed-on cleanups (lines 248 and 270) run in
@@ -2502,13 +2550,15 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // the effect's own apply calls among them): the role silence asks, since
         // the review of #220 (F2), that no package the build does not read may
         // run the exported function.
-        let leaf = assert_rule_findings(&findings, "leaf-owner-forbidden-call", 13);
+        // ADR 0971 (batch 11, B2): and three more of each, the JSX creations (component elements, expression containers' inserts) in the exported
+        // components: sixteen SC3001 and fifteen SC6002 uncertifiable rows, none a violation.
+        let leaf = assert_rule_findings(&findings, "leaf-owner-forbidden-call", 16);
         assert!(
             leaf.iter().all(|finding| finding["kind"] == "uncertifiable"
                 && finding["blockedBy"]["kind"] == "leaf-operation-unaccounted"),
             "{leaf:#?}"
         );
-        let apply = assert_rule_findings(&findings, "primitive-in-effect-callback", 12);
+        let apply = assert_rule_findings(&findings, "primitive-in-effect-callback", 15);
         assert!(
             apply
                 .iter()
@@ -2522,7 +2572,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             owner.iter().all(|finding| owner_entry_row(finding)),
             "{owner:#?}"
         );
-        assert_eq!(findings.len(), 4 + 13 + 12 + 6, "{findings:#?}");
+        assert_eq!(findings.len(), 4 + 16 + 15 + 6, "{findings:#?}");
     }
     if let Some(findings) = diagnostic_fixture("rc9-until-scope") {
         // rc.9's `until` carries resolve's observer guard, so the same four
@@ -2551,7 +2601,8 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // in an exported component body (lines 16, 25, 34, 47, 77): an unread
         // package may run an export under a leaf owner (B3, policy A). None is a
         // violation.
-        let universe = assert_rule_findings(&findings, "leaf-owner-forbidden-call", 5);
+        // ADR 0971 (batch 11, B2): three more, and three SC6002 `effect-creation-unaccounted` rows, at the JSX creations in the exported components.
+        let universe = assert_rule_findings(&findings, "leaf-owner-forbidden-call", 8);
         assert!(
             universe
                 .iter()
@@ -2559,12 +2610,21 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                     && finding["blockedBy"]["kind"] == "leaf-operation-unaccounted"),
             "{universe:#?}"
         );
+        let creations = assert_rule_findings(&findings, "primitive-in-effect-callback", 3);
+        assert!(
+            creations
+                .iter()
+                .all(|finding| finding["kind"] == "uncertifiable"
+                    && finding["blockedBy"]["kind"] == "effect-creation-unaccounted"),
+            "{creations:#?}"
+        );
         // ADR 0970: and the owner obligations (SC4001) of the exported components no tag renders.
         assert!(
             findings.iter().all(|finding| {
                 finding["rule"] == "no-await-primitive-in-tracked-scope"
                     || finding["rule"] == "unaudited-solid-release"
                     || finding["rule"] == "leaf-owner-forbidden-call"
+                    || finding["rule"] == "primitive-in-effect-callback"
                     || owner_entry_row(finding)
             }),
             "{findings:#?}"
@@ -2768,7 +2828,8 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
         // (lines 20, 27, 33, 91, 99): an unread package may run an exported
         // function under a leaf owner, so no creation in it is proven outside
         // one (B3), and the code's home row stands. None is a violation.
-        assert_eq!(findings.len(), 17, "{findings:#?}");
+        // ADR 0971 (batch 11, B2): four more, an SC3001 and an SC6002 uncertifiable row at each of the two JSX creations (lines 74, 82), so twenty-one.
+        assert_eq!(findings.len(), 21, "{findings:#?}");
         let unaccounted = findings
             .iter()
             .filter(|finding| finding["id"] == "SC3001")
@@ -2780,7 +2841,7 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
                 )
             })
             .collect::<Vec<_>>();
-        let expected = [20, 27, 33, 91, 99].map(|at| {
+        let expected = [20, 27, 33, 74, 82, 91, 99].map(|at| {
             (
                 Some(at),
                 Some("uncertifiable"),
@@ -2861,7 +2922,9 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             .filter(|finding| owner_entry_row(finding))
             .count();
         assert_eq!(owner, 12, "{findings:#?}");
-        assert_eq!(findings.len(), 16 + owner, "{findings:#?}");
+        // ADR 0971 (batch 11, B2): and twenty-two more, an SC3001 and an SC6002 uncertifiable row at each of the eleven JSX creations in the exported
+        // components; no other row moved.
+        assert_eq!(findings.len(), 16 + 22 + owner, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
@@ -2876,14 +2939,22 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
         return;
     };
     // ADR 0970: `Good.tsx`'s exported components no tag renders keep an owner obligation (SC4001), which is not this test's subject.
-    assert!(
-        async_findings.iter().all(|finding| {
-            owner_entry_row(finding)
-                || !finding["primaryLocation"]["path"]
+    // ADR 0971 (batch 11, B2): nor are the SC3001 and the SC6002 uncertifiable row of each of its two JSX creations (the returns of the exported components): the
+    // pending and async rules stay quiet there, and nothing else is.
+    let (creations, rest) = partition_creation_rows(
+        async_findings
+            .iter()
+            .filter(|finding| {
+                finding["primaryLocation"]["path"]
                     .as_str()
                     .is_some_and(|path| path.ends_with("Good.tsx"))
-        }),
-        "nested Loading and inline pending observers must stay clean: {async_findings:#?}"
+            })
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(creations.len(), 4, "{creations:#?}");
+    assert!(
+        rest.iter().all(|finding| owner_entry_row(finding)),
+        "nested Loading and inline pending observers must stay clean: {rest:#?}"
     );
 
     let Some(reactivity_findings) = diagnostic_fixture("shared-reactivity-v2") else {

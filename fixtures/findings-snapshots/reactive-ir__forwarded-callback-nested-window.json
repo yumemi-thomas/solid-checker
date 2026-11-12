@@ -2,6 +2,28 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 431,
+      "end": 661,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 431,
+      "end": 661,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -85,6 +107,50 @@
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
       "start": 1347,
       "end": 1359,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 1583,
+      "end": 1660,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 1583,
+      "end": 1660,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 1799,
+      "end": 1935,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
+      "start": 1799,
+      "end": 1935,
       "fixes": 0
     },
     {

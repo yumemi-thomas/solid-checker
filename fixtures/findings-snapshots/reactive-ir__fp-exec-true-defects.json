@@ -12,6 +12,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
+      "start": 470,
+      "end": 477,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
+      "start": 470,
+      "end": 477,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -20,6 +42,28 @@
       "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
       "start": 488,
       "end": 501,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
+      "start": 611,
+      "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
+      "start": 611,
+      "end": 725,
       "fixes": 0
     },
     {
@@ -52,6 +96,28 @@
       "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
       "start": 1036,
       "end": 1049,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
+      "start": 1265,
+      "end": 1484,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
+      "start": 1265,
+      "end": 1484,
       "fixes": 0
     },
     {

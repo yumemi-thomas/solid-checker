@@ -63,6 +63,28 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 657,
+      "end": 770,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 657,
+      "end": 770,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
       "start": 959,
       "end": 969,
       "fixes": 0
@@ -79,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1040,
+      "end": 1052,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -87,6 +120,94 @@
       "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
       "start": 1040,
       "end": 1052,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1040,
+      "end": 1052,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1224,
+      "end": 1241,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1224,
+      "end": 1241,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1282,
+      "end": 1290,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1282,
+      "end": 1290,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1345,
+      "end": 1405,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1345,
+      "end": 1405,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1612,
+      "end": 1629,
       "fixes": 0
     },
     {
@@ -109,6 +230,17 @@
       "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
       "start": 1612,
       "end": 1622,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-loading-cover/App.tsx",
+      "start": 1612,
+      "end": 1629,
       "fixes": 0
     },
     {

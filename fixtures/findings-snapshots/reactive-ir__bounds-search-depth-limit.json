@@ -243,10 +243,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2149,
+      "end": 2152,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2149,
+      "end": 2152,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
       "start": 2149,
@@ -309,6 +331,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2535,
+      "end": 2538,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -325,6 +358,17 @@
       "kind": "uncertifiable",
       "blocker": "mount-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2535,
+      "end": 2538,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
       "start": 2535,
       "end": 2538,
@@ -375,6 +419,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2991,
+      "end": 2994,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -383,6 +438,39 @@
       "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
       "start": 2991,
       "end": 2994,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2991,
+      "end": 2994,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 3039,
+      "end": 3058,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 3039,
+      "end": 3058,
       "fixes": 0
     },
     {
@@ -451,10 +539,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx",
+      "start": 829,
+      "end": 832,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx",
+      "start": 829,
+      "end": 832,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx",
       "start": 829,

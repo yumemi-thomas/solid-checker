@@ -628,6 +628,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 736,
+      "end": 916,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 736,
+      "end": 916,
+      "fixes": 0
+    },
+    {
       "rule": "prefer-for",
       "code": "SC8014",
       "kind": "uncertifiable",
@@ -639,6 +661,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 768,
+      "end": 907,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 768,
+      "end": 907,
+      "fixes": 0
+    },
+    {
       "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "uncertifiable",
@@ -647,6 +691,28 @@
       "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
       "start": 1206,
       "end": 1268,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1211,
+      "end": 1242,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1211,
+      "end": 1242,
       "fixes": 0
     },
     {
@@ -669,6 +735,72 @@
       "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
       "start": 1215,
       "end": 1229,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1276,
+      "end": 1300,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1276,
+      "end": 1300,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1309,
+      "end": 1562,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1309,
+      "end": 1562,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1337,
+      "end": 1547,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1337,
+      "end": 1547,
       "fixes": 0
     },
     {

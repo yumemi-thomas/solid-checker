@@ -24,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
+      "start": 264,
+      "end": 267,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -32,6 +43,28 @@
       "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
       "start": 264,
       "end": 267,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
+      "start": 264,
+      "end": 267,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
+      "start": 269,
+      "end": 272,
       "fixes": 0
     },
     {
@@ -51,6 +84,17 @@
       "kind": "uncertifiable",
       "blocker": "root-mount-pass-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
+      "start": 269,
+      "end": 272,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/tuple-accessor-slots/async-of-mixed.tsx",
       "start": 269,
       "end": 272,
@@ -79,6 +123,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-slot.tsx",
+      "start": 235,
+      "end": 240,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -95,6 +150,17 @@
       "kind": "uncertifiable",
       "blocker": "root-mount-pass-unproven",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/async-slot.tsx",
+      "start": 235,
+      "end": 240,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/tuple-accessor-slots/async-slot.tsx",
       "start": 235,
       "end": 240,
@@ -141,6 +207,28 @@
       "path": "fixtures/reactive-ir/tuple-accessor-slots/covered.tsx",
       "start": 78,
       "end": 88,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/covered.tsx",
+      "start": 210,
+      "end": 260,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/covered.tsx",
+      "start": 210,
+      "end": 260,
       "fixes": 0
     },
     {
@@ -199,6 +287,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
+      "start": 297,
+      "end": 300,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -215,6 +314,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
+      "start": 297,
+      "end": 300,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/tuple-accessor-slots/held-then-written.tsx",
       "start": 297,
       "end": 300,
@@ -275,10 +385,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/hole.tsx",
+      "start": 255,
+      "end": 258,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/hole.tsx",
+      "start": 255,
+      "end": 258,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/tuple-accessor-slots/hole.tsx",
       "start": 255,
@@ -297,10 +429,10 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "uncertifiable",
-      "blocker": "owner-callers-unenumerated",
+      "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/tuple-accessor-slots/settled-interval.tsx",
       "start": 391,
@@ -312,6 +444,50 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/settled-interval.tsx",
+      "start": 391,
+      "end": 410,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/settled-interval.tsx",
+      "start": 391,
+      "end": 410,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/settled.tsx",
+      "start": 199,
+      "end": 204,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/settled.tsx",
+      "start": 199,
+      "end": 204,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/tuple-accessor-slots/settled.tsx",
       "start": 199,
@@ -341,6 +517,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/sync-of-mixed.tsx",
+      "start": 272,
+      "end": 275,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -349,6 +536,39 @@
       "path": "fixtures/reactive-ir/tuple-accessor-slots/sync-of-mixed.tsx",
       "start": 272,
       "end": 275,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/sync-of-mixed.tsx",
+      "start": 272,
+      "end": 275,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/sync-of-mixed.tsx",
+      "start": 276,
+      "end": 313,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/sync-of-mixed.tsx",
+      "start": 276,
+      "end": 313,
       "fixes": 0
     },
     {
@@ -374,6 +594,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/two-returns.tsx",
+      "start": 313,
+      "end": 316,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -390,6 +621,17 @@
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-accessor-slots/two-returns.tsx",
+      "start": 313,
+      "end": 316,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/tuple-accessor-slots/two-returns.tsx",
       "start": 313,
       "end": 316,

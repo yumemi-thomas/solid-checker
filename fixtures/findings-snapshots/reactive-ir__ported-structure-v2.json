@@ -15,6 +15,19 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Resolve the effective runtime entry and argument shape before treating this as a violation."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 409,
+      "end": 447,
+      "fixes": 0,
+      "message": "this creation (`items().map((item) => <li>{item}</li>)`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -26,6 +39,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 409,
+      "end": 447,
+      "fixes": 0,
+      "message": "this creation (`items().map((item) => <li>{item}</li>)`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "prefer-for",
@@ -40,6 +66,19 @@
       "hint": "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 751,
+      "end": 803,
+      "fixes": 0,
+      "message": "this creation (`items().map((item, index) => <li>{item}{index}</`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -51,6 +90,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 751,
+      "end": 803,
+      "fixes": 0,
+      "message": "this creation (`items().map((item, index) => <li>{item}{index}</`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "prefer-for",
@@ -65,6 +117,19 @@
       "hint": "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 826,
+      "end": 859,
+      "fixes": 0,
+      "message": "this creation (`ready() && <strong>ready</strong>`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -76,6 +141,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 826,
+      "end": 859,
+      "fixes": 0,
+      "message": "this creation (`ready() && <strong>ready</strong>`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "prefer-show",
@@ -102,6 +180,19 @@
       "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 893,
+      "end": 903,
+      "fixes": 0,
+      "message": "this creation (`props.html`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -113,6 +204,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 893,
+      "end": 903,
+      "fixes": 0,
+      "message": "this creation (`props.html`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "jsx-no-duplicate-props",
@@ -127,6 +231,19 @@
       "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1132,
+      "end": 1142,
+      "fixes": 0,
+      "message": "this creation (`props.html`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -138,6 +255,19 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1132,
+      "end": 1142,
+      "fixes": 0,
+      "message": "this creation (`props.html`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     },
     {
       "rule": "jsx-no-duplicate-props",
@@ -164,6 +294,19 @@
       "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1339,
+      "end": 1349,
+      "fixes": 0,
+      "message": "this creation (`props.html`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -177,6 +320,32 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1339,
+      "end": 1349,
+      "fixes": 0,
+      "message": "this creation (`props.html`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1427,
+      "end": 1453,
+      "fixes": 0,
+      "message": "this creation (`props.ready ? \"yes\" : \"no\"`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -188,6 +357,45 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1427,
+      "end": 1453,
+      "fixes": 0,
+      "message": "this creation (`props.ready ? \"yes\" : \"no\"`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1464,
+      "end": 1536,
+      "fixes": 0,
+      "message": "this creation (`<Widget innerHTML={props.html}>component content`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1464,
+      "end": 1536,
+      "fixes": 0,
+      "message": "this creation (`<Widget innerHTML={props.html}>component content`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     }
   ]
 }
