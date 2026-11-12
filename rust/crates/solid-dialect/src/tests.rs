@@ -368,6 +368,10 @@ fn a_dialect_that_states_nothing_is_handed_no_vocabulary_by_a_default() {
         silent.callback_execution_at(Primitive::CreateMemo, 0, 1),
         None
     );
+    // No policy is not "every rule credits it": a dialect that states none has no code policy at all.
+    for code in RuntimeCode::ALL {
+        assert_eq!(silent.code_policy(code), None, "{code:?}");
+    }
 }
 
 /// The per-argument questions are independent, and the 2.0 answer to each

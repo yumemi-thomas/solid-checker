@@ -207,3 +207,30 @@ describe("the policy table", () => {
     for (const code of Object.keys(codePolicy)) expect(emitted.has(code) || thrown.has(code) || dist.includes(`"${code}"`), code).toBe(true);
   });
 });
+
+// Batch 11, slice 3: the Rust policy of Solid 2.0 (`Dialect::code_policy`) is this file's `codePolicy` in the dialect crate. The harness cannot import Rust,
+// so, as the oracle's tables above, the Rust table is read as text, one line per code, and held to the JS table.
+const rustPolicy = (() => {
+  const text = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../rust/crates/solid-dialect/src/solid_2/code_policy.rs"), "utf8");
+  const names = (list) => [...list.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  return [...text.matchAll(/^\s*\(RuntimeCode::(\w+), "([A-Z_]+)", &\[([^\]]*)\], &\[([^\]]*)\], (true|false)\),$/gm)]
+    .map(([, variant, code, claiming, declining, placeless]) => ({ variant, code, claiming: names(claiming), declining: names(declining), placeless: placeless === "true" }));
+})();
+
+describe("the Rust code policy", () => {
+  it("has a row for exactly the codes the policy table gives a claiming or a declining rule", () => {
+    const withRules = Object.entries(codePolicy).filter(([, policy]) => policy.rules.length || policy.declining?.length).map(([code]) => code);
+    expect(rustPolicy.map((row) => row.code).sort()).toEqual([...withRules].sort());
+    expect(new Set(rustPolicy.map((row) => row.code)).size).toBe(rustPolicy.length);
+  });
+  it("spells each variant as its code in camel case", () => {
+    for (const row of rustPolicy) expect(row.variant, row.code).toBe(row.code.toLowerCase().split("_").map((word) => word[0].toUpperCase() + word.slice(1)).join(""));
+  });
+  it("claims the rules of the policy, declines the rules it declines, and is placeless where placelessCodes says", () => {
+    for (const row of rustPolicy) {
+      expect(row.claiming, `${row.code} claiming`).toEqual(codePolicy[row.code].rules);
+      expect(row.declining, `${row.code} declining`).toEqual(codePolicy[row.code].declining ?? []);
+      expect(row.placeless, `${row.code} placeless`).toBe(placelessCodes.includes(row.code));
+    }
+  });
+});

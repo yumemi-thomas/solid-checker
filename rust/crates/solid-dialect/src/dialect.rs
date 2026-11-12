@@ -1174,6 +1174,18 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// What this dialect says of a Solid dev diagnostic `code`: the rules that
+    /// claim it, the rules that only decline it, and whether Solid reports it
+    /// from the scheduler instead of at the offending call (a placeless code).
+    ///
+    /// `None` means the dialect has **no policy** for the code. A caller treats
+    /// that as *no ending credits* (the site stays uncertifiable), never as
+    /// "every rule credits it". The default is `None`.
+    fn code_policy(&self, code: RuntimeCode) -> Option<CodePolicy> {
+        let _ = code;
+        None
+    }
+
     /// Whether the callback at `argument` of a `primitive` call is the **effect
     /// phase** of a user effect: the runtime queues it and runs it from inside
     /// the flush that drains effects, with the effect-callback marker set for
