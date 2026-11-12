@@ -35,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-apply-first-run/variants/layered/App.tsx",
+      "start": 473,
+      "end": 485,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",

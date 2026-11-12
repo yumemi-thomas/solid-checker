@@ -5171,8 +5171,6 @@ pub(super) fn plain_call_outside_jsx(
             .any(|element| caller.body.contains(element.span))
 }
 
-/// Whether the module publishes `function` itself: an export declaration of
-/// it, with no other function between, or Type Facts' export flag on it.
 /// Whether code the program does not hold may enter `function`: a namespace
 /// of its module hands it out by name, or the module exports it from an open
 /// program or one whose namespace escapes with no name
@@ -5189,6 +5187,11 @@ pub(crate) fn entered_by_unseen_code(
             && (!lookup.program_closed || lookup.escapes_unnamed(path)))
 }
 
+/// Whether the module publishes `function` itself: an export declaration of
+/// it, with no other function between, an export specifier naming the binding
+/// that holds it (`export { Comp }`, `export { Comp as Other }`,
+/// `export default Comp`: the binding is declared elsewhere in the file and the
+/// statement does not contain the function), or Type Facts' export flag on it.
 pub(crate) fn module_exports(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -5201,15 +5204,17 @@ pub(crate) fn module_exports(
                     && export.span.contains(outer.span)
                     && outer.span.contains(function.span)
             })
-    }) || lookup
-        .typescript_file(file.path.as_str())
-        .is_some_and(|facts| {
-            facts.functions.iter().any(|candidate| {
-                candidate.exported
-                    && candidate.body.start_byte == u64::from(function.body.start)
-                    && candidate.body.end_byte == u64::from(function.body.end)
+    }) || crate::owners::function_binding_name(file, function)
+        .is_some_and(|name| crate::indexes::binding_exported(file, name.span))
+        || lookup
+            .typescript_file(file.path.as_str())
+            .is_some_and(|facts| {
+                facts.functions.iter().any(|candidate| {
+                    candidate.exported
+                        && candidate.body.start_byte == u64::from(function.body.start)
+                        && candidate.body.end_byte == u64::from(function.body.end)
+                })
             })
-        })
 }
 
 /// ADR 0327's census: every invocation of the literal, followed forward

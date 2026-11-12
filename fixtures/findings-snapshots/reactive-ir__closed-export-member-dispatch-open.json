@@ -99,6 +99,17 @@
       "start": 570,
       "end": 588,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/closed-export-member-dispatch-open/helpers.tsx",
+      "start": 608,
+      "end": 612,
+      "fixes": 0
     }
   ]
 }

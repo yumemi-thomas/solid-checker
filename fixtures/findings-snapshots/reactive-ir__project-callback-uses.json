@@ -1174,6 +1174,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2100,
+      "end": 2107,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1182,6 +1193,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 2100,
       "end": 2107,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2193,
+      "end": 2205,
       "fixes": 0
     },
     {
@@ -1229,6 +1251,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2429,
+      "end": 2434,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1248,6 +1281,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 2625,
       "end": 2630,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2648,
+      "end": 2667,
       "fixes": 0
     },
     {
@@ -1460,6 +1504,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4237,
+      "end": 4244,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1468,6 +1523,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 4237,
       "end": 4244,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4246,
+      "end": 4261,
       "fixes": 0
     },
     {
@@ -1647,6 +1713,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 5044,
+      "end": 5051,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1798,6 +1875,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 6502,
       "end": 6513,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 6530,
+      "end": 6537,
       "fixes": 0
     },
     {

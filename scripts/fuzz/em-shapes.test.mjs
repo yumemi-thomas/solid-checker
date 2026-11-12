@@ -6,8 +6,16 @@ import { BASE_ONLY_CONTEXTS, SPEC } from "./misuse.mjs";
 import { censusCells, recallShapes } from "./matrix.mjs";
 import { isValid } from "./model.mjs";
 import { EM_CODES, EM_CONTEXTS, EM_CONTEXT_NAMES, EM_HOSTS, EM_ROUTES, emParts, emShape } from "./em-shapes.mjs";
+import { checkerProjectFiles } from "./checker.mjs";
 
 // Batch 11 (the follow-up to the review of #220, and of #221): a function that returns JSX, held by a variable, handed to a wrapper or reached by `eval`, and called where no owner is current, as generator cells with their twins.
+
+const builtOf = (code, context) => {
+  const side = EM_CONTEXTS[context];
+  const shape = (side === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none");
+  const program = generateProgram(7, { profile: "misuse", misusePlan: { code, context, variant: shape.variant, binding: "direct", layer: "none", legal: side === "legal" } });
+  return buildCase(program, { id: `em-${context}` });
+};
 
 const textOf = (code, context) => {
   const side = EM_CONTEXTS[context];
@@ -21,10 +29,10 @@ const textOf = (code, context) => {
 };
 
 describe("the em contexts (a JSX-returning function a variable holds, called where no owner is current)", () => {
-  it("are six routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(EM_ROUTES).toEqual(["view", "gen", "self", "hoc", "eval", "ns"]);
+  it("are nine routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(EM_ROUTES).toEqual(["view", "gen", "self", "hoc", "eval", "ns", "nss", "nsa", "nso"]);
     expect(EM_HOSTS).toEqual(["handler", "timer", "apply"]);
-    expect(EM_CONTEXT_NAMES).toHaveLength(36);
+    expect(EM_CONTEXT_NAMES).toHaveLength(54);
     for (const name of EM_CONTEXT_NAMES) {
       const parts = emParts(name);
       expect(parts, name).not.toBeNull();
@@ -109,6 +117,37 @@ describe("the em contexts (a JSX-returning function a variable holds, called whe
       const twin = textOf("NO_OWNER_CLEANUP", `em-ns-${host}-never`);
       expect(twin, host).toContain("void self;");
       expect(twin.join("\n"), host).not.toContain('self[["K"');
+    }
+  });
+  it("print the nss and nsa routes: the component published by an export specifier (R1), a plain one and a renamed arrow, called through the module's namespace by a key built at run time", () => {
+    for (const host of EM_HOSTS) {
+      const lead = textOf("NO_OWNER_CLEANUP", `em-nss-${host}`);
+      expect(lead, host).toContain("function K1() {");
+      expect(lead, host).toContain("export { K1 };");
+      expect(lead.join("\n"), host).not.toContain("export function K1");
+      expect(lead, host).toContain('self[["K","1"].join("") as "K1"]();');
+      const alias = textOf("NO_OWNER_CLEANUP", `em-nsa-${host}`);
+      expect(alias, host).toContain("const K1 = () => {");
+      expect(alias, host).toContain("export { K1 as Out1 };");
+      expect(alias, host).toContain('self[["O","ut1"].join("") as "Out1"]();');
+      expect(alias.join("\n"), host).toContain("<K1 />");
+      for (const route of ["nss", "nsa"]) {
+        const twin = textOf("NO_OWNER_CLEANUP", `em-${route}-${host}-never`);
+        expect(twin, `${route} ${host}`).toContain("void self;");
+        expect(twin.join("\n"), `${route} ${host}`).not.toContain("self[[");
+      }
+    }
+  });
+  it("print the nso route: the ns route in an OPEN program, which the oracle's programBoundary and the checker's manifest carry (R2)", () => {
+    for (const host of EM_HOSTS) {
+      const open = builtOf("NO_OWNER_CLEANUP", `em-nso-${host}`);
+      expect(open.text, host).toContain("export function K1() {");
+      expect(JSON.parse(open.files["oracle.json"]).programBoundary, host).toBe("open");
+      expect(JSON.parse(open.files["oracle.run.json"]).programBoundary, host).toBe("open");
+      expect(JSON.parse(checkerProjectFiles(open)["package.json"]), host).toEqual({ name: `em-em-nso-${host}`, main: "main.tsx" });
+      const closed = builtOf("NO_OWNER_CLEANUP", `em-ns-${host}`);
+      expect(JSON.parse(closed.files["oracle.json"]).programBoundary, host).toBeUndefined();
+      expect(checkerProjectFiles(closed)["package.json"], host).toBeUndefined();
     }
   });
   it("are cells of SPEC on their side for the codes the host reports, one base shape, not the census's, out of api-fire's plan", () => {

@@ -2312,6 +2312,8 @@ function buildOne(kit, plan = {}) {
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
     sigs: [...sigs, ...heldOwn, ...onOwn, ...(placed.sigs ?? [])], body: placed.body, view, ...(placed.hoisted ? { hoisted: placed.hoisted } : {}),
+    // R2 of the re-review of #221 (em-shapes.mjs `nso`): the program is OPEN, a publishing manifest (the oracle's `programBoundary`, emit.mjs, checker.mjs).
+    ...(placed.boundary ? { boundary: placed.boundary } : {}),
     // ADR 0917: a context's `moduleTop` must run before the values; a module source creating them at its scope prints it there instead.
     ...(placed.moduleTop && moduleScoped(source) ? { moduleTop: placed.moduleTop } : placed.top ? { top: placed.top } : {}),
     ...(placed.files ? { files: placed.files, importLines: placed.importLines ?? [] } : {}),

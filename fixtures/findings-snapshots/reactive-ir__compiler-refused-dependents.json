@@ -143,6 +143,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
+      "start": 382,
+      "end": 393,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -151,6 +162,28 @@
       "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
       "start": 395,
       "end": 407,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
+      "start": 395,
+      "end": 407,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
+      "start": 409,
+      "end": 415,
       "fixes": 0
     }
   ]

@@ -107,9 +107,17 @@ function TaggedOnly() {
   return <p>tagged</p>;
 }
 
+// Control of R3 (the re-review of #221). An exported component a tag renders, in a CLOSED program whose namespace of this module nothing reads: every caller is visible, so rendering
+// is the only entry. (In an open program, an importer the program does not hold may call it with no owner: fixture owner-emission-open-export.)
+export function ClosedExported() {
+  onCleanup(() => {});
+  return <p>closed export</p>;
+}
+
 function App() {
   return (
     <p>
+      <ClosedExported />
       <SelfSaving />
       <StepHelper />
       <NamedUnreferenced />

@@ -125,9 +125,11 @@ function expression that saves itself is run by whoever calls it). A function th
 census takes for a component that is handed to a call (`const Wrapped = hoc(() => {
 onCleanup(..); return <p/>; })`) is entered by whoever the callee is: only a
 primitive's position and a standard-library call that runs it inline place it. A
-component its module exports, whose module's namespace is read by name or
+component its module exports (a declaration, or a specifier: `export { Comp }`,
+`export { Comp as Other }`), whose module's namespace is read by name or
 enumerated with no name (`Object.values(ns)`, a spread, a dynamic `import()`'s
-module), is entered by whoever holds the namespace. A program that calls direct
+module), is entered by whoever holds the namespace; in an open program any export
+is, since code the program does not hold may import and call it with no owner. A program that calls direct
 `eval` reaches any binding by name, so every layer of it is open.
 
 An owner-creating callback owns only what runs in its synchronous extent. A

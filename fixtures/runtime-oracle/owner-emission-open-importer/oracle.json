@@ -1,0 +1,1 @@
+{ "note": "R3: open boundary, the importer is outside the checker program (external)", "programBoundary": "open", "external": ["importer.tsx"] }

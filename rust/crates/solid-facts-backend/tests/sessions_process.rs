@@ -1801,8 +1801,19 @@ declare namespace JSX {
     let mut session =
         NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
     let first = session.analyze().unwrap();
+    // ADR 0970: an exported component is entered by code the program does not hold in an open program, so no JSX use proves it owned there. The subject here is the identity
+    // another file's JSX use moves, which needs the closed program an application is.
+    let mut options = solid_reactive_ir::RuleOptions::default();
+    options.runtime.program_boundary = Some(solid_reactive_ir::ProgramBoundary::Closed);
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    let (initial, _) = incremental
+        .build_with_analysis_inputs_shared(
+            &first,
+            selected.vocabulary,
+            solid_reactive_ir::AnalysisInputs::empty(),
+            &options,
+        )
+        .unwrap();
     assert!(
         selected
             .solve(&initial)
@@ -1826,17 +1837,30 @@ void Card;
             None,
         )
         .unwrap();
-    let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
-    let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
-    let fresh_findings = selected.solve(&fresh);
-    assert!(
-        fresh_findings.iter().any(|finding| {
-            finding.rule == "missing-owner" && finding.primary_location.path.ends_with("Card.tsx")
-        }),
-        "without a JSX use, the exported untyped factory has no proven owner: {fresh_findings:#?}"
+    let fresh = solid_reactive_ir::build_with_analysis_inputs_measured(
+        &edited,
+        selected.vocabulary,
+        solid_reactive_ir::AnalysisInputs::empty(),
+        &options,
+    )
+    .unwrap()
+    .0;
+    let (retained, _) = incremental
+        .build_with_analysis_inputs_shared(
+            &edited,
+            selected.vocabulary,
+            solid_reactive_ir::AnalysisInputs::empty(),
+            &options,
+        )
+        .unwrap();
+    // The edit mattered: without a JSX use `Card` is no longer a proven component, so the program differs from the one the JSX use gave (in the closed program of this test no
+    // entry reaches `Card` then, so no obligation stands for it; in an open program an unseen importer might, ADR 0970).
+    assert_ne!(
+        *initial, fresh,
+        "without a JSX use, the exported untyped factory is no proven component"
     );
     assert_eq!(
-        retained, fresh,
+        *retained, fresh,
         "an edit in a reference file must invalidate component-dependent artifacts in Card.tsx"
     );
 }

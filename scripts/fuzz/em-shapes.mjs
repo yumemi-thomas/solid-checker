@@ -16,6 +16,11 @@
 //                           component `function K() { <site>; return <p />; }` is rendered by a tag, and the host's callback calls it by name through `eval("K()")`
 //   em-ns-<host>            the component stop read symbol references only (B2 of the review of #221): the component is exported by the program's module, a tag renders it, and the host's
 //                           callback calls it through the module's own namespace by a key built at run time (`self["K1"]()`, `import * as self from "./App"`), which names no symbol
+//   em-nss-<host>           the same with the component published by an export specifier, no export statement that contains the function (R1 of the re-review of #221):
+//                           `function K1() { <site>; return <p />; } export { K1 };`, called through `self["K1"]()`
+//   em-nsa-<host>           an arrow `const K1 = () => { .. }` published renamed (`export { K1 as Out1 }`, R1), called through `self["Out1"]()`
+//   em-nso-<host>           `em-ns` in an OPEN program (R2 and R3: a publishing manifest, `programBoundary: open`): the namespace census is a closed program's and code the
+//                           program does not hold may call any export; the caller in the program is the cell's, the unseen importer cannot be written (rediscovery.json)
 //   <route>-<host>-never    legal    the same declarations, the host runs nothing: the function is held (the generator not stepped, the saved function not called, the eval evaluating `1`) and never run, so no site runs
 //   hosts   handler (a button's click handler), timer (a `setTimeout` callback): where no owner is current; apply (an effect's apply: its stack has none; NO_OWNER_CLEANUP and
 //           NO_OWNER_CONTEXT, since a creation there is PRIMITIVE_IN_EFFECT_CALLBACK, a code of its own)
@@ -24,7 +29,7 @@
 // binding bare (`emShape`), not crossed by the census, out of api-fire's plan.
 import { button, contain, decl, domExpr, expr, fn, jsx, mounted, num, prim, ret } from "./model.mjs";
 
-export const EM_ROUTES = ["view", "gen", "self", "hoc", "eval", "ns"];
+export const EM_ROUTES = ["view", "gen", "self", "hoc", "eval", "ns", "nss", "nsa", "nso"];
 export const EM_HOSTS = ["handler", "timer", "apply"];
 /** The hosts each code is judged in: the hosts where the runtime reports the code for a call with no owner current. */
 export const EM_CODES = {
@@ -43,12 +48,12 @@ export const emParts = (context) => {
   return match ? { route: match[1], host: match[2], never: Boolean(match[3]) } : null;
 };
 
-/** The base shapes an `em-*` cell takes: the direct binding, no layer. The `ns` route writes the component at module scope, where the values of the shape's setup go with it: a reaction
+/** The base shapes an `em-*` cell takes: the direct binding, no layer. The `ns` routes write the component at module scope, where the values of the shape's setup go with it: a reaction
  * (`reaction-track-owned`) is then a creation with no owner of its own, so that variant is no twin of the others. */
 export function emShape(context, shape) {
   const parts = emParts(context);
   if (!parts) return true;
-  if (parts.route === "ns" && shape.variant === "reaction-track-owned") return false;
+  if (parts.route.startsWith("ns") && shape.variant === "reaction-track-owned") return false;
   return shape.binding === "direct" && (shape.layer ?? "none") === "none";
 }
 
@@ -106,13 +111,22 @@ export function emContext(context, stmts, kit) {
       const held = contain("frame", 9, stmts, { head: `function ${k}() `, close: "", after: ["return <p />;"] });
       return hostOf([held], k, `eval("${k}()")`, { twin: `eval("1")`, shown: [mounted(kit.name("m"), domExpr(`<${k} />`))] });
     }
-    case "ns": {
+    case "ns": case "nss": case "nsa": case "nso": {
       // B2 (the review of #221): the component the program's module exports and a tag renders; the host's callback calls it through the module's own namespace by a key built at run time
-      // (ADR 0934's `export-namespace-call`), so no reference names it. The twin keeps the namespace used and calls nothing.
+      // (ADR 0934's `export-namespace-call`), so no reference names it. The twin keeps the namespace used and calls nothing. The re-review's three: `nss` publishes it by an export
+      // specifier (`export { K1 }`, R1), `nsa` an arrow `const` by a renamed one (`export { K1 as Out1 }`, R1) and `nso` is `ns` in an OPEN program (a publishing manifest, R2: the
+      // namespace census is a closed program's).
       const k = kit.name("K");
-      const held = decl(k, fn([...stmts, ret(jsx())], { form: "function" }), { exported: true });
-      const run = `self[${JSON.stringify([k.slice(0, 1), k.slice(1)])}.join("") as "${k}"]()`;
-      return { ...hostOf([], k, run, { twin: "void self", shown: [mounted(kit.name("m"), domExpr(`<${k} />`))] }), hoisted: [held], files: {}, importLines: ['import * as self from "./App";'] };
+      const out = route === "nsa" ? kit.name("Out") : k;
+      const component = fn([...stmts, ret(jsx())], { form: route === "nsa" ? "arrow" : "function" });
+      const hoisted = route === "nss" ? [decl(k, component), expr(domExpr(`export { ${k} }`))]
+        : route === "nsa" ? [decl(k, component), expr(domExpr(`export { ${k} as ${out} }`))]
+          : [decl(k, component, { exported: true })];
+      const run = `self[${JSON.stringify([out.slice(0, 1), out.slice(1)])}.join("") as "${out}"]()`;
+      return {
+        ...hostOf([], k, run, { twin: "void self", shown: [mounted(kit.name("m"), domExpr(`<${k} />`))] }), hoisted, files: {}, importLines: ['import * as self from "./App";'],
+        ...(route === "nso" ? { boundary: "open" } : {}),
+      };
     }
     default: throw new Error(`no emission route ${route}`);
   }

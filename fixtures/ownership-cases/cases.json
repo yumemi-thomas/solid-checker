@@ -792,6 +792,44 @@
       "span": { "marker": "(props.state as { count: number }).count" },
       "fix": { "behavior": "none" },
       "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "textRange": [
+        120,
+        137
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "textRange": [
+        298,
+        315
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -1881,6 +1919,25 @@
       "severity": "warning",
       "span": {
        "marker": "feed()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "textRange": [
+        180,
+        191
+       ]
       },
       "fix": {
        "behavior": "none"

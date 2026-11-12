@@ -1208,20 +1208,6 @@ pub(crate) fn referenced_only_by_entry(
         && crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
 }
 
-/// Whether something hands `function` out with no reference of its binding naming it (B2, the review of #221): its module's namespace read by name (`ns.Comp`, an
-/// `import()`'s module member) or escaping with no name (`Object.values(ns)`, a spread, passed along) while the function is one of the module's exports. The census
-/// (ADR 0347) counts these entries; a tag renders none of them.
-fn handed_out_without_reference(
-    file: &solid_facts::FileFacts,
-    function: &solid_facts::ast::FunctionFact,
-    lookup: &SemanticLookup<'_>,
-) -> bool {
-    let path = file.path.as_str();
-    lookup.hands_out_by_name(path, function.span)
-        || (crate::execution_role::module_exports(file, function, lookup)
-            && lookup.escapes_unnamed(path))
-}
-
 /// Whether `at` is the whole argument of a call to a primitive the dialect gives an owner for it (`createRoot(helper)`): a position the owner graph places, whose edge is
 /// in the context. `action(gen)` keeps its argument and `createContext(f)` holds a value: no edge follows either (R29).
 fn primitive_position(
@@ -1268,8 +1254,10 @@ fn entered_by_tags_only(
         return false;
     }
     // B2 (the review of #221): a module namespace read by name or enumerated with no name (`ns.Comp`, `Object.values(ns)`, a dynamic `import()`'s module) hands an
-    // export out with no reference naming it, which the entry census (ADR 0347) holds and no tag accounts for.
-    if handed_out_without_reference(file, function, lookup) {
+    // export out with no reference naming it, which the entry census (ADR 0347) holds and no tag accounts for. R1, R2 and R3 (the re-review): so does an export that is
+    // a specifier (`export { Comp }`) and, in an open program, every export, the namespace census being a closed program's: code the program does not hold calls it.
+    // Both are what the read walks ask (ADR 0934: `entered_by_unseen_code`).
+    if crate::execution_role::entered_by_unseen_code(file, function, lookup) {
         return false;
     }
     !local.is_empty()

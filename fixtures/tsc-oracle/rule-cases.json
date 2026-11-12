@@ -265,6 +265,7 @@
       "dialect": "v2",
       "expect": "removed-because-redundant",
       "checker": "silent",
+      "programBoundary": "closed",
       "distinctFindings": [
         {
           "rule": "reactive-dispatch-unresolved",
@@ -292,6 +293,7 @@
       "dialect": "v2",
       "expect": "removed-because-redundant",
       "checker": "silent",
+      "programBoundary": "closed",
       "why": "Binary arithmetic and bitwise operators reject a function operand -- TS2365 for `+`, TS2362 for `-`, `*`, and `|` -- so those positions are TypeScript-owned and SC1005 must not duplicate them.",
       "allow": [
         2362,
@@ -786,6 +788,7 @@
       "expect": "silent",
       "checker": "reports",
       "checkerKind": "uncertifiable",
+      "programBoundary": "closed",
       "why": "createRenderEffect runs its first apply during the call, under the component's owner, so the cleanup registers there; only a later run, from the flush, has no owner, and whether one happens depends on the compute's sources changing. The published signature accepts both callbacks, so the ownership claim is the checker's own and stays an obligation rather than a violation.",
       "code": "import { createRenderEffect, createSignal, onCleanup } from \"solid-js\";\nconst [count] = createSignal(0);\nexport function App() {\n  createRenderEffect(() => count(), () => {\n    onCleanup(() => {});\n  });\n  return <div />;\n}\nexport const Root = () => <App />;\n"
     },

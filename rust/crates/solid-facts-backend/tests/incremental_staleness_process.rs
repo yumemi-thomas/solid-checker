@@ -578,7 +578,10 @@ fn a_component_identity_moved_by_another_file_reruns_exactly_its_readers() {
     ) else {
         return;
     };
-    let options = RuleOptions::default();
+    // ADR 0970: an exported component is entered by code the program does not hold in an open program, so no JSX use proves it owned there. The subject here is the identity
+    // another file's JSX use moves, which needs the closed program an application is.
+    let mut options = RuleOptions::default();
+    options.runtime.program_boundary = Some(solid_reactive_ir::ProgramBoundary::Closed);
     let vocabulary = solid_v2().vocabulary;
     let fresh = |facts: &ProjectFacts| {
         build_with_analysis_inputs_measured(facts, vocabulary, AnalysisInputs::empty(), &options)

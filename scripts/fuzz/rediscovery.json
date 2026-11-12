@@ -20351,5 +20351,137 @@
    "mx-no-owner-context-em-ns-apply-x-direct-none"
   ],
   "rediscovered": "the PR head (69b38ff55, release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-ns-*-never, which call nothing) are clean on the PR head and uncertifiable on the fix. The `reaction-track-owned` variant is no cell of the `ns` route (the shape's reaction would be hoisted to module scope with the component and create with no owner of its own)"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in a component its module publishes by an export SPECIFIER (`function K() { <site>; return <p />; } export { K }`: no export statement contains the function) and a tag renders, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`, `import * as self from \"./App\"`): `module_exports` (`execution_role/write_roles.rs`) took an export statement that contains the function, or Type Facts' export flag, for an export, so the owner emission's component stop (`entered_by_tags_only`) found no hand-out for a specifier-exported component the namespace census holds (R1 of the re-review of #221). Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier (`export { Comp }`, `export { Comp as Other }`, an arrow bound to a `const`), and the component stop asks `entered_by_unseen_code`. Cells em-nss-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-nss-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-nss-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-nss-apply-x-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nss-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in a component its module publishes by an export SPECIFIER (`function K() { <site>; return <p />; } export { K }`: no export statement contains the function) and a tag renders, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`, `import * as self from \"./App\"`): `module_exports` (`execution_role/write_roles.rs`) took an export statement that contains the function, or Type Facts' export flag, for an export, so the owner emission's component stop (`entered_by_tags_only`) found no hand-out for a specifier-exported component the namespace census holds (R1 of the re-review of #221). Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier (`export { Comp }`, `export { Comp as Other }`, an arrow bound to a `const`), and the component stop asks `entered_by_unseen_code`. Cells em-nss-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-nss-handler-effect-direct-none",
+   "mx-no-owner-effect-em-nss-handler-render-direct-none",
+   "mx-no-owner-effect-em-nss-timer-effect-direct-none",
+   "mx-no-owner-effect-em-nss-timer-render-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nss-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in a component its module publishes by an export SPECIFIER (`function K() { <site>; return <p />; } export { K }`: no export statement contains the function) and a tag renders, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`, `import * as self from \"./App\"`): `module_exports` (`execution_role/write_roles.rs`) took an export statement that contains the function, or Type Facts' export flag, for an export, so the owner emission's component stop (`entered_by_tags_only`) found no hand-out for a specifier-exported component the namespace census holds (R1 of the re-review of #221). Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier (`export { Comp }`, `export { Comp as Other }`, an arrow bound to a `const`), and the component stop asks `entered_by_unseen_code`. Cells em-nss-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-nss-handler-x-direct-none",
+   "mx-no-owner-context-em-nss-timer-x-direct-none",
+   "mx-no-owner-context-em-nss-apply-x-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nss-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in an arrow `const K = () => { <site>; return <p />; }` its module publishes by a RENAMED specifier (`export { K as Out1 }`) and a tag renders, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace under the exported name, by a key built at run time (`self[[\"O\",\"ut1\"].join(\"\") as \"Out1\"]()`): `module_exports` took an export statement that contains the function, or Type Facts' export flag, for an export: an arrow bound to a `const` and published by a renamed specifier has neither (R1 of the re-review of #221). Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier, renamed or not, and the component stop asks `entered_by_unseen_code`. Cells em-nsa-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-nsa-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-nsa-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-nsa-apply-x-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsa-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in an arrow `const K = () => { <site>; return <p />; }` its module publishes by a RENAMED specifier (`export { K as Out1 }`) and a tag renders, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace under the exported name, by a key built at run time (`self[[\"O\",\"ut1\"].join(\"\") as \"Out1\"]()`): `module_exports` took an export statement that contains the function, or Type Facts' export flag, for an export: an arrow bound to a `const` and published by a renamed specifier has neither (R1 of the re-review of #221). Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier, renamed or not, and the component stop asks `entered_by_unseen_code`. Cells em-nsa-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-nsa-handler-effect-direct-none",
+   "mx-no-owner-effect-em-nsa-handler-render-direct-none",
+   "mx-no-owner-effect-em-nsa-timer-effect-direct-none",
+   "mx-no-owner-effect-em-nsa-timer-render-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsa-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in an arrow `const K = () => { <site>; return <p />; }` its module publishes by a RENAMED specifier (`export { K as Out1 }`) and a tag renders, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace under the exported name, by a key built at run time (`self[[\"O\",\"ut1\"].join(\"\") as \"Out1\"]()`): `module_exports` took an export statement that contains the function, or Type Facts' export flag, for an export: an arrow bound to a `const` and published by a renamed specifier has neither (R1 of the re-review of #221). Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier, renamed or not, and the component stop asks `entered_by_unseen_code`. Cells em-nsa-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-nsa-handler-x-direct-none",
+   "mx-no-owner-context-em-nsa-timer-x-direct-none",
+   "mx-no-owner-context-em-nsa-apply-x-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsa-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in an exported component a tag renders, in an OPEN program (a publishing manifest: the oracle's `programBoundary`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`), the enumerating caller being in the program: the namespace census (ADR 0347) is a closed program's (`attribution.rs`: an open program has nothing to add), and the component stop (`entered_by_tags_only`) never asked the boundary (R2 of the re-review of #221). Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): the component stop asks `entered_by_unseen_code`: in an open program a function its module exports is entered by code the program does not hold. Cells em-nso-* (the emission grid's first open-boundary cells: emit.mjs writes the oracle's `programBoundary`, checker.mjs the manifest)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-nso-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-nso-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-nso-apply-x-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nso-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in an exported component a tag renders, in an OPEN program (a publishing manifest: the oracle's `programBoundary`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`), the enumerating caller being in the program: the namespace census (ADR 0347) is a closed program's (`attribution.rs`: an open program has nothing to add), and the component stop (`entered_by_tags_only`) never asked the boundary (R2 of the re-review of #221). Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): the component stop asks `entered_by_unseen_code`: in an open program a function its module exports is entered by code the program does not hold. Cells em-nso-* (the emission grid's first open-boundary cells: emit.mjs writes the oracle's `programBoundary`, checker.mjs the manifest)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-nso-handler-effect-direct-none",
+   "mx-no-owner-effect-em-nso-handler-render-direct-none",
+   "mx-no-owner-effect-em-nso-timer-effect-direct-none",
+   "mx-no-owner-effect-em-nso-timer-render-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nso-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in an exported component a tag renders, in an OPEN program (a publishing manifest: the oracle's `programBoundary`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it called through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`), the enumerating caller being in the program: the namespace census (ADR 0347) is a closed program's (`attribution.rs`: an open program has nothing to add), and the component stop (`entered_by_tags_only`) never asked the boundary (R2 of the re-review of #221). Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #221 at b80d5ad57 (review-221 rereview.md: rr-alias2, rr-alias3, rr-alias5, rr-b2-open, b2-min open), probed on the release build and in Chrome (oracle cases owner-emission-specifier and owner-emission-open-namespace); the head of #221 certifies it",
+  "fixed": "ADR 0970 (R1 and R2 of the re-review of #221): the component stop asks `entered_by_unseen_code`: in an open program a function its module exports is entered by code the program does not hold. Cells em-nso-* (the emission grid's first open-boundary cells: emit.mjs writes the oracle's `programBoundary`, checker.mjs the manifest)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-nso-handler-x-direct-none",
+   "mx-no-owner-context-em-nso-timer-x-direct-none",
+   "mx-no-owner-context-em-nso-apply-x-direct-none"
+  ],
+  "rediscovered": "b80d5ad57 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nso-*-never, which call nothing) are clean on b80d5ad57 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site (and the effect and context reads of the other two codes), written in a component its module exports and a tag renders, in an OPEN program, was certified with no row where an importer the program does not hold calls the export with no owner (`import { Exported } from \"pkg\"; setTimeout(() => Exported())`): the owner emission's component stop took the render for the only entry, though code the program does not hold may call any export of an open program (R3 of the re-review of #221, the review's o1). Chrome rc.21 reports NO_OWNER_CLEANUP (NO_OWNER_EFFECT for a render effect of the JSX, NO_OWNER_CONTEXT for a context read) at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable review of #221 flagged it (o1, the open boundary's unseen importers), the re-review confirmed it as a false clean under the owner's ruling (rr-o1b); Chrome-confirmed in oracle case owner-emission-open-importer (oracle.json `external`: a page script the checker's program does not hold)",
+  "fixed": "ADR 0970 (R3 of the re-review of #221): the component stop asks `entered_by_unseen_code` (`handed_out_without_reference` is gone): a function its module exports is entered by code the program does not hold in an open program, and in a closed one where the module's namespace is read or escapes. Fixture owner-emission-open-export (the head certifies `Exported`, the fix files an SC4001 row; `Local`, no export, stays silent) and the closed control `ClosedExported` in owner-emission-layer-stops",
+  "outside": "the shape has no caller in the program: the importer is another package's code, which the checker cannot see and a grid program cannot hold (every program is checked beside the harness's `main.tsx`, which renders each export by a tag, and the fuzzer's Chrome run loads nothing else). The cells em-nso-* write the open boundary and a caller IN the program (the module's namespace enumerated by a key built at run time): they are the rediscovery of the same fix (`entered_by_unseen_code` in the component stop), 10 programs the head certifies (3 NO_OWNER_CLEANUP, 4 NO_OWNER_EFFECT, 3 NO_OWNER_CONTEXT) and the fix does not. The unseen caller itself is Chrome-confirmed by the oracle's own case (oracle.json `external`) and pinned by the fixture pair"
+ },
+ {
+  "finding": "SC1001's site, a signal read in a helper a component's effect calls, was certified legal in an OPEN program where the helper is exported by a SPECIFIER (`function helper() { return count(); } export { helper }`, `export { helper as other }`, a `const` arrow exported so): `module_exports` (`execution_role/write_roles.rs`) took an export statement that contains the function, or Type Facts' export flag, for an export, so the read walks took the helper for unexported and claimed every caller visible, though an importer the program does not hold may call it in a component's body, where the read is untracked (rc.21 STRICT_READ_UNTRACKED). `export function helper` was an obligation (`entered_by_unseen_code`, ADR 0934)",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): found while fixing R1 of the re-review of #221 (the reviewer noted the general path may share the hole; probes sp-read-decl and sp-read-spec: SC1001 uncertifiable and certified); the same cause shows on the corpus as +236 rows of other rules (SC9012 parameter-* and SC2003 unproven-container-root in library code that publishes its functions by `export { .. }` lists)",
+  "fixed": "ADR 0970 (R1 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier; fixture exported-specifier-open-read (the head files SC1001 at `declared` only, the fix at the three specifier-exported helpers too; `local`, not exported, stays silent)",
+  "outside": "the false clean needs a caller the program does not hold (the helper has no other caller than the component's effect in the program): the grids have none (every program is checked beside the harness's `main.tsx`; a caller in the program, such as the namespace call of ADR 0934's `export-namespace-call`, is unresolved dispatch and an obligation on every build). The cells em-nss-*, em-nsa-* and em-nso-* (SC4001's three codes) rediscover the same cause, `module_exports` and the open boundary, with a caller in the program, 30 programs the head certifies (10 each) and the fix does not"
  }
 ]
