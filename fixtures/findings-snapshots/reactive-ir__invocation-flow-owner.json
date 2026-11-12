@@ -86,6 +86,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 1161,
+      "end": 1170,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -116,6 +127,17 @@
       "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
       "start": 1294,
       "end": 1304,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 1444,
+      "end": 1453,
       "fixes": 0
     },
     {
