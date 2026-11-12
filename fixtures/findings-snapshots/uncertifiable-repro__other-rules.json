@@ -69,8 +69,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/other-rules/src/clean-children-helper.tsx",
-      "start": 411,
-      "end": 419,
+      "start": 450,
+      "end": 458,
       "fixes": 0
     },
     {
@@ -80,8 +80,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/other-rules/src/clean-children-helper.tsx",
-      "start": 458,
-      "end": 466,
+      "start": 497,
+      "end": 505,
       "fixes": 0
     },
     {
@@ -91,8 +91,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/other-rules/src/clean-loading-boundary.tsx",
-      "start": 380,
-      "end": 390,
+      "start": 419,
+      "end": 429,
       "fixes": 0
     },
     {
