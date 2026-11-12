@@ -90,6 +90,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2a.tsx",
+      "start": 199,
+      "end": 203,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
@@ -153,6 +164,17 @@
       "path": "fixtures/reactive-ir/handed-net-guards/g2d-handler.tsx",
       "start": 121,
       "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net-guards/g2d-under-loading.tsx",
+      "start": 130,
+      "end": 133,
       "fixes": 0
     },
     {

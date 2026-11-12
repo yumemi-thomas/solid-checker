@@ -10,16 +10,9 @@
 //
 // Nothing here reads a rule's behaviour back into the checker: the fold is of a log a run already wrote, and `scripts/proof-credit.mjs` only counts.
 import { codeRules, declinesCode } from "../fuzz/codes.mjs";
-import { foldFiles } from "./proof-log.mjs";
+import { SITE_CODE, foldFiles } from "./proof-log.mjs";
 
-/** The Chrome runtime code each table of the site universe (rust/crates/solid-reactive-ir/src/proof_universe.rs) answers. */
-export const SITE_CODE = {
-  read: "STRICT_READ_UNTRACKED",
-  write: "REACTIVE_WRITE_IN_OWNED_SCOPE",
-  action: "ACTION_CALLED_IN_OWNED_SCOPE",
-  "store-write": "STORE_WRITE_OUTSIDE_SETTER",
-  "on-flush": "ON_FLUSH_IN_OWNED_SCOPE",
-};
+export { SITE_CODE };
 
 const spanKey = (line) => `${line.s}:${line.e}`;
 
@@ -47,7 +40,8 @@ export function siteCredits(lines) {
       verdicts.get(key).push(verdict);
     }
     for (const site of tables.site) {
-      const code = SITE_CODE[site.t] ?? null;
+      // A line of the log carries its code since slice 4 (one line per code of the site); an older log gives the table's first.
+      const code = site.code ?? SITE_CODE[site.t] ?? null;
       const spans = new Set([spanKey(site), ...(site.alt ?? []).map(([s, e]) => `${s}:${e}`)]);
       const found = [...spans].flatMap((key) => verdicts.get(key) ?? []);
       const by = [...new Map(found.map((verdict) => [`${verdict.rule}|${verdict.code}|${verdict.kind}`, { rule: verdict.rule ?? null, id: verdict.code, kind: verdict.kind }])).values()]

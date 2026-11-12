@@ -16,6 +16,11 @@
 //       naming code: a fact kind and its span; a label is not a fact (`label-only-end`); or a premise the log itself can confirm
 //       and does not (`premise-unconfirmed`: a setter's guard that throws first has its SC2001 violation in the final list).
 //
+// A site has one `site` line per Chrome code it may raise (batch 11, slice 4: `code`, and `by`/`credited` for the ending that stands at its span), and the checks above are
+// asked of each (site, code): an ending ends a code only if it answers that code, a named silence ends the codes its `codes` list (a silence line with none ends every code, as
+// a log from before the field does), and the classifier's decisions are about the table's first code (`SITE_CODE`), so a line of another code (SC2009 at a setter call) has no
+// decision to be explained by: it is ended by a row, a silence naming it, or it is a C1 hit.
+//
 // C2, a label-only end and an unconfirmed premise are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a
 // stated reason.
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
@@ -25,6 +30,15 @@ export const CHECKS = ["C1", "C2", "C3"];
 
 /** The decision kinds that answer for a universe site of each table. */
 const DECISION_KIND = { read: "read", write: "write", action: "action" };
+
+/** The Chrome runtime code each table of the site universe (rust/crates/solid-reactive-ir/src/proof_universe.rs) answers first: the code the classifier's decisions are about. */
+export const SITE_CODE = {
+  read: "STRICT_READ_UNTRACKED",
+  write: "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  action: "ACTION_CALLED_IN_OWNED_SCOPE",
+  "store-write": "STORE_WRITE_OUTSIDE_SETTER",
+  "on-flush": "ON_FLUSH_IN_OWNED_SCOPE",
+};
 
 /**
  * The premise kinds whose claim the log itself confirms, each `(premise, verdicts by span) => boolean`. A setter whose write guard
@@ -190,11 +204,13 @@ export function proofHits(lines) {
     // A site that ends in nothing: no row, no census obligation, no compiler discard. Its account is the classifier's answer
     // (a tagged, non-default arm that said silent), a named silence, or nothing at all.
     for (const site of t.site) {
-      // A named silence at the site, or at any span a row for it may sit at (`alt`), is its account.
+      // A named silence at the site, or at any span a row for it may sit at (`alt`), is its account when it names the site's code (a line with no `codes` names every code).
       const spans = [spanKey(site), ...(site.alt ?? []).map(([s, e]) => `${s}:${e}`)];
-      if (site.end !== "none" || spans.some((key) => silents.has(key))) continue;
+      const silencedFor = (key) => (silents.get(key) ?? []).some((silent) => silent.codes === undefined || site.code === undefined || silent.codes.includes(site.code));
+      if (site.end !== "none" || spans.some(silencedFor)) continue;
+      // The classifier's decisions are about the table's first code: another code of the site has none.
       const kind = DECISION_KIND[site.t];
-      const decisions = kind ? decisionsFor(kind, site) : [];
+      const decisions = kind && (site.code === undefined || site.code === SITE_CODE[site.t]) ? decisionsFor(kind, site) : [];
       const speaking = decisions.filter(reports);
       const detail = {
         via: site.via,
@@ -250,12 +266,13 @@ export function proofHits(lines) {
 
 /** Counts of what the log holds, for the gate's summary line. */
 export function proofStats(lines) {
-  const stats = { sites: 0, siteEnds: {}, rows: 0, reportedRows: 0, findings: 0, verdicts: 0, drops: {}, silents: 0, proofs: {}, decisions: 0 };
+  const stats = { sites: 0, siteEnds: {}, siteCodes: {}, rows: 0, reportedRows: 0, findings: 0, verdicts: 0, drops: {}, silents: 0, proofs: {}, decisions: 0 };
   for (const line of lines) {
     switch (line.k) {
       case "site":
         stats.sites += 1;
         stats.siteEnds[line.end] = (stats.siteEnds[line.end] ?? 0) + 1;
+        if (line.code !== undefined) stats.siteCodes[line.code] = (stats.siteCodes[line.code] ?? 0) + 1;
         break;
       case "row":
         stats.rows += 1;

@@ -1423,3 +1423,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-fake-timers/variants/jest/node_modules/**
 !fixtures/reactive-ir/flush-universe-fake-timers/variants/bun/node_modules/
 !fixtures/reactive-ir/flush-universe-fake-timers/variants/bun/node_modules/**
+!fixtures/reactive-ir/ending-by-code-other-rule/node_modules/
+!fixtures/reactive-ir/ending-by-code-other-rule/node_modules/**
+!fixtures/reactive-ir/ending-by-code-other-rule-crediting/node_modules/
+!fixtures/reactive-ir/ending-by-code-other-rule-crediting/node_modules/**
+!fixtures/reactive-ir/optimistic-write-site-code/node_modules/
+!fixtures/reactive-ir/optimistic-write-site-code/node_modules/**

@@ -41,6 +41,46 @@ describe("C2(c): a package finding the dependency-source drop discarded stands a
   });
 });
 
+describe("a site has one line per Chrome code (batch 11, slice 4): the checks are asked of each (site, code)", () => {
+  const OPTIMISTIC = "OPTIMISTIC_WRITE_BEFORE_LOAD";
+  const WRITE = "REACTIVE_WRITE_IN_OWNED_SCOPE";
+  const line = (s, code, extra = {}) => site(s, { t: "write", code, ...extra });
+
+  test("the classifier's decisions are about the table's first code: a reporting write decision speaks for the write line, not for SC2009's", () => {
+    const writeDecision = decision(10, { t: "write", role: "UntrackedRendering" });
+    assert.deepEqual(kinds([line(10, WRITE), writeDecision]), ["C2/reporting-decision-no-row"]);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC), writeDecision]), ["C1/no-decision"]);
+  });
+
+  test("a line whose ending answers its code is ended; one whose code only another ending answers is a hit again", () => {
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, { end: "row" })]), []);
+    // `none`: an ending stands at the span but answers another code (`credited: false`), so it ends nothing for this one.
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, { by: "rule:no-write-in-pure-computation", credited: false })]), ["C1/no-decision"]);
+  });
+
+  test("a named silence ends the codes it names; one with no codes ends every code, as a log from before the field does", () => {
+    const named = silent(10, { codes: [WRITE] });
+    assert.deepEqual(kinds([line(10, WRITE), decision(10, { t: "write" }), named]), []);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC), named]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC), silent(10)]), []);
+    // A line with no `code` (a log from before slice 4) is ended by any silence, and its decisions are the table's.
+    assert.deepEqual(kinds([site(10, { t: "write" }), silent(10, { codes: [WRITE] })]), []);
+    assert.deepEqual(kinds([site(10, { t: "write" }), decision(10, { t: "write" })]), ["C2/reporting-decision-no-row"]);
+  });
+
+  test("a silence at an alternate span of the site names its code too", () => {
+    const composite = { alt: [[11, 19]] };
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, composite), silent(11, { e: 19, codes: [OPTIMISTIC] })]), []);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, composite), silent(11, { e: 19, codes: [WRITE] })]), ["C1/no-decision"]);
+  });
+
+  test("the stats count the lines by code", () => {
+    const stats = proofStats([line(10, WRITE, { end: "row" }), line(10, OPTIMISTIC), site(20, { code: "STRICT_READ_UNTRACKED" }), site(30)]);
+    assert.equal(stats.sites, 4);
+    assert.deepEqual(stats.siteCodes, { [WRITE]: 1, [OPTIMISTIC]: 1, STRICT_READ_UNTRACKED: 1 });
+  });
+});
+
 describe("C2: a reporting decision with nothing ending the site", () => {
   test("audit candidate S1: the classifier says the read reports, the producer left no row, no finding and no proof", () => {
     assert.deepEqual(kinds([site(10), decision(10)]), ["C2/reporting-decision-no-row"]);

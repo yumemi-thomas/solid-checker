@@ -24,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1030,
+      "end": 1045,
+      "fixes": 0
+    },
+    {
       "rule": "optimistic-write-before-load",
       "code": "SC2009",
       "kind": "uncertifiable",
