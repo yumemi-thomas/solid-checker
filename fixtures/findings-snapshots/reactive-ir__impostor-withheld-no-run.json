@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-withheld-no-run/App.tsx",
+      "start": 461,
+      "end": 468,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -54,6 +65,17 @@
       "path": "fixtures/reactive-ir/impostor-withheld-no-run/App.tsx",
       "start": 555,
       "end": 567,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-withheld-no-run/App.tsx",
+      "start": 576,
+      "end": 583,
       "fixes": 0
     },
     {
