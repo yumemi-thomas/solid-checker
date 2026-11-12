@@ -1423,3 +1423,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-fake-timers/variants/jest/node_modules/**
 !fixtures/reactive-ir/flush-universe-fake-timers/variants/bun/node_modules/
 !fixtures/reactive-ir/flush-universe-fake-timers/variants/bun/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-flip/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-flip/node_modules/**

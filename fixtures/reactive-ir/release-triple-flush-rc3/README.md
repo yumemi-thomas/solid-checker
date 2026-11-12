@@ -1,3 +1,5 @@
 # release-triple-flush-rc3
 
 `flush()` inside action bodies on the `2.0.0-rc.3` triple does not throw (`@solidjs/signals` gained the `FLUSH_IN_ACTION` guard in rc.8; rc.3's `flush` drains inside an action step). The typings are identical, so `tsc` is clean against the stub and published rc.3 and only the runtime differs; the throw follows the resolved signals (`release-triple-flush-rc8`, `rc9-flush-in-action`). Expected: no `SC2006`, and the `SC9014` release notice alone (the rc.3 triple is not the audited release). `diagnostics_process.rs` asserts both: zero `flush-in-action` findings and exactly one finding, the notice.
+
+Since the flip of ADR 0967's default (the review of #216) this fixture's program has an open boundary (no `.solid-checker/runtime.json`), so each `flush()` written in an exported function keeps an uncertifiable row of every code its program censuses ruled out (SC2006 `flush-in-action-unaccounted`, SC2008 `flush-in-effect-unaccounted`, SC3001 `leaf-operation-unaccounted`): an export may be entered by code this build cannot see, an action's step among it. The snapshot's additional rows are those; the claim above is unchanged.
