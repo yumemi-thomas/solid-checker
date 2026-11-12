@@ -6,6 +6,20 @@
 //   FLIP_READ_VARIANTS  { [code]: { [variant]: { kind, contexts } } }, a source of that kind, in those contexts, added to the code's recall variants
 import { apiSignal, awaitStmt, button, call, child, ctl, decl, domExpr, expr, flush, fn, iife, jsx, jsxExpr, member, mounted, num, prim, ref, ret } from "./model.mjs";
 
+/**
+ * Batch 11 (the `then` arm of the SC1002 walk): a memo's compute returns `q(promise).then(…).then(handler)`, `q` an identity function, so no link's receiver is proven
+ * a native promise, and nothing is withheld (the `then-withheld-chain` program writes a computed key that withholds `then`; these do not). The handler's read runs past the
+ * flight's settlement: Chrome (rc.21) warns UNTRACKED_READ_AFTER_AWAIT. `[form, links]`: the handler is `f` handed by name, `() => f()` an arrow at the call, or
+ * `o.f` a closed object's member; `links` counts the `then`s.
+ */
+const THEN_UNPLACED = {
+  "then-unplaced-chain": ["arrow", 2],
+  "then-unplaced-chain-named": ["named", 2],
+  "then-unplaced-chain-member": ["member", 2],
+  "then-unplaced-chain-depth3": ["named", 3],
+  "then-unplaced-chain-identity": ["named", 1],
+};
+
 // ADR 0654: `dynamic(source, options)` as each variant writes it: every one throws in dev, by the source's shape or the options'.
 export const STATIC_SOURCES = {
   "src-block": '() => { return Promise.resolve("p" as const); }, { static: true }',
@@ -485,7 +499,7 @@ export const FLIP_READ_CONTEXTS = {
   PENDING_ASYNC_FORBIDDEN_SCOPE: ["settled-chain-placed", "export-placed"],
   // ADR 0669: a memo's promise chain with a handler handed by name.
   // ADR 0820: an iterator stepped from the compute, the site past the generator's first suspension.
-  UNTRACKED_READ_AFTER_AWAIT: ["aw-pre-pick", "aw-mixed-cont", "aw-mixed-late", "aw-forward-await", "aw-forward-direct", "aw-forward-fan-run", "then-named", "then-withheld", "then-withheld-named", "then-withheld-chain", "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
+  UNTRACKED_READ_AFTER_AWAIT: ["aw-pre-pick", "aw-mixed-cont", "aw-mixed-late", "aw-forward-await", "aw-forward-direct", "aw-forward-fan-run", "then-named", "then-withheld", "then-withheld-named", "then-withheld-chain", ...Object.keys(THEN_UNPLACED), "gen-await", "gen-await-effect", "gen-yield", "gen-iife", "gen-wrap", "gen-delegate", "gen-next", "gen-sync-loop", ...Object.keys(COND_AWAITS), ...HELPER_AWAITS, ...Object.keys(THEN_HANDLERS).filter((c) => c !== "aw-then-calls-async")],
   // ADR 0679: a named function holding a window-inheriting call, run directly from the body.
   STRICT_READ_UNTRACKED: ["root-named-twice", "root-named-foreach", FLUSH_READ_STORED, ...FLUSH_READ_BODY, ...LYING, ...Object.keys(RECEIVERS), ...Object.keys(ITER_SAME)],
   // ADR 0782: a mount outside the cleanup, or in a handler, keeps the guard's throw.
@@ -1206,6 +1220,19 @@ export function flipReadContext(context, stmts, kit) {
     if (effect) return { body: [expr(prim("effect", fn(body, { async: true }), { apply: fn([]) }))], view: [] };
     const m = kit.name("m");
     return { body: [decl(m, prim("memo", fn(body, { async: true }))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))], view: [] };
+  }
+  // Batch 11: the same chain with no computed write to withhold `then`: the receiver of each link is a call no fact proves native.
+  if (THEN_UNPLACED[context]) {
+    const [form, links] = THEN_UNPLACED[context];
+    const [q, f, m, o] = [kit.name("q"), kit.name("f"), kit.name("m"), kit.name("o")];
+    const between = Array.from({ length: links - 1 }, (_, index) => `.then(() => ${index + 1})`).join("");
+    const handler = form === "arrow" ? `() => ${f}()` : form === "member" ? `${o}.f` : f;
+    const flight = domExpr(`${q}(new Promise<number>((done) => setTimeout(() => done(1), 1)))${between}.then(${handler})`);
+    const holder = form === "member" ? [decl(o, domExpr(`{ f: ${f} }`))] : [];
+    return {
+      body: [decl(q, domExpr("(x: Promise<number>) => x")), decl(f, fn([...stmts, ret(num(1))])), ...holder, decl(m, prim("memo", fn([ret(flight)]))), expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))],
+      view: [],
+    };
   }
   // Review R39: a chain of withheld `then`s on a flight the memo returns: the second handler reads. Chrome warns there.
   if (context === "then-withheld-chain") {
