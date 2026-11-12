@@ -1,0 +1,7 @@
+# then-unplaced-chain
+
+**Claim (ADR 0882 amended, batch 11).** A handler of a `.then` whose receiver nothing proves native and no premise claims (a call's result: `same(settle()).then(() => 1).then(f)`, `same` an identity function) may run after the flight settles, which Chrome (rc.21) warns about (UNTRACKED_READ_AFTER_AWAIT at the read), or inline, which tracks it. `expand_standard`'s `Promise.then` arm returned with no row, and without walking the receiver's own chain, when the call was not withheld (the fuzz program `then-withheld-chain` is masked: its computed write withholds `then`, and a withheld call rows its handlers). Every handler is a proof obligation, an uncertifiable row of SC1002 (`HandlerMayNotRun`), never a violation: nothing here proves the receiver native or the handler run.
+
+`App.tsx`: `Named` (the handler handed by name), `Arrow` (an arrow at the call), `InPlace` (the handler written in the call), `Member` (a member of a closed object), `Depth3` (three links), `Identity` (one link): an SC1002 row at the read in each (none on main 743ce7c89). `Native` is the control the walk already rowed: the receiver is a promise literal, proven native. Silent: `Plain`, whose handlers read nothing.
+
+The claim and undecided branches of the arm (a receiver whose native premise a visible write withdraws, or the nesting limit cut) dropped a handler handed by name, a member and a spread as well; they file the same obligations now (`readable_handler`).

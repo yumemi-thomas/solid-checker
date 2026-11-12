@@ -3877,39 +3877,53 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                     // handlers are proof obligations.
                     // ADR 0750: a receiver whose claim the nesting limit cut
                     // may be native too: its handlers are obligations.
-                    let undecided = !native_promise_claim(self.ctx, file, receiver, 0)
-                        && native_promise_undecided(self.ctx, file, receiver, 0);
+                    let claim = native_promise_claim(self.ctx, file, receiver, 0);
+                    let undecided = !claim && native_promise_undecided(self.ctx, file, receiver, 0);
                     // Review R39: a withheld call has no claim to read: its
-                    // handlers and its chain stay obligations.
-                    if withheld && !undecided && !native_promise_claim(self.ctx, file, receiver, 0)
-                    {
+                    // handlers and its chain stay obligations. Batch 11 (the
+                    // `then` arm): so does a call that is not withheld, whose
+                    // receiver nothing proves native and whose premise nothing
+                    // claims (a call's result, a project function's, an identity
+                    // function's): `.then(f)` on it may run `f` after the flight
+                    // settles, which Chrome (rc.21) warns about, and the arm
+                    // returned with no row and no expansion of the receiver's own
+                    // chain. Every handler is a proof obligation, and the
+                    // receiver's inner call is walked.
+                    if !undecided && !claim {
                         self.unresolved_chain_handlers(draft, walk, queue, file, call, depth);
                         return;
                     }
                     let mark = draft.static_defects.len();
-                    if undecided || native_promise_claim(self.ctx, file, receiver, 0) {
-                        for argument in call
-                            .arguments
-                            .iter()
-                            .take(handlers)
-                            .filter(|argument| !argument.spread)
+                    let reason = if undecided {
+                        AfterAwaitObligation::HandlerMayNotRun
+                    } else {
+                        AfterAwaitObligation::IntrinsicMayBeReplaced
+                    };
+                    for argument in call.arguments.iter().take(handlers) {
+                        // Batch 11: a handler handed by name was dropped here, and
+                        // so was a member or a spread: each is an obligation, as it
+                        // is on a receiver no fact claims. A literal generator
+                        // runs no body when called, as before.
+                        if (!argument.spread)
+                            && callback_argument_literal(file, argument.span)
+                                .is_some_and(|callback| callback.generator)
                         {
-                            if let Some(callback) = callback_argument_literal(file, argument.span)
-                                && !callback.generator
-                            {
+                            continue;
+                        }
+                        match self.readable_handler(file, argument) {
+                            Some((handler_file, callback)) => {
+                                self.enqueue_handler_calls(walk, queue, handler_file, callback);
                                 self.report_conditional_region(
                                     draft,
                                     walk,
-                                    file,
+                                    handler_file,
                                     callback,
                                     depth,
-                                    &if undecided {
-                                        AfterAwaitObligation::HandlerMayNotRun
-                                    } else {
-                                        AfterAwaitObligation::IntrinsicMayBeReplaced
-                                    },
+                                    &reason,
                                 );
                             }
+                            None if !argument.spread && plain_value(file, argument.span) => {}
+                            None => self.push_unfollowed(draft, walk, file, call, argument.span),
                         }
                     }
                     if undecided {
@@ -4048,6 +4062,31 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         }
     }
 
+    /// The function a chain call's handler argument names: a literal, a project function handed by name, or a member of a closed object
+    /// (ADR 0669, batch 11), when the walk can read it.
+    fn readable_handler(
+        &self,
+        file: &'f FileFacts,
+        argument: &solid_facts::ast::ArgumentFact,
+    ) -> Option<(&'f FileFacts, &'f FunctionFact)> {
+        if argument.spread {
+            return None;
+        }
+        callback_argument_literal(file, argument.span)
+            .map(|callback| (file, callback))
+            .or_else(|| {
+                (argument.value == ArgumentValueKind::Identifier)
+                    .then(|| self.named_function(file, argument.span))
+                    .flatten()
+            })
+            .or_else(|| {
+                file.ast
+                    .member_at(file.ast.peel_ts_sugar_span(argument.span))
+                    .filter(|member| !file.ast.computed_members.contains(&member.span))
+                    .and_then(|member| self.closed_member(file, member))
+            })
+    }
+
     /// ADR 0882: `.then`/`.catch`/`.finally` on the flight with no exact
     /// standard declaration (a cast, an `any` receiver, a thenable): the
     /// handlers may run on the flight, inline, or never. A function the walk
@@ -4096,18 +4135,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
             _ => return,
         };
         for argument in call.arguments.iter().take(handlers) {
-            let readable = (!argument.spread)
-                .then(|| {
-                    callback_argument_literal(file, argument.span)
-                        .map(|callback| (file, callback))
-                        .or_else(|| {
-                            (argument.value == ArgumentValueKind::Identifier)
-                                .then(|| self.named_function(file, argument.span))
-                                .flatten()
-                        })
-                })
-                .flatten();
-            match readable {
+            match self.readable_handler(file, argument) {
                 Some((handler_file, callback)) => {
                     self.enqueue_handler_calls(walk, queue, handler_file, callback);
                     self.report_conditional_region(
