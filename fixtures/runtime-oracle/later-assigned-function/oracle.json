@@ -1,0 +1,1 @@
+{"note": "batch 11: a function assigned to a variable after its declaration and called through the name (the checker read a function with no binding name as one nobody calls); the same shapes are in fixtures/reactive-ir/later-assigned-function and the la-* fuzz cells"}

@@ -504,7 +504,7 @@ fn untrack_carrier<'f>(
         return Some(call);
     }
     // ADR 0628: a `const` chain or an object literal's member names it exactly.
-    if crate::local_access::member_assigned(file, function) {
+    if crate::local_access::assigned_function(file, function) {
         return None;
     }
     file.ast.calls.iter().find(|call| {
