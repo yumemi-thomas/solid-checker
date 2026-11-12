@@ -95,12 +95,14 @@ build-what-if:
 	  --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --features what-if --bin solid-checker-rust
 	cp "$(WHAT_IF_TARGET_DIR)/release/solid-checker-rust" "$(WHAT_IF_TARGET_DIR)/release/solid-checker-what-if"
 
-# ADR 0950: the what-if build's own tests, with the feature and the target directory of `build-what-if`: the seam and the hazard ids (solid-reactive-ir), then the
-# taint, the refusals and the daemon's absence through the binary (`what_if_process`). `test-rust` and `verify` never turn the feature on, and their default build's
+# ADR 0950: the what-if build's own tests, with the feature and the target directory of `build-what-if`: the seam and the hazard ids (solid-reactive-ir), the filter's rule
+# for a row owed for several reasons (ADR 0965, solid-facts-backend), then the taint, the refusals and the daemon's absence through the binary (`what_if_process`). `test-rust` and `verify` never turn the feature on, and their default build's
 # half (`what_if_default_process`) runs there.
 test-what-if: build-typefacts
 	CARGO_TARGET_DIR="$(WHAT_IF_TARGET_DIR)" SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test \
 	  --manifest-path $(RUST_MANIFEST) -p solid-reactive-ir --features what-if --lib -- what_if every_atom_id_names_its_hazard
+	CARGO_TARGET_DIR="$(WHAT_IF_TARGET_DIR)" SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test \
+	  --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --features what-if --lib -- what_if
 	CARGO_TARGET_DIR="$(WHAT_IF_TARGET_DIR)" SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) test --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --features what-if --test what_if_process
 
