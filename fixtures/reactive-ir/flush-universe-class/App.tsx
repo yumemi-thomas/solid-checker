@@ -109,6 +109,46 @@ export function Prop() {
   return <p>x</p>;
 }
 
+// N5 (the second re-review of #213). `catch` and `finally` run their handler through the receiver's `then` (`catch(f)` is `this.then(undefined, f)`, ECMAScript
+// 27.2.5.1), and a Promise subclass may run it at once: the handler is called on the stack of whatever called `catch`, here an effect's apply. The class of a scheduler's
+// callback says the handler runs from an empty stack, which a call through the receiver's `then` does not give (three rows each; the inherited method still resolves to
+// the standard declaration, so the refusal is the call's: a plain `Promise` is refused too, `Plain`).
+class Sync<T> extends Promise<T> {
+  override then<A = T, B = never>(
+    ok?: ((value: T) => A | PromiseLike<A>) | null,
+    bad?: ((reason: unknown) => B | PromiseLike<B>) | null,
+  ): Promise<A | B> {
+    void ok;
+    bad?.(undefined);
+    return this as unknown as Promise<A | B>;
+  }
+}
+const sync = new Sync<void>(() => {});
+export function Receiver() {
+  createEffect(() => n(), () => {
+    sync.catch(() => {
+      flush();
+    });
+  });
+  return <p>x</p>;
+}
+
+export function Finally() {
+  createEffect(() => n(), () => {
+    sync.finally(() => {
+      flush();
+    });
+  });
+  return <p>x</p>;
+}
+
+export function Plain() {
+  void Promise.reject(new Error("x")).catch(() => {
+    flush();
+  });
+  return <p>x</p>;
+}
+
 // Silent, each on a typed reason. A named function expression whose name nothing uses can only run as often as the scheduler runs it (`FreshStack`); the flush directly
 // in the timer's callback (`FreshStack`); and past the await (`AwaitContinuation`).
 export function Once() {

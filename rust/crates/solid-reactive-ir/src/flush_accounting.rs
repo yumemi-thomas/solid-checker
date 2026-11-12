@@ -77,12 +77,15 @@ enum FlushSafe {
     NoLeafScope,
     /// A callback a reviewed host scheduler runs from an empty stack, written directly in it (the census's `FreshStack`): no step, apply or leaf
     /// callback is below it. Only for code that runs when the callback runs ([`callback_runs_it`]: no parameter default, no generator, no named function expression
-    /// its own code calls again, no class field initializer, no JSX or tracked region written in the call).
+    /// its own code calls again, no class field initializer, no JSX or tracked region written in the call), and for a call that does not reach the callback through its
+    /// receiver's `then` (`catch` and `finally`).
     FreshStack,
     /// Code an `await` of its own async function dominates (the census's `AwaitContinuation`): it resumes from the microtask queue on an empty stack.
     /// Only for a call in a function's body: a parameter default runs wherever its function is called.
     AwaitContinuation,
-    /// Module top level, outside every function, class and JSX element (the census's `ModuleInitialization`): evaluated before any callback runs.
+    /// Module top level, outside every function, class and JSX element (the census's `ModuleInitialization`): evaluated before any callback runs. A flush written
+    /// in the suite body a reviewed runner runs inside its registration at module level has the class too, on the questions of [`suite_body_runs_it`] (the same as the
+    /// callback's, asked of what is written inside the registration).
     ModuleInitialization,
     /// A callback a reviewed test runner schedules, the flush written directly in it (the census's `TestRunner`: `direct_callback_contains`): the
     /// runner's own stack, on the same two conditions as [`Self::FreshStack`]. A flush in a helper the callback calls is a `TestHelper` to the census,
@@ -168,7 +171,14 @@ fn reasons<'a>(
             callback_runs_it(lookup, file, site.span).then_some(FlushSafe::FreshStack)
         }
         Some(DispatchCaller::AwaitContinuation) => in_body.then_some(FlushSafe::AwaitContinuation),
-        Some(DispatchCaller::ModuleInitialization) => Some(FlushSafe::ModuleInitialization),
+        // Module top level is evaluated before any callback runs. A site in a function body has this class only through the suite body a runner runs inside the
+        // registration call (ADR 0438): the census asked the class, the parameter list, JSX and tracked region questions of the registration call, not of the flush, so
+        // the same questions as the callback's are asked here of everything written inside the registration (the second re-review of #213, N4).
+        Some(DispatchCaller::ModuleInitialization) => {
+            (!file.ast.any_function_body_containing(site.span)
+                || suite_body_runs_it(lookup, file, site.span))
+            .then_some(FlushSafe::ModuleInitialization)
+        }
         Some(DispatchCaller::TestRunner) => {
             callback_runs_it(lookup, file, site.span).then_some(FlushSafe::TestRunner)
         }
@@ -195,7 +205,41 @@ fn reasons<'a>(
 
 /// Whether a flush written in a scheduler's or a runner's callback runs on the stack that callback was given: everything between the flush and the call that hands the
 /// callback over (the callback and each inline carrier written in it) runs when the callback runs. The call is the one the census class names (`fresh_stack_callback_call`);
-/// no call is no proof. Written inside it, a function or a region that runs its code elsewhere or later refuses the claim:
+/// no call is no proof, and neither is a call that reaches the callback through its receiver's `then` (`Promise.prototype.catch` and `finally` run the handler inside
+/// `then`, which a subclass may run at once, on the stack of whatever called them: the second re-review's N5). The questions of [`runs_when_the_call_runs`] are asked of what
+/// is written inside the call.
+fn callback_runs_it(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> bool {
+    let Some((call, resolved)) = crate::execution_role::fresh_stack_callback_call(file, span, lookup)
+    else {
+        return false;
+    };
+    !crate::runtime_semantics::dispatches_through_receiver_then(resolved)
+        && runs_when_the_call_runs(file, span, call.span)
+}
+
+/// Whether a flush written in the suite body of a reviewed runner's registration, a body the runner runs inside the registration call, runs when that call runs. The call is
+/// the outermost registration of the chain of suites around the flush (a suite body written in a suite body is run inside both): the class of the flush is the class of
+/// that call's position, and the questions of [`runs_when_the_call_runs`] are asked of what is written inside it. No registration is no proof.
+fn suite_body_runs_it(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> bool {
+    let Some(mut registration) = lookup.inline_suite_body_registration(file, span) else {
+        return false;
+    };
+    while let Some(outer) = lookup.inline_suite_body_registration(file, registration.span) {
+        registration = outer;
+    }
+    runs_when_the_call_runs(file, span, registration.span)
+}
+
+/// Whether code written at `span` inside the call spanning `call` runs when that call runs. Written inside it, a function or a region that runs its code elsewhere or later
+/// refuses the claim:
 ///
 /// - a parameter list holds the flush (a default value runs wherever its function is called: the review of #213, B2);
 /// - a function is a named function expression its own code uses (`setTimeout(function tick() { flush(); … tick(true) })` runs `tick` again on the stack of whatever calls the
@@ -205,22 +249,14 @@ fn reasons<'a>(
 ///   where the component reads it, a tracked region is a render effect: N3, as `continuation_function` asks of the code after an await).
 ///
 /// A function written around the call is not asked: what it holds runs once per run of the call, and the callback still runs from the scheduler or the runner.
-fn callback_runs_it(
-    lookup: &crate::indexes::SemanticLookup<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> bool {
-    let Some((call, _)) = crate::execution_role::fresh_stack_callback_call(file, span, lookup)
-    else {
-        return false;
-    };
+fn runs_when_the_call_runs(file: &FileFacts, span: Span, call: Span) -> bool {
     let mut written_in_the_call = file
         .ast
         .functions_owning(span)
-        .filter(|function| call.span.contains(function.span));
+        .filter(|function| call.contains(function.span));
     !written_in_the_call.any(|function| {
         !function.body.contains(span) || function.generator || reentered_by_name(file, function)
-    }) && crate::execution_role::runs_with_its_function(file, span, call.span)
+    }) && crate::execution_role::runs_with_its_function(file, span, call)
 }
 
 /// A named function expression whose name is used: `setTimeout(function tick() { … tick(true) })`. The name is bound inside the function only, so the code that

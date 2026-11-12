@@ -21,10 +21,10 @@ const textOf = (code, context) => {
 };
 
 describe("the fc contexts (a flush in a function the host enters again, or calls for its default)", () => {
-  it("are six forms on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(FC_FORMS).toEqual(["named", "pdefault", "pdefault-await", "field", "gencarrier", "jsxprop"]);
+  it("are seven forms on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(FC_FORMS).toEqual(["named", "pdefault", "pdefault-await", "field", "gencarrier", "jsxprop", "recvthen"]);
     expect(FC_HOSTS).toEqual(["effect-apply", "action", "tracked"]);
-    expect(FC_CONTEXT_NAMES).toHaveLength(36);
+    expect(FC_CONTEXT_NAMES).toHaveLength(42);
     for (const name of FC_CONTEXT_NAMES) {
       const parts = fcParts(name);
       expect(parts, name).not.toBeNull();
@@ -75,6 +75,19 @@ describe("the fc contexts (a flush in a function the host enters again, or calls
     expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-jsxprop-effect-apply-never")).not.toContain("read1();");
     expect(textOf("FLUSH_IN_ACTION", "fc-jsxprop-action").some((line) => line.startsWith("setTimeout(() => void fr1());"))).toBe(true);
     expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "fc-field-tracked").some((line) => line.startsWith("createTrackedEffect("))).toBe(true);
+  });
+  it("print the receiver form: the site is the callback of a `catch` the host calls on a promise whose `then` runs the handler, and in the twin `then` runs nothing", () => {
+    const lead = textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-recvthen-effect-apply");
+    expect(lead).toContain("class Sync1<T> extends Promise<T> {");
+    expect(lead).toContain("bad?.(undefined);");
+    expect(lead.some((line) => line.startsWith("recv1.catch(() => {"))).toBe(true);
+    expect(lead.indexOf("flush();")).toBeGreaterThan(lead.findIndex((line) => line.startsWith("recv1.catch(")));
+    const twin = textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-recvthen-effect-apply-never");
+    expect(twin).toContain("void bad;");
+    expect(twin).not.toContain("bad?.(undefined);");
+    expect(twin).toContain("flush();");
+    expect(textOf("FLUSH_IN_ACTION", "fc-recvthen-action")).toContain("setTimeout(() => void fr1());");
+    expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "fc-recvthen-tracked").some((line) => line.startsWith("createTrackedEffect("))).toBe(true);
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(fcShape("fc-named-action", { binding: "alias", layer: "none" })).toBe(false);
