@@ -18,7 +18,9 @@
 //!   or iteration target (a store write), in a `delete` operand, or in the
 //!   receiver of an in-place array method (`push`, `splice`, ...);
 //! - every call of `onFlush` (SC3002), found from the calls' resolved
-//!   primitives, not from a source.
+//!   primitives, not from a source;
+//! - every call of `onCleanup` and of a creation (`createMemo`, `createEffect`, `createRoot`, ...) the dialect refuses under a leaf owner or on an
+//!   effect apply's stack (SC3001, SC6002; batch 11, slice 6), found the same way.
 //!
 //! Each site carries the runtime codes it may raise ([`SiteCode`]: a read raises STRICT_READ_UNTRACKED; a setter call REACTIVE_WRITE_IN_OWNED_SCOPE and,
 //! when its source may be an optimistic one that has not answered or its primitive is not resolved, OPTIMISTIC_WRITE_BEFORE_LOAD; and so on), and
@@ -244,6 +246,12 @@ pub(crate) enum SiteCode {
     StoreWrite,
     /// ON_FLUSH_IN_OWNED_SCOPE.
     OnFlush,
+    /// CLEANUP_IN_FORBIDDEN_SCOPE: an `onCleanup` call under a leaf owner (SC3001).
+    CleanupForbidden,
+    /// PRIMITIVE_IN_FORBIDDEN_SCOPE: a creation a leaf owner refuses (SC3001).
+    PrimitiveForbidden,
+    /// PRIMITIVE_IN_EFFECT_CALLBACK: a creation on an effect apply's stack with no owner set (SC6002).
+    EffectCreation,
 }
 
 /// The uncertifiable row a code gets when nothing ends it: the rule's id, name and blocker, and the noun its message uses.
@@ -256,13 +264,16 @@ pub(crate) struct Home {
 
 impl SiteCode {
     /// Every code of the universe, in the order the proof log writes them.
-    pub(crate) const ALL: [Self; 6] = [
+    pub(crate) const ALL: [Self; 9] = [
         Self::StrictRead,
         Self::ReactiveWrite,
         Self::OptimisticWrite,
         Self::ActionCall,
         Self::StoreWrite,
         Self::OnFlush,
+        Self::CleanupForbidden,
+        Self::PrimitiveForbidden,
+        Self::EffectCreation,
     ];
 
     pub(crate) const fn runtime_code(self) -> RuntimeCode {
@@ -273,6 +284,9 @@ impl SiteCode {
             Self::ActionCall => RuntimeCode::ActionCalledInOwnedScope,
             Self::StoreWrite => RuntimeCode::StoreWriteOutsideSetter,
             Self::OnFlush => RuntimeCode::OnFlushInOwnedScope,
+            Self::CleanupForbidden => RuntimeCode::CleanupInForbiddenScope,
+            Self::PrimitiveForbidden => RuntimeCode::PrimitiveInForbiddenScope,
+            Self::EffectCreation => RuntimeCode::PrimitiveInEffectCallback,
         }
     }
 
@@ -320,6 +334,24 @@ impl SiteCode {
                 blocker: crate::blockers::ON_FLUSH_UNACCOUNTED,
                 noun: "onFlush call",
             },
+            Self::CleanupForbidden => Home {
+                id: "SC3001",
+                rule: "leaf-owner-forbidden-call",
+                blocker: crate::blockers::LEAF_OPERATION_UNACCOUNTED,
+                noun: "onCleanup call",
+            },
+            Self::PrimitiveForbidden => Home {
+                id: "SC3001",
+                rule: "leaf-owner-forbidden-call",
+                blocker: crate::blockers::LEAF_OPERATION_UNACCOUNTED,
+                noun: "creation",
+            },
+            Self::EffectCreation => Home {
+                id: "SC6002",
+                rule: "primitive-in-effect-callback",
+                blocker: crate::blockers::EFFECT_CREATION_UNACCOUNTED,
+                noun: "creation",
+            },
         }
     }
 }
@@ -331,11 +363,20 @@ const OPTIMISTIC_WRITE_CODES: &[SiteCode] = &[SiteCode::ReactiveWrite, SiteCode:
 const ACTION_CODES: &[SiteCode] = &[SiteCode::ActionCall];
 const STORE_WRITE_CODES: &[SiteCode] = &[SiteCode::StoreWrite];
 const ON_FLUSH_CODES: &[SiteCode] = &[SiteCode::OnFlush];
+/// The code lists of an owner-call site: an `onCleanup` call, a creation a leaf owner refuses, one the dialect says throws on an effect's apply, or both.
+const CLEANUP_CODES: &[SiteCode] = &[SiteCode::CleanupForbidden];
+const CREATION_CODES: &[SiteCode] = &[SiteCode::PrimitiveForbidden];
+const EFFECT_CREATION_CODES: &[SiteCode] = &[SiteCode::EffectCreation];
+const CREATION_AND_EFFECT_CODES: &[SiteCode] =
+    &[SiteCode::PrimitiveForbidden, SiteCode::EffectCreation];
+/// A leaf operation at a call the walk could not place (`UnmodelledSlot`): any forbidden operation, so both of a leaf owner's codes.
+const CLEANUP_AND_CREATION_CODES: &[SiteCode] =
+    &[SiteCode::CleanupForbidden, SiteCode::PrimitiveForbidden];
 
 /// One site: where it is, what kind it is, and the other spans a row that
 /// answers for it may sit at.
 pub(crate) struct Site {
-    /// `read`, `write`, `action`, `store-write` or `on-flush`.
+    /// `read`, `write`, `action`, `store-write`, `on-flush` or `owner-call`.
     pub(crate) table: &'static str,
     /// What the source is: `accessor`, `store`, `props`, `setter`, `action` or
     /// `primitive`.
@@ -490,6 +531,8 @@ pub(crate) enum Detail<'p> {
     Action(ExecutionRole),
     Defect(&'p StaticDefect),
     Violation(&'p StaticViolation),
+    /// A leaf owner's operation (SC3001's table): its kind.
+    LeafOperation(&'p crate::LeafOwnerOperationKind),
     Nothing,
 }
 
@@ -508,6 +551,7 @@ impl Detail<'_> {
                 defect.analysis_context
             ),
             Self::Violation(violation) => violation.id.clone(),
+            Self::LeafOperation(kind) => format!("leaf-operation:{kind:?}"),
             Self::Nothing => String::new(),
         }
     }
@@ -630,6 +674,29 @@ pub(crate) const ACTION_ROW: EndedBy<'static> = EndedBy::Table {
     answers: ACTION_CODES,
 };
 
+/// The row of a leaf owner's operation (SC3001's table, `program.leaf_operations`): the codes of this universe its kind answers. A cleanup answers
+/// CLEANUP_IN_FORBIDDEN_SCOPE and a creation PRIMITIVE_IN_FORBIDDEN_SCOPE; a call the walk could not place in the leaf scope (`UnmodelledSlot`) may be
+/// either, so it answers both (an obligation). The other kinds are another code's (an observer guard's, a flush, which slice 5's flush census ends) or no
+/// site's (a leaf callback no walk could follow stands at the leaf call, a generator's iterator at the call of the generator), so they answer none of
+/// this universe's. Every kind is named: a new one is a compile error here.
+pub(crate) fn leaf_operation_row(kind: &crate::LeafOwnerOperationKind) -> EndedBy<'static> {
+    use crate::LeafOwnerOperationKind as Kind;
+    let answers: &'static [SiteCode] = match kind {
+        Kind::Cleanup => CLEANUP_CODES,
+        Kind::Primitive(_) => CREATION_CODES,
+        Kind::UnmodelledSlot => CLEANUP_AND_CREATION_CODES,
+        Kind::ObserverGuarded(_)
+        | Kind::ObserverCacheTracking
+        | Kind::Flush
+        | Kind::UnresolvedCallback
+        | Kind::GeneratorStepped => &[],
+    };
+    EndedBy::Table {
+        name: "leaf-operation",
+        answers,
+    }
+}
+
 /// Whether an ending answers `code` under the dialect's policy. `None` is no policy: the code has no ending credits, never "every rule credits it"
 /// (fail closed). One `match` over [`EndedBy`], no wildcard: a table answers the codes it names, an SC9012 every code that is not placeless, a
 /// finding the rules the policy says claim the code (or, an obligation, decline it), the compiler's discard every code.
@@ -747,6 +814,26 @@ impl<'p> Endings<'p> {
                 &action.location,
                 row(ACTION_ROW, Detail::Action(action.execution)),
             );
+        }
+        // A leaf owner's operation stands at the call it is written at, and, reached through a helper, at the helper call with its own sites kept
+        // beside it (ADR 0942). A leaf callback no walk could follow (`UnresolvedCallback`) stands at the leaf call, never at a site inside it.
+        for operation in &program.leaf_operations {
+            if matches!(
+                operation.kind,
+                crate::LeafOwnerOperationKind::UnresolvedCallback
+            ) {
+                continue;
+            }
+            for location in std::iter::once(&operation.location).chain(operation.sites.iter()) {
+                note(
+                    &mut at,
+                    location,
+                    row(
+                        leaf_operation_row(&operation.kind),
+                        Detail::LeafOperation(&operation.kind),
+                    ),
+                );
+            }
         }
         let mut mutations: HashMap<&'p str, Vec<(u64, u64, Ending<'p>)>> = HashMap::default();
         for defect in &program.static_defects {
@@ -959,6 +1046,7 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
         }
     }
     on_flush_sites(ctx, &mut found);
+    owner_call_sites(ctx, &mut found);
     found
 }
 
@@ -986,6 +1074,58 @@ fn on_flush_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts,
                     },
                 ));
             }
+        }
+    }
+}
+
+/// The owner-call universe (batch 11, slice 6): each call whose resolved primitive the dialect refuses under a leaf owner or on an effect apply's stack,
+/// outside dependency source, whatever its callee is spelled (found from the calls, like [`on_flush_sites`] and ADR 0886's owner sites): `onCleanup`
+/// (CLEANUP_IN_FORBIDDEN_SCOPE), a creation a leaf owner refuses (PRIMITIVE_IN_FORBIDDEN_SCOPE, [`crate::cleanup::creates_forbidden_primitive`]) and,
+/// on a client build, a creation the dialect says throws on an effect's apply (PRIMITIVE_IN_EFFECT_CALLBACK,
+/// [`solid_dialect::Dialect::throws_creating_in_effect_callback`]: the argument test is [`crate::static_api::first_argument_is_function`], the one the
+/// SC6002 producer asks). A call of the second kind that is also of the first has both codes.
+fn owner_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
+    let lookup = ctx.semantic_lookup;
+    let dialect = ctx.dialect;
+    let client_build = crate::static_api::client_build(ctx);
+    for file in crate::base::reads::file_slots(ctx.facts) {
+        if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        for call in &file.ast.calls {
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                continue;
+            };
+            let leaf = if primitive == solid_dialect::Primitive::OnCleanup {
+                crate::cleanup::leaf_forbids(dialect, file, call, primitive)
+                    .then_some(SiteCode::CleanupForbidden)
+            } else {
+                crate::cleanup::creates_forbidden_primitive(dialect, file, call, primitive)
+                    .then_some(SiteCode::PrimitiveForbidden)
+            };
+            let effect = client_build
+                && dialect.throws_creating_in_effect_callback(
+                    primitive,
+                    crate::static_api::first_argument_is_function(call),
+                );
+            let codes = match (leaf, effect) {
+                (Some(SiteCode::CleanupForbidden), _) => CLEANUP_CODES,
+                (Some(_), true) => CREATION_AND_EFFECT_CODES,
+                (Some(_), false) => CREATION_CODES,
+                (None, true) => EFFECT_CREATION_CODES,
+                (None, false) => continue,
+            };
+            found.push((
+                file,
+                Site {
+                    table: "owner-call",
+                    source: "primitive",
+                    via: "call",
+                    at: call.callee,
+                    alternates: vec![call.span],
+                    codes,
+                },
+            ));
         }
     }
 }

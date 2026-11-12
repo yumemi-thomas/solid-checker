@@ -574,8 +574,14 @@ impl RemovedRow for crate::OwnerRequirement {
 }
 
 impl RemovedRow for crate::LeafOwnerOperation {
+    /// The site of a removed operation ends for the codes the operation would have answered (batch 11, slice 6): a cleanup's, a creation's.
     fn ended_by(&self) -> Option<RemovedBy> {
-        None
+        let by = proof_universe::leaf_operation_row(&self.kind);
+        // A kind that answers no code of the universe (a flush, an observer guard, an unfollowed callback) names nothing.
+        if matches!(by, proof_universe::EndedBy::Table { answers: [], .. }) {
+            return None;
+        }
+        RemovedBy::of(&by)
     }
 }
 

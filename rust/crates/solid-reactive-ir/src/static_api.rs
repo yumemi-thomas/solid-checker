@@ -123,14 +123,33 @@ impl LeafRowsAccount {
     }
 }
 
+/// No server build of the Solid packages is selected, or a client root is present (a fact of every file): the build the SC6002 producer and the
+/// owner-call universe (`proof_universe.rs`) ask their creation sites on. One definition.
+pub(crate) fn client_build(ctx: &AnalysisContext<'_>) -> bool {
+    !ctx.rule_options.runtime.selects_server_build()
+        || crate::execution_paths::client_root_present(ctx.facts, ctx.dialect)
+}
+
+/// Whether the first argument of `call` is a function literal (not a spread): the fact the dialect's `throws_creating_in_effect_callback` is asked
+/// with (`createSignal(() => …)` creates a computation, `createSignal(0)` does not). One definition: both SC6002 arms and the owner-call universe ask it.
+pub(crate) fn first_argument_is_function(call: &solid_facts::ast::CallFact) -> bool {
+    call.arguments.first().is_some_and(|argument| {
+        !argument.spread
+            && matches!(
+                argument.value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+            )
+    })
+}
+
 pub(crate) fn context_of<'a>(ctx: &AnalysisContext<'a>) -> StaticApiContext<'a> {
     StaticApiContext {
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
         symbol_names: ctx.symbol_names,
         tables: crate::late_chunks::DiscoveryTables::of(ctx),
-        client_build: !ctx.rule_options.runtime.selects_server_build()
-            || crate::execution_paths::client_root_present(ctx.facts, ctx.dialect),
+        client_build: client_build(ctx),
         package_instances: &ctx.rule_options.runtime.package_instances,
     }
 }
@@ -910,14 +929,7 @@ impl StaticApiContext<'_> {
                 && self.client_build()
                 && dialect.throws_creating_in_effect_callback(
                     created,
-                    call.arguments.first().is_some_and(|argument| {
-                        !argument.spread
-                            && matches!(
-                                argument.value,
-                                solid_facts::ast::ArgumentValueKind::Function
-                                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                            )
-                    }),
+                    first_argument_is_function(call),
                 )
                 && let Some(root) = self.lookup.callee_package_root(file, call.callee)
                 && let Some(origin) = crate::effect_phase::ownerless_effect_phase_origin(
@@ -995,14 +1007,7 @@ impl StaticApiContext<'_> {
                 && self.client_build()
                 && dialect.throws_creating_in_effect_callback(
                     created,
-                    call.arguments.first().is_some_and(|argument| {
-                        !argument.spread
-                            && matches!(
-                                argument.value,
-                                solid_facts::ast::ArgumentValueKind::Function
-                                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                            )
-                    }),
+                    first_argument_is_function(call),
                 )
                 && !result.violations.iter().any(|violation| {
                     violation.id == "SC6002"
