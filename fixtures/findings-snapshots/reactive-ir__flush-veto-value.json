@@ -27,6 +27,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "primitive-handed",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-veto-value/App.tsx",
+      "start": 553,
+      "end": 563,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "primitive-value",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-veto-value/App.tsx",
@@ -43,6 +54,17 @@
       "path": "fixtures/reactive-ir/flush-veto-value/App.tsx",
       "start": 831,
       "end": 841,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "primitive-handed",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-veto-value/App.tsx",
+      "start": 857,
+      "end": 867,
       "fixes": 0
     },
     {

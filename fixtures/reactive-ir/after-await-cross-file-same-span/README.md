@@ -1,0 +1,9 @@
+# after-await-cross-file-same-span
+
+**Claim (ADR 0961 amended, batch 11 slice 9A).** A call in one file never hides a call in another. The after-await walk (SC1002) keeps the calls and tagged templates it has entered in a set; the set held spans alone, and a span is an offset within one file. A project file the continuation reaches whose call stands at the same offsets, with the same length, as one the walk had entered in another file was skipped: the read it reaches kept only the hand-off nets' uncertifiable rows (`handed-read-after-await`, `function-run-unplaced`), where the same program with the call one byte away is a violation. The set is keyed by file and span.
+
+`App.tsx`: `HelperApp`, `IifeApp`, `TagApp` and `EachApp` are an async memo that calls the entry of `<form>-b.ts` after its `await`; the entry's own call (a project function, an immediately invoked arrow, a tagged template, a callback `forEach` runs inline) stands at the same byte offset, with the same length, as the memo's call. Each is an SC1002 violation at the read in its `<form>-b.ts` (Chrome rc.21 warns UNTRACKED_READ_AFTER_AWAIT at each; `fixtures/runtime-oracle/after-await-cross-file-same-span` judges them). `NoneApp` is the silent twin: its entry's helper reads nothing, no SC1002 row.
+
+Each call is bracketed by `/*[form*/ ... /*]form*/`, and each `<form>-b.ts` opens with a comment that pads its call to the offset of the one in `App.tsx`. `scripts/fixture-same-span.test.mjs` asserts that the two stand at one offset with one length, in this fixture and in its runtime-oracle copy: an edit above a call would otherwise make the fixture test nothing and nothing would notice.
+
+Never silent on the old build, in any form probed (12 programs, memo and effect hosts, a `.then` continuation too): the hand-off nets rowed each, uncertifiable. The change is a proof recovered, uncertifiable to violation.
