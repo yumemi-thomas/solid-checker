@@ -8,3 +8,5 @@ Violations: the same component mounted under no boundary (`NestedUnhandled`), an
 outside mount may leave unhandled. The stub is `stored-throw-observation`'s plus rc.21's `flush` overloads; no `package.json`, so the
 program is open.
 On the census tree the two `<Errored>` elements, in exported components of this open program, also carry SC4001 `function-run-unplaced` (ADR 0883/0886: JSX that creates a boundary is an owner site, and an exported component's run is unplaced).
+
+Since the flip of ADR 0967's default (the review of #216) this fixture's program has an open boundary (no `.solid-checker/runtime.json`), so each `flush()` written in an exported function keeps an uncertifiable row of every code its program censuses ruled out (SC2006 `flush-in-action-unaccounted`, SC2008 `flush-in-effect-unaccounted`, SC3001 `leaf-operation-unaccounted`): an export may be entered by code this build cannot see, an action's step among it. The snapshot's additional rows are those; the claim above is unchanged.

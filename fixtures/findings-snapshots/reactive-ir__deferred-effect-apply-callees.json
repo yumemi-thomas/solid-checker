@@ -2,11 +2,33 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 649,
+      "end": 656,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 649,
+      "end": 656,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
       "start": 649,
       "end": 656,
@@ -53,6 +75,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 963,
+      "end": 970,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "violation",
@@ -60,6 +93,17 @@
       "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
       "start": 963,
       "end": 968,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 963,
+      "end": 970,
       "fixes": 0
     },
     {
@@ -127,6 +171,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1316,
+      "end": 1323,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
@@ -135,6 +190,17 @@
       "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
       "start": 1316,
       "end": 1321,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 1316,
+      "end": 1323,
       "fixes": 0
     },
     {

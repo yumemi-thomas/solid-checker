@@ -42,6 +42,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
+      "start": 1345,
+      "end": 1394,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "violation",
@@ -49,6 +60,17 @@
       "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
       "start": 1345,
       "end": 1350,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
+      "start": 1345,
+      "end": 1394,
       "fixes": 0
     },
     {
@@ -72,6 +94,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
+      "start": 1884,
+      "end": 1891,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "violation",
@@ -82,6 +115,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
+      "start": 1884,
+      "end": 1891,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
+      "start": 2056,
+      "end": 2063,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "violation",
@@ -89,6 +144,17 @@
       "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
       "start": 2056,
       "end": 2061,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/slot-run-effect-phase/App.tsx",
+      "start": 2056,
+      "end": 2063,
       "fixes": 0
     },
     {

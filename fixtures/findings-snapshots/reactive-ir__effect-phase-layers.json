@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 669,
+      "end": 676,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "violation",
@@ -20,6 +31,17 @@
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 669,
       "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 669,
+      "end": 676,
       "fixes": 0
     },
     {
@@ -34,6 +56,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 883,
+      "end": 890,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "violation",
@@ -41,6 +74,17 @@
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 883,
       "end": 888,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 883,
+      "end": 890,
       "fixes": 0
     },
     {
@@ -88,6 +132,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 1462,
+      "end": 1469,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
@@ -96,6 +151,17 @@
       "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
       "start": 1462,
       "end": 1467,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-phase-layers/App.tsx",
+      "start": 1462,
+      "end": 1469,
       "fixes": 0
     },
     {

@@ -7,7 +7,8 @@ import { censusCells, recallShapes } from "./matrix.mjs";
 import { isValid } from "./model.mjs";
 import { PH_CODES, PH_CONTEXTS, PH_CONTEXT_NAMES, PH_HOSTS, PH_PACKAGE, PH_ROUTES, phPackageFiles, phParts, phShape } from "./ph-shapes.mjs";
 
-// The B3 PR after #213: a flush in a function a package the build does not read as source may run, by every route a function reaches the package, with the twins that never run it.
+// The B3 PR after #213 and its flip (the review of #216): a flush in a function a package the build does not read as source may run, by every route a function reaches the package
+// (twenty-six), with the twins that never run it.
 
 const built = (code, context) => {
   const side = PH_CONTEXTS[context];
@@ -22,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are thirteen routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call"]);
+  it("are twenty-six routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(78);
+    expect(PH_CONTEXT_NAMES).toHaveLength(156);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -43,7 +44,8 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(files["index.js"]).toContain("action(function* ()");
     expect(files["index.js"]).toContain("createEffect(() => 1, () => {");
     expect(files["index.js"]).toContain("createTrackedEffect(() => {");
-    for (const name of ["runStep", "runApplyWith", "runLeafAll", "StepView", "ApplyView", "LeafView", "skipRun", "skipRunWith", "skipRunAll", "SkipView"]) expect(files["index.d.ts"], name).toContain(`export declare const ${name}:`);
+    for (const name of ["runStep", "runApplyWith", "runLeafAll", "runStepGet", "runApplyConfig", "StepView", "ApplyView", "LeafView", "skipRun", "skipRunWith", "skipRunAll", "skipRunGet", "skipRunConfig", "SkipView"]) expect(files["index.d.ts"], name).toContain(`export declare const ${name}:`);
+    expect(files["index.d.ts"]).toContain("export declare const config:");
     const program = built("FLUSH_IN_ACTION", "ph-literal-step");
     expect(Object.keys(program.packages ?? {})).toEqual([PH_PACKAGE]);
   });
@@ -78,6 +80,40 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     const caller = textOf("FLUSH_IN_ACTION", "ph-caller-step");
     expect(caller.some((line) => /^function helper\d+\(\) \{$/.test(line))).toBe(true);
     expect(caller.some((line) => /^runStep\(\(\) => helper\d+\(\)\);$/.test(line))).toBe(true);
+  });
+  it("print the flip's routes: where the value is kept, iterated, returned, assigned, run inline, or passed along a component", () => {
+    const set = textOf("FLUSH_IN_ACTION", "ph-set-step");
+    expect(set.some((line) => /^const kept\d+ = new Set<\(\) => void>\(\);$/.test(line))).toBe(true);
+    expect(set.some((line) => /^kept\d+\.add\(\(\) => \{$/.test(line))).toBe(true);
+    expect(set.some((line) => /^runStep\(each\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-forof-step").some((line) => /^for \(const each\d+ of \[\(\) => \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-recv-step").some((line) => /^\[\(\) => \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-resolve-step").some((line) => line.startsWith("void Promise.resolve(() => {"))).toBe(true);
+    const klass = textOf("FLUSH_IN_ACTION", "ph-class-step");
+    expect(klass.some((line) => /^class Job\d+ \{$/.test(line))).toBe(true);
+    expect(klass.some((line) => /^runStepWith\(new Job\d+\(\)\);$/.test(line))).toBe(true);
+    const assign = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-assign-apply");
+    expect(assign).toContain('import { runApplyConfig, config } from "fz-step";');
+    expect(assign.some((line) => line.startsWith("config.onStep = () => {"))).toBe(true);
+    expect(assign).toContain("runApplyConfig();");
+    expect(textOf("FLUSH_IN_ACTION", "ph-assign-step-never")).toContain("skipRunConfig();");
+    const props = textOf("FLUSH_IN_ACTION", "ph-props-step");
+    expect(props.some((line) => /^function Wrap\d+\(props: \{ render: \(\) => void \}\) \{$/.test(line))).toBe(true);
+    expect(props).toContain("return <StepView render={props.render} />;");
+    expect(textOf("FLUSH_IN_ACTION", "ph-getter-step").some((line) => /^runStepGet\(\(\) => cb\d+\);$/.test(line))).toBe(true);
+    const reflect = textOf("FLUSH_IN_ACTION", "ph-reflect-step");
+    expect(reflect.some((line) => /^wrap\d+\.call\(null, \(\) => \{$/.test(line))).toBe(true);
+    expect(reflect).toContain("runStep(run);");
+    expect(textOf("FLUSH_IN_ACTION", "ph-inline-step").some((line) => /^\[1\]\.forEach\(cb\d+\);$/.test(line))).toBe(true);
+    const param = textOf("FLUSH_IN_ACTION", "ph-param-step");
+    expect(param.some((line) => /^function call\d+\(g: \(\) => void\) \{$/.test(line))).toBe(true);
+    expect(param.some((line) => /^call\d+\(cb\d+\);$/.test(line))).toBe(true);
+    const untrack = textOf("FLUSH_IN_ACTION", "ph-untrack-step");
+    expect(untrack).toContain('import { untrack } from "solid-js";');
+    expect(untrack.some((line) => /^untrack\(cb\d+\);$/.test(line))).toBe(true);
+    const dynamic = textOf("FLUSH_IN_ACTION", "ph-dynamic-step");
+    expect(dynamic).toContain('import { Dynamic } from "@solidjs/web";');
+    expect(dynamic.some((line) => line.startsWith("document.body.append((<Dynamic component={StepView} render={() => {"))).toBe(true);
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(phShape("ph-literal-step", { binding: "alias", layer: "none" })).toBe(false);
