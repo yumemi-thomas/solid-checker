@@ -1157,6 +1157,46 @@ fn site_runs_during_local_call(
 /// rendered call that runs it (ADR 0462).
 const CALL_ATTRIBUTED_DEPTH: usize = 4;
 
+/// ADR 0636: `symbol` is, or aliases, the setter of an optimistic creation that may not have answered, on a dialect whose runtime refuses a write
+/// before it has: the source is a may-be-async one (`async_sources`: absence is the existing proof of a synchronous source) created by an
+/// optimistic primitive. An alias holds the creation's declaration. The one definition: the write producer asks it, and so does the site
+/// universe when it gives a setter call its OPTIMISTIC_WRITE_BEFORE_LOAD code.
+pub(crate) fn optimistic_async_setter(
+    dialect: &dyn solid_dialect::Dialect,
+    setters: &HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            crate::OwnedWriteOption,
+            ReactiveSourceKind,
+        ),
+    >,
+    async_sources: &HashSet<SymbolId>,
+    source_primitives: &HashMap<SymbolId, SymbolId>,
+    symbol: &str,
+) -> bool {
+    let optimistic = |symbol: &str| {
+        async_sources.contains(symbol)
+            && matches!(
+                source_primitives
+                    .get(symbol)
+                    .and_then(|primitive| dialect.primitive(primitive)),
+                Some(
+                    solid_dialect::Primitive::CreateOptimistic
+                        | solid_dialect::Primitive::CreateOptimisticStore
+                )
+            )
+    };
+    dialect.refuses_optimistic_write_before_load()
+        && setters.get(symbol).is_some_and(|row| {
+            optimistic(symbol)
+                || setters
+                    .iter()
+                    .any(|(other, candidate)| candidate.1 == row.1 && optimistic(other.as_str()))
+        })
+}
+
 pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) facts: &'a ProjectFacts,
     pub(crate) lookup: &'a SemanticLookup<'facts>,
@@ -4443,25 +4483,13 @@ impl LocalAccessContext<'_, '_> {
     /// ADR 0636: `symbol` is, or aliases, the setter of an optimistic creation
     /// that may not have answered. An alias holds the creation's declaration.
     fn optimistic_async_setter(&self, symbol: &str) -> bool {
-        let optimistic = |symbol: &str| {
-            self.async_sources.contains(symbol)
-                && matches!(
-                    self.source_primitives
-                        .get(symbol)
-                        .and_then(|primitive| self.lookup.dialect.primitive(primitive)),
-                    Some(
-                        solid_dialect::Primitive::CreateOptimistic
-                            | solid_dialect::Primitive::CreateOptimisticStore
-                    )
-                )
-        };
-        self.lookup.dialect.refuses_optimistic_write_before_load()
-            && self.setters.get(symbol).is_some_and(|row| {
-                optimistic(symbol)
-                    || self.setters.iter().any(|(other, candidate)| {
-                        candidate.1 == row.1 && optimistic(other.as_str())
-                    })
-            })
+        optimistic_async_setter(
+            self.lookup.dialect,
+            self.setters,
+            self.async_sources,
+            self.source_primitives,
+            symbol,
+        )
     }
 
     /// ADR 0636: a call nothing placed that may run such a setter (a binding

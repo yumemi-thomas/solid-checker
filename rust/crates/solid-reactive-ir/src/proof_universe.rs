@@ -20,6 +20,12 @@
 //! - every call of `onFlush` (SC3002), found from the calls' resolved
 //!   primitives, not from a source.
 //!
+//! Each site carries the runtime codes it may raise ([`SiteCode`]: a read raises STRICT_READ_UNTRACKED; a setter call REACTIVE_WRITE_IN_OWNED_SCOPE and,
+//! when its source may be an optimistic one that has not answered or its primitive is not resolved, OPTIMISTIC_WRITE_BEFORE_LOAD; and so on), and
+//! each code ends on its own: by a row of the table that answers it, an SC9012 (a withholding covers any code that names a line), a finding of a
+//! rule the dialect's policy says claims the code, or the compiler's discard (batch 11, slice 4, ADR 0967). A finding of another rule at the same
+//! span (a style rule's, SC1002's) answers its own code and ends nothing here.
+//!
 //! A reference used as a value (passed, returned, stored) is a use the
 //! value-use census (ADR 0692) follows or answers with an SC9012; it is not a
 //! site here. What this does not list: a props binding destructured in a
@@ -27,6 +33,7 @@
 //! the props sources; `Object.assign(store.a, x)` and the other standard
 //! library writes.
 
+use solid_dialect::{CodePolicy, Dialect, RuntimeCode};
 use solid_facts::FileFacts;
 use solid_facts::ast::MemberFact;
 use solid_facts::core::Span;
@@ -66,6 +73,9 @@ struct Kind {
     /// The root is a store (any member Get is a reactive read); else a props
     /// root, whose per-prop reactivity is a fact of the props index.
     store: bool,
+    /// A setter whose call may raise OPTIMISTIC_WRITE_BEFORE_LOAD ([`optimistic_write_setter`]): its write site carries that code beside the
+    /// owned-scope write's.
+    optimistic_write: bool,
 }
 
 impl Kind {
@@ -77,8 +87,40 @@ impl Kind {
             action: ctx.actions.contains_key(symbol),
             root: store || ctx.prop_sources.contains_key(symbol),
             store,
+            optimistic_write: optimistic_write_setter(ctx, symbol),
         }
     }
+}
+
+/// Whether a call of the setter `symbol` may raise OPTIMISTIC_WRITE_BEFORE_LOAD, on a dialect whose runtime refuses that write: its source is
+/// (or an alias of it is) an optimistic creation that may not have answered (ADR 0636, the one definition the write producer asks as well:
+/// [`crate::local_access::optimistic_async_setter`]), or the primitive the setter comes from is not resolved by it or by any alias holding its
+/// declaration, so that nothing says the write is not optimistic (a missing fact is an obligation, never a clean).
+fn optimistic_write_setter(ctx: &AnalysisContext<'_>, symbol: &crate::SymbolId) -> bool {
+    let dialect = ctx.dialect;
+    if !dialect.refuses_optimistic_write_before_load() {
+        return false;
+    }
+    let Some(row) = ctx.setters.get(symbol) else {
+        return false;
+    };
+    let resolved = |setter: &crate::SymbolId| {
+        ctx.source_primitives
+            .get(setter)
+            .and_then(|primitive| dialect.primitive(primitive))
+            .is_some()
+    };
+    crate::local_access::optimistic_async_setter(
+        dialect,
+        ctx.setters,
+        ctx.async_sources,
+        ctx.source_primitives,
+        symbol.as_str(),
+    ) || !(resolved(symbol)
+        || ctx
+            .setters
+            .iter()
+            .any(|(other, candidate)| candidate.1 == row.1 && resolved(other)))
 }
 
 /// The syntax of one file the universe asks about that no cached index of the
@@ -185,6 +227,101 @@ fn chain_end(file: &FileFacts, tables: &FileTables, first: &MemberFact) -> Chain
     ChainEnd::Read(links)
 }
 
+/// A Solid dev diagnostic a site of this universe may raise: one variant per code the universe's tables carry, closed so that every code has the
+/// uncertifiable row it gets when nothing ends it ([`SiteCode::home`]) and the runtime code the dialect's policy is asked about
+/// ([`SiteCode::runtime_code`]).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) enum SiteCode {
+    /// STRICT_READ_UNTRACKED: a reactive read where nothing tracks it.
+    StrictRead,
+    /// REACTIVE_WRITE_IN_OWNED_SCOPE: a setter call under an owner.
+    ReactiveWrite,
+    /// OPTIMISTIC_WRITE_BEFORE_LOAD: an optimistic setter called before its source answered.
+    OptimisticWrite,
+    /// ACTION_CALLED_IN_OWNED_SCOPE.
+    ActionCall,
+    /// STORE_WRITE_OUTSIDE_SETTER.
+    StoreWrite,
+    /// ON_FLUSH_IN_OWNED_SCOPE.
+    OnFlush,
+}
+
+/// The uncertifiable row a code gets when nothing ends it: the rule's id, name and blocker, and the noun its message uses.
+pub(crate) struct Home {
+    pub(crate) id: &'static str,
+    pub(crate) rule: &'static str,
+    pub(crate) blocker: &'static str,
+    pub(crate) noun: &'static str,
+}
+
+impl SiteCode {
+    pub(crate) const fn runtime_code(self) -> RuntimeCode {
+        match self {
+            Self::StrictRead => RuntimeCode::StrictReadUntracked,
+            Self::ReactiveWrite => RuntimeCode::ReactiveWriteInOwnedScope,
+            Self::OptimisticWrite => RuntimeCode::OptimisticWriteBeforeLoad,
+            Self::ActionCall => RuntimeCode::ActionCalledInOwnedScope,
+            Self::StoreWrite => RuntimeCode::StoreWriteOutsideSetter,
+            Self::OnFlush => RuntimeCode::OnFlushInOwnedScope,
+        }
+    }
+
+    /// The code as Solid's dev dist spells it, for the proof log.
+    pub(crate) const fn name(self) -> &'static str {
+        self.runtime_code().name()
+    }
+
+    /// The home rule of the code: the row of a site no ending, silence or discard accounts for.
+    pub(crate) const fn home(self) -> Home {
+        match self {
+            Self::StrictRead => Home {
+                id: "SC1001",
+                rule: "strict-read-untracked",
+                blocker: crate::blockers::STRICT_READ_UNACCOUNTED,
+                noun: "read",
+            },
+            Self::ReactiveWrite => Home {
+                id: "SC2001",
+                rule: "no-write-in-pure-computation",
+                blocker: crate::blockers::WRITE_UNACCOUNTED,
+                noun: "write",
+            },
+            Self::OptimisticWrite => Home {
+                id: "SC2009",
+                rule: "optimistic-write-before-load",
+                blocker: crate::blockers::OPTIMISTIC_WRITE_UNACCOUNTED,
+                noun: "optimistic write",
+            },
+            Self::ActionCall => Home {
+                id: "SC2002",
+                rule: "action-called-in-owned-scope",
+                blocker: crate::blockers::ACTION_UNACCOUNTED,
+                noun: "action call",
+            },
+            Self::StoreWrite => Home {
+                id: "SC2003",
+                rule: "no-store-mutation-outside-setter",
+                blocker: crate::blockers::STORE_WRITE_UNACCOUNTED,
+                noun: "store write",
+            },
+            Self::OnFlush => Home {
+                id: "SC3002",
+                rule: "on-flush-in-owned-scope",
+                blocker: crate::blockers::ON_FLUSH_UNACCOUNTED,
+                noun: "onFlush call",
+            },
+        }
+    }
+}
+
+/// The codes of the sites of each table. A write site whose setter may be an optimistic one has the second list.
+const READ_CODES: &[SiteCode] = &[SiteCode::StrictRead];
+const WRITE_CODES: &[SiteCode] = &[SiteCode::ReactiveWrite];
+const OPTIMISTIC_WRITE_CODES: &[SiteCode] = &[SiteCode::ReactiveWrite, SiteCode::OptimisticWrite];
+const ACTION_CODES: &[SiteCode] = &[SiteCode::ActionCall];
+const STORE_WRITE_CODES: &[SiteCode] = &[SiteCode::StoreWrite];
+const ON_FLUSH_CODES: &[SiteCode] = &[SiteCode::OnFlush];
+
 /// One site: where it is, what kind it is, and the other spans a row that
 /// answers for it may sit at.
 pub(crate) struct Site {
@@ -197,6 +334,8 @@ pub(crate) struct Site {
     pub(crate) via: &'static str,
     pub(crate) at: Span,
     pub(crate) alternates: Vec<Span>,
+    /// The codes the site may raise; each ends (or gets its row) on its own.
+    pub(crate) codes: &'static [SiteCode],
 }
 
 /// The sites that start at `reference`, a reference of a source of `kind`.
@@ -215,10 +354,19 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
         .filter(|call| call.direct_callee && !call.construct)
         .chain(composite)
     {
-        for (applies, table, source) in [
-            (kind.setter, "write", "setter"),
-            (kind.action, "action", "action"),
-            (kind.accessor, "read", "accessor"),
+        for (applies, table, source, codes) in [
+            (
+                kind.setter,
+                "write",
+                "setter",
+                if kind.optimistic_write {
+                    OPTIMISTIC_WRITE_CODES
+                } else {
+                    WRITE_CODES
+                },
+            ),
+            (kind.action, "action", "action", ACTION_CODES),
+            (kind.accessor, "read", "accessor", READ_CODES),
         ] {
             if applies {
                 sites.push(Site {
@@ -227,6 +375,7 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
                     via: "call",
                     at: call.span,
                     alternates: vec![call.callee, reference],
+                    codes,
                 });
             }
         }
@@ -258,6 +407,7 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
                     via: "member",
                     at: first.span,
                     alternates,
+                    codes: READ_CODES,
                 }
             }
             ChainEnd::Assignment(at) => Site {
@@ -266,6 +416,7 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
                 via: "assignment",
                 at,
                 alternates: Vec::new(),
+                codes: STORE_WRITE_CODES,
             },
             ChainEnd::Delete(at) => Site {
                 table: "store-write",
@@ -273,6 +424,7 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
                 via: "delete",
                 at,
                 alternates: Vec::new(),
+                codes: STORE_WRITE_CODES,
             },
             ChainEnd::Mutator { call, callee } => Site {
                 table: "store-write",
@@ -280,6 +432,7 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
                 via: "mutator",
                 at: call,
                 alternates: vec![callee],
+                codes: STORE_WRITE_CODES,
             },
         });
     }
@@ -350,38 +503,120 @@ impl Detail<'_> {
     }
 }
 
-/// The final program's rows, census obligations, defects and violations by file
-/// and byte span: the best class standing at each (the first of equal classes).
+/// What stands at a span and ends a site, as far as the code asked about is concerned: which codes it answers.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum EndedBy<'p> {
+    /// A row of one of the program's tables (a read, an async read, a write, an action): the codes of this universe the table answers.
+    Table {
+        name: &'static str,
+        answers: &'static [SiteCode],
+    },
+    /// An SC9012 obligation: a withholding at a position covers any code that names a line there.
+    Census,
+    /// A finding (a violation or a defect) of the rule `name`, an obligation when `uncertain`.
+    Rule { name: &'p str, uncertain: bool },
+    /// The compiler deleted the code.
+    Discarded,
+}
+
+impl EndedBy<'_> {
+    /// The proof log's word for it: `table:<name>`, `census`, `rule:<name>` (`:u` for an obligation) or `discarded`.
+    pub(crate) fn text(&self) -> String {
+        match self {
+            Self::Table { name, .. } => format!("table:{name}"),
+            Self::Census => "census".to_owned(),
+            Self::Rule { name, uncertain } => {
+                format!("rule:{name}{}", if *uncertain { ":u" } else { "" })
+            }
+            Self::Discarded => "discarded".to_owned(),
+        }
+    }
+}
+
+/// The rule SC9012 is reported under: its findings are census obligations, whatever family or channel they reach the report by.
+const CENSUS_RULE: &str = "reactive-dispatch-unresolved";
+
+/// A finding of the rule `name` as what ends a site: SC9012's are the census, the others a claim of their own rule.
+fn by_rule(name: &str, uncertain: bool) -> EndedBy<'_> {
+    if name == CENSUS_RULE {
+        EndedBy::Census
+    } else {
+        EndedBy::Rule { name, uncertain }
+    }
+}
+
+const READ_ROW: EndedBy<'static> = EndedBy::Table {
+    name: "read",
+    answers: READ_CODES,
+};
+/// An async read's row answers the pending codes (ADR 0838 accounts for them): none of this universe's.
+const ASYNC_READ_ROW: EndedBy<'static> = EndedBy::Table {
+    name: "async-read",
+    answers: &[],
+};
+const WRITE_ROW: EndedBy<'static> = EndedBy::Table {
+    name: "write",
+    answers: WRITE_CODES,
+};
+const ACTION_ROW: EndedBy<'static> = EndedBy::Table {
+    name: "action",
+    answers: ACTION_CODES,
+};
+
+/// Whether an ending answers `code` under the dialect's policy. `None` is no policy: the code has no ending credits, never "every rule credits it"
+/// (fail closed). One `match` over [`EndedBy`], no wildcard: a table answers the codes it names, an SC9012 every code that is not placeless, a
+/// finding the rules the policy says claim the code (or, an obligation, decline it), the compiler's discard every code.
+fn credits(policy: Option<&CodePolicy>, code: SiteCode, by: &EndedBy<'_>) -> bool {
+    let Some(policy) = policy else {
+        return false;
+    };
+    match by {
+        EndedBy::Table { answers, .. } => answers.contains(&code),
+        EndedBy::Census => !policy.placeless,
+        EndedBy::Rule { name, uncertain } => {
+            policy.claiming.iter().any(|claimed| claimed == name)
+                || (*uncertain && policy.declining.iter().any(|declined| declined == name))
+        }
+        EndedBy::Discarded => true,
+    }
+}
+
+/// One ending that stands at a span: its class (the order of precedence), what it is, and the row's text for the log.
+#[derive(Clone, Copy)]
+pub(crate) struct Ending<'p> {
+    pub(crate) class: EndClass,
+    pub(crate) by: EndedBy<'p>,
+    pub(crate) detail: Detail<'p>,
+}
+
+/// How one code of a site ends: the strongest ending that answers it, and (for the log) the strongest that stands at the site and does not.
+pub(crate) struct End<'p> {
+    pub(crate) credited: Option<Ending<'p>>,
+    pub(crate) uncredited: Option<Ending<'p>>,
+}
+
+/// The final program's rows, census obligations, defects and violations by file and byte span: every ending standing at each, with what it is.
 pub(crate) struct Endings<'p> {
-    at: HashMap<(&'p str, u64, u64), (EndClass, Detail<'p>)>,
+    at: HashMap<(&'p str, u64, u64), Vec<Ending<'p>>>,
     /// The store-write findings (SC2003 violations, direct-mutation defects) by
     /// file: a write through a chain is reported from the chain's root through
     /// the wrappers around it (ADR 0922), which starts inside the chain-end
     /// member's span and ends where it ends.
-    mutations: HashMap<&'p str, Vec<(u64, u64, EndClass, Detail<'p>)>>,
+    mutations: HashMap<&'p str, Vec<(u64, u64, Ending<'p>)>>,
 }
 
 fn note<'p>(
-    at: &mut HashMap<(&'p str, u64, u64), (EndClass, Detail<'p>)>,
+    at: &mut HashMap<(&'p str, u64, u64), Vec<Ending<'p>>>,
     location: &'p Location,
-    class: EndClass,
-    detail: Detail<'p>,
+    ending: Ending<'p>,
 ) {
-    let key = (
+    at.entry((
         location.path.as_ref(),
         location.start_byte,
         location.end_byte,
-    );
-    match at.entry(key) {
-        std::collections::hash_map::Entry::Vacant(slot) => {
-            slot.insert((class, detail));
-        }
-        std::collections::hash_map::Entry::Occupied(mut slot) => {
-            if class < slot.get().0 {
-                slot.insert((class, detail));
-            }
-        }
-    }
+    ))
+    .or_default()
+    .push(ending);
 }
 
 impl<'p> Endings<'p> {
@@ -394,12 +629,16 @@ impl<'p> Endings<'p> {
             + program.static_defects.len()
             + program.static_violations.len();
         at.reserve(rows);
+        let row = |by: EndedBy<'p>, detail: Detail<'p>| Ending {
+            class: EndClass::Row,
+            by,
+            detail,
+        };
         for read in &program.reads {
             note(
                 &mut at,
                 &read.location,
-                EndClass::Row,
-                Detail::Read(read.execution),
+                row(READ_ROW, Detail::Read(read.execution)),
             );
             // A row attributed to another place (a helper's call) answers for
             // the read it came from.
@@ -407,8 +646,7 @@ impl<'p> Endings<'p> {
                 note(
                     &mut at,
                     origin,
-                    EndClass::Row,
-                    Detail::OriginOfRead(read.execution),
+                    row(READ_ROW, Detail::OriginOfRead(read.execution)),
                 );
             }
         }
@@ -416,8 +654,7 @@ impl<'p> Endings<'p> {
             note(
                 &mut at,
                 &read.location,
-                EndClass::Row,
-                Detail::AsyncRead(read.execution),
+                row(ASYNC_READ_ROW, Detail::AsyncRead(read.execution)),
             );
             for origin in [read.origin.as_ref(), read.pending_origin.as_ref()]
                 .into_iter()
@@ -426,8 +663,7 @@ impl<'p> Endings<'p> {
                 note(
                     &mut at,
                     origin,
-                    EndClass::Row,
-                    Detail::OriginOfAsyncRead(read.execution),
+                    row(ASYNC_READ_ROW, Detail::OriginOfAsyncRead(read.execution)),
                 );
             }
         }
@@ -435,41 +671,47 @@ impl<'p> Endings<'p> {
             note(
                 &mut at,
                 &write.location,
-                EndClass::Row,
-                Detail::Write(write.execution),
+                row(WRITE_ROW, Detail::Write(write.execution)),
             );
         }
         for action in &program.actions {
             note(
                 &mut at,
                 &action.location,
-                EndClass::Row,
-                Detail::Action(action.execution),
+                row(ACTION_ROW, Detail::Action(action.execution)),
             );
         }
-        let mut mutations: HashMap<&'p str, Vec<(u64, u64, EndClass, Detail<'p>)>> =
-            HashMap::default();
+        let mut mutations: HashMap<&'p str, Vec<(u64, u64, Ending<'p>)>> = HashMap::default();
         for defect in &program.static_defects {
-            let family = defect.kind.dedup_identity();
-            let class = if family == "reactive-dispatch-unresolved" {
-                EndClass::Census
-            } else {
-                EndClass::Defect
+            let family = defect.kind.family();
+            let by = by_rule(family.rule_name(), defect.uncertain);
+            let ending = Ending {
+                class: if matches!(by, EndedBy::Census) {
+                    EndClass::Census
+                } else {
+                    EndClass::Defect
+                },
+                by,
+                detail: Detail::Defect(defect),
             };
-            if family == "no-store-mutation-outside-setter" {
+            if family == crate::StaticDefectFamily::DirectMutation {
                 mutations
                     .entry(defect.location.path.as_ref())
                     .or_default()
                     .push((
                         defect.location.start_byte,
                         defect.location.end_byte,
-                        class,
-                        Detail::Defect(defect),
+                        ending,
                     ));
             }
-            note(&mut at, &defect.location, class, Detail::Defect(defect));
+            note(&mut at, &defect.location, ending);
         }
         for violation in &program.static_violations {
+            let ending = Ending {
+                class: EndClass::Violation,
+                by: by_rule(&violation.rule, violation.uncertain),
+                detail: Detail::Violation(violation),
+            };
             if violation.id == "SC2003" {
                 mutations
                     .entry(violation.location.path.as_ref())
@@ -477,59 +719,79 @@ impl<'p> Endings<'p> {
                     .push((
                         violation.location.start_byte,
                         violation.location.end_byte,
-                        EndClass::Violation,
-                        Detail::Violation(violation),
+                        ending,
                     ));
             }
-            note(
-                &mut at,
-                &violation.location,
-                EndClass::Violation,
-                Detail::Violation(violation),
-            );
+            note(&mut at, &violation.location, ending);
         }
         Self { at, mutations }
     }
 
-    /// The site's ending: its row, else a census obligation, a defect or a
-    /// violation at it, else the compiler's discard, else nothing.
-    pub(crate) fn end(&self, file: &FileFacts, site: &Site) -> Option<(EndClass, Detail<'p>)> {
+    /// How `code` of the site ends: the strongest ending, over the spans a row for the site may sit at, that answers the code under the
+    /// dialect's policy; else a store write's chain finding that does, else the compiler's discard. An ending that stands at the site and
+    /// answers another code (a style finding's, SC1002's) is kept apart, for the log: it ends nothing.
+    pub(crate) fn end(
+        &self,
+        dialect: &dyn Dialect,
+        file: &FileFacts,
+        site: &Site,
+        code: SiteCode,
+    ) -> End<'p> {
+        let policy = dialect.code_policy(code.runtime_code());
         let path = file.path.as_str();
-        let mut best: Option<(EndClass, Detail<'p>)> = None;
+        let mut found = End {
+            credited: None,
+            uncredited: None,
+        };
+        let stronger = |slot: &Option<Ending<'p>>, ending: &Ending<'p>| {
+            slot.as_ref().is_none_or(|held| ending.class < held.class)
+        };
         for span in std::iter::once(site.at).chain(site.alternates.iter().copied()) {
-            let Some((class, detail)) =
-                self.at
-                    .get(&(path, u64::from(span.start), u64::from(span.end)))
-            else {
-                continue;
-            };
-            // The strongest ending of the spans a site may be reported at.
-            match &best {
-                Some((held, _)) if *class >= *held => {}
-                _ => best = Some((*class, *detail)),
+            for ending in self
+                .at
+                .get(&(path, u64::from(span.start), u64::from(span.end)))
+                .into_iter()
+                .flatten()
+            {
+                let slot = if credits(policy.as_ref(), code, &ending.by) {
+                    &mut found.credited
+                } else {
+                    &mut found.uncredited
+                };
+                // The strongest ending of the spans a site may be reported at; the first of equal classes stays.
+                if stronger(slot, ending) {
+                    *slot = Some(*ending);
+                }
             }
         }
-        if best.is_some() {
-            return best;
+        if found.credited.is_some() {
+            return found;
         }
         // A store write is reported from the chain's root through its wrappers:
         // a finding that ends where the chain-end member ends and starts inside it.
         if site.table == "store-write"
-            && let Some((_, _, class, detail)) = self
+            && let Some((_, _, ending)) = self
                 .mutations
                 .get(path)
                 .into_iter()
                 .flatten()
-                .find(|(start, end, _, _)| {
-                    *end == u64::from(site.at.end) && *start >= u64::from(site.at.start)
+                .find(|(start, end, ending)| {
+                    *end == u64::from(site.at.end)
+                        && *start >= u64::from(site.at.start)
+                        && credits(policy.as_ref(), code, &ending.by)
                 })
         {
-            return Some((*class, *detail));
+            found.credited = Some(*ending);
+            return found;
         }
         if crate::execution_role::discarded_region_contains(file, site.at) {
-            return Some((EndClass::Discarded, Detail::Nothing));
+            found.credited = Some(Ending {
+                class: EndClass::Discarded,
+                by: EndedBy::Discarded,
+                detail: Detail::Nothing,
+            });
         }
-        None
+        found
     }
 }
 
@@ -619,6 +881,10 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
                                 found[at].1.alternates.push(alternate);
                             }
                         }
+                        // The code lists of one table nest (a write site's second list holds the first), so the union is the longer one.
+                        if site.codes.len() > found[at].1.codes.len() {
+                            found[at].1.codes = site.codes;
+                        }
                     }
                     None => {
                         index.insert(key, found.len());
@@ -652,6 +918,7 @@ fn on_flush_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts,
                         via: "call",
                         at: call.callee,
                         alternates: vec![call.span],
+                        codes: ON_FLUSH_CODES,
                     },
                 ));
             }
@@ -659,16 +926,24 @@ fn on_flush_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts,
     }
 }
 
-/// Writes one `site` line: the site and how the final program ends it.
-pub(crate) fn log_site(file: &FileFacts, site: &Site, end: &str, detail: &str) {
+/// Writes one `site` line per code of the site: the site, the code, and how the final program ends it (`credited`: whether the ending answers the
+/// code; a `none` line names, as `by` and `detail`, the strongest ending that stands at the site and does not).
+pub(crate) fn log_site(file: &FileFacts, site: &Site, code: SiteCode, end: &End<'_>) {
+    let (class, ending, credited) = match (&end.credited, &end.uncredited) {
+        (Some(ending), _) => (ending.class.name(), Some(ending), true),
+        (None, other) => ("none", other.as_ref(), false),
+    };
     proof_log::site(&SiteRecord {
         table: site.table,
         source: site.source,
         via: site.via,
+        code: code.name(),
         location: &site.at.location(file.path.shared()),
         alternates: &site.alternates,
-        end,
-        detail,
+        end: class,
+        detail: &ending.map_or_else(String::new, |ending| ending.detail.text()),
+        by: &ending.map_or_else(String::new, |ending| ending.by.text()),
+        credited,
     });
 }
 
