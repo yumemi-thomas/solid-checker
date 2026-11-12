@@ -247,7 +247,7 @@
   "SC9012 value-escaped-from-untrack": 3,
   "SC9012 value-exported-unnamed": 6,
   "SC9012 value-forwarded": 245,
-  "SC9012 value-from-primitive-callback": 28,
+  "SC9012 value-from-primitive-callback": 26,
   "SC9012 value-held-in-binding": 111,
   "SC9012 value-held-in-member": 24,
   "SC9012 value-in-carrier": 349,

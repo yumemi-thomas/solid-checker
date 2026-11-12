@@ -34,8 +34,8 @@ export function RootInApply() {
 export function RootInMemo() {
   const outer = createMemo(() =>
     createRoot(() => {
-      const inner = createMemo(() => 9);
-      return inner;
+      createMemo(() => 9);
+      return 9;
     }),
   );
   return <p>{outer()}</p>;
