@@ -277,7 +277,7 @@ pub(super) fn silences(
                     call.span,
                     None,
                     lookup,
-                    &caller_unplaced,
+                    caller_unplaced,
                 );
             for (answer, group) in [(leaf_answer, Group::Leaf), (effect_answer, Group::Effect)] {
                 let Some(answer) = answer else {

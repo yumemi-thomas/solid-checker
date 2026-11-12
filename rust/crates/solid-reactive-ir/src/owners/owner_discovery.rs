@@ -1004,6 +1004,7 @@ pub(crate) struct OwnerState {
 /// The owner requirements of the project, and the call-site gates they
 /// settled. `state` holds the previous build's graph (a one-shot build's is
 /// empty).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn find_missing_owners_incremental(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
