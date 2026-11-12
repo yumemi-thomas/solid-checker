@@ -108,7 +108,8 @@ export function MemberSpread() {
   return <div>{String(data())}</div>;
 }
 
-// Quiet: a computed key may name any property.
+// No violation: a computed key may name any property. The read is an uncertifiable row (batch 10c: a computed key may be one the host
+// reads by itself, a symbol or a coercion), never silence.
 export function MemberComputedKey() {
   const [value] = createSignal(1);
   const [tick] = createSignal(0);

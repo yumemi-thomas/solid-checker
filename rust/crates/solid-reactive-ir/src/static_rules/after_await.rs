@@ -119,6 +119,9 @@ type GeneratorCall<'f> = (
 struct Walk<'m> {
     member: &'m Member,
     reported: HashSet<(String, u64, u64)>,
+    /// The calls this walk has filed an unresolved invocation for (ADR 0964): a set of its own, so that a row the hand-off (ADR 0669)
+    /// or the inexact callee (ADR 0879) files at the same callee is neither pre-empted nor pre-empts it.
+    invoked: HashSet<(String, u64, u64)>,
     visited: HashSet<Span>,
     /// Function literals queued as members, which own their obligations.
     queued: HashSet<(String, Span)>,
@@ -353,15 +356,34 @@ pub(super) fn reads_run_unplaced(
     // route runs (a class method that iterates stored listeners, an object method that calls a stored callback) is an obligation
     // too: the continuation reaches it through the member's access, not through a call the walk follows.
     let mut invocations = Vec::new();
+    let mut widened = Vec::new();
     for file in crate::base::reads::all_files(ctx.facts) {
         for call in &file.ast.calls {
-            if unresolved_invocation(ctx, file, call)
+            let known = unresolved_invocation_known(ctx, file, call);
+            if (known || unresolved_invocation_widened(ctx, file, call))
                 && crate::static_api::unplaced_member_blocker(file, call.span, lookup).is_some()
             {
-                invocations.push(unresolved_invocation_obligation(
+                let row = unresolved_invocation_obligation(
                     file,
                     call,
                     crate::blockers::UNRESOLVED_INVOCATION,
+                );
+                if known {
+                    invocations.push(row);
+                } else {
+                    widened.push(row);
+                }
+            }
+        }
+        // Batch 10c (B1): a tag the program stored, written in member-route code, is called there as a call is.
+        for template in &file.ast.tagged_templates {
+            if unresolved_tag(ctx, file, template)
+                && crate::static_api::unplaced_member_blocker(file, template.span, lookup).is_some()
+            {
+                widened.push(unresolved_obligation_at(
+                    file,
+                    file.ast.peel_ts_sugar_span(template.tag),
+                    template.tag,
                 ));
             }
         }
@@ -405,6 +427,11 @@ pub(super) fn reads_run_unplaced(
         })
         .collect::<Vec<_>>();
     for defect in defects {
+        draft.push_defect(defect);
+    }
+    // The rows of the widened invocations file last: a row of the family already at the same start (a read's, the net's earlier
+    // rows) keeps its place, and this one stands only where none does.
+    for defect in widened {
         draft.push_defect(defect);
     }
 }
@@ -503,14 +530,14 @@ struct Speculated {
     span_log: Vec<(crate::pipeline::SpanKey, bool)>,
 }
 
-/// ADR 0964: whether `call` invokes a function value the walk cannot resolve: a callback stored in a parameter, a variable, an array, a
-/// map or an object, called through that name (`callbacks.forEach((c) => c())`, `const fn = list[0]; fn()`, `registry.get(k)!()`).
-/// Whatever function the program put there runs on the call's stack, so on the continuation it may read a reactive source untracked:
-/// an obligation at the call, never silence. Three facts decide it, all of the call's own syntax and bindings (a resolved-call fact is
-/// demanded for few calls, so its absence says nothing): the callee is an identifier declared as a parameter, or as a variable whose
-/// value is not a function the walk resolves; or it is the result of a call (`get(k)!()`, `f()()`) that is no primitive's accessor.
-/// A callee that is an accessor, a setter, an action, a typed candidate (ADR 0294), a primitive, a project function or a function literal is read elsewhere.
-fn unresolved_invocation(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact) -> bool {
+/// ADR 0964 as filed in batch 10b: whether `call` invokes a function value the walk cannot resolve through the name of a parameter or a
+/// variable, or through the result of a call. Its rows are the ones the net has always filed, in the order it files them
+/// ([`unresolved_invocation_widened`] files the rest after them, and never in their place).
+fn unresolved_invocation_known(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> bool {
     let lookup = ctx.semantic_lookup;
     let callee = file.ast.peel_ts_sugar_span(call.callee);
     if call.construct || file.ast.function_at(callee).is_some() {
@@ -552,6 +579,230 @@ fn unresolved_invocation(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &Cal
         })
 }
 
+/// Batch 10c (B1): the invocations [`unresolved_invocation`] takes beyond [`unresolved_invocation_known`]: a slot, `.call` and `.apply`, a
+/// reassigned `let`, a `new`. Added rows only: they are filed after the rows the net filed before ([`Walk::invoked`]), claim no callee
+/// another row stands at, and stand only where no other row does.
+fn unresolved_invocation_widened(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> bool {
+    unresolved_invocation(ctx, file, call) && !unresolved_invocation_known(ctx, file, call)
+}
+
+/// ADR 0964: whether `call` invokes a function value the walk cannot resolve: a callback stored in a parameter, a variable, an array, a
+/// map or an object, called through that name (`callbacks.forEach((c) => c())`, `const fn = list[0]; fn()`, `registry.get(k)!()`).
+/// Whatever function the program put there runs on the call's stack, so on the continuation it may read a reactive source untracked:
+/// an obligation at the call, never silence. Three facts decide it, all of the call's own syntax and bindings (a resolved-call fact is
+/// demanded for few calls, so its absence says nothing): the callee is an identifier declared as a parameter, or as a variable whose
+/// value is not a function the walk resolves; or it is the result of a call (`get(k)!()`, `f()()`) that is no primitive's accessor.
+/// A callee that is an accessor, a setter, an action, a typed candidate (ADR 0294), a primitive, a project function or a function literal is read elsewhere.
+///
+/// Batch 10c (B1) closes the spellings the Fable review of batch 10b found silent, each the same fact (a function the program stored is
+/// run here) written another way ([`stored_function_value`]): a member the project declares as a slot and no function body defines
+/// (`bus.cb()`, `holder.cb?.()`, a function-typed field), the receiver of `f.call(…)` and `f.apply(…)` (the value those run), a `let`
+/// the program reassigns (its initializer is not the value any more), a `new` of a stored value, and a tagged template's tag
+/// ([`unresolved_tag`]).
+fn unresolved_invocation(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact) -> bool {
+    let lookup = ctx.semantic_lookup;
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if file.ast.function_at(callee).is_some() {
+        return false;
+    }
+    // `f.call(…)` and `f.apply(…)` run the value they are read from: the value invoked is the receiver.
+    let receiver = crate::local_access::dispatch_receiver(lookup, file, call)
+        .map(|receiver| file.ast.peel_ts_sugar_span(receiver));
+    let (invoked, how) = match receiver {
+        Some(receiver) => (receiver, Invoked::Receiver),
+        None if call.construct => (callee, Invoked::Construct),
+        None => (callee, Invoked::Callee(call)),
+    };
+    stored_function_value(ctx, file, invoked, how)
+        && lookup.primitive_at_call(file, call.span).is_none()
+        && !invoked_symbol(ctx, file, call, receiver).is_some_and(|symbol| {
+            ctx.accessors.contains_key(symbol)
+                || ctx.setters.contains_key(symbol)
+                || ctx.actions.contains_key(symbol)
+                // ADR 0294: a typed candidate whose implementation is not visible (a parameter typed `Accessor<T>`) has its own row, SC9012
+                // `type-only-source`: its declared type says what it may be, which a stored function's is not.
+                || typed_unknown(ctx, symbol)
+        })
+}
+
+/// What invokes the value [`stored_function_value`] asks about.
+#[derive(Clone, Copy)]
+enum Invoked<'c> {
+    /// The callee of this call.
+    Callee(&'c CallFact),
+    /// The callee of a `new`.
+    Construct,
+    /// The receiver of `f.call(…)` or `f.apply(…)`.
+    Receiver,
+    /// The tag of a tagged template.
+    Tag,
+}
+
+/// The symbol of the value an invocation runs, for the exclusions of an accessor, a setter, an action and a typed candidate: the
+/// callee's own for a plain call ([`call_accessor_symbol`]), the receiver's for `f.call(…)`.
+fn invoked_symbol<'s>(
+    ctx: &'s AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+    receiver: Option<Span>,
+) -> Option<&'s SymbolId> {
+    let Some(receiver) = receiver else {
+        return call_accessor_symbol(ctx, file, call);
+    };
+    tag_symbol(ctx, file, receiver)
+}
+
+/// The symbol of the identifier, or of the property of the static member, at `value`.
+fn tag_symbol<'s>(
+    ctx: &'s AnalysisContext<'_>,
+    file: &FileFacts,
+    value: Span,
+) -> Option<&'s SymbolId> {
+    match file.ast.member_at(value) {
+        Some(member) if !file.ast.computed_members.contains(&member.span) => {
+            ctx.entities.at(file.path.as_str(), member.property)
+        }
+        Some(_) => None,
+        None => ctx.entities.at(file.path.as_str(), value),
+    }
+}
+
+/// Whether the value at `value` (the callee of a call or a `new`, the receiver of `.call` or `.apply`, a tag) is one the program
+/// stored, whose function this walk does not enter: an identifier declared as a parameter or a variable that is not a function the
+/// walk resolves (a `let` the program reassigns holds more than its initializer), a call's result that is no primitive's, an element
+/// access (the value stored under an index or a key, for a receiver or a tag; for a callee the declaration the compiler picked
+/// decides), or a member the project declares as a slot ([`crate::indexes::SemanticLookup::project_slot_without_body`]).
+fn stored_function_value(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    value: Span,
+    how: Invoked<'_>,
+) -> bool {
+    let lookup = ctx.semantic_lookup;
+    if crate::owners::is_identifier_span(file, value) {
+        return file
+            .ast
+            .reference_declaration(value)
+            .is_some_and(|declaration| {
+                // A `function` declaration or a `const` bound to a function literal is that function, called or thrown (a call
+                // before its declarator): the layer walk reads the body or no function runs. Nothing was stored there.
+                super::same_file_function(file, declaration).is_none()
+                    && !(matches!(how, Invoked::Construct)
+                        && file.ast.bindings.iter().any(|binding| {
+                            binding.names.iter().any(|name| name.span == declaration)
+                                && binding.initializer.is_some_and(|initializer| {
+                                    let initializer = file.ast.peel_ts_sugar_span(initializer);
+                                    file.ast.classes.iter().any(|class| class.span == initializer)
+                                })
+                        }))
+                    && (super::declared_as_parameter(file, declaration)
+                        || file.ast.bindings.iter().any(|binding| {
+                            binding.names.iter().any(|name| name.span == declaration)
+                        }))
+            })
+            // The function the identifier names, when it is the value the identifier holds now: a `let` the program writes again
+            // does not hold its initializer.
+            && !lookup
+                .function_called_at(file.path.as_str(), value)
+                .is_some_and(|(function_file, function)| {
+                    lookup.function_value_is_current(function_file, function)
+                });
+    }
+    // The value is a call's result: the value that call returns is called (`registry.get(k)!()`), unless that call is a primitive
+    // (`createMemo(f)()` reads the accessor it made).
+    if let Some(inner) = file.ast.call_at(value) {
+        return lookup.primitive_at_call(file, inner.span).is_none();
+    }
+    let Some(member) = file.ast.member_at(value) else {
+        return false;
+    };
+    // A `new` of a member (`new this.Impl()`, `new ns.Widget()`) is a class or a constructor the program names: not this net's.
+    if matches!(how, Invoked::Construct) {
+        return false;
+    }
+    // A method or a function the project declares has a body: a class method and an object literal's method are read where they are
+    // written (ADR 0963's class elements and methods), a function declaration is placed by its exact call edges.
+    if let Invoked::Callee(call) = how
+        && lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| {
+                matches!(
+                    declaration.kind.as_ref(),
+                    "MethodDeclaration" | "FunctionDeclaration" | "Constructor"
+                )
+            })
+    {
+        return false;
+    }
+    if file.ast.computed_members.contains(&member.span) {
+        return match how {
+            Invoked::Receiver | Invoked::Tag => true,
+            Invoked::Callee(call) => lookup
+                .resolved_callee_call(file, call.callee)
+                .and_then(|resolved| resolved.declaration.as_ref())
+                .is_some_and(|declaration| lookup.resolved_slot_without_body(declaration)),
+            Invoked::Construct => false,
+        };
+    }
+    // A closed object literal's member is the function the walk follows (ADR 0351, `called_function`): it is entered, not stored.
+    if lookup.closed_member_function(file, member).is_some() {
+        return false;
+    }
+    match ctx.entities.at(file.path.as_str(), member.property) {
+        Some(symbol) => lookup.project_slot_without_body(symbol.as_str()),
+        // The property of a receiver or a tag has no entity fact of its own (only a callee's member is demanded): the member of a value
+        // the project holds (a local, a parameter, `this`) is a slot the program may have stored a function in; a global's or an
+        // import's (`Math.max.apply`) is not this net's.
+        None => {
+            matches!(how, Invoked::Receiver | Invoked::Tag) && project_owned_member(file, member)
+        }
+    }
+}
+
+/// Whether the member chain at `member` starts at a value the project holds: a name declared as a parameter or a variable in this
+/// file (`bus.cb`, `props.fn`), not a global (`Math.max`) nor an import. A chain rooted at `this` names no declaration and is not
+/// decided here (`docs/open-work.md`).
+fn project_owned_member(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> bool {
+    let mut root = file.ast.peel_ts_sugar_span(member.object);
+    while let Some(inner) = file.ast.member_at(root) {
+        root = file.ast.peel_ts_sugar_span(inner.object);
+    }
+    file.ast
+        .reference_declaration(root)
+        .is_some_and(|declaration| {
+            super::declared_as_parameter(file, declaration)
+                || file
+                    .ast
+                    .bindings
+                    .iter()
+                    .any(|binding| binding.names.iter().any(|name| name.span == declaration))
+        })
+}
+
+/// Batch 10c (B1): whether the tag of `template` is a stored value the walk cannot resolve ([`stored_function_value`]): a tagged
+/// template calls its tag where it is written (ADR 0531), so the function the program stored there runs on this stack. A tag that is
+/// a function literal or a project function the walk names is followed by [`Reach::visit_template`] instead.
+fn unresolved_tag(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    template: &TaggedTemplateFact,
+) -> bool {
+    let tag = file.ast.peel_ts_sugar_span(template.tag);
+    file.ast.function_at(tag).is_none()
+        && stored_function_value(ctx, file, tag, Invoked::Tag)
+        && !tag_symbol(ctx, file, tag).is_some_and(|symbol| {
+            ctx.accessors.contains_key(symbol)
+                || ctx.setters.contains_key(symbol)
+                || ctx.actions.contains_key(symbol)
+                || typed_unknown(ctx, symbol)
+        })
+}
+
 /// The obligation row at a call that invokes a function value the walk cannot resolve ([`unresolved_invocation`]).
 fn unresolved_invocation_obligation(
     file: &FileFacts,
@@ -559,17 +810,27 @@ fn unresolved_invocation_obligation(
     context: &str,
 ) -> StaticDefect {
     let _ = context;
+    // A `new` runs its callee at the `new` keyword: V8's frame for the construction stands there, so the row starts there (a call's
+    // frame stands at its callee, which is where its own span starts).
+    let at = if call.construct {
+        Span::new(call.span.start, call.callee.end)
+    } else {
+        call.callee
+    };
+    unresolved_obligation_at(file, file.ast.peel_ts_sugar_span(call.callee), at)
+}
+
+/// The obligation row at the value `text_of` names, for a call, a `new` or a tag ([`unresolved_invocation`], [`unresolved_tag`]).
+fn unresolved_obligation_at(file: &FileFacts, text_of: Span, at: Span) -> StaticDefect {
     StaticDefect {
         kind: StaticDefectKind::ReactiveReadAfterAwait {
-            accessor: file
-                .source_text(file.ast.peel_ts_sugar_span(call.callee))
-                .map_or_else(
-                    || "a stored function".to_owned(),
-                    |text| text.chars().take(80).collect(),
-                ),
+            accessor: file.source_text(text_of).map_or_else(
+                || "a stored function".to_owned(),
+                |text| text.chars().take(80).collect(),
+            ),
             obligation: Some(AfterAwaitObligation::UnresolvedInvocation),
         },
-        location: location(file.path.shared(), call.callee),
+        location: location(file.path.shared(), at),
         analysis_context: crate::blockers::UNRESOLVED_INVOCATION.to_owned(),
         fixes: vec![],
         uncertain: true,
@@ -1479,6 +1740,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         let mut walk = Walk {
             member,
             reported: HashSet::default(),
+            invoked: HashSet::default(),
             visited: HashSet::default(),
             queued: HashSet::default(),
             placed: HashSet::default(),
@@ -1759,7 +2021,10 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         }
         // ADR 0964: a call written in the function's own body after one of its awaits that invokes a function value the walk cannot
         // resolve (`fn()` for a `const fn = list[0]`, a stored callback) runs whatever function the program stored there on the
-        // continuation: an obligation at the call, where no row stands yet.
+        // continuation: an obligation at the call, where no row stands yet. The rows wait for the end of the walk (`deferred`): a row the
+        // hand-off, the inexact callee or the parameter files at the same callee is the cover that stands, and this one neither
+        // pre-empts it nor repeats it.
+        let mut deferred = Vec::new();
         if let Some((file, ast_function)) = ast_function(self.files, function) {
             for candidate in &file.ast.calls {
                 let written_here = ast_function.body.contains(candidate.span)
@@ -1774,17 +2039,19 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                     continue;
                 }
                 let callee = location(file.path.shared(), candidate.callee);
-                if unresolved_invocation(ctx, file, candidate)
-                    && walk.reported.insert((
-                        callee.path.to_string(),
-                        callee.start_byte,
-                        callee.end_byte,
-                    ))
-                {
-                    draft.push_defect(unresolved_invocation_obligation(
-                        file,
-                        candidate,
-                        &member.context,
+                let key = (callee.path.to_string(), callee.start_byte, callee.end_byte);
+                if unresolved_invocation_known(ctx, file, candidate) {
+                    if walk.reported.insert(key) {
+                        draft.push_defect(unresolved_invocation_obligation(
+                            file,
+                            candidate,
+                            &member.context,
+                        ));
+                    }
+                } else if unresolved_invocation_widened(ctx, file, candidate) {
+                    deferred.push((
+                        key,
+                        unresolved_invocation_obligation(file, candidate, &member.context),
                     ));
                 }
             }
@@ -1951,6 +2218,11 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
             self.after_conditional_await(draft, &mut walk, file, ast_function);
             self.report_unplaced_functions(draft, &mut walk, file, ast_function);
             self.follow_generators(draft, &mut walk, queue, file, ast_function);
+        }
+        for (key, defect) in deferred {
+            if !walk.reported.contains(&key) && walk.invoked.insert(key) {
+                draft.push_defect(defect);
+            }
         }
         if let Some(reason) = &member.conditional {
             mark_uncertain(draft, mark, reason);
@@ -3016,6 +3288,17 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
             .map(|function| (file, function))
             .or_else(|| self.named_function(file, tag))
         else {
+            // Batch 10c (B1): a tag the walk does not enter is a value the program stored (`const t = tags[0]; t\`x\``), called on this
+            // stack: an obligation at the tag, never silence.
+            if unresolved_tag(self.ctx, file, template)
+                && walk.invoked.insert((
+                    file.path.to_string(),
+                    u64::from(tag.start),
+                    u64::from(tag.end),
+                ))
+            {
+                draft.push_defect(unresolved_obligation_at(file, tag, template.tag));
+            }
             return;
         };
         if function.generator {
@@ -3350,7 +3633,13 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
             handed(walk, draft);
             if inexact_callee(ctx, file, call) && walk.reported.insert(key.clone()) {
                 draft.push_defect(inexact_callee_obligation(file, call, &walk.member.context));
-            } else if unresolved_invocation(ctx, file, call) && walk.reported.insert(key) {
+            } else if (unresolved_invocation_known(ctx, file, call)
+                && walk.reported.insert(key.clone()))
+                || (unresolved_invocation_widened(ctx, file, call)
+                    && !walk.reported.contains(&key)
+                    && walk.invoked.insert(key))
+            {
+                // The rows of the known classes claim the callee, as they always did; the widened ones only add.
                 draft.push_defect(unresolved_invocation_obligation(
                     file,
                     call,
@@ -3364,7 +3653,12 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                 draft.push_defect(typed_after_await_obligation(file, call.callee));
             } else {
                 handed(walk, draft);
-                if unresolved_invocation(ctx, file, call) && walk.reported.insert(key) {
+                if (unresolved_invocation_known(ctx, file, call)
+                    && walk.reported.insert(key.clone()))
+                    || (unresolved_invocation_widened(ctx, file, call)
+                        && !walk.reported.contains(&key)
+                        && walk.invoked.insert(key))
+                {
                     draft.push_defect(unresolved_invocation_obligation(
                         file,
                         call,

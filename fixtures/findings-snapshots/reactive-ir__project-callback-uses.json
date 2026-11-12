@@ -417,6 +417,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
+      "start": 5328,
+      "end": 5336,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -458,6 +469,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
       "start": 5590,
       "end": 5597,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
+      "start": 5614,
+      "end": 5622,
       "fixes": 0
     },
     {
@@ -556,6 +578,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
       "start": 7098,
       "end": 7105,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/App.tsx",
+      "start": 7206,
+      "end": 7215,
       "fixes": 0
     },
     {
@@ -1248,6 +1281,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 4732,
       "end": 4743,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4781,
+      "end": 4789,
       "fixes": 0
     },
     {

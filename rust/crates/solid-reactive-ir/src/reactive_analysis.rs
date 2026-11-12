@@ -432,7 +432,24 @@ pub(crate) fn collect_project<'facts>(
                     .map(|action| &action.location),
             )
             .chain(handed.iter().map(|obligation| &obligation.location))
-            .chain(draft.static_defects.iter().map(|defect| &defect.location))
+            .chain(
+                draft
+                    .static_defects
+                    .iter()
+                    // An unresolved invocation (ADR 0964, batch 10c) names no source: its call may run any function the program stored,
+                    // so it is no row that read the value a census follows. Counted, it would end the walk of a held source at the call
+                    // and drop the row (SC9012 `value-held-in-binding`, the pending rules') that names where the source went.
+                    .filter(|defect| {
+                        !matches!(
+                            defect.kind,
+                            crate::StaticDefectKind::ReactiveReadAfterAwait {
+                                obligation: Some(crate::AfterAwaitObligation::UnresolvedInvocation),
+                                ..
+                            }
+                        )
+                    })
+                    .map(|defect| &defect.location),
+            )
             // ADR 0874: a withheld call's rows are about its target; the
             // value on its chain keeps a row of its own.
             .filter(|location| {

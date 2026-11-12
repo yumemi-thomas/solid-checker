@@ -924,6 +924,7 @@ pub(crate) fn runs_implicitly(
             ast.object_properties
                 .iter()
                 .any(|property| !property.data && ast.peel_ts_sugar_span(property.value) == value)
+                || stored_in_host_called_slot(file, function)
                 || crate::owners::function_binding_name(file, function).is_some_and(|name| {
                     ast.tagged_template_tags
                         .iter()
@@ -935,6 +936,139 @@ pub(crate) fn runs_implicitly(
                         })
                 })
         })
+}
+
+/// The names a function is stored under that the host itself reads by, with no call expression naming it: a coercion (`toString`,
+/// `valueOf`, `toJSON`, `toLocaleString`: a template, `+o`, `JSON.stringify`, `String(o)`), the promise protocol (`then`: an `await`,
+/// a return from an async function), the iterator protocol (`next`, `return`, `throw`: a `for..of`, a spread, a destructuring), a
+/// DOM event listener object (`handleEvent`).
+const HOST_CALLED_KEYS: &[&str] = &[
+    "toString",
+    "toLocaleString",
+    "valueOf",
+    "toJSON",
+    "then",
+    "next",
+    "return",
+    "throw",
+    "handleEvent",
+];
+
+/// The traps of a `Proxy` handler: each is read by the host when its operation runs on the proxy, whatever the key it is written under
+/// elsewhere.
+const PROXY_TRAPS: &[&str] = &[
+    "get",
+    "set",
+    "has",
+    "deleteProperty",
+    "ownKeys",
+    "getOwnPropertyDescriptor",
+    "defineProperty",
+    "getPrototypeOf",
+    "setPrototypeOf",
+    "isExtensible",
+    "preventExtensions",
+    "apply",
+    "construct",
+];
+
+/// What a property key says of the slot, as the facts can read it.
+enum SlotKey<'f> {
+    /// A name written as an identifier or a literal.
+    Name(&'f str),
+    /// A computed key no literal decides (`[Symbol.iterator]`, `[key]`): the slot may be one the host reads.
+    Unknown,
+}
+
+/// The key at `key` (an object literal's property key, or the property of a member expression): its name when it is an identifier or a
+/// literal (a string, quotes dropped; a number), `Unknown` for a computed key that is neither.
+fn slot_key(file: &solid_facts::FileFacts, key: Span, computed: bool) -> SlotKey<'_> {
+    let text = file.source_text(key).map_or("", str::trim);
+    let quoted = text.len() >= 2
+        && (text.starts_with('"') || text.starts_with('\''))
+        && text.ends_with(&text[..1]);
+    if quoted {
+        return SlotKey::Name(&text[1..text.len() - 1]);
+    }
+    if !computed
+        || (!text.is_empty()
+            && text
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || byte == b'.'))
+    {
+        return SlotKey::Name(text);
+    }
+    SlotKey::Unknown
+}
+
+/// Batch 10c (ADR 0963, B2): whether `function` is stored where the host runs it by itself and no call or access shows it, written as a
+/// function value rather than as a method or accessor ([`runs_implicitly`] takes those for any key): the value of an object literal's
+/// property under a key the host reads by (a coercion, the promise or iterator protocol, a computed key), as a function written there or a
+/// name that is its binding (`{ toString: show }`); the value assigned to such a member (`o.toString = fn`, `K.prototype.toString = fn`,
+/// `o[Symbol.iterator] = fn`); a trap of a `new Proxy(target, handler)` handler; the `get` or `set` of a descriptor handed to
+/// `Object.defineProperty`, `Reflect.defineProperty`, `Object.defineProperties` or `Object.create`. A function stored under any other key
+/// runs by a call of that slot, which the call-site net asks ([`crate::static_rules`] `unresolved_invocation`).
+fn stored_in_host_called_slot(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let ast = &file.ast;
+    let name = crate::owners::function_binding_name(file, function);
+    // The value written at `value` is this function, or names the binding it is.
+    let holds = |value: Span| {
+        let value = ast.peel_ts_sugar_span(value);
+        value == function.span
+            || name.is_some_and(|name| ast.reference_declaration(value) == Some(name.span))
+    };
+    let host_called = |key: &SlotKey<'_>| match key {
+        SlotKey::Name(name) => HOST_CALLED_KEYS.contains(name),
+        SlotKey::Unknown => true,
+    };
+    let global = |callee: Span| {
+        let mut root = ast.peel_ts_sugar_span(callee);
+        while let Some(member) = ast.member_at(root) {
+            root = ast.peel_ts_sugar_span(member.object);
+        }
+        ast.reference_declaration(root).is_none()
+    };
+    // The handler literal of a `new Proxy(target, handler)`, and the descriptor literals handed to the property-definition functions.
+    let in_argument = |property: Span, callee: &str, index: usize, construct: bool| {
+        ast.calls.iter().any(|call| {
+            call.construct == construct
+                && call.static_callee(&file.source) == Some(callee)
+                && global(call.callee)
+                && call
+                    .arguments
+                    .get(index)
+                    .is_some_and(|argument| !argument.spread && argument.span.contains(property))
+        })
+    };
+    ast.object_properties.iter().any(|property| {
+        if !property.data || !holds(property.value) {
+            return false;
+        }
+        let key = slot_key(file, property.key, property.computed);
+        let trap = matches!(&key, SlotKey::Name(name) if PROXY_TRAPS.contains(name));
+        let descriptor = matches!(&key, SlotKey::Name("get" | "set"));
+        host_called(&key)
+            || (trap && in_argument(property.span, "Proxy", 1, true))
+            || (descriptor
+                && (in_argument(property.span, "Object.defineProperty", 2, false)
+                    || in_argument(property.span, "Reflect.defineProperty", 2, false)
+                    || in_argument(property.span, "Object.defineProperties", 1, false)
+                    || in_argument(property.span, "Object.create", 1, false)))
+    }) || ast.assignments.iter().any(|assignment| {
+        holds(assignment.value_span)
+            && ast
+                .member_at(ast.peel_ts_sugar_span(assignment.target))
+                .is_some_and(|member| {
+                    host_called(&slot_key(
+                        file,
+                        member.property,
+                        ast.computed_members.contains(&member.span),
+                    ))
+                })
+    })
 }
 
 impl SiteReach<'_, '_> {

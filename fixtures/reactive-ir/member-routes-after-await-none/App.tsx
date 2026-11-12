@@ -22,3 +22,18 @@ export function Sync() {
   });
   return <div>{m()}</div>;
 }
+
+// Batch 10c (B2): the function-valued routes in a synchronous memo: no continuation, no SC1002 row.
+const coercedArrow = { toString: () => String(count()) };
+const assigned: { toString(): string } = {};
+assigned.toString = () => String(count());
+const trappedArrow = new Proxy({} as { value: number }, { get: () => count() });
+export function SyncValues() {
+  const m = createMemo(() => {
+    void `${coercedArrow}`;
+    void `${assigned}`;
+    void trappedArrow.value;
+    return 1;
+  });
+  return <div>{m()}</div>;
+}
