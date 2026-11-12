@@ -1163,7 +1163,7 @@ const CALL_ATTRIBUTED_DEPTH: usize = 4;
 /// universe when it gives a setter call its OPTIMISTIC_WRITE_BEFORE_LOAD code.
 pub(crate) fn optimistic_async_setter(
     dialect: &dyn solid_dialect::Dialect,
-    setters: &HashMap<
+    rows: &HashMap<
         SymbolId,
         (
             SymbolId,
@@ -1172,14 +1172,14 @@ pub(crate) fn optimistic_async_setter(
             ReactiveSourceKind,
         ),
     >,
-    async_sources: &HashSet<SymbolId>,
-    source_primitives: &HashMap<SymbolId, SymbolId>,
+    asynchronous: &HashSet<SymbolId>,
+    primitive_of: &HashMap<SymbolId, SymbolId>,
     symbol: &str,
 ) -> bool {
     let optimistic = |symbol: &str| {
-        async_sources.contains(symbol)
+        asynchronous.contains(symbol)
             && matches!(
-                source_primitives
+                primitive_of
                     .get(symbol)
                     .and_then(|primitive| dialect.primitive(primitive)),
                 Some(
@@ -1189,9 +1189,9 @@ pub(crate) fn optimistic_async_setter(
             )
     };
     dialect.refuses_optimistic_write_before_load()
-        && setters.get(symbol).is_some_and(|row| {
+        && rows.get(symbol).is_some_and(|row| {
             optimistic(symbol)
-                || setters
+                || rows
                     .iter()
                     .any(|(other, candidate)| candidate.1 == row.1 && optimistic(other.as_str()))
         })
