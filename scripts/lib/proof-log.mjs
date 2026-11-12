@@ -17,9 +17,11 @@
 //       and does not (`premise-unconfirmed`: a setter's guard that throws first has its SC2001 violation in the final list).
 //
 // A site has one `site` line per Chrome code it may raise (batch 11, slice 4: `code`, and `by`/`credited` for the ending that stands at its span), and the checks above are
-// asked of each (site, code): an ending ends a code only if it answers that code, a named silence ends the codes its `codes` list (a silence line with none ends every code, as
-// a log from before the field does), and the classifier's decisions are about the table's first code (`SITE_CODE`), so a line of another code (SC2009 at a setter call) has no
-// decision to be explained by: it is ended by a row, a silence naming it, or it is a C1 hit.
+// asked of each (site, code): an ending ends a code only if it answers that code, a named end (`rule: "end"`) ends the codes its `codes` list and no other (a line with no `codes`
+// ends none: the writer omits an empty list, the end's removed row answering no code of the universe, and the checker then files the code's uncertifiable row; a line of another
+// pass at the span, `PendingSafe`, `FlushSafe`, a `row:*` stage, SC4001, is not about a code of the universe; a site line with no `code` is ended by none, fail closed), and the
+// classifier's decisions are about the table's first code (`SITE_CODE`), so a line of another code (SC2009 at a setter call) has no decision to be explained by: it is ended by a
+// row, a named end listing it, or it is a C1 hit.
 //
 // C2, a label-only end and an unconfirmed premise are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a
 // stated reason.
@@ -204,9 +206,10 @@ export function proofHits(lines) {
     // A site that ends in nothing: no row, no census obligation, no compiler discard. Its account is the classifier's answer
     // (a tagged, non-default arm that said silent), a named silence, or nothing at all.
     for (const site of t.site) {
-      // A named silence at the site, or at any span a row for it may sit at (`alt`), is its account when it names the site's code (a line with no `codes` names every code).
+      // A named end at the site, or at any span a row for it may sit at (`alt`), is its account when it lists the site's code. Only a named end (`rule: "end"`) is one, and only for the
+      // codes it lists: a line with no `codes`, one of another pass, and a site line with no `code` end nothing (fail closed: the checker ends none of them and files the code's row).
       const spans = [spanKey(site), ...(site.alt ?? []).map(([s, e]) => `${s}:${e}`)];
-      const silencedFor = (key) => (silents.get(key) ?? []).some((silent) => silent.codes === undefined || site.code === undefined || silent.codes.includes(site.code));
+      const silencedFor = (key) => (silents.get(key) ?? []).some((silent) => silent.rule === "end" && site.code !== undefined && Array.isArray(silent.codes) && silent.codes.includes(site.code));
       if (site.end !== "none" || spans.some(silencedFor)) continue;
       // The classifier's decisions are about the table's first code: another code of the site has none.
       const kind = DECISION_KIND[site.t];
