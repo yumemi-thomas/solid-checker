@@ -72,8 +72,9 @@ enum Site {
 /// The global objects a program's own globals are members of.
 const GLOBAL_OBJECTS: [&str; 4] = ["globalThis", "window", "self", "global"];
 
-/// How many names an escaped object may be traced back through
-/// (`const y = x.self()`): each is a name the walk then follows forward.
+/// How many names deep a walk follows a value held by a name: an escaped object
+/// traced back through `const y = x.self()`, each a name the walk then follows
+/// forward, and a function held through `const g = f; const h = g` ([`walk_aliases`]).
 const MAX_ALIASES: usize = 8;
 
 /// Which slot of a holder holds the source.
@@ -83,6 +84,47 @@ enum Slot {
     Any,
     /// A static key, interned by [`Census::key`]. An array's index is its text.
     Key(u32),
+}
+
+/// What one name that holds a function leads to: a call through it, or a further name
+/// initialized with a reference of it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AliasStep {
+    Call(Span),
+    Name(Span),
+}
+
+/// The calls through the names a function is held by, and whether the walk left a
+/// name unfollowed (ADR 0928). `start` is the names declared with the function
+/// itself; `step` answers what one name leads to. A name is followed forward at
+/// most [`MAX_ALIASES`] names deep, by the length of the chain and never by how
+/// many sibling names there are, and a name past that depth is not followed: the
+/// answer is `true`, the calls it would have given are unknown, and the caller must
+/// not read the calls it got as all of them.
+fn walk_aliases(
+    start: Vec<Span>,
+    mut step: impl FnMut(Span) -> Vec<AliasStep>,
+) -> (Vec<Span>, bool) {
+    let mut pending = start.into_iter().map(|name| (name, 1)).collect::<Vec<_>>();
+    let mut seen = HashSet::default();
+    let mut calls = Vec::new();
+    let mut truncated = false;
+    while let Some((name, depth)) = pending.pop() {
+        if depth > MAX_ALIASES {
+            truncated = true;
+            continue;
+        }
+        if !seen.insert(name) {
+            continue;
+        }
+        for next in step(name) {
+            match next {
+                AliasStep::Call(call) => calls.push(call),
+                AliasStep::Name(alias) => pending.push((alias, depth + 1)),
+            }
+        }
+    }
+    (calls, truncated)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -781,8 +823,10 @@ impl<'l, 'a> Census<'l, 'a> {
     /// ADR 0928: the calls of a function through `const` names that hold it
     /// (`const f = () => s; const g = f; g()`), which the call graph does not
     /// name: each name the compiler declared with the function, or with a
-    /// reference of such a name, as its whole initializer.
-    fn alias_calls(&mut self, file: &FileFacts, function: Span) -> Vec<Span> {
+    /// reference of such a name, as its whole initializer. The flag says the
+    /// walk stopped short of a name there is (a chain deeper than
+    /// [`MAX_ALIASES`]): a call through it is not among the calls.
+    fn alias_calls(&mut self, file: &FileFacts, function: Span) -> (Vec<Span>, bool) {
         let ast = &file.ast;
         let names_of = |value: Span| {
             ast.bindings
@@ -795,22 +839,17 @@ impl<'l, 'a> Census<'l, 'a> {
                 })
                 .flat_map(|binding| binding.names.iter().map(|name| name.span))
         };
-        let mut names = names_of(function).collect::<Vec<_>>();
-        let mut seen = HashSet::default();
-        let mut calls = Vec::new();
-        while let Some(name) = names.pop() {
-            if seen.len() > MAX_ALIASES || !seen.insert(name) {
-                continue;
-            }
+        walk_aliases(names_of(function).collect(), |name| {
+            let mut steps = Vec::new();
             for reference in self.references(file, name) {
                 match ast.calls_with_peeled_callee(reference).next() {
-                    Some(call) if !call.construct => calls.push(call.span),
+                    Some(call) if !call.construct => steps.push(AliasStep::Call(call.span)),
                     Some(_) => {}
-                    None => names.extend(names_of(reference)),
+                    None => steps.extend(names_of(reference).map(AliasStep::Name)),
                 }
             }
-        }
-        calls
+            steps
+        })
     }
 
     /// ADR 0928: the calls in `file` whose callee the compiler resolves to
@@ -2025,14 +2064,18 @@ impl<'l, 'a> Census<'l, 'a> {
         // ADR 0928: a call through a name that aliases the function
         // (`const g = f; g()`), or of a method or slot the compiler resolves
         // to it, which the call graph does not name.
-        let mut more = self.alias_calls(file, function);
+        let (mut more, truncated) = self.alias_calls(file, function);
         more.extend(self.method_calls(file, function));
         for call in more {
             reached = true;
             self.position(file, call, mode);
         }
         self.return_hops -= 1;
-        if reached {
+        if truncated {
+            // A name past the walk's depth may hold the function and call it: what it does with the value
+            // is unread, whatever the calls that were found did.
+            Position::Open(blockers::VALUE_FORWARDED)
+        } else if reached {
             Position::Followed
         } else {
             Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE)
@@ -3374,6 +3417,111 @@ mod tests {
         ] {
             assert_eq!(written_key(text), key, "{text}");
         }
+    }
+
+    /// A graph of alias names for [`walk_aliases`]: each name leads to the calls through it and
+    /// to the names initialized with a reference of it. Names are told apart by their start.
+    fn alias_graph(
+        calls: &[(u32, u32)],
+        names: &[(u32, u32)],
+    ) -> impl FnMut(Span) -> Vec<AliasStep> {
+        let calls = calls.to_vec();
+        let names = names.to_vec();
+        move |name| {
+            let mut steps = Vec::new();
+            for (from, call) in &calls {
+                if *from == name.start {
+                    steps.push(AliasStep::Call(Span::new(*call, *call + 1)));
+                }
+            }
+            for (from, alias) in &names {
+                if *from == name.start {
+                    steps.push(AliasStep::Name(Span::new(*alias, *alias + 1)));
+                }
+            }
+            steps
+        }
+    }
+
+    /// The census's closed set of aliases once capped the NAMES it followed, and dropped the rest
+    /// without a word: `const a = f; const b = f; ...` with ten names lost the calls through the
+    /// ninth and tenth, and a call found elsewhere made the walk read "followed".
+    #[test]
+    fn every_call_through_ten_sibling_names_is_returned() {
+        // names at starts 1000..=1009, each called once at 2000 + its own start offset
+        let start = (0..10)
+            .map(|index| Span::new(1000 + index, 1001 + index))
+            .collect::<Vec<_>>();
+        let calls = (0..10)
+            .map(|index| (1000 + index, 2000 + index))
+            .collect::<Vec<_>>();
+        let (found, truncated) = walk_aliases(start, alias_graph(&calls, &[]));
+        let mut found = found.into_iter().map(|call| call.start).collect::<Vec<_>>();
+        found.sort_unstable();
+        assert_eq!(found, (2000..2010).collect::<Vec<_>>());
+        assert!(!truncated, "ten siblings are one name deep");
+    }
+
+    #[test]
+    fn a_chain_is_followed_to_the_depth_limit_and_a_longer_one_says_it_stopped() {
+        // g1 = f; g2 = g1; ... each name `index` is called at 2000 + index and holds name `index + 1`
+        let chain = |length: u32| {
+            let start = vec![Span::new(1, 2)];
+            let calls = (1..=length)
+                .map(|index| (index, 2000 + index))
+                .collect::<Vec<_>>();
+            let names = (1..length)
+                .map(|index| (index, index + 1))
+                .collect::<Vec<_>>();
+            walk_aliases(start, alias_graph(&calls, &names))
+        };
+        let depth = u32::try_from(MAX_ALIASES).unwrap();
+        let (found, truncated) = chain(depth);
+        assert_eq!(found.len(), MAX_ALIASES);
+        assert!(
+            !truncated,
+            "a chain of {MAX_ALIASES} names is within the limit"
+        );
+        let (found, truncated) = chain(depth + 2);
+        assert!(
+            truncated,
+            "a chain two names past the limit leaves names unfollowed"
+        );
+        assert_eq!(
+            found.len(),
+            MAX_ALIASES,
+            "the names within the limit are all followed"
+        );
+        let (found, truncated) = chain(10);
+        assert!(truncated);
+        assert_eq!(found.len(), MAX_ALIASES);
+    }
+
+    #[test]
+    fn a_wide_and_deep_walk_returns_every_call_it_followed_and_says_when_it_did_not() {
+        // two chains of ten names from the function: the first eight names of each are followed
+        let start = vec![Span::new(1, 2), Span::new(101, 102)];
+        let mut calls = Vec::new();
+        let mut names = Vec::new();
+        for base in [1u32, 101] {
+            for index in 0..10 {
+                calls.push((base + index, 2000 + base + index));
+                if index < 9 {
+                    names.push((base + index, base + index + 1));
+                }
+            }
+        }
+        let (found, truncated) = walk_aliases(start, alias_graph(&calls, &names));
+        assert_eq!(found.len(), 2 * MAX_ALIASES);
+        assert!(truncated);
+    }
+
+    #[test]
+    fn a_name_that_holds_itself_is_followed_once() {
+        let (found, truncated) =
+            walk_aliases(vec![Span::new(1, 2)], alias_graph(&[(1, 2000)], &[(1, 1)]));
+        assert_eq!(found, vec![Span::new(2000, 2001)]);
+        assert!(!truncated);
     }
 
     #[test]

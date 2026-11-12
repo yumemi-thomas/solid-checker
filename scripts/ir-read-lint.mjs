@@ -136,6 +136,19 @@ export function codeLines(text) {
   return code;
 }
 
+/** Which lines of a Rust source sit in a `#[cfg(test)]` item: the lines `codeLines` blanks, for a scan that reads the comments `codeLines` strips. */
+export function testItemLines(text) {
+  const lines = text.split("\n");
+  const inTest = new Array(lines.length).fill(false);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!TEST_ATTRIBUTE.test(lines[index])) continue;
+    const end = itemEnd(lines, index);
+    for (; index <= end; index += 1) inTest[index] = true;
+    index -= 1;
+  }
+  return inTest;
+}
+
 /** Counts of each raw-read kind in one source text. */
 export function countReads(text) {
   const counts = {
