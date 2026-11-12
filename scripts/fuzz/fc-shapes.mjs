@@ -12,6 +12,8 @@
 //             gencarrier      `late = [1].map(function* () { <site> })` written in a timer's callback, `late[0].next()` in the host: the carrier only creates the generator object, its body runs
 //                             at `.next()` (the re-review of #213, N1 and N2).
 //             jsxprop         `<Child v={<site>} />` created in a timer's callback, `props.v` read in the host: a prop written in JSX is a getter, it runs where the component reads it (N3).
+//             recvthen        `recv.catch(() => { <site> })` written in the host's callback, `recv` an instance of a Promise subclass whose `then` runs the handler at once: `catch` runs its callback
+//                             through the receiver's `then` (ECMAScript 27.2.5.1), so the callback is run on the host's stack (the second re-review of #213, N5). The twin's `then` runs nothing.
 //   hosts   effect-apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), action (an action's step: FLUSH_IN_ACTION), tracked (a leaf owner's callback: FLUSH_IN_TRACKED_QUEUE_CALLBACK)
 //
 // Chrome (rc.21, the real oracle) confirmed the false clean on #213's head e70b560f2 (a typed reason `FlushSafe::FreshStack` ended the site): `named` in an action's step and in an effect's apply,
@@ -20,7 +22,7 @@
 // holds the shapes in plain programs; fixtures/reactive-ir/flush-universe-class holds the runner's).
 import { contain } from "./model.mjs";
 
-export const FC_FORMS = ["named", "pdefault", "pdefault-await", "field", "gencarrier", "jsxprop"];
+export const FC_FORMS = ["named", "pdefault", "pdefault-await", "field", "gencarrier", "jsxprop", "recvthen"];
 export const FC_HOSTS = ["effect-apply", "action", "tracked"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const FC_CODES = {
@@ -129,6 +131,31 @@ const FRAMES = {
       mode: "expr",
       imports: inside.imports,
     };
+  },
+  recvthen: (n, host, never) => {
+    const sync = n("Sync");
+    const recv = n("recv");
+    const sig = n("fs");
+    const run = n("fr");
+    // A promise whose `then` runs the rejection handler at once: `catch(cb)` is `this.then(undefined, cb)`. In the twin `then` runs nothing, so the handler never runs.
+    const klass = [
+      `class ${sync}<T> extends Promise<T> {`,
+      `  override then<A = T, B = never>(ok?: ((value: T) => A | PromiseLike<A>) | null, bad?: ((reason: unknown) => B | PromiseLike<B>) | null): Promise<A | B> {`,
+      `    void ok;`,
+      `    ${never ? "void bad;" : "bad?.(undefined);"}`,
+      `    return this as unknown as Promise<A | B>;`,
+      `  }`,
+      `}`,
+      `const ${recv} = new ${sync}<void>(() => {});`,
+    ].join("\n");
+    const open = `${recv}.catch(() => `;
+    // The host's callback calls `catch`; the site is written in its callback, which `then` runs on the host's stack.
+    const hosts = {
+      "effect-apply": { head: `const [${sig}] = createSignal(0);\ncreateEffect(\n  () => ${sig}(),\n  () => {\n    ${open}`, close: `);\n  },\n);`, imports: ["createEffect"] },
+      tracked: { head: `const [${sig}] = createSignal(0);\ncreateTrackedEffect(() => {\n  ${sig}();\n  ${open}`, close: `);\n});`, imports: ["createTrackedEffect"] },
+      action: { head: `const ${run} = action(function* () {\n  ${open}`, close: `);\n});\nsetTimeout(() => void ${run}());`, imports: ["action"] },
+    }[host];
+    return { head: `${klass}\n${hosts.head}`, close: hosts.close, imports: hosts.imports };
   },
   "pdefault-await": (n, host, never) => {
     const late = n("late");
