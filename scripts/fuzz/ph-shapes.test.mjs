@@ -1,0 +1,134 @@
+import { describe, expect, it } from "vitest";
+import { buildCase } from "./emit.mjs";
+import { generateProgram } from "./generate.mjs";
+import { recallLegalShapes } from "./legal.mjs";
+import { BASE_ONLY_CONTEXTS, SPEC } from "./misuse.mjs";
+import { censusCells, recallShapes } from "./matrix.mjs";
+import { isValid } from "./model.mjs";
+import { PH_CODES, PH_CONTEXTS, PH_CONTEXT_NAMES, PH_HOSTS, PH_PACKAGE, PH_ROUTES, phPackageFiles, phParts, phShape } from "./ph-shapes.mjs";
+
+// The B3 PR after #213 and its flip (the review of #216): a flush in a function a package the build does not read as source may run, by every route a function reaches the package
+// (twenty-six), with the twins that never run it.
+
+const built = (code, context) => {
+  const side = PH_CONTEXTS[context];
+  const shape = (side === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none");
+  const program = generateProgram(7, { profile: "misuse", misusePlan: { code, context, variant: shape.variant, binding: "direct", layer: "none", legal: side === "legal" } });
+  const case_ = buildCase(program, { id: `ph-${context}` });
+  expect(isValid(program), context).toBe(true);
+  expect(case_.neutral, context).toBe(true);
+  expect(case_.sites, context).toHaveLength(1);
+  return case_;
+};
+const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
+
+describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
+  it("are twenty-six routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic"]);
+    expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
+    expect(PH_CONTEXT_NAMES).toHaveLength(156);
+    for (const name of PH_CONTEXT_NAMES) {
+      const parts = phParts(name);
+      expect(parts, name).not.toBeNull();
+      expect(PH_CONTEXTS[name]).toBe(parts.never ? "legal" : "misuse");
+      expect(name).toBe(`ph-${parts.route}-${parts.host}${parts.never ? "-never" : ""}`);
+    }
+    for (const other of ["ph-literal", "fc-named-action", "ph-literal-other", "pl-untrack-tracked"]) expect(phParts(other), other).toBeNull();
+  });
+  it("ship a package that names no Solid package, so the build does not read its source", () => {
+    const files = phPackageFiles();
+    const manifest = JSON.parse(files["package.json"]);
+    expect(manifest.name).toBe(PH_PACKAGE);
+    expect(manifest.dependencies).toBeUndefined();
+    expect(manifest.peerDependencies).toBeUndefined();
+    expect(files["index.js"]).toContain("action(function* ()");
+    expect(files["index.js"]).toContain("createEffect(() => 1, () => {");
+    expect(files["index.js"]).toContain("createTrackedEffect(() => {");
+    for (const name of ["runStep", "runApplyWith", "runLeafAll", "runStepGet", "runApplyConfig", "StepView", "ApplyView", "LeafView", "skipRun", "skipRunWith", "skipRunAll", "skipRunGet", "skipRunConfig", "SkipView"]) expect(files["index.d.ts"], name).toContain(`export declare const ${name}:`);
+    expect(files["index.d.ts"]).toContain("export declare const config:");
+    const program = built("FLUSH_IN_ACTION", "ph-literal-step");
+    expect(Object.keys(program.packages ?? {})).toEqual([PH_PACKAGE]);
+  });
+  it("print the routes: the site first, then the call that hands the function to the package, or in the twin to a function that ignores it", () => {
+    const literal = textOf("FLUSH_IN_ACTION", "ph-literal-step");
+    expect(literal).toContain('import { runStep } from "fz-step";');
+    expect(literal.some((line) => line.startsWith("runStep(() => {"))).toBe(true);
+    const twin = textOf("FLUSH_IN_ACTION", "ph-literal-step-never");
+    expect(twin).toContain('import { skipRun } from "fz-step";');
+    expect(twin.some((line) => line.startsWith("skipRun(() => {"))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-ref-step").some((line) => /^runStep\(cb\d+\);$/.test(line))).toBe(true);
+    const alias = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-alias-apply");
+    expect(alias.some((line) => /^const again\d+ = cb\d+;$/.test(line))).toBe(true);
+    expect(alias.some((line) => /^runApply\(again\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-member-step").some((line) => line.startsWith("runStepWith({ run: () => {"))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-method-step").some((line) => line.startsWith("runStepWith({ run() {"))).toBe(true);
+    const holder = textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-holder-leaf");
+    expect(holder.some((line) => line.startsWith("const opts"))).toBe(true);
+    expect(holder.some((line) => /^runLeafWith\(opts\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-array-step").some((line) => line.startsWith("runStepAll([() => {"))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-jsx-step").some((line) => line.startsWith("document.body.append((<StepView render={() => {"))).toBe(true);
+    expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-children-apply").some((line) => line.startsWith("document.body.append((<ApplyView>{() => {"))).toBe(true);
+    expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-jsx-leaf-never").some((line) => line.includes("<SkipView render={() => {"))).toBe(true);
+    const wrap = textOf("FLUSH_IN_ACTION", "ph-wrap-step");
+    expect(wrap.some((line) => /^function wrap\d+\(run: \(\) => void\) \{$/.test(line))).toBe(true);
+    expect(wrap).toContain("runStep(run);");
+    const returned = textOf("FLUSH_IN_ACTION", "ph-return-step");
+    expect(returned.some((line) => /^function make\d+\(\) \{$/.test(line))).toBe(true);
+    expect(returned.some((line) => /^runStep\(make\d+\(\)\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-call-step").some((line) => line.startsWith("runStep.call(null, () => {"))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-call-step-never").some((line) => line.startsWith("skipRun.call(null, () => {"))).toBe(true);
+    const caller = textOf("FLUSH_IN_ACTION", "ph-caller-step");
+    expect(caller.some((line) => /^function helper\d+\(\) \{$/.test(line))).toBe(true);
+    expect(caller.some((line) => /^runStep\(\(\) => helper\d+\(\)\);$/.test(line))).toBe(true);
+  });
+  it("print the flip's routes: where the value is kept, iterated, returned, assigned, run inline, or passed along a component", () => {
+    const set = textOf("FLUSH_IN_ACTION", "ph-set-step");
+    expect(set.some((line) => /^const kept\d+ = new Set<\(\) => void>\(\);$/.test(line))).toBe(true);
+    expect(set.some((line) => /^kept\d+\.add\(\(\) => \{$/.test(line))).toBe(true);
+    expect(set.some((line) => /^runStep\(each\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-forof-step").some((line) => /^for \(const each\d+ of \[\(\) => \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-recv-step").some((line) => /^\[\(\) => \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-resolve-step").some((line) => line.startsWith("void Promise.resolve(() => {"))).toBe(true);
+    const klass = textOf("FLUSH_IN_ACTION", "ph-class-step");
+    expect(klass.some((line) => /^class Job\d+ \{$/.test(line))).toBe(true);
+    expect(klass.some((line) => /^runStepWith\(new Job\d+\(\)\);$/.test(line))).toBe(true);
+    const assign = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-assign-apply");
+    expect(assign).toContain('import { runApplyConfig, config } from "fz-step";');
+    expect(assign.some((line) => line.startsWith("config.onStep = () => {"))).toBe(true);
+    expect(assign).toContain("runApplyConfig();");
+    expect(textOf("FLUSH_IN_ACTION", "ph-assign-step-never")).toContain("skipRunConfig();");
+    const props = textOf("FLUSH_IN_ACTION", "ph-props-step");
+    expect(props.some((line) => /^function Wrap\d+\(props: \{ render: \(\) => void \}\) \{$/.test(line))).toBe(true);
+    expect(props).toContain("return <StepView render={props.render} />;");
+    expect(textOf("FLUSH_IN_ACTION", "ph-getter-step").some((line) => /^runStepGet\(\(\) => cb\d+\);$/.test(line))).toBe(true);
+    const reflect = textOf("FLUSH_IN_ACTION", "ph-reflect-step");
+    expect(reflect.some((line) => /^wrap\d+\.call\(null, \(\) => \{$/.test(line))).toBe(true);
+    expect(reflect).toContain("runStep(run);");
+    expect(textOf("FLUSH_IN_ACTION", "ph-inline-step").some((line) => /^\[1\]\.forEach\(cb\d+\);$/.test(line))).toBe(true);
+    const param = textOf("FLUSH_IN_ACTION", "ph-param-step");
+    expect(param.some((line) => /^function call\d+\(g: \(\) => void\) \{$/.test(line))).toBe(true);
+    expect(param.some((line) => /^call\d+\(cb\d+\);$/.test(line))).toBe(true);
+    const untrack = textOf("FLUSH_IN_ACTION", "ph-untrack-step");
+    expect(untrack).toContain('import { untrack } from "solid-js";');
+    expect(untrack.some((line) => /^untrack\(cb\d+\);$/.test(line))).toBe(true);
+    const dynamic = textOf("FLUSH_IN_ACTION", "ph-dynamic-step");
+    expect(dynamic).toContain('import { Dynamic } from "@solidjs/web";');
+    expect(dynamic.some((line) => line.startsWith("document.body.append((<Dynamic component={StepView} render={() => {"))).toBe(true);
+  });
+  it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
+    expect(phShape("ph-literal-step", { binding: "alias", layer: "none" })).toBe(false);
+    expect(phShape("pl-untrack-tracked", { binding: "alias", layer: "iife" })).toBe(true);
+    for (const [code, hosts] of Object.entries(PH_CODES)) {
+      for (const context of PH_CONTEXT_NAMES.filter((name) => hosts.includes(phParts(name).host))) {
+        const side = PH_CONTEXTS[context] === "misuse" ? SPEC[code].recallContexts : SPEC[code].recallLegal;
+        expect(side, `${code} ${context}`).toContain(context);
+        const shapes = (PH_CONTEXTS[context] === "misuse" ? recallShapes : recallLegalShapes)(code, context);
+        expect(shapes.length, `${code} ${context}`).toBeGreaterThan(0);
+        for (const shape of shapes) expect({ binding: shape.binding, layer: shape.layer ?? "none" }, `${code} ${context}`).toEqual({ binding: "direct", layer: "none" });
+      }
+    }
+    for (const context of PH_CONTEXT_NAMES) expect(BASE_ONLY_CONTEXTS()).toContain(context);
+    expect(Object.keys(PH_CODES)).toEqual(["FLUSH_IN_EFFECT_CALLBACK", "FLUSH_IN_ACTION", "FLUSH_IN_TRACKED_QUEUE_CALLBACK"]);
+    expect(censusCells().filter(({ context }) => PH_CONTEXT_NAMES.includes(context))).toEqual([]);
+  });
+});

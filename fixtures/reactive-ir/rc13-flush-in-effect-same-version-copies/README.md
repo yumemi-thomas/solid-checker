@@ -1,3 +1,5 @@
 # rc13-flush-in-effect-same-version-copies
 
 Two installed copies of `solid-js` at the same version (`node_modules` and `lib/node_modules`). TypeScript merges the second into the first copy's declarations, so the declaration package directories are equal, yet the runtime loads both and each has its own scheduler queue: `lib/helper.ts` imports the second copy, so its `flush` is not the queue the first copy's `createEffect` is running. SC2008 decides package identity by module resolution from each file's directory (`PackageInstanceEvidence`): the `flush` in `App.ts` is reported, the one reached through `lib/helper.ts` is not.
+
+Since the flip of ADR 0967's default (the review of #216) this fixture's program has an open boundary (no `.solid-checker/runtime.json`), so each `flush()` written in an exported function keeps an uncertifiable row of every code its program censuses ruled out (SC2006 `flush-in-action-unaccounted`, SC2008 `flush-in-effect-unaccounted`, SC3001 `leaf-operation-unaccounted`): an export may be entered by code this build cannot see, an action's step among it. The snapshot's additional rows are those; the claim above is unchanged.

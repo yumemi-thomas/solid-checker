@@ -1,3 +1,5 @@
 # flush-veto-body
 
 **Claim (ADR 0613).** A `flush()` in a component body drains the queue under the component (rc.17 sets no owner around the drain), so every `createEffect` apply's ownerless proofs are withheld: SC6002 and SC4001 for the effect created in `CreatesInApply`'s apply, and SC2001 for the writes in `WritesInApply`'s apply and `WritesInReturnedCleanup`'s returned cleanup, are uncertifiable. Probed (rc.17 fast runtime): the inner effect raised nothing, the write threw `REACTIVE_WRITE_IN_OWNED_SCOPE`. Control: `flush-veto-kept`. Stubs as in `effect-phase-layers`.
+
+Since the flip of ADR 0967's default (the review of #216) this fixture's program has an open boundary (no `.solid-checker/runtime.json`), so each `flush()` written in an exported function keeps an uncertifiable row of every code its program censuses ruled out (SC2006 `flush-in-action-unaccounted`, SC2008 `flush-in-effect-unaccounted`, SC3001 `leaf-operation-unaccounted`): an export may be entered by code this build cannot see, an action's step among it. The snapshot's additional rows are those; the claim above is unchanged.

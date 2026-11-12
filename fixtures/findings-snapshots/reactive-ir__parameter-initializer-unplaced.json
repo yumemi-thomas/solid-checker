@@ -90,6 +90,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 1285,
+      "end": 1292,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -175,6 +186,17 @@
       "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
       "start": 2007,
       "end": 2012,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2007,
+      "end": 2014,
       "fixes": 0
     },
     {

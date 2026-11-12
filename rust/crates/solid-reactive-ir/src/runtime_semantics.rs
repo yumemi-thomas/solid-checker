@@ -221,6 +221,46 @@ pub(super) fn test_runner_function_declaration(path: &str, name: &str) -> Option
         .map(|(_, suite_bodies)| *suite_bodies)
 }
 
+/// The installed declaration files of the reviewed test libraries that declare a function named `useFakeTimers`, which replaces the host's timers with a clock the test
+/// advances (F1 of the review of #213, the owner's ruling): `vi` of vitest and of `bun:test`, `jest` of `@types/jest`, of `@jest/globals` (whose `Jest` is
+/// `@jest/environment`'s) and of `bun:test`. Each entry is a run of consecutive path components, as [`TEST_RUNNER_DECLARATIONS`]'s are (`node_modules` leads each, so a
+/// project directory named `vitest` is not one). A library not listed here (sinon's `useFakeTimers`, jasmine's clock, `node:test`'s mock timers, a configuration that
+/// turns fake timers on) is named in `docs/open-work.md`, not recognized.
+const FAKE_TIMER_DECLARATIONS: &[&[&str]] = &[
+    &["node_modules", "vitest"],
+    &["node_modules", "@types", "jest"],
+    &["node_modules", "@jest", "environment"],
+    &["node_modules", "@jest", "globals"],
+    &["node_modules", "bun-types", "test.d.ts"],
+];
+
+/// The name the reviewed libraries declare their fake-timer installer under: `vi.useFakeTimers`, `jest.useFakeTimers`.
+const FAKE_TIMER_INSTALLER: &str = "useFakeTimers";
+
+/// Whether the file `path` is an installed declaration file of a reviewed fake-timer library ([`FAKE_TIMER_DECLARATIONS`]).
+pub(super) fn fake_timer_library_declaration(path: &str) -> bool {
+    let components = path.split(['/', '\\']).collect::<Vec<_>>();
+    FAKE_TIMER_DECLARATIONS.iter().any(|library| {
+        components
+            .windows(library.len())
+            .any(|window| window == *library)
+    })
+}
+
+/// Whether the declaration `name` of the file `path` is one a reviewed test library declares for installing fake timers ([`FAKE_TIMER_DECLARATIONS`]). A declaration the
+/// symbol of a member's property resolves to (the compiler's, never the spelling written at the call: `vi["useFakeTimers"]`, `vi.useFakeTimers.call(vi)` and
+/// `const install = vi.useFakeTimers` name the same declaration).
+pub(super) fn fake_timer_installer_declaration(path: &str, name: &str) -> bool {
+    name == FAKE_TIMER_INSTALLER && fake_timer_library_declaration(path)
+}
+
+/// Whether `property`, the name the syntax states for a member of an object a reviewed library declares (`vi.useFakeTimers` read as a value, `const { useFakeTimers } = vi`), is
+/// the installer's. The entity of a property that is not called is not in the table, and the one a shorthand key names is the local binding, so the property is read from
+/// the name written and the object's declaration decides which library's it is.
+pub(super) fn fake_timer_installer_property(property: &str) -> bool {
+    property == FAKE_TIMER_INSTALLER
+}
+
 /// Whether a registration function declared under `name` registers a suite.
 pub(super) fn test_runner_suite_function(name: &str) -> bool {
     matches!(name, "describe" | "suite")
