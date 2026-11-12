@@ -28,7 +28,10 @@ reactivity analysis but cannot be established. Covered forms include:
 - a Solid primitive used as a value (`let eff = createEffect`,
   `Reflect.apply(createEffect, …)`): the calls it reaches are not followed. A
   binding that exactly holds it (`const eff = createEffect`, `const r =
-  S.refresh`, a closed holder's member; ADR 0901) names it instead; and
+  S.refresh`, a closed holder's member; ADR 0901) names it instead. A
+  primitive handed to a call as an argument also files `primitive-handed` at the
+  call (ADR 0825 amended: the runtime's frame stands there, the reference's row
+  at the argument); and
 - an exported helper that directly invokes a member supplied through a
   parameter outside a proven tracked JSX region, because callers outside the
   analyzed project can supply unseen behavior.

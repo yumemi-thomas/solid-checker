@@ -201,6 +201,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "primitive-handed",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 629,
+      "end": 689,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "primitive-value",
       "severity": "warning",
       "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",

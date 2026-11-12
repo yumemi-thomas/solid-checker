@@ -235,6 +235,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect.analysis_context == crate::PRIMITIVE_HANDED => (
+            format!(
+                "Solid primitive {callee} is handed to this call as a value, so what the call does with it is not followed; the owner, tracking and write rules that apply where it runs are not checked"
+            ),
+            "Call the primitive directly by its imported name where it is wanted, so solid-checker can see each call.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::blockers::PRIMITIVE_ALIAS_CALL => (
             format!(
                 "This call resolves to Solid's {callee} through a name solid-checker cannot follow, so no rule sees what {callee} does here"
