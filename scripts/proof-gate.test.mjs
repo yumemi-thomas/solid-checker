@@ -151,6 +151,48 @@ describe("an owner-call site's fail-closed ending is named (batch 11, slice 6; c
     // Another table's site is no owner-call site: its row and a decline end nothing.
     assert.deepEqual(kinds([site(10, { t: "write", code: "REACTIVE_WRITE_IN_OWNED_SCOPE" }), verdict(10, { code: "SC2001", rule: "no-write-in-pure-computation", kind: "uncertifiable", ctx: "write-unaccounted" }), declined(10, ["REACTIVE_WRITE_IN_OWNED_SCOPE"])]), ["C1/no-decision"]);
   });
+
+  // Gate change (batch 11, B2; coordinator-approved): the projection's ExecutionPaths pass removes a home row a client build never reaches (the arm of an `isServer` ternary), and
+  // the drop is the home row's own and carries its typed premise.
+  const homeDrop = (s, code, extra = {}) =>
+    drop(s, {
+      code: code === EFFECT ? "SC6002" : "SC3001",
+      from: "uncertifiable",
+      ctx: code === EFFECT ? "effect-creation-unaccounted" : "leaf-operation-unaccounted",
+      premises: [{ kind: "ClientRuntimeReach", at: [s, s + 3] }],
+      ...extra,
+    });
+
+  test("gate change: a home row the ExecutionPaths pass dropped with its typed ClientRuntimeReach premise, and a decline, end the site", () => {
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT), declined(10, [EFFECT])]), []);
+    assert.deepEqual(kinds([call(10, CREATION), homeDrop(10, CREATION), declined(10, [CREATION])]), []);
+    // At an alternate span of the site, as the row may be.
+    assert.deepEqual(kinds([call(10, EFFECT, { alt: [[11, 19]] }), homeDrop(11, EFFECT, { e: 19 }), declined(10, [EFFECT])]), []);
+    // A creation's two codes end each on their own: SC3001's row stands, SC6002's was dropped.
+    assert.deepEqual(kinds([call(10, CREATION), call(10, EFFECT), home(10, CREATION), homeDrop(10, EFFECT), declined(10, [CREATION, EFFECT])]), []);
+    // The decline is still required, and a drop of another code's home row ends nothing here.
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT)]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, CREATION), declined(10, [EFFECT])]), ["C1/no-decision"]);
+  });
+
+  test("gate change: an untyped drop ends nothing", () => {
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { premises: [] }), declined(10, [EFFECT])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { premises: undefined }), declined(10, [EFFECT])]), ["C1/no-decision"]);
+    // Another premise kind, or a ClientRuntimeReach that names no span, is no typed premise.
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { premises: [{ kind: "OwningFindingAtSite", at: [10, 13] }] }), declined(10, [EFFECT])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { premises: [{ kind: "ClientRuntimeReach" }] }), declined(10, [EFFECT])]), ["C1/no-decision"]);
+  });
+
+  test("gate change: a drop of any other pass ends nothing, whatever premise it names, and so does a drop that is not the home row's own", () => {
+    for (const pass of ["OwnedByEnabledRule", "RuleDisabled", "HostSuppression", "SupersededByViolation", "SiteUnreached", "RuntimeConfiguration"]) {
+      assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { pass }), declined(10, [EFFECT])]), ["C1/no-decision"], pass);
+    }
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { code: "SC1001" }), declined(10, [EFFECT])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { from: "violation" }), declined(10, [EFFECT])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, EFFECT), homeDrop(10, EFFECT, { ctx: "function-run-unplaced" }), declined(10, [EFFECT])]), ["C1/no-decision"]);
+    // A reclass line is no drop.
+    assert.deepEqual(kinds([call(10, EFFECT), { ...homeDrop(10, EFFECT), k: "reclass" }, declined(10, [EFFECT])]), ["C1/no-decision"]);
+  });
 });
 
 describe("C2: a reporting decision with nothing ending the site", () => {
