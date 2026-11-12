@@ -1,7 +1,9 @@
 // The Solid dev diagnostic codes, the checker rules that claim them, and the dev-build errors thrown with no
 // code. `codeRules`, `thrownCodes` and `withholdingRules` copy the tables in scripts/runtime-oracle.mjs: that file
 // is a script with top-level effects and cannot be imported, so codes.test.mjs reads it and fails when the two
-// drift. `codeRules` is derived from the policy table below.
+// drift. `codeRules` is derived from the policy table below. The claiming rules, the declining rules and the placeless codes of
+// that table are mirrored in Rust, behind `Dialect::code_policy`: rust/crates/solid-dialect/src/solid_2/code_policy.rs, one line
+// per code; a change to `rules`, `declining` or `placelessCodes` here is a change to that table too.
 
 // --- The policy table (phase D) -------------------------------------------------------------------------------
 // Every rc.21 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for

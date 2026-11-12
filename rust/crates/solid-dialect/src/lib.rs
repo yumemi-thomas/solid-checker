@@ -24,6 +24,7 @@
 //! | `vocabulary` | `Primitive` and the small role enums it is described with. |
 //! | `packages` | Package-name predicates over the carried dialects and `HostTargetCondition`. |
 //! | `semantics` | Callback, owner, boundary and type-role enums and records a dialect answers with. |
+//! | `runtime_code` | `RuntimeCode`, the Solid dev diagnostic codes with a claiming or declining rule, and `CodePolicy`, what a dialect says of one. |
 //! | `dialect` | The `Dialect` trait. |
 //! | `solid_2`, `exports` | The Solid 2.0 vocabulary and the generated export index. |
 
@@ -40,6 +41,8 @@ mod packages;
 pub use packages::*;
 mod semantics;
 pub use semantics::*;
+mod runtime_code;
+pub use runtime_code::*;
 mod dialect;
 pub use dialect::*;
 
