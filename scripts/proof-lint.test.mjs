@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { describe, test } from "vitest";
 
 import { ROOT } from "./ir-read-lint.mjs";
-import { baselineFor, endIds, FINDING_FILTER_ONLY, hitsOf, PENDING, premiseKinds, problems, SCANNED, seenLists, seenMutators, silentRoleValues, SITE_ACCOUNTING } from "./proof-lint.mjs";
+import { baselineFor, endIds, FINDING_FILTER_ONLY, HAND_OFF_WINDOW, hitsOf, KIND_NAMES, PENDING, premiseKinds, problems, proseHandOffs, SCANNED, seenLists, seenMutators, silentRoleValues, SITE_ACCOUNTING } from "./proof-lint.mjs";
 
 const kinds = (text, producer = true) => hitsOf(text, producer).map((hit) => hit.kind);
 
@@ -98,6 +98,59 @@ describe("the other shapes", () => {
 
   test("test modules and comments are left out", () => {
     assert.deepEqual(kinds("// source.is_none_or(|x| x)\n#[cfg(test)]\nmod tests {\n    fn t() { let _ = x.unwrap_or(true); }\n}\n", false), []);
+  });
+});
+
+// ADR 0942, batch 11 slice 10b: a comment that hands a case to another check, above code that drops it, with no typed `Delegate`.
+describe("a prose hand-off is a comment that hands a case over, above a drop", () => {
+  const lines = (text) => proseHandOffs(text).map((hit) => hit.line);
+
+  test("a comment naming another rule's claim above a `continue` is a hit, at the comment's line", () => {
+    const text = "fn walk() {\n    // Flush first (SC2006's claim), so that kind is not this walk's.\n    if kind == Flush {\n        continue;\n    }\n}\n";
+    assert.deepEqual(lines(text), [2]);
+    assert.deepEqual(proseHandOffs(text).map((hit) => hit.kind), ["prose-hand-off"]);
+    assert.ok(KIND_NAMES.includes("prose-hand-off"));
+    assert.deepEqual(hitsOf(text, false).map((hit) => hit.kind).filter((kind) => kind === "prose-hand-off"), ["prose-hand-off"]);
+  });
+
+  test("each phrase of the claim, the judging, the pass and the walk is read, in a comment or a doc comment", () => {
+    for (const phrase of ["// SC4001's claim", "/// that function's to judge", "// stored-throw's to report", "// the owner graph's to answer", "// left to the stored-throw pass", "// not this walk's", "//! left to the other pass"]) {
+      assert.deepEqual(lines(`${phrase}\nreturn None;\n`), [1], phrase);
+    }
+    for (const phrase of ["// the claim is that the bindings are read once", "// SC4001 claims it", "// this walk's own claim", "let text = \"SC2006's claim\";", "// left to chance"]) {
+      assert.deepEqual(lines(`${phrase}\nreturn None;\n`), [], phrase);
+    }
+  });
+
+  test("each drop is read: continue, return None, return false, a None arm, a retain, a kind filter beside a record or a push", () => {
+    for (const drop of ["continue;", "return None;", "return false;", "Some(_) => None,", "findings.retain(|row| keep(row));", "findings.retain_mut(|row| keep(row));"]) {
+      assert.deepEqual(lines(`// SC4001's claim\n${drop}\n`), [1], drop);
+    }
+    assert.deepEqual(lines("// SC2006's claim\nif kind != LeafOwnerOperationKind::Flush {\n    record(kinds, kind);\n}\n"), [1]);
+    assert.deepEqual(lines("// SC2006's claim\nif matches!(kind, Kind::Flush) {\n    rows.push(row);\n}\n"), [1]);
+    // a kind filter with nothing it guards, and code that only reads, are no drop
+    assert.deepEqual(lines("// SC2006's claim\nif kind != LeafOwnerOperationKind::Flush {\n    return Some(kind);\n}\n"), []);
+    assert.deepEqual(lines("// SC4001's claim\nlet owner = lookup.owner(span)?;\nreturn Some(owner);\n"), []);
+  });
+
+  test("a typed Delegate in the window is the hand-off, so the comment is none", () => {
+    assert.deepEqual(lines("// SC3001's claim: the hand-off\nreturn ends.delegate(Delegate::LeafOwnerForbiddenCall);\ncontinue;\n"), []);
+    assert.deepEqual(lines("// SC3001's claim\nif owner.leaf() {\n    continue;\n}\nlet end = Delegate::LeafOwnerForbiddenCall;\n"), []);
+  });
+
+  test("the window is twenty code lines: comments and blank lines do not count, the drop past it is not seen", () => {
+    const filler = (count) => Array.from({ length: count }, (_, index) => `let step_${index} = ${index};`).join("\n");
+    assert.equal(HAND_OFF_WINDOW, 20);
+    assert.deepEqual(lines(`// SC4001's claim\n${filler(HAND_OFF_WINDOW - 1)}\ncontinue;\n`), [1]);
+    assert.deepEqual(lines(`// SC4001's claim\n${filler(HAND_OFF_WINDOW)}\ncontinue;\n`), []);
+    assert.deepEqual(lines(`// SC4001's claim\n\n// a note\n${filler(HAND_OFF_WINDOW - 1)}\n\n// another note\ncontinue;\n`), [1]);
+  });
+
+  test("a comment in a test item is left out, one after it is read, and a single-kind scan does not run the pass", () => {
+    const text = "#[cfg(test)]\nmod tests {\n    // SC4001's claim\n    fn t() { continue; }\n}\n// SC2006's claim\nreturn None;\n";
+    assert.deepEqual(lines(text), [6]);
+    assert.deepEqual(hitsOf("// SC4001's claim\ncontinue;\n", false, false, "finding-filter"), []);
+    assert.deepEqual(hitsOf("// SC4001's claim\ncontinue;\n", false, false, "prose-hand-off").map((hit) => hit.kind), ["prose-hand-off"]);
   });
 });
 

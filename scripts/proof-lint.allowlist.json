@@ -232,6 +232,10 @@
         "count": 2,
         "why": "pending-review"
       },
+      "prose-hand-off": {
+        "count": 4,
+        "why": "pending-review"
+      },
       "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
@@ -885,6 +889,10 @@
       "primitive-name-match": {
         "count": 2,
         "why": "pending-review"
+      },
+      "prose-hand-off": {
+        "count": 1,
+        "why": "`action_step_leaf_owner` is a positive lookup: `Some(owner)` only where every caller of the action's first step has the leaf owner and no `yield` may come first; the `return None` states that no leaf owner is proven, and `containing_leaf_owner` then tries its other routes, so the comment's \"not this read's claim\" scopes a lookup and hands no case to another check"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
@@ -1150,6 +1158,10 @@
         "count": 8,
         "why": "pending-review"
       },
+      "prose-hand-off": {
+        "count": 1,
+        "why": "pending-review"
+      },
       "silent-unmatched-slot": {
         "count": 3,
         "why": "pending-review"
@@ -1163,6 +1175,10 @@
       "finding-filter": {
         "count": 1,
         "why": "the callback-pattern site spans sorted and deduplicated (`sites.dedup()`) before each is judged: an equal span is one site"
+      },
+      "prose-hand-off": {
+        "count": 1,
+        "why": "SC1003's own claim (the bindings are read once and then never update) is the sentence; the `continue` rests on a positive compiler fact, `discarded_region_contains` (the compiler deleted the destructure), and not on another check's answer"
       }
     },
     "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs": {
@@ -1269,6 +1285,10 @@
       "primitive-name-match": {
         "count": 5,
         "why": "pending-review"
+      },
+      "prose-hand-off": {
+        "count": 1,
+        "why": "the comment scopes this rule's own claim (a write through a member chain rooted at a call lands on whatever the call returned); the `continue` follows `push_unproven_container_write`, which records that write as an obligation unless ADR 0720's row proves the call returns a store value, so nothing is dropped and no other check is named"
       },
       "silent-unmatched-slot": {
         "count": 4,
