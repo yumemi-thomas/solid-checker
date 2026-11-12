@@ -208,7 +208,8 @@ fn callback_runs_it(
     file: &FileFacts,
     span: Span,
 ) -> bool {
-    let Some((call, resolved)) = crate::execution_role::fresh_stack_callback_call(file, span, lookup)
+    let Some((call, resolved)) =
+        crate::execution_role::fresh_stack_callback_call(file, span, lookup)
     else {
         return false;
     };
