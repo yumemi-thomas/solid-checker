@@ -1,4 +1,4 @@
-import { createRoot, onCleanup } from "solid-js";
+import { createMemo, createRoot, onCleanup } from "solid-js";
 import { render } from "@solidjs/web";
 
 // Batch 11, the follow-up to the review of #220 (ADR 0970): the owner emission asks `named_layer_entry_open` whether a layer around an owner-requiring operation may be entered by
@@ -9,6 +9,9 @@ import { render } from "@solidjs/web";
 //   the saved function runs it with no owner.
 // - N1, the caller walk took a generator's body for a placed run: a helper called from a generator's body runs where an iterator is stepped. (The emission already answered
 //   this shape on main with its generator-step obligation; the cell keeps it so.)
+//
+// The review of #221 found two more stops that let a layer through: B1 (a function the census takes for a component that is handed to a wrapper call, below) and B2 (a component
+// its module exports while the module's namespace is enumerated: `lib.tsx` and `Namespace.tsx`). B3, direct `eval`, has its own fixture (owner-emission-eval): it opens every layer.
 
 // N2. The root runs the callback at once (it saves itself and creates nothing); the timer calls it later, on its own stack: no owner is current (Chrome rc.21: NO_OWNER_CLEANUP).
 let saved: (() => void) | undefined;
@@ -64,6 +67,46 @@ function PlainCaller() {
   return <p>plain</p>;
 }
 
+// B1 (the review of #221). A function the census takes for a component that is handed to a wrapper (`const Wrapped = hoc(() => { .. return <p/> })`) is entered by whoever
+// the wrapper is: `hoc` calls it from a timer, with no owner (Chrome rc.21: NO_OWNER_CLEANUP). Only a primitive's position and a standard-library call that runs it inline
+// place a function handed to a call.
+function hoc(Component: () => unknown) {
+  setTimeout(() => {
+    Component();
+  }, 0);
+  return Component as any;
+}
+const Wrapped = hoc(() => {
+  onCleanup(() => {});
+  return <p>wrapped</p>;
+});
+
+// Controls of B1. A function that returns JSX and is the whole argument of a primitive the dialect gives an owner for (`createMemo`), or of a standard-library call that runs it inline
+// (`map`), is placed: its owner is the primitive's, or the component's own, so only that position enters it.
+function PrimitiveOwned() {
+  const view = createMemo(() => {
+    onCleanup(() => {});
+    return <p>memo</p>;
+  });
+  return <p>{view()}</p>;
+}
+function InlineRun() {
+  return (
+    <p>
+      {[1].map(() => {
+        onCleanup(() => {});
+        return <b>x</b>;
+      })}
+    </p>
+  );
+}
+
+// Control. A component only a tag renders, handed to nothing: rendering enters it under the owner its render sets.
+function TaggedOnly() {
+  onCleanup(() => {});
+  return <p>tagged</p>;
+}
+
 function App() {
   return (
     <p>
@@ -71,6 +114,10 @@ function App() {
       <StepHelper />
       <NamedUnreferenced />
       <PlainCaller />
+      <Wrapped />
+      <PrimitiveOwned />
+      <InlineRun />
+      <TaggedOnly />
     </p>
   );
 }

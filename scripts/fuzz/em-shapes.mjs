@@ -10,15 +10,21 @@
 //                           (`function* g() { h(); yield 1; }`, `const it = g()` in the component body), which the host steps with a `for...of`
 //   em-self-<host>          the stop at an owner-creating layer returned before the function's references (N2): the callback of `createRoot` is a named function expression that
 //                           saves itself (`createRoot(function f() { if (!sv) { sv = f; return; } <site> })`), which the host calls (`sv!()`)
-//   <route>-<host>-never    legal    the same declarations, the host runs nothing: the function is held (the generator not stepped, the saved function not called) and never run, so no site runs
+//   em-hoc-<host>           the census takes a function handed to a wrapper call for a component (`const Wr = wrap(() => { <site>; return <p />; })`, B1 of the review of #221) and the walk
+//                           stopped at it; the wrapper keeps what it is handed (`const wrap = (c) => { sv = c; return c as () => any; }`) and the host calls the kept function (`sv!()`), a tag renders `Wr` too
+//   em-eval-<host>          a direct `eval` reaches any binding by name (B3 of the review of #221) and the walk asked for it after the stop that closes a component only tags render: the
+//                           component `function K() { <site>; return <p />; }` is rendered by a tag, and the host's callback calls it by name through `eval("K()")`
+//   em-ns-<host>            the component stop read symbol references only (B2 of the review of #221): the component is exported by the program's module, a tag renders it, and the host's
+//                           callback calls it through the module's own namespace by a key built at run time (`self["K1"]()`, `import * as self from "./App"`), which names no symbol
+//   <route>-<host>-never    legal    the same declarations, the host runs nothing: the function is held (the generator not stepped, the saved function not called, the eval evaluating `1`) and never run, so no site runs
 //   hosts   handler (a button's click handler), timer (a `setTimeout` callback): where no owner is current; apply (an effect's apply: its stack has none; NO_OWNER_CLEANUP and
 //           NO_OWNER_CONTEXT, since a creation there is PRIMITIVE_IN_EFFECT_CALLBACK, a code of its own)
 //
 // A function that returns no JSX and is entered the same way was already an obligation (`entry-by-reference`), so each stop is the whole of its hole. Recall contexts, the direct
 // binding bare (`emShape`), not crossed by the census, out of api-fire's plan.
-import { button, contain, decl, domExpr, expr, fn, jsx, num, prim, ret } from "./model.mjs";
+import { button, contain, decl, domExpr, expr, fn, jsx, mounted, num, prim, ret } from "./model.mjs";
 
-export const EM_ROUTES = ["view", "gen", "self"];
+export const EM_ROUTES = ["view", "gen", "self", "hoc", "eval", "ns"];
 export const EM_HOSTS = ["handler", "timer", "apply"];
 /** The hosts each code is judged in: the hosts where the runtime reports the code for a call with no owner current. */
 export const EM_CODES = {
@@ -37,9 +43,13 @@ export const emParts = (context) => {
   return match ? { route: match[1], host: match[2], never: Boolean(match[3]) } : null;
 };
 
-/** The base shapes an `em-*` cell takes: the direct binding, no layer. */
+/** The base shapes an `em-*` cell takes: the direct binding, no layer. The `ns` route writes the component at module scope, where the values of the shape's setup go with it: a reaction
+ * (`reaction-track-owned`) is then a creation with no owner of its own, so that variant is no twin of the others. */
 export function emShape(context, shape) {
-  return !emParts(context) || (shape.binding === "direct" && (shape.layer ?? "none") === "none");
+  const parts = emParts(context);
+  if (!parts) return true;
+  if (parts.route === "ns" && shape.variant === "reaction-track-owned") return false;
+  return shape.binding === "direct" && (shape.layer ?? "none") === "none";
 }
 
 /** The placement of `stmts` for an `em-*` context (`{ body, view }`), or undefined for any other. */
@@ -47,13 +57,13 @@ export function emContext(context, stmts, kit) {
   const parts = emParts(context);
   if (!parts) return undefined;
   const { route, host, never } = parts;
-  // What the host's callback does with the route's holder: runs it, or, in the twin, only keeps its name used.
-  const hostOf = (setup, holder, text) => {
-    const runs = [expr(domExpr(never ? `void ${holder}` : text))];
+  // What the host's callback does with the route's holder: runs it, or, in the twin, only keeps its name used (`twin` says what else it does there). `shown` are view items the route adds.
+  const hostOf = (setup, holder, text, { twin = `void ${holder}`, shown = [] } = {}) => {
+    const runs = [expr(domExpr(never ? twin : text))];
     switch (host) {
-      case "handler": return { body: setup, view: [button(kit.name("b"), runs)] };
-      case "timer": return { body: [...setup, expr(prim("timer", fn(runs)))], view: [] };
-      case "apply": return { body: [...setup, expr(prim("effect", fn([ret(num(1))]), { apply: fn(runs) }))], view: [] };
+      case "handler": return { body: setup, view: [button(kit.name("b"), runs), ...shown] };
+      case "timer": return { body: [...setup, expr(prim("timer", fn(runs)))], view: shown };
+      case "apply": return { body: [...setup, expr(prim("effect", fn([ret(num(1))]), { apply: fn(runs) }))], view: shown };
       default: throw new Error(`no emission host ${host}`);
     }
   };
@@ -79,6 +89,30 @@ export function emContext(context, stmts, kit) {
       const guard = expr(domExpr(`if (!${sv}) { ${sv} = ${f}; return; }`));
       const frame = contain("frame", 9, [guard, ...stmts], { head: `createRoot(function ${f}() `, close: ");", imports: ["createRoot"] });
       return hostOf([expr(domExpr(`let ${sv}: (() => void) | undefined`)), frame], sv, `${sv}!()`);
+    }
+    case "hoc": {
+      // B1 (the review of #221): the arrow that returns JSX is the argument of a wrapper call that keeps it, `const Wr = wrap(() => { <site>; return <p />; })`, and a tag renders `Wr`; the host
+      // calls the kept function, which runs on its own stack with no owner.
+      const w = kit.name("wr");
+      const sv = kit.name("sv");
+      const bound = kit.name("Wr");
+      const keep = [expr(domExpr(`let ${sv}: (() => unknown) | undefined`)), expr(domExpr(`const ${w} = (c: () => unknown) => { ${sv} = c; return c as () => any; }`))];
+      const held = contain("frame", 9, stmts, { head: `const ${bound} = ${w}(() => `, close: ");", after: ["return <p />;"] });
+      return hostOf([...keep, held], sv, `${sv}!()`, { shown: [mounted(kit.name("m"), domExpr(`<${bound} />`))] });
+    }
+    case "eval": {
+      // B3 (the review of #221): the component only a tag renders; the host's callback reaches it by name through direct `eval`, which no reference of the program shows.
+      const k = kit.name("K");
+      const held = contain("frame", 9, stmts, { head: `function ${k}() `, close: "", after: ["return <p />;"] });
+      return hostOf([held], k, `eval("${k}()")`, { twin: `eval("1")`, shown: [mounted(kit.name("m"), domExpr(`<${k} />`))] });
+    }
+    case "ns": {
+      // B2 (the review of #221): the component the program's module exports and a tag renders; the host's callback calls it through the module's own namespace by a key built at run time
+      // (ADR 0934's `export-namespace-call`), so no reference names it. The twin keeps the namespace used and calls nothing.
+      const k = kit.name("K");
+      const held = decl(k, fn([...stmts, ret(jsx())], { form: "function" }), { exported: true });
+      const run = `self[${JSON.stringify([k.slice(0, 1), k.slice(1)])}.join("") as "${k}"]()`;
+      return { ...hostOf([], k, run, { twin: "void self", shown: [mounted(kit.name("m"), domExpr(`<${k} />`))] }), hoisted: [held], files: {}, importLines: ['import * as self from "./App";'] };
     }
     default: throw new Error(`no emission route ${route}`);
   }

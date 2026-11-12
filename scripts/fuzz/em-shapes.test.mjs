@@ -7,7 +7,7 @@ import { censusCells, recallShapes } from "./matrix.mjs";
 import { isValid } from "./model.mjs";
 import { EM_CODES, EM_CONTEXTS, EM_CONTEXT_NAMES, EM_HOSTS, EM_ROUTES, emParts, emShape } from "./em-shapes.mjs";
 
-// Batch 11 (the follow-up to the review of #220): a function that returns JSX, held by a variable and called where no owner is current, as generator cells with their twins.
+// Batch 11 (the follow-up to the review of #220, and of #221): a function that returns JSX, held by a variable, handed to a wrapper or reached by `eval`, and called where no owner is current, as generator cells with their twins.
 
 const textOf = (code, context) => {
   const side = EM_CONTEXTS[context];
@@ -21,10 +21,10 @@ const textOf = (code, context) => {
 };
 
 describe("the em contexts (a JSX-returning function a variable holds, called where no owner is current)", () => {
-  it("are three routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(EM_ROUTES).toEqual(["view", "gen", "self"]);
+  it("are six routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(EM_ROUTES).toEqual(["view", "gen", "self", "hoc", "eval", "ns"]);
     expect(EM_HOSTS).toEqual(["handler", "timer", "apply"]);
-    expect(EM_CONTEXT_NAMES).toHaveLength(18);
+    expect(EM_CONTEXT_NAMES).toHaveLength(36);
     for (const name of EM_CONTEXT_NAMES) {
       const parts = emParts(name);
       expect(parts, name).not.toBeNull();
@@ -73,9 +73,49 @@ describe("the em contexts (a JSX-returning function a variable holds, called whe
       expect(twin, host).not.toContain("sv1!();");
     }
   });
+  it("print the hoc route: the arrow that returns JSX is the argument of a wrapper that keeps it, a tag renders the binding, the host calls the kept function (the twin only keeps the holder)", () => {
+    for (const host of EM_HOSTS) {
+      const lead = textOf("NO_OWNER_CLEANUP", `em-hoc-${host}`);
+      expect(lead, host).toContain("let sv1: (() => unknown) | undefined;");
+      expect(lead, host).toContain("const wr1 = (c: () => unknown) => { sv1 = c; return c as () => any; };");
+      expect(lead, host).toContain("const Wr1 = wr1(() => {");
+      expect(lead.join("\n"), host).toContain("return <p />;");
+      expect(lead.join("\n"), host).toContain("<Wr1 />");
+      expect(lead, host).toContain("sv1!();");
+      const twin = textOf("NO_OWNER_CLEANUP", `em-hoc-${host}-never`);
+      expect(twin, host).toContain("void sv1;");
+      expect(twin, host).not.toContain("sv1!();");
+    }
+  });
+  it("print the eval route: the component a tag renders, the host reaches it by name through direct eval (the twin evaluates 1)", () => {
+    for (const host of EM_HOSTS) {
+      const lead = textOf("NO_OWNER_CLEANUP", `em-eval-${host}`);
+      expect(lead.join("\n"), host).toContain("function K1() {");
+      expect(lead.join("\n"), host).toContain("return <p />;");
+      expect(lead.join("\n"), host).toContain("<K1 />");
+      expect(lead, host).toContain('eval("K1()");');
+      const twin = textOf("NO_OWNER_CLEANUP", `em-eval-${host}-never`);
+      expect(twin, host).toContain('eval("1");');
+      expect(twin.join("\n"), host).not.toContain('eval("K1()")');
+    }
+  });
+  it("print the ns route: an exported component a tag renders, called by the host through the module's own namespace by a key built at run time (the twin only keeps the namespace used)", () => {
+    for (const host of EM_HOSTS) {
+      const lead = textOf("NO_OWNER_CLEANUP", `em-ns-${host}`);
+      expect(lead, host).toContain('import * as self from "./App";');
+      expect(lead.join("\n"), host).toContain("export function K1() {");
+      expect(lead.join("\n"), host).toContain("<K1 />");
+      expect(lead, host).toContain('self[["K","1"].join("") as "K1"]();');
+      const twin = textOf("NO_OWNER_CLEANUP", `em-ns-${host}-never`);
+      expect(twin, host).toContain("void self;");
+      expect(twin.join("\n"), host).not.toContain('self[["K"');
+    }
+  });
   it("are cells of SPEC on their side for the codes the host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(emShape("em-view-timer", { binding: "alias", layer: "none" })).toBe(false);
     expect(emShape("pl-untrack-tracked", { binding: "alias", layer: "iife" })).toBe(true);
+    expect(emShape("em-ns-timer", { binding: "direct", layer: "none", variant: "reaction-track-owned" })).toBe(false);
+    expect(emShape("em-eval-timer", { binding: "direct", layer: "none", variant: "reaction-track-owned" })).toBe(true);
     expect(Object.keys(EM_CODES)).toEqual(["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_CONTEXT"]);
     for (const [code, hosts] of Object.entries(EM_CODES)) {
       for (const context of EM_CONTEXT_NAMES.filter((name) => hosts.includes(emParts(name).host))) {

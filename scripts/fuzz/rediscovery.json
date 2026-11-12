@@ -20231,5 +20231,125 @@
    "mx-no-owner-context-em-self-apply-x-direct-none"
   ],
   "rediscovered": "main (56aa6c126, release build): 3 false-clean programs, Chrome confirming; the fix (the branch stacked on #220): none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-self-*-never, which call nothing) are clean on main and uncertifiable on the fix. The em-gen cells (N1: a helper called from a generator's body) are recall-gap on main already, so they are cells, not ids"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in an arrow that returns JSX and is the argument of a wrapper call that keeps it (`const Wr = wrap(() => { <site>; return <p />; })`, a tag renders `Wr`; the host then calls the kept function from a timer, a handler or an effect's apply), was certified with no row: the census takes such an arrow for a component (`hoc_bound`), the owner emission's entry walk (`layer_entry_open`, ADR 0868) had no binding to ask for a function that is an argument and let the layer through, so the owner graph's owned context was read as every entry, though the wrapper's host runs the kept function with no owner current. Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B1 of the Fable review of #221 (the entry walk is shared code), probed on the release build and in Chrome (oracle case owner-emission-layer-stops); the PR head certifies it",
+  "fixed": "ADR 0970 (B1 of the review of #221): a function the census takes for a component that is handed to a call is an open entry unless the call is a primitive's position or a standard-library call that runs it inline (`layer_entry_open`, `primitive_position`). Cells em-hoc-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-hoc-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-hoc-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-hoc-apply-x-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-hoc-*-never, which run nothing) are clean on the PR head and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in a component that only a tag renders (`function K() { <site>; return <p />; }`, `<K />`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it by name through direct `eval(\"K()\")`: the owner emission's entry walk (`layer_entry_open`) asked `program_has_eval()` after the stop that closes a component entered by tags alone, though a program that calls direct `eval` reaches any binding by name. Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B3 of the Fable review of #221 (the entry walk is shared code), probed on the release build and in Chrome (oracle case owner-emission-eval); the PR head certifies it",
+  "fixed": "ADR 0970 (B3 of the review of #221): `program_has_eval()` is asked before the stops that close a layer (`layer_entry_open`): a program with direct eval opens every layer. Cells em-eval-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-eval-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-eval-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-eval-apply-x-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-eval-*-never, which run nothing) are clean on the PR head and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in an arrow that returns JSX and is the argument of a wrapper call that keeps it (`const Wr = wrap(() => { <site>; return <p />; })`, a tag renders `Wr`; the host then calls the kept function from a timer, a handler or an effect's apply), was certified with no row: the census takes such an arrow for a component (`hoc_bound`), the owner emission's entry walk (`layer_entry_open`, ADR 0868) had no binding to ask for a function that is an argument and let the layer through, so the owner graph's owned context was read as every entry, though the wrapper's host runs the kept function with no owner current. Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B1 of the Fable review of #221 (the entry walk is shared code), probed on the release build and in Chrome (oracle case owner-emission-layer-stops); the PR head certifies it",
+  "fixed": "ADR 0970 (B1 of the review of #221): a function the census takes for a component that is handed to a call is an open entry unless the call is a primitive's position or a standard-library call that runs it inline (`layer_entry_open`, `primitive_position`). Cells em-hoc-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-hoc-handler-effect-direct-none",
+   "mx-no-owner-effect-em-hoc-handler-render-direct-none",
+   "mx-no-owner-effect-em-hoc-timer-effect-direct-none",
+   "mx-no-owner-effect-em-hoc-timer-render-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-hoc-*-never, which run nothing) are clean on the PR head and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in a component that only a tag renders (`function K() { <site>; return <p />; }`, `<K />`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it by name through direct `eval(\"K()\")`: the owner emission's entry walk (`layer_entry_open`) asked `program_has_eval()` after the stop that closes a component entered by tags alone, though a program that calls direct `eval` reaches any binding by name. Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B3 of the Fable review of #221 (the entry walk is shared code), probed on the release build and in Chrome (oracle case owner-emission-eval); the PR head certifies it",
+  "fixed": "ADR 0970 (B3 of the review of #221): `program_has_eval()` is asked before the stops that close a layer (`layer_entry_open`): a program with direct eval opens every layer. Cells em-eval-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-eval-handler-effect-direct-none",
+   "mx-no-owner-effect-em-eval-handler-render-direct-none",
+   "mx-no-owner-effect-em-eval-timer-effect-direct-none",
+   "mx-no-owner-effect-em-eval-timer-render-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-eval-*-never, which run nothing) are clean on the PR head and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in an arrow that returns JSX and is the argument of a wrapper call that keeps it (`const Wr = wrap(() => { <site>; return <p />; })`, a tag renders `Wr`; the host then calls the kept function from a timer, a handler or an effect's apply), was certified with no row: the census takes such an arrow for a component (`hoc_bound`), the owner emission's entry walk (`layer_entry_open`, ADR 0868) had no binding to ask for a function that is an argument and let the layer through, so the owner graph's owned context was read as every entry, though the wrapper's host runs the kept function with no owner current. Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B1 of the Fable review of #221 (the entry walk is shared code), probed on the release build and in Chrome (oracle case owner-emission-layer-stops); the PR head certifies it",
+  "fixed": "ADR 0970 (B1 of the review of #221): a function the census takes for a component that is handed to a call is an open entry unless the call is a primitive's position or a standard-library call that runs it inline (`layer_entry_open`, `primitive_position`). Cells em-hoc-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-hoc-handler-x-direct-none",
+   "mx-no-owner-context-em-hoc-timer-x-direct-none",
+   "mx-no-owner-context-em-hoc-apply-x-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-hoc-*-never, which run nothing) are clean on the PR head and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in a component that only a tag renders (`function K() { <site>; return <p />; }`, `<K />`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it by name through direct `eval(\"K()\")`: the owner emission's entry walk (`layer_entry_open`) asked `program_has_eval()` after the stop that closes a component entered by tags alone, though a program that calls direct `eval` reaches any binding by name. Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B3 of the Fable review of #221 (the entry walk is shared code), probed on the release build and in Chrome (oracle case owner-emission-eval); the PR head certifies it",
+  "fixed": "ADR 0970 (B3 of the review of #221): `program_has_eval()` is asked before the stops that close a layer (`layer_entry_open`): a program with direct eval opens every layer. Cells em-eval-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-eval-handler-x-direct-none",
+   "mx-no-owner-context-em-eval-timer-x-direct-none",
+   "mx-no-owner-context-em-eval-apply-x-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-eval-*-never, which run nothing) are clean on the PR head and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in a component the program's module exports and a tag renders (`export function K() { <site>; return <p />; }`, `<K />`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`, `import * as self from \"./App\"`): the owner emission's component stop (`entered_by_tags_only`) read the references of the binding and a namespace names no symbol, though the entry census (ADR 0347) holds an export whose namespace escapes. Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B2 of the Fable review of #221 (review-221 probes b2-min, b2-dyn, b2-handler, p3, p3l), probed on the release build and in Chrome (oracle case owner-emission-namespace); the PR head certifies it",
+  "fixed": "ADR 0970 (B2 of the review of #221): `entered_by_tags_only` is false for a function its module exports while the module's namespace is read by name or escapes with no name (`handed_out_without_reference`: `hands_out_by_name`, `escapes_unnamed`). Cells em-ns-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-ns-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-ns-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-ns-apply-x-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-ns-*-never, which call nothing) are clean on the PR head and uncertifiable on the fix. The `reaction-track-owned` variant is no cell of the `ns` route (the shape's reaction would be hoisted to module scope with the component and create with no owner of its own)"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in a component the program's module exports and a tag renders (`export function K() { <site>; return <p />; }`, `<K />`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`, `import * as self from \"./App\"`): the owner emission's component stop (`entered_by_tags_only`) read the references of the binding and a namespace names no symbol, though the entry census (ADR 0347) holds an export whose namespace escapes. Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B2 of the Fable review of #221 (review-221 probes b2-min, b2-dyn, b2-handler, p3, p3l), probed on the release build and in Chrome (oracle case owner-emission-namespace); the PR head certifies it",
+  "fixed": "ADR 0970 (B2 of the review of #221): `entered_by_tags_only` is false for a function its module exports while the module's namespace is read by name or escapes with no name (`handed_out_without_reference`: `hands_out_by_name`, `escapes_unnamed`). Cells em-ns-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-ns-handler-effect-direct-none",
+   "mx-no-owner-effect-em-ns-handler-render-direct-none",
+   "mx-no-owner-effect-em-ns-timer-effect-direct-none",
+   "mx-no-owner-effect-em-ns-timer-render-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-ns-*-never, which call nothing) are clean on the PR head and uncertifiable on the fix. The `reaction-track-owned` variant is no cell of the `ns` route (the shape's reaction would be hoisted to module scope with the component and create with no owner of its own)"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in a component the program's module exports and a tag renders (`export function K() { <site>; return <p />; }`, `<K />`), was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`, `import * as self from \"./App\"`): the owner emission's component stop (`entered_by_tags_only`) read the references of the binding and a namespace names no symbol, though the entry census (ADR 0347) holds an export whose namespace escapes. Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): B2 of the Fable review of #221 (review-221 probes b2-min, b2-dyn, b2-handler, p3, p3l), probed on the release build and in Chrome (oracle case owner-emission-namespace); the PR head certifies it",
+  "fixed": "ADR 0970 (B2 of the review of #221): `entered_by_tags_only` is false for a function its module exports while the module's namespace is read by name or escapes with no name (`handed_out_without_reference`: `hands_out_by_name`, `escapes_unnamed`). Cells em-ns-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-ns-handler-x-direct-none",
+   "mx-no-owner-context-em-ns-timer-x-direct-none",
+   "mx-no-owner-context-em-ns-apply-x-direct-none"
+  ],
+  "rediscovered": "the PR head (69b38ff55, release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-ns-*-never, which call nothing) are clean on the PR head and uncertifiable on the fix. The `reaction-track-owned` variant is no cell of the `ns` route (the shape's reaction would be hoisted to module scope with the component and create with no owner of its own)"
  }
 ]

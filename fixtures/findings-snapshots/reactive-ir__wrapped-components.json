@@ -33,6 +33,28 @@
       "start": 560,
       "end": 568,
       "fixes": 1
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/wrapped-components/wrapped-invalid.tsx",
+      "start": 596,
+      "end": 600,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/wrapped-components/wrapped-invalid.tsx",
+      "start": 831,
+      "end": 841,
+      "fixes": 0
     }
   ]
 }

@@ -121,7 +121,14 @@ or a render effect in it is uncertifiable: the timer, handler or apply that call
 through the reference runs it with no owner. The same walk opens a generator's body
 and any function it calls (a body runs where an iterator is stepped), and keeps an
 owner-creating callback's stop only where nothing references the callback (a named
-function expression that saves itself is run by whoever calls it).
+function expression that saves itself is run by whoever calls it). A function the
+census takes for a component that is handed to a call (`const Wrapped = hoc(() => {
+onCleanup(..); return <p/>; })`) is entered by whoever the callee is: only a
+primitive's position and a standard-library call that runs it inline place it. A
+component its module exports, whose module's namespace is read by name or
+enumerated with no name (`Object.values(ns)`, a spread, a dynamic `import()`'s
+module), is entered by whoever holds the namespace. A program that calls direct
+`eval` reaches any binding by name, so every layer of it is open.
 
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a

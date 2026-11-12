@@ -1208,6 +1208,41 @@ pub(crate) fn referenced_only_by_entry(
         && crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
 }
 
+/// Whether something hands `function` out with no reference of its binding naming it (B2, the review of #221): its module's namespace read by name (`ns.Comp`, an
+/// `import()`'s module member) or escaping with no name (`Object.values(ns)`, a spread, passed along) while the function is one of the module's exports. The census
+/// (ADR 0347) counts these entries; a tag renders none of them.
+fn handed_out_without_reference(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let path = file.path.as_str();
+    lookup.hands_out_by_name(path, function.span)
+        || (crate::execution_role::module_exports(file, function, lookup)
+            && lookup.escapes_unnamed(path))
+}
+
+/// Whether `at` is the whole argument of a call to a primitive the dialect gives an owner for it (`createRoot(helper)`): a position the owner graph places, whose edge is
+/// in the context. `action(gen)` keeps its argument and `createContext(f)` holds a value: no edge follows either (R29).
+fn primitive_position(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    at: Span,
+) -> bool {
+    file.ast.arguments_containing(at).any(|(call, index)| {
+        !call.arguments[index].spread
+            && file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .callback_owner_at(primitive, index, call.arguments.len())
+                        .is_some()
+                })
+    })
+}
+
 /// Whether every reference of `function`'s binding, in its file and the others, is the name of a JSX tag (the opening one or the closing one: the same
 /// reference), and a tag renders it: the one way a render enters a function and no value flows anywhere else. A function with no binding, or none a tag
 /// renders, is not.
@@ -1230,6 +1265,11 @@ fn entered_by_tags_only(
     if !local.iter().all(|(at, _)| tag_name(*at))
         || !crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
     {
+        return false;
+    }
+    // B2 (the review of #221): a module namespace read by name or enumerated with no name (`ns.Comp`, `Object.values(ns)`, a dynamic `import()`'s module) hands an
+    // export out with no reference naming it, which the entry census (ADR 0347) holds and no tag accounts for.
+    if handed_out_without_reference(file, function, lookup) {
         return false;
     }
     !local.is_empty()
@@ -1295,6 +1335,10 @@ fn layer_entry_open(
         if function.generator {
             return true;
         }
+        // B3 (the review of #221): a program that calls direct `eval` reaches any binding by name, so every layer is open: before the stops that would close one.
+        if lookup.program_has_eval() {
+            return true;
+        }
         if lookup.function_proven_component(file, function)
             && entered_by_tags_only(file, function, lookup)
         {
@@ -1307,7 +1351,7 @@ fn layer_entry_open(
         {
             return false;
         }
-        if lookup.program_has_eval() || function.method_name.is_some() {
+        if function.method_name.is_some() {
             return true;
         }
         if function_binding_name(file, function).is_none() {
@@ -1322,6 +1366,19 @@ fn layer_entry_open(
                 })
             });
             if in_place || argument {
+                // B1 (the review of #221): a function the census takes for a component that is handed to a call (`const Wrapped = hoc(() => { onCleanup(..); return <p/>; })`,
+                // `hoc` calling it from a timer) is entered by whoever the callee is. Only a primitive's position (the owner graph's own edge) and a standard-library call that
+                // runs it inline place it; a wrapper's render is the proof batch's, like a router's.
+                if !in_place
+                    && lookup.function_may_be_component(file, function)
+                    && !primitive_position(file, lookup, function.span)
+                    && !matches!(
+                        crate::local_access::hand_off_at(file, function.span, lookup),
+                        crate::local_access::HandOff::Inline(_)
+                    )
+                {
+                    return true;
+                }
                 continue;
             }
             return true;
@@ -1330,27 +1387,9 @@ fn layer_entry_open(
         else {
             return true;
         };
-        // A whole argument the dialect gives an owner is a position the owner
-        // graph places (`createRoot(helper)`): its edge is in the context.
-        // `action(gen)` keeps its argument and `createContext(f)` holds a
-        // value: no edge follows either (R29).
-        let primitive_position = |at: Span| {
-            file.ast.arguments_containing(at).any(|(call, index)| {
-                !call.arguments[index].spread
-                    && file.ast.peel_ts_sugar_span(call.arguments[index].span) == at
-                    && lookup
-                        .primitive_at_call(file, call.span)
-                        .is_some_and(|primitive| {
-                            lookup
-                                .dialect
-                                .callback_owner_at(primitive, index, call.arguments.len())
-                                .is_some()
-                        })
-            })
-        };
         if local
             .iter()
-            .any(|(at, hand_off)| escapes(hand_off) && !primitive_position(*at))
+            .any(|(at, hand_off)| escapes(hand_off) && !primitive_position(file, lookup, *at))
             || crate::local_access::foreign_reference_hand_offs(file, function, lookup)
                 .iter()
                 .any(|(_, _, hand_off)| escapes(hand_off))

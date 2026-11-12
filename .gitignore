@@ -1463,3 +1463,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-emission-component-by-reference/node_modules/**
 !fixtures/reactive-ir/owner-emission-layer-stops/node_modules/
 !fixtures/reactive-ir/owner-emission-layer-stops/node_modules/**
+!fixtures/reactive-ir/owner-emission-eval/node_modules/
+!fixtures/reactive-ir/owner-emission-eval/node_modules/**
