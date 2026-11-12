@@ -17,10 +17,21 @@ fn fixture(name: &str) -> std::path::PathBuf {
 /// The report of a one-shot check of the fixture `name`, with the proof log at
 /// `log` when given; the status and findings.
 fn check(typefacts: &str, name: &str, log: Option<&Path>) -> serde_json::Value {
+    check_with(typefacts, name, log, &[])
+}
+
+/// [`check`] with more environment: the dry runs of the proof log's measurement hooks.
+fn check_with(
+    typefacts: &str,
+    name: &str,
+    log: Option<&Path>,
+    environment: &[(&str, &str)],
+) -> serde_json::Value {
     let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
     command
         .env("SOLID_TYPEFACTS_BIN", typefacts)
         .env("SOLID_CHECKER_DAEMON", "0")
+        .envs(environment.iter().copied())
         .args(["--format", "json", "--project"])
         .arg(fixture(name).join("tsconfig.json"));
     if let Some(log) = log {
@@ -103,6 +114,29 @@ fn the_log_names_each_file_once_and_every_line_by_it() {
         "decision", "row", "finding", "verdict", "site", "silent", "owner",
     ] {
         assert!(kinds.contains(kind), "no {kind} line: {kinds:?}");
+    }
+    fs::remove_dir_all(directory).ok();
+}
+
+// Batch 11, slice 0: a finding and a verdict name the rule that reported them, so a fold can say which rule ended a site (`scripts/lib/proof-credit.mjs`).
+#[test]
+fn a_finding_and_a_verdict_name_their_rule() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-rules");
+    let log = directory.join("latent.jsonl");
+    check(&typefacts, "latent-silent-arms", Some(&log));
+    let found = lines(&log)
+        .into_iter()
+        .filter(|line| line["k"] == "finding" || line["k"] == "verdict")
+        .collect::<Vec<_>>();
+    assert!(!found.is_empty(), "no finding or verdict line");
+    for line in &found {
+        assert!(line["code"].as_str().unwrap().starts_with("SC"), "{line}");
+        assert!(
+            line["rule"].as_str().is_some_and(|rule| !rule.is_empty()),
+            "a {} line names no rule: {line}",
+            line["k"]
+        );
     }
     fs::remove_dir_all(directory).ok();
 }
@@ -240,6 +274,136 @@ fn a_setter_names_its_guard_only_where_ownedwrite_is_proven_off() {
     assert_eq!(
         named,
         BTreeSet::from([setter_call("Plain"), setter_call("OwnedOff")])
+    );
+    fs::remove_dir_all(directory).ok();
+}
+
+// Batch 11, slice 0: the dry run that lists the candidate sites of the rules with no site universe (`proof_candidates.rs`) is asked for, writes nothing unasked, and moves no answer.
+#[test]
+fn the_candidates_are_listed_only_when_asked_and_move_no_answer() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-candidates");
+    let mut seen = BTreeSet::new();
+    let mut loading_values = BTreeSet::new();
+    let mut sync_states = BTreeSet::new();
+    let mut census = Vec::new();
+    let mut computations = BTreeSet::new();
+    // `resolve` and `until`, the effect and computation primitives with `sync` options, `Loading` boundaries with `on`, and a namespace `flush`.
+    for name in [
+        "unplaced-site-obligations",
+        "static-api",
+        "rc21-loading-on-accessor",
+        "flush-veto-namespace",
+    ] {
+        let off = directory.join(format!("{name}.off.jsonl"));
+        let zero = directory.join(format!("{name}.zero.jsonl"));
+        let on = directory.join(format!("{name}.on.jsonl"));
+        let without = check_with(&typefacts, name, Some(&off), &[]);
+        let declined = check_with(
+            &typefacts,
+            name,
+            Some(&zero),
+            &[("SOLID_CHECKER_IR_PROOF_CANDIDATES", "0")],
+        );
+        let asked = check_with(
+            &typefacts,
+            name,
+            Some(&on),
+            &[("SOLID_CHECKER_IR_PROOF_CANDIDATES", "1")],
+        );
+        assert_eq!(without, asked, "{name}: the dry run moved an answer");
+        assert_eq!(without, declined, "{name}: a `0` moved an answer");
+        for unasked in [&off, &zero] {
+            assert!(
+                lines(unasked).iter().all(|line| line["k"] != "candidate"),
+                "{name}: a candidate was written unasked"
+            );
+        }
+        let before = lines(&off);
+        let after = lines(&on);
+        // The log with the dry run is the log without it, plus the candidates: no other line moves.
+        let others = |all: &[serde_json::Value]| {
+            all.iter()
+                .filter(|line| line["k"] != "candidate" && line["k"] != "path")
+                .map(|line| {
+                    (
+                        line["k"].to_string(),
+                        line["s"].to_string(),
+                        line["e"].to_string(),
+                    )
+                })
+                .collect::<BTreeSet<_>>()
+        };
+        assert_eq!(
+            others(&before),
+            others(&after),
+            "{name}: the dry run moved a line"
+        );
+        for line in after.iter().filter(|line| line["k"] == "candidate") {
+            let rule = line["rule"].as_str().unwrap();
+            let table = line["t"].as_str().unwrap();
+            assert!(
+                line["s"].is_u64()
+                    && line["e"].is_u64()
+                    && line["alt"].is_array()
+                    && line["facts"].is_object(),
+                "{name}: a candidate names no place: {line}"
+            );
+            seen.insert(format!("{rule} {table}"));
+            match (rule, table) {
+                ("SC5007", "loading-on-value") => {
+                    loading_values.insert(line["facts"]["value"].as_str().unwrap().to_owned());
+                }
+                ("SC7002", "sync-option") => {
+                    sync_states.insert(line["facts"]["sync"].as_str().unwrap().to_owned());
+                }
+                ("flush", "census") => census.push((name, line["facts"].clone())),
+                ("SC1002", "read-after-await") => {
+                    computations.insert(line["facts"]["computation"].as_str().unwrap().to_owned());
+                }
+                _ => {}
+            }
+        }
+    }
+    for expected in [
+        "SC1002 read-after-await",
+        "SC2004 resolve",
+        "SC2005 until",
+        "SC5006 loading-on",
+        "SC5007 loading-on-value",
+        "SC7001 effect-function-slot",
+        "SC7002 sync-option",
+        "flush census",
+    ] {
+        assert!(
+            seen.contains(expected),
+            "no candidate `{expected}`: {seen:?}"
+        );
+    }
+    // What a value is proven to be: an accessor handed to `on` is a function, a call's result is not, a prop is open.
+    assert_eq!(
+        loading_values,
+        BTreeSet::from([
+            "function".to_owned(),
+            "not-function".to_owned(),
+            "open".to_owned()
+        ])
+    );
+    // A read after a dominating await is a candidate of SC1002, in a computation's function (`createMemo(async () => ...)`) or in another async function.
+    assert!(
+        computations.contains("yes"),
+        "no read after an await in a computation: {computations:?}"
+    );
+    // `sync: true` is a site of SC7002 and so is a call whose options the syntax does not show.
+    assert!(
+        sync_states.contains("true") && sync_states.contains("unknown"),
+        "{sync_states:?}"
+    );
+    assert!(
+        census
+            .iter()
+            .any(|(name, facts)| *name == "flush-veto-namespace" && facts["called"] == "yes"),
+        "no called flush site in the census: {census:?}"
     );
     fs::remove_dir_all(directory).ok();
 }
