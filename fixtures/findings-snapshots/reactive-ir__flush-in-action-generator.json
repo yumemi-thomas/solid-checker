@@ -56,6 +56,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-in-action-generator/App.tsx",
+      "start": 644,
+      "end": 651,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -163,6 +174,28 @@
       "path": "fixtures/reactive-ir/flush-in-action-generator/App.tsx",
       "start": 1832,
       "end": 1837,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-in-action-generator/App.tsx",
+      "start": 2117,
+      "end": 2124,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-in-action-generator/App.tsx",
+      "start": 2117,
+      "end": 2124,
       "fixes": 0
     },
     {

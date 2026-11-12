@@ -518,8 +518,9 @@
       "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
-      "why": "`flush()` takes no arguments and returns void; the claim is about the phase it is called in.",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "`flush()` takes no arguments and returns void; the claim is about the phase it is called in. ADR 0966: this `onSettled` is called at module level, where the owner graph proves no owner, so its callback is no leaf owner's and the rule must never be a violation here; the flush accounting still ends the site in an uncertifiable row (`leaf-operation-unaccounted`), because no typed reason names that proof yet (the leaf universe's, slice 6).",
       "code": "import { onSettled, flush } from \"solid-js\";\nonSettled(() => {\n  flush();\n});\n"
     },
     {
@@ -1050,9 +1051,10 @@
       "rule": "flush-in-action",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
       "sourceExtension": "ts",
-      "why": "The negative beside the keystone: after an `await` an async generator body continues from a microtask, outside any step, so the same `flush()` is legal there and the rule must stay quiet.",
+      "why": "The negative beside the keystone: after an `await` an async generator body continues from a microtask, outside any step, so the same `flush()` is legal there and the rule must never be a violation. ADR 0966: the flush accounting ends the site in an uncertifiable row (`flush-in-action-unaccounted`): the census's continuation class excludes generator bodies (a `yield` resumes inside a step), and the accounting names no reason for the walk's own proof.",
       "code": "import { action, flush } from \"solid-js\";\nexport const save = action(async function* () {\n  await Promise.resolve();\n  flush();\n});\n"
     },
     {

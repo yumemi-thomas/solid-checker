@@ -174,6 +174,10 @@ the result, read after the action resolves (`await save(); …`).
   generator is evaluated when the action creates the generator, before the first step (ADR 0454): no row. A method's
   default is the same row.
 
+## Accounting (ADR 0966)
+
+Every flush the flush census lists ends, for this code, in a row of this rule at the site, an SC9012, the compiler's discard, or a typed reason (the program names no primitive that could put the flush where this code applies, or the flush's caller is on an empty stack: a scheduled callback, code past an `await`, module evaluation, a test runner's callback written directly, or a site nothing enters). A flush none of those ends gets an uncertifiable `SC2006` row, `flush-in-action-unaccounted`: the walks that place a flush also answer "placed off" for a function no call edge reaches, a body that may be a component and an owner set around the call, none of which is a proof, so those sites stay uncertifiable (never a violation).
+
 ## Related
 
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the other

@@ -165,8 +165,19 @@ pub(super) fn rendered_component<'f>(
 /// inline callback in the initializer). The initializer runs when an
 /// instance is constructed, not where the class is written.
 pub(crate) fn inside_instance_field(file: &solid_facts::FileFacts, span: Span) -> bool {
+    inside_instance_field_within(file, span, Span::new(0, u32::MAX))
+}
+
+/// [`inside_instance_field`] for the classes written inside `within` (the code a callback holds: a class written around the callback does not run what the
+/// callback holds); the whole file bounds nothing.
+pub(crate) fn inside_instance_field_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    within: Span,
+) -> bool {
     file.ast.classes.iter().any(|class| {
         class.span.contains(span)
+            && within.contains(class.span)
             && class.elements.iter().any(|element| {
                 element.kind == solid_facts::ast::ClassElementKind::Field
                     && !element.r#static

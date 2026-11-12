@@ -383,6 +383,8 @@ function render(program, instrument) {
       case "class-ctor-default": return `class ${name} {\n${ind(depth + 1)}constructor(p0: unknown = ${expr(c.body[0].e, depth + 1)}) {}\n${ind(depth)}}${line(`new ${name}(${(c.args ?? []).map((argument) => expr(argument, depth)).join(", ")});`)}`;
       // ADR 0963 (ob-shapes.mjs): the construct is the text around the body, which is a function body of its own (or one expression, `mode: "expr"`).
       case "frame": {
+        // fc-shapes.mjs: the raw text of a frame may use a primitive the program imports nowhere else (`imports`).
+        for (const name of c.imports ?? []) used.add(name);
         const at = (text) => text.split("\n").join(`\n${ind(depth)}`);
         const inner = c.mode === "expr" ? expr(c.body[0].e, depth + 1) : block(c.body, depth + (c.nest ?? 0), open(), [], c.after ?? []);
         return `${at(c.head)}${inner}${at(c.close)}${(c.then ?? []).map(line).join("")}`;

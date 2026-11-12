@@ -476,18 +476,33 @@ fn continuation_function(
     file: &solid_facts::FileFacts,
     span: Span,
 ) -> Option<&solid_facts::ast::FunctionFact> {
-    if inside_instance_field(file, span)
-        || file.ast.jsx_containing(span).next().is_some()
-        || file
-            .compiler
-            .tracked_regions
-            .iter()
-            .any(|region| region.span.contains(span))
-    {
+    if !runs_with_its_function(file, span, Span::new(0, u32::MAX)) {
         return None;
     }
     containing_ast_function(&file.ast, span)
         .filter(|function| function.r#async && !function.generator)
+}
+
+/// Whether code written at `span` runs when the body of the function around it runs, and not elsewhere or later: it is in no instance field initializer
+/// (it runs at construction), no JSX expression and no compiler tracked region (a prop getter or a render effect the compiler creates runs it, where the
+/// prop is read or the region is tracked). Only the classes, elements and regions written inside `within` count: the code a callback holds (the whole file bounds
+/// nothing). The one definition the continuation after an await asks ([`continuation_function`]) and the flush accounting asks of the code a scheduler's or a
+/// runner's callback holds.
+pub(crate) fn runs_with_its_function(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    within: Span,
+) -> bool {
+    !(inside_instance_field_within(file, span, within)
+        || file
+            .ast
+            .jsx_containing(span)
+            .any(|element| within.contains(element.span))
+        || file
+            .compiler
+            .tracked_regions
+            .iter()
+            .any(|region| region.span.contains(span) && within.contains(region.span)))
 }
 
 /// Whether `span` sits in the `catch` or `finally` of a `try` whose block

@@ -36,7 +36,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("reactive-dispatch-unresolved", 13),
         ("no-destructure", 1),
         ("components-return-once", 3),
-        ("leaf-owner-forbidden-call", 7),
+        // ADR 0966 (batch 11, slice 5): two more, the uncertifiable
+        // `leaf-operation-unaccounted` rows at the two `flush` calls in
+        // `owned-scope-valid.tsx`'s memo body, pinned below. No violation moved.
+        ("leaf-owner-forbidden-call", 9),
     ] {
         assert_rule_findings(&findings, rule, count);
     }
@@ -284,6 +287,11 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 // uncertifiable: an apply's write and a module-scope
                 // `onSettled`'s, which that flush may drain (ADR 0613).
                 ("no-write-in-pure-computation", 4),
+                // ADR 0966: the two `flush` calls in the memo body. The
+                // program runs a callback under a leaf owner (`onSettled`)
+                // and no census class places the calls off one: uncertifiable
+                // rows, never a violation (pinned below).
+                ("leaf-owner-forbidden-call", 2),
             ]
             .as_slice(),
         ),
@@ -300,6 +308,23 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 .count();
             assert_eq!(actual, *count, "incidental {file} / {rule}: {findings:#?}");
         }
+    }
+
+    // ADR 0966: the leaf rows of the `-valid` file are the flush accounting's
+    // internal uncertifiables (`leaf-operation-unaccounted`), none a violation.
+    for finding in findings_for_rule(&findings, "leaf-owner-forbidden-call")
+        .into_iter()
+        .filter(|finding| {
+            finding["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("owned-scope-valid.tsx"))
+        })
+    {
+        assert_eq!(finding["kind"], "uncertifiable", "{finding:#?}");
+        assert_eq!(
+            finding["analysisContext"], "leaf-operation-unaccounted",
+            "{finding:#?}"
+        );
     }
 
     for (file, rules) in [

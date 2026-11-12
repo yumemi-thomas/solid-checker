@@ -203,6 +203,28 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2700,
+      "end": 2707,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",
+      "start": 2700,
+      "end": 2707,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
       "blocker": "parameter-initializer-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-initializer-unplaced/App.tsx",

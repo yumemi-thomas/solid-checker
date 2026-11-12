@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+      "start": 649,
+      "end": 656,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
