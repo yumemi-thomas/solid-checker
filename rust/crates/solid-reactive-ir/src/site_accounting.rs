@@ -668,6 +668,7 @@ mod tests {
             identity_unproven: false,
             sites: Vec::new(),
             computation_error_unobserved: false,
+            stop: None,
         }
     }
 

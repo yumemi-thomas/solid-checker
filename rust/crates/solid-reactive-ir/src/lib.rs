@@ -810,6 +810,49 @@ pub struct LeafOwnerOperation {
     /// ADR 0893: the throw reaches no proven report.
     #[serde(default, skip_serializing_if = "is_false")]
     pub computation_error_unobserved: bool,
+    /// ADR 0959, batch 11 (what-if slice 2): the stop of the slot climb that owes this obligation, for an
+    /// [`LeafOwnerOperationKind::UnmodelledSlot`] reached at one of the two stops that owe one. It names the cause and
+    /// nothing else: no default build reads it, it is in no report and in no serialized form.
+    #[serde(skip)]
+    pub stop: Option<LeafStop>,
+}
+
+/// Why the slot climb of the leaf-owner walk owes an obligation: the two stops of [`execution_role::ClimbStop`] that do
+/// (ADR 0959). Their rows are SC3001's uncertifiable `leaf-owner-unproven` rows, the blocker every uncertain leaf
+/// operation shares; a what-if run tells the stops apart (ADR 0965), so each is a premise of its own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LeafStop {
+    /// A callback with a parameter, an async or a generator callback of a primitive that runs it in place.
+    UnmodelledInPlace,
+    /// The bound of sixteen layers.
+    Bound,
+}
+
+/// ADR 0965, what-if slice 2 (the what-if build only): the blocker kind of an uncertain leaf operation's row, which the stops of the slot climb share.
+#[cfg(feature = "what-if")]
+pub const LEAF_OWNER_UNPROVEN: &str = blockers::LEAF_OWNER_UNPROVEN;
+
+#[cfg(feature = "what-if")]
+impl LeafStop {
+    /// The premise kind (`--assume Premise(<kind>)`) of this cause: a kind of its own, where every report holds the
+    /// `leaf-owner-unproven` the stops share with the other uncertain leaf operations.
+    pub(crate) const fn cause(self) -> &'static str {
+        match self {
+            Self::UnmodelledInPlace => "leaf-owner-climb-unmodelled-in-place",
+            Self::Bound => "leaf-owner-climb-bound",
+        }
+    }
+}
+
+#[cfg(feature = "what-if")]
+impl LeafOwnerOperation {
+    /// ADR 0965, what-if slice 2: the premise kind this operation's `leaf-owner-unproven` row is owed for: the stop's own kind where the slot climb
+    /// stopped at one of the two stops that owe an obligation, `leaf-owner-unproven` for any other reason. A row stands while any reason it is owed
+    /// for does, so the backend's filter asks every operation at its site.
+    #[must_use]
+    pub fn what_if_cause(&self) -> &'static str {
+        self.stop.map_or(LEAF_OWNER_UNPROVEN, LeafStop::cause)
+    }
 }
 
 impl LeafOwnerOperation {

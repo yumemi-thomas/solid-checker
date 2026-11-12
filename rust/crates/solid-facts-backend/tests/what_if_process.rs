@@ -304,6 +304,146 @@ fn an_assumed_premise_no_row_carries_moves_no_finding() {
     assert_eq!(report["status"], baseline["status"]);
 }
 
+// ADR 0965, slice 2: the two stops of the slot climb that owe an obligation (ADR 0959) are SC3001's uncertifiable `leaf-owner-unproven` rows in every report, the blocker every
+// uncertain leaf operation shares. The what-if build tells them apart: a stop's premise lifts the rows owed at that stop and no other, and `Premise(leaf-owner-unproven)` the rest.
+const OWED: &str = "leaf-owner-unproven";
+const THE_REST: &str = "Premise(leaf-owner-unproven)";
+const IN_PLACE: &str = "Premise(leaf-owner-climb-unmodelled-in-place)";
+const BOUND: &str = "Premise(leaf-owner-climb-bound)";
+
+/// What identifies a finding in a comparison: rule, kind, place and blocker.
+fn finding_key(finding: &Value) -> (String, String, String, String) {
+    (
+        finding["rule"].as_str().unwrap_or("").to_owned(),
+        finding["kind"].as_str().unwrap_or("").to_owned(),
+        finding["primaryLocation"].to_string(),
+        finding["blockedBy"]["kind"]
+            .as_str()
+            .unwrap_or("")
+            .to_owned(),
+    )
+}
+
+/// The places of the findings whose blocker is `kind`.
+fn places_of(report: &Value, kind: &str) -> Vec<String> {
+    findings(report)
+        .iter()
+        .filter(|finding| finding["blockedBy"]["kind"] == kind)
+        .map(|finding| finding["primaryLocation"].to_string())
+        .collect()
+}
+
+/// The places of the rows of `OWED` in the fixture `name` that stand in its baseline and not with `premise` assumed. The run is the premise's alone: every finding that stays is the
+/// baseline's, each marked with it, and every other finding of the baseline is there.
+fn lifted(name: &str, premise: &str) -> Vec<String> {
+    let baseline = check_fixture(name, &[]);
+    let report = check_fixture(name, &[premise]);
+    assert_eq!(
+        report["assumed"],
+        json!({ "hazards": [premise], "flipped": [premise] }),
+        "{name} {premise}"
+    );
+    let before = places_of(&baseline, OWED);
+    let after = places_of(&report, OWED);
+    let gone: Vec<String> = before
+        .iter()
+        .filter(|place| !after.contains(place))
+        .cloned()
+        .collect();
+    let kept: Vec<_> = findings(&baseline)
+        .iter()
+        .filter(|finding| {
+            !(finding["kind"] == "uncertifiable"
+                && finding["blockedBy"]["kind"] == OWED
+                && gone.contains(&finding["primaryLocation"].to_string()))
+        })
+        .map(finding_key)
+        .collect();
+    assert_eq!(
+        untainted(&report)
+            .iter()
+            .map(finding_key)
+            .collect::<Vec<_>>(),
+        kept,
+        "{name} {premise}: the assumption moved a finding that is no row of `{OWED}`"
+    );
+    for finding in findings(&report) {
+        assert_eq!(
+            finding["premises"],
+            json!([{ "kind": "assumed", "hazards": [premise] }]),
+            "{name} {premise}: {finding:#}"
+        );
+    }
+    gone
+}
+
+#[test]
+fn a_callback_the_climb_cannot_read_is_a_cause_of_its_own() {
+    // `leaf-unmodelled-slot`: a call under a callback with a parameter, an async one, `latest`'s and a namespace spelling, each of a primitive that runs it in place (the
+    // climb's `UnmodelledInPlace`), and a plain `untrack` the walk proves (a violation, no row).
+    let name = "leaf-unmodelled-slot";
+    let rows = places_of(&check_fixture(name, &[]), OWED);
+    assert_eq!(rows.len(), 5, "{rows:?}");
+    assert_eq!(
+        lifted(name, IN_PLACE),
+        rows,
+        "the stop lifts every row it owes"
+    );
+    assert!(
+        lifted(name, THE_REST).is_empty(),
+        "the rest lifts a row of a stop"
+    );
+    assert!(
+        lifted(name, BOUND).is_empty(),
+        "the bound lifts a row of another stop"
+    );
+}
+
+#[test]
+fn the_bound_of_the_climb_is_a_cause_of_its_own() {
+    // `leaf-slot-climb-bound`: a call under seventeen in-place layers (a row), and under sixteen, which the walk crosses (a violation).
+    let name = "leaf-slot-climb-bound";
+    let rows = places_of(&check_fixture(name, &[]), OWED);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(lifted(name, BOUND), rows);
+    assert!(lifted(name, IN_PLACE).is_empty());
+    assert!(lifted(name, THE_REST).is_empty());
+    assert!(
+        findings(&check_fixture(name, &[BOUND]))
+            .iter()
+            .any(|finding| finding["kind"] == "violation"),
+        "the violation at sixteen layers is no row of the cause"
+    );
+}
+
+#[test]
+fn a_leaf_row_owed_for_another_reason_is_the_rests_and_no_stops() {
+    // `flush-in-tracked-named-async`: the rows of a named async callback a slot takes the throw of (ADR 0959, amended): no climb stop owes them.
+    let name = "flush-in-tracked-named-async";
+    let rows = places_of(&check_fixture(name, &[]), OWED);
+    assert_eq!(rows.len(), 4, "{rows:?}");
+    assert_eq!(lifted(name, THE_REST), rows);
+    assert!(lifted(name, IN_PLACE).is_empty());
+    assert!(lifted(name, BOUND).is_empty());
+}
+
+#[test]
+fn every_reason_assumed_lifts_every_row_and_assuming_none_changes_none() {
+    // The stops and the rest together are the cause as it was before the stops were told apart: all five rows of `leaf-unmodelled-slot`; the control moves nothing.
+    let name = "leaf-unmodelled-slot";
+    let all = check_fixture(name, &[THE_REST, IN_PLACE, BOUND]);
+    assert!(
+        places_of(&all, OWED).is_empty(),
+        "a row of the cause is left: {all:#}"
+    );
+    let baseline = check_fixture(name, &[]);
+    assert_eq!(baseline["assumed"], json!({ "hazards": [], "flipped": [] }));
+    assert_eq!(places_of(&baseline, OWED).len(), 5);
+    for finding in findings(&baseline) {
+        assert!(finding.get("premises").is_none(), "{finding:#}");
+    }
+}
+
 #[test]
 fn a_premise_id_that_is_no_blocker_kind_is_an_error() {
     for id in [

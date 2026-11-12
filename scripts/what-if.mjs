@@ -375,10 +375,15 @@ export function premiseSetsFromBaselines(baselines, existing, minRows = 20) {
     }
   }
   const have = new Set(existing.map(({ ids }) => [...ids].sort().join("\0")));
-  return [...kinds]
+  const derived = [...kinds]
     .filter(([kind, rows]) => rows >= minRows && !have.has(`Premise(${kind})`))
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
     .map(([kind]) => ({ name: `premise:${kind}`, ids: [`Premise(${kind})`] }));
+  // The causes only the what-if build tells apart (PREMISE_PARENT) are asked beside the kind they share, and with it: the baselines cannot count them (the shipped checker's rows hold the shared kind).
+  const variants = Object.entries(PREMISE_PARENT)
+    .filter(([variant, parent]) => (kinds.get(parent) ?? 0) >= minRows && !have.has(`Premise(${variant})`))
+    .map(([variant]) => ({ name: `premise:${variant}`, ids: [`Premise(${variant})`] }));
+  return [...derived, ...variants];
 }
 
 /** The hazard ids the what-if build can name (ADR 0947's atoms): a lifting set with another atom (the array-slots formula's) is not asked of it. */
@@ -492,12 +497,25 @@ async function scanPrograms(path, { kinds = false } = {}) {
 export const premiseOf = (id) => /^Premise\(([a-z0-9]+(?:-[a-z0-9]+)+)\)$/.exec(id)?.[1] ?? null;
 
 /**
+ * ADR 0965, what-if slice 2: the causes only the what-if build tells apart, and the blocker kind the shipped checker's rows (and so the scan's `u.kinds`) hold them under. The two climb stops
+ * that owe an obligation (ADR 0959) are SC3001's uncertifiable `leaf-owner-unproven` rows in every report, the blocker every uncertain leaf operation shares; the what-if build knows which stop
+ * each row is owed at, so `Premise(<stop>)` lifts the rows of that stop alone and `Premise(leaf-owner-unproven)` the rest. A program is selected for a variant by the kind it shares.
+ */
+export const PREMISE_PARENT = {
+  "leaf-owner-climb-unmodelled-in-place": "leaf-owner-unproven",
+  "leaf-owner-climb-bound": "leaf-owner-unproven",
+};
+
+/** The kind of the scan's `u.kinds` a `Premise(<kind>)` set selects its programs by. */
+export const premiseSelectionKind = (kind) => PREMISE_PARENT[kind] ?? kind;
+
+/**
  * Whether the grid's program can move under `set` (so it is run under it): one of its formula rows fires a hazard of the set (the seam answers only for a hazard the program has), or, for a
  * `Premise(<kind>)` id (ADR 0965), the program carries a row of that cause; `all` (`--programs-from all`) runs every program under every set.
  */
 export function programWantsSet(program, set, all = false) {
   if (all) return true;
-  return program.formulas.some(({ fired }) => fired.some((id) => set.ids.includes(id))) || set.ids.some((id) => { const kind = premiseOf(id); return kind !== null && (program.kinds ?? []).includes(kind); });
+  return program.formulas.some(({ fired }) => fired.some((id) => set.ids.includes(id))) || set.ids.some((id) => { const kind = premiseOf(id); return kind !== null && (program.kinds ?? []).includes(premiseSelectionKind(kind)); });
 }
 
 /** The lifting sets of a scan's formula groups, with the rows and programs of each: what to ask `--assume`. */
