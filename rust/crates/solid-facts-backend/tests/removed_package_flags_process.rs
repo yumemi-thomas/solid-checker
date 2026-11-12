@@ -61,11 +61,14 @@ fn snapshot(output: &Output) -> serde_json::Value {
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
-fn findings(snapshot: &serde_json::Value) -> Vec<(String, String, String)> {
+/// The findings as `(id, kind, message)`, without the owner obligations of ADR 0970 (an exported component no tag renders), which are not the subject of a test about
+/// packages.
+fn findings_without_owner_rows(snapshot: &serde_json::Value) -> Vec<(String, String, String)> {
     snapshot["findings"]
         .as_array()
         .unwrap()
         .iter()
+        .filter(|finding| !super::support::owner_entry_row(finding))
         .map(|finding| {
             (
                 finding["id"].as_str().unwrap().to_owned(),
@@ -92,10 +95,7 @@ fn the_requirement_boundary_survives_without_any_package_source() {
     ));
     assert_eq!(disabled["status"], "uncertifiable");
     // ADR 0970: the fixture's exported component no tag renders keeps an owner obligation (SC4001), which is not this test's subject.
-    let rows = findings(&disabled)
-        .into_iter()
-        .filter(|row| row.0 != "SC4001")
-        .collect::<Vec<_>>();
+    let rows = findings_without_owner_rows(&disabled);
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(
         (rows[0].0.as_str(), rows[0].1.as_str()),

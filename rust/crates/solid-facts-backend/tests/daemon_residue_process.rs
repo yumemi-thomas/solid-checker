@@ -445,7 +445,7 @@ fn a_file_in_a_new_directory_under_a_source_less_one_is_seen() {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|finding| finding["id"] != "SC4001")
+            .filter(|finding| !crate::process_support::owner_entry_row(finding))
             .count()
     };
     assert_eq!(count(&fresh), count(&before) + 1);

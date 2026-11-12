@@ -961,9 +961,16 @@ fn rust_cli_emits_snapshot_text_and_certification_exit_codes() {
     assert_eq!(output.status.code(), Some(1));
     let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(snapshot["status"], "violation");
-    assert_eq!(snapshot["findings"][0]["primaryLocation"]["line"], 8);
+    // ADR 0970: the exported components of the fixture no tag renders also hold owner obligations (SC4001), which sort first and are not this test's subject.
+    let findings = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| !crate::process_support::owner_entry_row(finding))
+        .collect::<Vec<_>>();
+    assert_eq!(findings[0]["primaryLocation"]["line"], 8);
     assert!(
-        snapshot["findings"][0]["primaryLocation"]["column"]
+        findings[0]["primaryLocation"]["column"]
             .as_u64()
             .is_some_and(|column| column > 0)
     );
@@ -987,8 +994,15 @@ fn rust_cli_emits_snapshot_text_and_certification_exit_codes() {
         String::from_utf8_lossy(&output.stderr)
     );
     let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(snapshot["status"], "certified");
-    assert_eq!(snapshot["findings"].as_array().unwrap().len(), 0);
+    // ADR 0970: the corrected source holds no violation, but its exported components no tag renders keep owner obligations (SC4001), so it is uncertifiable, not certified.
+    assert_eq!(snapshot["status"], "uncertifiable");
+    assert!(
+        snapshot["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(crate::process_support::owner_entry_row)
+    );
 }
 
 #[cfg(unix)]
@@ -1109,7 +1123,14 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
         "initial incremental fragments must match the fresh builder"
     );
     assert_eq!(incremental_timings.source_discovery_unchanged_files, 0);
-    let findings = selected.solve(&program);
+    // ADR 0970: the exported components of the fixture no tag renders also hold owner obligations (SC4001), which are not this test's subject.
+    let findings = selected
+        .solve(&program)
+        .into_iter()
+        .filter(|finding| {
+            !(finding.rule.ends_with("missing-owner") && finding.kind == "uncertifiable")
+        })
+        .collect::<Vec<_>>();
     assert_eq!(findings.len(), 1, "findings = {findings:#?}");
     // Catalog-relative name: unprefixed in 2.0, `v1/`-prefixed in a
     // dialect-v1-only build.
