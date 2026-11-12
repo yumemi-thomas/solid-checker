@@ -146,9 +146,16 @@ site_silences! {
     /// An effect's apply is proven never to run (`effect_execution`, ADR 0590):
     /// the pass removed the row.
     ApplyNeverRuns => "effect_execution.gate_diagnostics.apply-never-runs",
-    /// A dispatch obligation of an exported helper every caller of which is in
-    /// view and passes a closed value: the pass removed the row.
+    /// A dispatch obligation of an exported helper in a closed program, every way
+    /// into which is a call expression the graph resolves: the pass removed the row.
     ClosedProgramExportDischarge => "attribution.discharge_closed_program_export_dispatch.closed-callers",
+    /// A use of a parameter nothing resolves, at an argument that holds a primitive
+    /// on every run (ADR 0320), in a closed program: the pass removed the row.
+    ArgumentPrimitiveDischarge => "attribution.discharge_closed_program_export_dispatch.argument-primitive",
+    /// A member dispatch on an argument that is a built-in value or a literal whose
+    /// own member is a primitive (ADRs 0211-0214), in a closed program: the pass
+    /// removed the row.
+    ArgumentMemberPrimitiveDischarge => "attribution.discharge_closed_program_export_dispatch.argument-member-primitive",
     /// A function the program places elsewhere (its call edges), read through
     /// a call: the summaries decide at the calls.
     CallPlacedElsewhere => "local_access.discover_call_as.placed-elsewhere",
@@ -278,6 +285,16 @@ impl SiteEnds {
     /// An end for a row a pass removed from the draft, on the one fact it
     /// removed it on, about the code of the row itself.
     pub(crate) fn removed(&mut self, location: &Location, silence: SiteSilence, kind: PremiseKind) {
+        self.removed_with(location, silence, &[kind]);
+    }
+
+    /// `removed` for a removal that rests on several facts, each about the code of the row itself.
+    pub(crate) fn removed_with(
+        &mut self,
+        location: &Location,
+        silence: SiteSilence,
+        kinds: &[PremiseKind],
+    ) {
         let (Ok(start), Ok(end)) = (
             u32::try_from(location.start_byte),
             u32::try_from(location.end_byte),
@@ -289,7 +306,10 @@ impl SiteEnds {
             Arc::clone(&location.path),
             site,
             silence,
-            vec![Premise::at(kind, Some(site))],
+            kinds
+                .iter()
+                .map(|kind| Premise::at(*kind, Some(site)))
+                .collect(),
         );
     }
 
