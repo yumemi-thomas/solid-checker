@@ -129,8 +129,7 @@ fn an_owner_call_decline_ends_nothing() {
     let directory = temporary_directory("proof-log-declined");
     let log = directory.join("owner-call.jsonl");
     let report = check(&typefacts, "owner-call-leaf-universe", Some(&log));
-    let source =
-        fs::read_to_string(fixture("owner-call-leaf-universe").join("App.tsx")).unwrap();
+    let source = fs::read_to_string(fixture("owner-call-leaf-universe").join("App.tsx")).unwrap();
     let start = source.find("createMemo(() => 4)").unwrap() as u64;
     let end = start + "createMemo".len() as u64;
     let code = "PRIMITIVE_IN_FORBIDDEN_SCOPE";
@@ -158,11 +157,15 @@ fn an_owner_call_decline_ends_nothing() {
                 .is_some_and(|codes| codes.iter().any(|listed| listed == code))
     };
     assert!(
-        lines.iter().any(|line| line["k"] == "declined" && lists(line)),
+        lines
+            .iter()
+            .any(|line| line["k"] == "declined" && lists(line)),
         "no decline lists {code} at the callee"
     );
     assert!(
-        !lines.iter().any(|line| line["k"] == "silent" && lists(line)),
+        !lines
+            .iter()
+            .any(|line| line["k"] == "silent" && lists(line)),
         "a silence lists {code} at a site only a decline stands at"
     );
     fs::remove_dir_all(directory).ok();
