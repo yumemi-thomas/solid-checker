@@ -3656,11 +3656,10 @@ function caseFindings(entry, report) {
 /**
  * How many cases are `held`, exactly (a ratchet). A held case is temporary: a broader
  * blocker covers its files until a named later proof lands (ADR 0803 step 2:
- * a listener or callback the census cannot read; ADR 0969: a JSX closing tag read as a
- * hand-off, two cases). A new held case
+ * a listener or callback the census cannot read). A new held case
  * needs a reviewed raise here; the proof that restores them lowers it.
  */
-export const HELD_CAP = 60;
+export const HELD_CAP = 58;
 
 /**
  * The problems of the held cases. A held case keeps its recorded `kind`,

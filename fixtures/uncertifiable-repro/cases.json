@@ -16720,24 +16720,7 @@
     "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11"
    },
    "weight": 6,
-   "status": "certified",
-   "held": {
-    "adr": "0969",
-    "restoredBy": "A JSX closing tag is no hand-off (ADR 0967, ADR 0969)",
-    "why": "certified clean before ADR 0969, uncertifiable until B3's hand-off census stops reading a JSX closing tag as a hand-off: `</Card>`, written beside `<Card>` for a component with children, is taken for a reference that hands the component to a package nothing here reads (`package_hand_off.rs`, `position`), so the leaf universe's SC3001 home row stands at each creation the component writes, though the mounted root renders it (the same file with a self-closing element is silent); the closing-tag proof restores the expectation above",
-    "expect": [
-     {
-      "kind": "uncertifiable",
-      "rule": "SC3001",
-      "context": "leaf-operation-unaccounted"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC3001",
-      "context": "leaf-operation-unaccounted"
-     }
-    ]
-   }
+   "status": "certified"
   },
   {
    "id": "clean-dynamic-as",
@@ -16817,19 +16800,7 @@
     "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
    },
    "weight": 35,
-   "status": "certified",
-   "held": {
-    "adr": "0969",
-    "restoredBy": "A JSX closing tag is no hand-off (ADR 0967, ADR 0969)",
-    "why": "certified clean before ADR 0969, uncertifiable until B3's hand-off census stops reading a JSX closing tag as a hand-off: `</Card>`, written beside `<Card>` for a component with children, is taken for a reference that hands the component to a package nothing here reads (`package_hand_off.rs`, `position`), so the leaf universe's SC3001 home row stands at each creation the component writes, though the mounted root renders it (the same file with a self-closing element is silent); the closing-tag proof restores the expectation above",
-    "expect": [
-     {
-      "kind": "uncertifiable",
-      "rule": "SC3001",
-      "context": "leaf-operation-unaccounted"
-     }
-    ]
-   }
+   "status": "certified"
   },
   {
    "id": "clean-portal-show",
