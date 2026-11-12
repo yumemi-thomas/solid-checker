@@ -1415,3 +1415,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-class/node_modules/**
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off/node_modules/**
+!fixtures/reactive-ir/flush-universe-fake-timers/node_modules/
+!fixtures/reactive-ir/flush-universe-fake-timers/node_modules/**
+!fixtures/reactive-ir/flush-universe-fake-timers/variants/jest/node_modules/
+!fixtures/reactive-ir/flush-universe-fake-timers/variants/jest/node_modules/**
+!fixtures/reactive-ir/flush-universe-fake-timers/variants/bun/node_modules/
+!fixtures/reactive-ir/flush-universe-fake-timers/variants/bun/node_modules/**
