@@ -3659,7 +3659,7 @@ function caseFindings(entry, report) {
  * a listener or callback the census cannot read). A new held case
  * needs a reviewed raise here; the proof that restores them lowers it.
  */
-export const HELD_CAP = 60;
+export const HELD_CAP = 59;
 
 /**
  * The problems of the held cases. A held case keeps its recorded `kind`,

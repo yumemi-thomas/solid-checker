@@ -16736,24 +16736,7 @@
     "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa"
    },
    "weight": 3,
-   "status": "certified",
-   "held": {
-    "adr": "0971",
-    "restoredBy": "Prove a package renders a component under an owner, from its dependency source (ADR 0970)",
-    "why": "certified clean before a JSX creation became a site of the owner-call universe (ADR 0971): `App` is exported from an open program, so code this program does not hold may call it outside any owner, and the JSX creations in it (the `<Eyebrow>` elements, and the `<Dynamic>` that `Eyebrow` renders, which create a root and a render effect) keep an uncertifiable SC3001 and SC6002 row (an unread package may run an export of an open program: B3, policy A); the proof that a package renders a component it is handed under an owner, from the package's source, restores the expectation",
-    "expect": [
-     {
-      "kind": "uncertifiable",
-      "rule": "SC3001",
-      "context": "leaf-operation-unaccounted"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC6002",
-      "context": "effect-creation-unaccounted"
-     }
-    ]
-   }
+   "status": "certified"
   },
   {
    "id": "clean-dynamic-spread",
