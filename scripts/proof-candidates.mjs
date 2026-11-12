@@ -16,19 +16,26 @@ import { proofLogLines } from "./lib/proof-log.mjs";
 
 const files = (path) => (statSync(path).isDirectory() ? readdirSync(path).filter((name) => name.endsWith(".jsonl")).sort().map((name) => join(path, name)) : [path]);
 
-/** The per-project tallies of every log under `path` and their total: `{ projects: { program: { "<rule> <table>": tally } }, total: { "<rule> <table>": tally } }`. */
+/**
+ * The per-project tallies of every log under `path` and their total: `{ projects: { program: { "<rule> <table>": tally } }, total: { "<rule> <table>": tally }, coverage, logs }`.
+ * `logs` counts the log files and those holding at least one `candidate` line of the dry run: a run whose analyses stopped early (unresolved imports) has few, and its tallies are
+ * a fraction of the truth.
+ */
 export function foldDirectory(path) {
   const projects = {};
   const total = {};
   const coverage = { findings: {}, uncovered: {}, packageAtEntry: {} };
+  const logs = { files: 0, withCandidateLines: 0 };
   for (const file of files(resolve(path))) {
-    const { program, tallies, orphans } = foldLogFile(file);
+    const { program, tallies, orphans, candidateLines } = foldLogFile(file);
+    logs.files += 1;
+    if (candidateLines > 0) logs.withCandidateLines += 1;
     const name = program ?? file;
     projects[name] = tallies;
     for (const [key, tally] of Object.entries(tallies)) mergeTally((total[key] ??= newTally()), tally);
     for (const part of ["findings", "uncovered", "packageAtEntry"]) for (const [rule, count] of Object.entries(orphans[part])) coverage[part][rule] = (coverage[part][rule] ?? 0) + count;
   }
-  return { projects, total, coverage };
+  return { projects, total, coverage, logs };
 }
 
 const ends = (tally) => `finding ${tally.ends["finding-violation"] + tally.ends["finding-obligation"]} (violation ${tally.ends["finding-violation"]}, obligation ${tally.ends["finding-obligation"]}), other ${tally.ends.other}, silent ${tally.ends.silent}, discarded ${tally.ends.discarded}, unaccounted ${tally.ends.unaccounted}`;
@@ -58,11 +65,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     for (const file of files(resolve(path))) for (const candidate of candidatesOf(proofLogLines(file))) process.stdout.write(`${JSON.stringify(candidate)}\n`);
     process.exit(0);
   }
-  const { projects, total, coverage } = foldDirectory(path);
+  const { projects, total, coverage, logs } = foldDirectory(path);
   if (flags.includes("--json")) {
-    process.stdout.write(`${JSON.stringify({ total, coverage, ...(flags.includes("--per-project") ? { projects } : {}) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ total, coverage, logs, ...(flags.includes("--per-project") ? { projects } : {}) }, null, 2)}\n`);
   } else {
     if (flags.includes("--per-project")) for (const [program, tallies] of Object.entries(projects)) process.stdout.write(`${render(tallies, program)}\n`);
-    process.stdout.write(`${render(total, `all (${Object.keys(projects).length} log(s))`, coverage)}\n`);
+    process.stdout.write(`${render(total, `all (${logs.files} log(s), ${logs.withCandidateLines} with a candidate line)`, coverage)}\n`);
   }
 }

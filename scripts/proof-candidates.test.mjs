@@ -1,7 +1,11 @@
 // Batch 11, slice 0: the candidate fold (scripts/lib/candidates.mjs), on hand-written log lines.
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "vitest";
 
+import { foldDirectory } from "./proof-candidates.mjs";
 import { OWNER_CONTEXT_LEAF, OWNER_CONTEXT_LEAF_OWNED, addCandidate, candidatesOf, factsOf, isTestFile, mergeTally, newTally, tallyCandidates } from "./lib/candidates.mjs";
 
 const F = "/p/App.tsx";
@@ -123,4 +127,21 @@ test("an SC1002 read's shape joins whether its async function is a computation's
   assert.equal(tally.byFact["shape=computation-direct"].ends["finding-obligation"], 1);
   // another rule's facts get no shape
   assert.equal(factsOf({ rule: "SC7002", facts: { sync: "true" } }).shape, undefined);
+});
+
+test("the fold counts the logs that hold a candidate line, so a run whose analyses stopped early shows", () => {
+  const dir = mkdtempSync(join(tmpdir(), "proof-candidates-"));
+  const write = (name, lines) => writeFileSync(join(dir, name), `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`);
+  try {
+    write("proof-1.jsonl", [candidate("SC7002", "sync-option", 5, 10, { facts: { sync: "absent" } })]);
+    // a log with a finding but no candidate line (the analysis ended before the accounting, or the dry run was off), and one with only a silence the fold reads as SC2009's candidate
+    write("proof-2.jsonl", [verdict(5, 10, "sync-computation-received-async", "SC7002", "violation")]);
+    write("proof-3.jsonl", [{ k: "silent", f: F, s: 30, e: 40, rule: "end", proof: "local_access.push_setter_write.optimistic-signal-unguarded" }]);
+    const { logs, total } = foldDirectory(dir);
+    assert.deepEqual(logs, { files: 3, withCandidateLines: 1 });
+    assert.equal(total["SC7002 sync-option"].candidates, 1);
+    assert.equal(total["SC2009 optimistic-write"].candidates, 1); // a candidate, but not from a `candidate` line: it does not count as the dry run's
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

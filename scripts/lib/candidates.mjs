@@ -39,7 +39,7 @@ const within = (outer, inner) => outer.s <= inner.s && inner.e <= outer.e;
  * The candidates of one log file's lines, each with how it ends: `[{ file, program, rule, table, s, e, facts, end, ownRule, otherRules }]`.
  * `end` is one of `finding-violation`, `finding-obligation`, `other`, `silent`, `discarded`, `unaccounted`.
  */
-export function candidatesOf(lines, { orphans = null } = {}) {
+export function candidatesOf(lines, { orphans = null, stats = null } = {}) {
   const files = new Map();
   const of = (file) => {
     if (!files.has(file)) files.set(file, { program: null, candidates: [], verdicts: [], bySpan: new Map(), silent: new Set(), owners: [], optimistic: new Set() });
@@ -48,6 +48,7 @@ export function candidatesOf(lines, { orphans = null } = {}) {
   for (const line of lines) {
     if (line.f === undefined) continue;
     if (line.k === "candidate") {
+      if (stats) stats.candidateLines += 1;
       const entry = of(line.f);
       entry.program ??= line.g ?? null;
       entry.candidates.push({ rule: line.rule, table: line.t, s: line.s, e: line.e, alt: line.alt ?? [], facts: line.facts ?? {} });
@@ -164,9 +165,13 @@ export function mergeTally(into, tally) {
   return into;
 }
 
-/** The candidates of a log file or directory's files, read in chunks and folded one file at a time: `[{ file, program, tallies }]`. */
+/**
+ * The candidates of one log file, read in chunks and folded: `{ program, tallies, orphans, candidateLines }`. `candidateLines` counts the dry run's own `candidate` lines (not the
+ * candidates read from the `owner` and `silent` lines): a log with none is a program whose analysis ended before the accounting, or a run with the dry run off.
+ */
 export function foldLogFile(path) {
   const orphans = { findings: {}, uncovered: {}, packageAtEntry: {} };
-  const candidates = candidatesOf(proofLogLines(path), { orphans });
-  return { program: candidates.find((candidate) => candidate.program)?.program ?? null, tallies: tallyCandidates(candidates), orphans };
+  const stats = { candidateLines: 0 };
+  const candidates = candidatesOf(proofLogLines(path), { orphans, stats });
+  return { program: candidates.find((candidate) => candidate.program)?.program ?? null, tallies: tallyCandidates(candidates), orphans, candidateLines: stats.candidateLines };
 }
