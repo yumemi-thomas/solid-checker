@@ -19876,5 +19876,44 @@
    "mx-flush-in-tracked-queue-callback-fc-gencarrier-tracked-x-direct-none"
   ],
   "rediscovered": "`rel-s5q` (release, the PR's fix of B1 and B2, code of cdc0cbaa5, checker sha256 360f3e981b80…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the `fc-gencarrier-tracked` cell: false-clean 1; `make fuzz-focus` exits 1 (the code's other `fc-*` cells are covered by uncertifiable rows). The fix (release `rel-s5r`, checker sha256 c25effa70bf3…, the branch head's code, same host): recall-gap on every misuse cell of the three forms, 0 false clean, 0 behaviour, 0 attribution and 0 inconclusive differences; the legal twins clean or uncertifiable (0 false positive)."
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` written in the handler of `recv.catch(…)` or `recv.finally(…)` called in an effect's apply on an instance of a Promise subclass whose `then` runs the handler at once, was certified with no row: the flush accounting (slice 5) ended it on `FlushSafe::FreshStack` (on main no producer accounted for it), because `callback_runs_it` dropped the resolved call and `catch` and `finally` run their handler through the receiver's `then` (ECMAScript 27.2.5.1), so the handler runs on the host's stack. Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable second re-review of #213 (2026-11-12, rereview2-slice5, N5, read from ECMA-262 27.2.5.1), confirmed in Chrome with the real oracle on the previous head's release build `rel-s5r` (patterns flushclass/recvthen-*: three false cleans, one per host)",
+  "fixed": "ADR 0966 amended a third time (the second re-review of #213): `callback_runs_it` refuses a call that dispatches through its receiver's `then` (`runtime_semantics::dispatches_through_receiver_then`: `Promise.prototype.catch` and `finally`, ECMAScript 27.2.5.1, run the handler through `then`, which a subclass may run at once, on the stack of the caller), as every other consumer of `fresh_stack_callback_call` must (its own documentation); otherwise no reason, so the site's uncertifiable row",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-fc-recvthen-effect-apply-x-direct-none"
+  ],
+  "rediscovered": "`rel-s5r` (release, the PR head 26935ba82 as built by runfix-s5r.sh; Chrome host and the real oracle, `--runtime-diff all`): 1 programs false-clean (fc-recvthen-effect-apply); the code's 1 fc-recvthen programs: false-clean 1. `rel-n45` (release, the fix 0fcf36601): recall-gap 1"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` written in the handler of `recv.catch(…)` or `recv.finally(…)` called in an action's step on an instance of a Promise subclass whose `then` runs the handler at once, was certified with no row: the flush accounting (slice 5) ended it on `FlushSafe::FreshStack` (on main no producer accounted for it), because `callback_runs_it` dropped the resolved call and `catch` and `finally` run their handler through the receiver's `then` (ECMAScript 27.2.5.1), so the handler runs on the host's stack. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable second re-review of #213 (2026-11-12, rereview2-slice5, N5, read from ECMA-262 27.2.5.1), confirmed in Chrome with the real oracle on the previous head's release build `rel-s5r` (patterns flushclass/recvthen-*: three false cleans, one per host)",
+  "fixed": "ADR 0966 amended a third time (the second re-review of #213): `callback_runs_it` refuses a call that dispatches through its receiver's `then` (`runtime_semantics::dispatches_through_receiver_then`: `Promise.prototype.catch` and `finally`, ECMAScript 27.2.5.1, run the handler through `then`, which a subclass may run at once, on the stack of the caller), as every other consumer of `fresh_stack_callback_call` must (its own documentation); otherwise no reason, so the site's uncertifiable row",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-fc-recvthen-action-x-direct-none"
+  ],
+  "rediscovered": "`rel-s5r` (release, the PR head 26935ba82 as built by runfix-s5r.sh; Chrome host and the real oracle, `--runtime-diff all`): 1 programs false-clean (fc-recvthen-action); the code's 1 fc-recvthen programs: false-clean 1. `rel-n45` (release, the fix 0fcf36601): recall-gap 1"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` written in the handler of `recv.catch(…)` or `recv.finally(…)` called in a leaf owner's callback (`createTrackedEffect`) on an instance of a Promise subclass whose `then` runs the handler at once, was certified with no row: the flush accounting (slice 5) ended it on `FlushSafe::FreshStack` (on main no producer accounted for it), because `callback_runs_it` dropped the resolved call and `catch` and `finally` run their handler through the receiver's `then` (ECMAScript 27.2.5.1), so the handler runs on the host's stack. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable second re-review of #213 (2026-11-12, rereview2-slice5, N5, read from ECMA-262 27.2.5.1), confirmed in Chrome with the real oracle on the previous head's release build `rel-s5r` (patterns flushclass/recvthen-*: three false cleans, one per host)",
+  "fixed": "ADR 0966 amended a third time (the second re-review of #213): `callback_runs_it` refuses a call that dispatches through its receiver's `then` (`runtime_semantics::dispatches_through_receiver_then`: `Promise.prototype.catch` and `finally`, ECMAScript 27.2.5.1, run the handler through `then`, which a subclass may run at once, on the stack of the caller), as every other consumer of `fresh_stack_callback_call` must (its own documentation); otherwise no reason, so the site's uncertifiable row",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-fc-recvthen-tracked-x-direct-none"
+  ],
+  "rediscovered": "`rel-s5r` (release, the PR head 26935ba82 as built by runfix-s5r.sh; Chrome host and the real oracle, `--runtime-diff all`): 1 programs false-clean (fc-recvthen-tracked); the code's 1 fc-recvthen programs: false-clean 1. `rel-n45` (release, the fix 0fcf36601): recall-gap 1"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` written in the suite body a reviewed runner runs inside its registration (`node:test`'s `describe`, jest-circus, mocha, playwright), was certified with no row in four shapes of code that does not run when the suite body runs: a class field's initializer (`Late = class { x = flush(); }`, `new Late()` in an effect's apply), a default value (`late = (x = flush()) => x`), a prop written in JSX (`<Child v={flush()} />`) and a named suite body its own code uses (`kept = again`, called later from any stack). The flush accounting (slice 5) ended each on `FlushSafe::ModuleInitialization` (on main no producer accounted for it), unasked: the census gives a flush directly in the suite body the class of the registration's position, and the class, parameter-list, JSX and field questions had been asked of the registration call, not of the flush. Node 24 with the real `node:test` and solid-js rc.21 (dev build) ran the first in an effect's apply: the suite body ran inline and FLUSH_IN_EFFECT_CALLBACK was raised at the field's flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable second re-review of #213 (2026-11-12, rereview2-slice5, N4, probes s4-inline-suite and s5-inline-suite-*), confirmed in Node with the real `node:test` on the previous head's release build `rel-s5r` (certified, 0 rows)",
+  "fixed": "ADR 0966 amended a third time (the second re-review of #213): a flush in a function body that has the class `ModuleInitialization` (a suite body a runner runs inside its registration) ends the codes only when the questions of `callback_runs_it` hold of everything written inside the outermost registration of the chain (`suite_body_runs_it`, `runs_when_the_call_runs`: no parameter list, generator, named function expression its own code uses, class field initializer, JSX element or compiler tracked region); otherwise no reason, so the site's uncertifiable row",
+  "outside": "the shape needs a reviewed runner's inline suite body (`describe` of `node:test`, `@types/node/test.d.ts`), and the generator's runtime is Chrome, which cannot load `node:test`: no generator context writes it. The fixture `fixtures/reactive-ir/flush-universe-inline-suite` holds the four shapes and their silent twins (15 uncertifiable rows on the fix, 6 on `rel-s5r`), and the Node run of the field shape is recorded in the PR"
  }
 ]
