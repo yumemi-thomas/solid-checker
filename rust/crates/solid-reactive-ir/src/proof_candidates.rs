@@ -241,6 +241,12 @@ pub(crate) fn log(ctx: &AnalysisContext<'_>, universe: &[(&FileFacts, Site)]) {
             facts: &[
                 ("called", yes(site.called)),
                 ("caller", yes(site.caller.is_some())),
+                // The census class of the caller (the word the dispatch census gives it): how a site that stays uncertifiable was classed.
+                (
+                    "class",
+                    site.caller
+                        .map_or("none", crate::indexes::DispatchCaller::word),
+                ),
                 ("drainsNothing", yes(site.drains_nothing)),
             ],
         });

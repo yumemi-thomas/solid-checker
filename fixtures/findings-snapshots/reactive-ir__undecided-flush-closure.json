@@ -34,6 +34,28 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 855,
+      "end": 888,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 855,
+      "end": 888,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -74,6 +96,28 @@
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1122,
       "end": 1133,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1122,
+      "end": 1162,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1122,
+      "end": 1162,
       "fixes": 0
     },
     {
@@ -118,6 +162,28 @@
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1380,
       "end": 1385,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1380,
+      "end": 1413,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1380,
+      "end": 1413,
       "fixes": 0
     },
     {
@@ -176,6 +242,28 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1650,
+      "end": 1664,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 1650,
+      "end": 1664,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -217,6 +305,39 @@
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 2198,
       "end": 2204,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 2217,
+      "end": 2250,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 2217,
+      "end": 2250,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
+      "start": 2217,
+      "end": 2250,
       "fixes": 0
     },
     {

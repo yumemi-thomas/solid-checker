@@ -73,6 +73,8 @@ export const PRODUCERS = [
   /^rust\/crates\/solid-reactive-ir\/src\/execution_role\//,
   /^rust\/crates\/solid-reactive-ir\/src\/local_access\.rs$/,
   /^rust\/crates\/solid-reactive-ir\/src\/owners(?:\.rs|\/)/,
+  // Batch 11, slice 5 (owner-approved): the flush accounting ends a flush site with a typed reason, so a role it produced would be a silence.
+  /^rust\/crates\/solid-reactive-ir\/src\/flush_accounting\.rs$/,
 ];
 
 /** The files that own the primitive vocabulary: the dialect's questions are stated in its enum, so a name match there is the answer, not a copy of it (ADR 0945). */
