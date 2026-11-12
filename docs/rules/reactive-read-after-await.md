@@ -79,7 +79,10 @@ there, and the reads in it are then reported with the same two proofs:
   `PromiseLike`, a typed `Promise<T>` parameter or an unknown receiver is not
   proof, since a thenable may call back inline. The proof holds while no visible
   write reaches the Promise intrinsics (ADR 0349). With such a write the handler
-  is a proof obligation, never a violation. Two limits keep a handler uncertifiable:
+  is a proof obligation, never a violation. So is a handler of a `.then` on a
+  receiver nothing proves native and no premise claims (a call's result, an
+  identity function's: batch 11), whether written in place, handed by name or
+  taken from a closed object's member, and the receiver's own chain is walked. Two limits keep a handler uncertifiable:
   - *An `async` function returns the chain without awaiting it* (the
     computation itself, or an `async` helper): the function adopts the promise
     in a later microtask. A receiver that may already be settled

@@ -1395,3 +1395,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/later-assigned-function/node_modules/**
 !fixtures/reactive-ir/primitive-handed-value/node_modules/
 !fixtures/reactive-ir/primitive-handed-value/node_modules/**
+!fixtures/reactive-ir/then-unplaced-chain/node_modules/
+!fixtures/reactive-ir/then-unplaced-chain/node_modules/**
