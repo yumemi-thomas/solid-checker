@@ -323,11 +323,11 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "strict-read-unaccounted",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 6357,
-      "end": 6364,
+      "start": 6328,
+      "end": 6335,
       "fixes": 0
     },
     {
@@ -337,8 +337,8 @@
       "blocker": "unresolved-invocation",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 6457,
-      "end": 6467,
+      "start": 6496,
+      "end": 6506,
       "fixes": 0
     },
     {
@@ -348,8 +348,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 6769,
-      "end": 6776,
+      "start": 6808,
+      "end": 6815,
       "fixes": 0
     },
     {
@@ -359,8 +359,8 @@
       "blocker": "unresolved-invocation",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 6904,
-      "end": 6908,
+      "start": 6943,
+      "end": 6947,
       "fixes": 0
     },
     {
@@ -370,8 +370,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 7088,
-      "end": 7095,
+      "start": 7127,
+      "end": 7134,
       "fixes": 0
     },
     {
@@ -381,8 +381,8 @@
       "blocker": "unresolved-invocation",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 7200,
-      "end": 7214,
+      "start": 7239,
+      "end": 7253,
       "fixes": 0
     },
     {
@@ -392,8 +392,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 7448,
-      "end": 7455,
+      "start": 7487,
+      "end": 7494,
       "fixes": 0
     },
     {
@@ -403,8 +403,8 @@
       "blocker": "unresolved-invocation",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 7619,
-      "end": 7629,
+      "start": 7658,
+      "end": 7668,
       "fixes": 0
     },
     {
@@ -414,8 +414,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 8558,
-      "end": 8565,
+      "start": 8597,
+      "end": 8604,
       "fixes": 0
     },
     {
@@ -425,8 +425,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-function-after-await/App.tsx",
-      "start": 8895,
-      "end": 8902,
+      "start": 8934,
+      "end": 8941,
       "fixes": 0
     },
     {

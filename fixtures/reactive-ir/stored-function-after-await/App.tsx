@@ -212,8 +212,11 @@ export function Apply() {
 }
 
 // A `let` the program assigns again holds the later function, not its initializer.
+function readCount() {
+  return count();
+}
 let reassigned: () => unknown = () => {};
-reassigned = () => count();
+reassigned = readCount;
 export function Reassigned() {
   const m = createMemo(async () => {
     await pause();
