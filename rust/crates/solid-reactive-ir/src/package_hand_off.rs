@@ -13,6 +13,8 @@
 //!   Code in an element's prop, spread or child expression (no function between) runs where that element evaluates it: the compiler makes it a getter of a component's
 //!   props, read when the component reads the prop, so under a component nothing here reads (`<Pkg>{helper()}</Pkg>`, `<Pkg>{list.map(() => <Own />)}</Pkg>`) it is
 //!   handed;
+//!   An accessor runs where it is read: a project component's props (whose expressions are getters) and an object literal with a getter are followed as objects of
+//!   accessors, so a reference of them in code a package may run hands what the accessor runs (`runStep(() => { void props.children; })`);
 //! - an argument of a call: the receiver decides ([`Receiver`]): a dialect primitive and the standard library's inline callbacks run it before they return, on the stack
 //!   of the function the call is written in; a reviewed fresh-stack scheduler, a DOM listener registration and a reviewed test runner's registration run it elsewhere and
 //!   keep nothing; a project function the call graph resolves exactly goes on in its parameter (a component's props are its first parameter, a reflective call's forwarded
@@ -66,6 +68,7 @@ use crate::local_access::HandOff;
 use crate::runtime_semantics::RuntimeArgumentBehavior;
 
 /// What receives a function value at a hand-off position.
+#[derive(Clone, Copy)]
 enum Receiver<'a> {
     /// Code whose behavior the program knows: it runs the value elsewhere (a host scheduler, a DOM listener registration, a reviewed runner) or never, and keeps nothing.
     Known,
@@ -84,10 +87,43 @@ type Key = (Arc<str>, Span);
 /// What one question has visited, so that a cycle of copies or calls ends.
 #[derive(Default)]
 struct Walk {
+    /// The value followed is an object whose members are accessors (a component's props, whose expressions the compiler makes getters; an object literal with a
+    /// getter): reading a member runs the accessor where the read is written, so a reference of the object in code a package may run hands what the accessor runs
+    /// (the review of #222's check 3, R1 and R2). A walk in this mode is its own: its positions are not those of a walk of the value itself.
+    accessor: bool,
+    /// In that mode, the component whose props are followed: a reference written directly in its body reads them when the component runs, which is where its
+    /// element is created (already asked), so only a reference inside a function within it, or anywhere else, asks where it runs.
+    accessor_owner: Option<Key>,
     positions: HashSet<Key>,
     functions: HashSet<Key>,
     returned_positions: HashSet<(Key, Key)>,
     returned_bindings: HashSet<(Key, Key)>,
+}
+
+impl Walk {
+    /// A walk of an object whose members are accessors.
+    fn accessors() -> Self {
+        Self {
+            accessor: true,
+            ..Self::default()
+        }
+    }
+}
+
+/// Whether the function is the value of an accessor property of an object literal (`get g() { … }`, `set g(v) { … }`: neither a data property nor a method),
+/// and the literal: `Some(None)` when no literal fact holds the property, which is handed (a missing fact is no proof).
+fn accessor_object(ast: &AstFacts, function: &FunctionFact) -> Option<Option<Span>> {
+    let property = ast
+        .object_properties
+        .iter()
+        .find(|property| !property.data && !property.method && property.value == function.span)?;
+    Some(
+        ast.object_get_shapes
+            .iter()
+            .filter(|shape| shape.span.contains(property.span))
+            .min_by_key(|shape| shape.span.end - shape.span.start)
+            .map(|shape| shape.span),
+    )
 }
 
 /// How a reflective call forwards its arguments to its target.
@@ -169,6 +205,17 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 return true;
             }
         }
+        // An accessor of an object literal (`{ get g() { … } }`) runs where a member of the object is read, not where the function is a value: the object is followed as
+        // an object of accessors (the review of #222's check 3, R2).
+        if let Some(object) = accessor_object(ast, function) {
+            // No literal fact holds the property: handed.
+            let Some(object) = object else {
+                return true;
+            };
+            if self.position(file, object, &mut Walk::accessors()) {
+                return true;
+            }
+        }
         // A function declaration is hoisted, not written at a position: only its references are.
         let mut positions: Vec<(&'a FileFacts, Span)> = Vec::new();
         if function.kind != FunctionKind::Declaration {
@@ -226,6 +273,18 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let at = ast.peel_ts_sugar_span(at);
         if !walk.positions.insert((file.path.shared(), at)) {
             return false;
+        }
+        // A reference of an object whose members are accessors may read one where it is written: a member read, a destructuring, a spread, an iteration.
+        if walk.accessor {
+            let in_owner = walk.accessor_owner.as_ref().is_some_and(|(path, owner)| {
+                path.as_ref() == file.path.as_str()
+                    && ast
+                        .innermost_function_owning(at)
+                        .is_some_and(|function| function.span == *owner)
+            });
+            if !in_owner && self.runs_where_written(file, at, walk) {
+                return true;
+            }
         }
         // `ReturnType<typeof f>` is erased: nothing runs there.
         if ast.type_queries.iter().any(|query| query.contains(at)) {
@@ -518,7 +577,18 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             return false;
         }
         let receiver = self.element_receiver(file, index, element);
-        self.receiver_hands(file, receiver, walk)
+        if self.receiver_hands(file, receiver, walk) {
+            return true;
+        }
+        // A project component reads its props wherever it reads them: the expression is a getter of the props object, which runs at the read (`runStep(() => {
+        // void props.children; })` in the component, or a closure handed to a package's component). Its first parameter is followed as an object of accessors.
+        // An unread package's component was answered by `receiver_hands` (handed); a known receiver or a dialect's element reads no props of a project function.
+        if let Receiver::Parameter(component_file, component, parameter) = receiver {
+            let mut props = Walk::accessors();
+            props.accessor_owner = Some((component_file.path.shared(), component.span));
+            return self.parameter(component_file, component, parameter, &mut props);
+        }
+        false
     }
 
     /// Whether what the receiver does with the value hands it to a package.

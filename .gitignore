@@ -1435,3 +1435,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-package-hand-off-flip/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-causes/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-causes/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-accessors/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-accessors/node_modules/**

@@ -20262,5 +20262,44 @@
   "found": "Fable re-review of #222 at 5e6efd4f5 (N1 and its table, probes P50/P52/P53/P54/P62/P83/P97/P99 by reading); confirmed by Mac 5 in Chrome (rc.21 oracle, pattern lane `pkghand/frame-map-step`, `frame-call-step`, `render-call-step`, `frame-iife-step`, `frame-map-ref-step`, `frame-flush-step`, `frame-void-step`, `frame-typeof-step`: FLUSH_IN_ACTION in all eight) on main 56aa6c126, #222's 9b8fc91b1 and 5e6efd4f5: the `map` form kept its rows on main and lost them with cause A (9b8fc91b1), the other seven were false clean on all three builds",
   "fixed": "ADR 0967 amended (the re-review of #222, N1, `package_hand_off.rs`): code in an element's prop, spread or child expression with no function between runs where that element evaluates it (`evaluated_by_element`, asked by `runs_where_written`, by a declared function's call sites and by `may_run` for the flush itself): the innermost such element's creation, and for a component its receiver (a component nothing here reads hands it; a project component follows its first parameter); `may_run` asks it of the flush's own span",
   "outside": "a route's site is the statements of a function the frame writes (ph-shapes.mjs `head`/`close` around a block), so no generated program writes a site as an expression in a JSX child; the fixture flush-universe-package-hand-off-causes (the line after `directFlushInChild`, three rows) and the pattern `pkghand/frame-flush-step` (false clean on main, 9b8fc91b1 and 5e6efd4f5; fine on the fix) hold it"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` that an installed package the build does not read runs as an action's step, was certified with no row when it runs through an accessor read in code the package runs: a project component that reads a prop in a closure it hands to the package (`runStep(() => { void props.children; })`, from its own timer, or a `render` callback of the package's component), where the child or prop expression is a getter of its props object; and an object literal's getter read through a parameter in such a closure (`runStep(() => { void p.g; })`). The value of the read goes nowhere, so the value flow placed nothing. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Fable check 3 of #222 at 777299896 (R1, R2; probes P115, P117, P200, P206, P208, P209, P212, by reading), confirmed by Mac 5 in Chrome with the step outside the owned scope (pattern lane, `pkghand/props-read-*`, `getter-param-step`: FLUSH_IN_ACTION in all eight; the reviewer's form with `runStep` in the component's body throws ACTION_CALLED_IN_OWNED_SCOPE first): silent on main 56aa6c126 and on 777299896",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`, an accessor runs where it is read): a project component's props are also followed as an object of accessors (`Walk::accessors`), where a reference written in a function within the component, or anywhere else, asks where it runs; an accessor property of an object literal follows the literal the same way, and an accessor no literal fact holds is handed",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-propsread-step-x-direct-none",
+   "mx-flush-in-action-ph-propsrender-step-x-direct-none",
+   "mx-flush-in-action-ph-getterparam-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 18 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 9 of 9 agree on each build): main 56aa6c126 and #222's 777299896 fail `make fuzz-focus` (focus exit 1, 9 false clean, the 9 twins clean), the fix exits 0, \"nothing needs a look\" (9 recall-gap, the 9 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the eight `props-read-*` and `getter-param-step` programs false clean on 777299896, fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` that an installed package the build does not read runs as an effect's apply, was certified with no row when it runs through an accessor read in code the package runs: a project component that reads a prop in a closure it hands to the package (`runStep(() => { void props.children; })`, from its own timer, or a `render` callback of the package's component), where the child or prop expression is a getter of its props object; and an object literal's getter read through a parameter in such a closure (`runStep(() => { void p.g; })`). The value of the read goes nowhere, so the value flow placed nothing. Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "Fable check 3 of #222 at 777299896 (R1, R2; probes P115, P117, P200, P206, P208, P209, P212, by reading), confirmed by Mac 5 in Chrome with the step outside the owned scope (pattern lane, `pkghand/props-read-*`, `getter-param-step`: FLUSH_IN_ACTION in all eight; the reviewer's form with `runStep` in the component's body throws ACTION_CALLED_IN_OWNED_SCOPE first): silent on main 56aa6c126 and on 777299896",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`, an accessor runs where it is read): a project component's props are also followed as an object of accessors (`Walk::accessors`), where a reference written in a function within the component, or anywhere else, asks where it runs; an accessor property of an object literal follows the literal the same way, and an accessor no literal fact holds is handed",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-propsread-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-propsrender-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-getterparam-apply-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 18 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 9 of 9 agree on each build): main 56aa6c126 and #222's 777299896 fail `make fuzz-focus` (focus exit 1, 9 false clean, the 9 twins clean), the fix exits 0, \"nothing needs a look\" (9 recall-gap, the 9 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the eight `props-read-*` and `getter-param-step` programs false clean on 777299896, fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` that an installed package the build does not read runs as a leaf owner's callback (`createTrackedEffect`), was certified with no row when it runs through an accessor read in code the package runs: a project component that reads a prop in a closure it hands to the package (`runStep(() => { void props.children; })`, from its own timer, or a `render` callback of the package's component), where the child or prop expression is a getter of its props object; and an object literal's getter read through a parameter in such a closure (`runStep(() => { void p.g; })`). The value of the read goes nowhere, so the value flow placed nothing. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "Fable check 3 of #222 at 777299896 (R1, R2; probes P115, P117, P200, P206, P208, P209, P212, by reading), confirmed by Mac 5 in Chrome with the step outside the owned scope (pattern lane, `pkghand/props-read-*`, `getter-param-step`: FLUSH_IN_ACTION in all eight; the reviewer's form with `runStep` in the component's body throws ACTION_CALLED_IN_OWNED_SCOPE first): silent on main 56aa6c126 and on 777299896",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`, an accessor runs where it is read): a project component's props are also followed as an object of accessors (`Walk::accessors`), where a reference written in a function within the component, or anywhere else, asks where it runs; an accessor property of an object literal follows the literal the same way, and an accessor no literal fact holds is handed",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-propsread-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-propsrender-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-getterparam-leaf-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 18 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 9 of 9 agree on each build): main 56aa6c126 and #222's 777299896 fail `make fuzz-focus` (focus exit 1, 9 false clean, the 9 twins clean), the fix exits 0, \"nothing needs a look\" (9 recall-gap, the 9 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the eight `props-read-*` and `getter-param-step` programs false clean on 777299896, fine on the fix"
  }
 ]

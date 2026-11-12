@@ -1,0 +1,140 @@
+import { flush } from "solid-js";
+import { Pkg, runStep } from "steplib";
+
+// The review of #222's check 3, R1 and R2: an accessor runs where it is read. `steplib` (its source is not read: its manifest names no Solid package) runs what it is handed
+// as an action's step. The program names no action, effect or leaf primitive, so the census says the three flush codes cannot arise; a flush the package may run keeps
+// its three uncertifiable rows (`flush-in-action-unaccounted`, `flush-in-effect-unaccounted`, `leaf-operation-unaccounted`), never silence, never a violation.
+
+// ---- R1: a project component reads a prop in a step the package runs. The compiler makes the child (or prop) expression a getter of the props object, so the read
+// runs it there, whatever is done with the value.
+function stepChildCall() {
+  flush();
+  return "x";
+}
+function StepReader(props: { children?: unknown }) {
+  setTimeout(() => {
+    void runStep(() => {
+      void props.children;
+    });
+  });
+  return null;
+}
+setTimeout(() => {
+  void (<StepReader>{stepChildCall()}</StepReader>);
+});
+
+function StepChildElement() {
+  flush();
+  return null;
+}
+function StepElementReader(props: { children?: unknown }) {
+  setTimeout(() => {
+    void runStep(() => {
+      void props.children;
+    });
+  });
+  return null;
+}
+setTimeout(() => {
+  void (<StepElementReader><StepChildElement /></StepElementReader>);
+});
+
+function destructuredChild() {
+  flush();
+  return "x";
+}
+function DestructuringReader(props: { children?: unknown }) {
+  setTimeout(() => {
+    void runStep(() => {
+      const { children } = props;
+      void children;
+    });
+  });
+  return null;
+}
+setTimeout(() => {
+  void (<DestructuringReader>{destructuredChild()}</DestructuringReader>);
+});
+
+const directMarker = 0;
+function DirectReader(props: { children?: unknown }) {
+  setTimeout(() => {
+    void runStep(() => {
+      void props.children;
+    });
+  });
+  return null;
+}
+setTimeout(() => {
+  void (<DirectReader>{(flush(), directMarker)}</DirectReader>);
+});
+
+function renderProp() {
+  flush();
+  return "x";
+}
+function RenderReader(props: { x?: unknown }) {
+  return <Pkg render={() => {
+    void props.x;
+  }} />;
+}
+setTimeout(() => {
+  void (<RenderReader x={renderProp()} />);
+});
+
+// ---- R2: an object literal's getter runs where a member of the object is read: here through a project function's parameter, in a step the package runs
+const getterObject = {
+  get g() {
+    flush();
+    return 1;
+  },
+};
+function readsInStep(p: { g: number }) {
+  void runStep(() => {
+    void p.g;
+  });
+}
+setTimeout(() => {
+  readsInStep(getterObject);
+});
+
+// ---- twins, silent: the reads run on stacks no package runs
+// a component that reads its children in its own body (it runs where its element is created, the timer's callback)
+function twinBodyChild() {
+  flush();
+  return "x";
+}
+function BodyReader(props: { children?: unknown }) {
+  void props.children;
+  return null;
+}
+setTimeout(() => {
+  void (<BodyReader>{twinBodyChild()}</BodyReader>);
+});
+// a component that reads its children in a timer's callback of its own
+function twinTimerChild() {
+  flush();
+  return "x";
+}
+function TimerReader(props: { children?: unknown }) {
+  setTimeout(() => {
+    void props.children;
+  });
+  return null;
+}
+setTimeout(() => {
+  void (<TimerReader>{twinTimerChild()}</TimerReader>);
+});
+// a getter read through a parameter in a timer's callback
+const twinGetterObject = {
+  get g() {
+    flush();
+    return 1;
+  },
+};
+function readsHere(p: { g: number }) {
+  void p.g;
+}
+setTimeout(() => {
+  readsHere(twinGetterObject);
+});
