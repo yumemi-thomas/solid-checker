@@ -40,7 +40,9 @@ pub(crate) use context_census::*;
 mod owner_state;
 use owner_state::{HandOuts, OwnerGraph, PathId};
 mod owner_emission;
-pub(crate) use owner_emission::{Emission, PackageRead, PackageRequirement};
+pub(crate) use owner_emission::{
+    Emission, PackageRead, PackageRequirement, referenced_only_by_entry,
+};
 use owner_emission::{EmissionInputs, emit_file};
 mod jsx_sites;
 pub(crate) use jsx_sites::{JsxSiteKind, aliased_primitive, control_flow_parent, jsx_sites};

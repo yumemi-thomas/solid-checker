@@ -21,10 +21,10 @@ const textOf = (code, context) => {
 };
 
 describe("the er contexts (a function reached by a reference)", () => {
-  it("are eight routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack"]);
+  it("are ten routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself"]);
     expect(ER_HOSTS).toEqual(["apply", "tracked", "settled"]);
-    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (8 + 2));
+    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (10 + 2));
     for (const name of ER_CONTEXT_NAMES) {
       const parts = erParts(name);
       expect(parts, name).not.toBeNull();
@@ -100,6 +100,28 @@ describe("the er contexts (a function reached by a reference)", () => {
     const untrackedTwin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-genuntrack-apply-never");
     expect(untrackedTwin).toContain("void it1;");
     expect(untrackedTwin.join("\n")).not.toContain("[...it1]");
+  });
+  it("print the genhelper route: a function written beside the generator and called from its body, the iterator made at module scope and stepped by the apply (the twin only keeps it)", () => {
+    const lead = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-genhelper-apply");
+    expect(lead).toContain("let it1: Generator<number> | undefined;");
+    expect(lead).toContain("createRoot(() => {");
+    expect(lead.join("\n")).toContain("function hh1() {");
+    expect(lead).toContain("function* g1() { hh1(); yield 1; }");
+    expect(lead).toContain("it1 = g1();");
+    expect(lead.join("\n")).toContain("for (const _ of it1!) { void _; }");
+    const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-genhelper-apply-never");
+    expect(twin).toContain("void it1;");
+    expect(twin.join("\n")).not.toContain("for (const _ of");
+  });
+  it("print the rootself route: a createRoot callback that is a named function expression saving itself, called by the apply (the twin only keeps the holder)", () => {
+    const lead = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-rootself-apply");
+    expect(lead).toContain("let sv1: (() => void) | undefined;");
+    expect(lead).toContain("createRoot(function f1() {");
+    expect(lead).toContain("if (!sv1) { sv1 = f1; return; };");
+    expect(lead).toContain("sv1!();");
+    const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-rootself-apply-never");
+    expect(twin).toContain("void sv1;");
+    expect(twin).not.toContain("sv1!();");
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(erShape("er-view-apply", { binding: "alias", layer: "none" })).toBe(false);

@@ -170,7 +170,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 1683,
+  "SC6002 effect-creation-unaccounted": 1687,
   "SC6002 effect-owner-unproven": 30,
   "SC6002 function-run-unplaced": 37,
   "SC6002 generator-step-unplaced": 1,

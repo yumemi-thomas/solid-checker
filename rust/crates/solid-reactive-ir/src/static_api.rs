@@ -2843,9 +2843,11 @@ pub(crate) fn owner_created_around_call(
     let mut at = site;
     for _ in 0..16 {
         let function = file.ast.innermost_function_owning(at)?;
+        // A layer something else references (N2: a named function expression that saved itself) is run by whoever calls it, not only by the primitive.
         if function.generator
             || crate::owners::in_parameter_list(&file.ast, at)
             || crate::execution_role::may_follow_suspension(file, at)
+            || !crate::owners::referenced_only_by_entry(file, function, lookup)
         {
             return None;
         }

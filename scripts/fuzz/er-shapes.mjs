@@ -21,6 +21,13 @@
 //                     generator whose call is at module scope has no function around it, so no row but the one the fix files stands there
 //             genuntrack the site is in an `untrack` callback the generator's body runs in place, `function* g() { untrack(() => { <site> }); yield 1; }` (module scope too), which
 //                     the host steps by spread (`[...it]`): the same layer, another in-place form (B1)
+//             genhelper  the site is in a function written OUTSIDE the generator and called from its body, `function h() { <site> } function* g() { h(); yield 1; }` (module scope,
+//                     the iterator made inside a module-level `createRoot` so the helper has an owned context), which the host steps with a `for...of`: the generator is no
+//                     lexical layer of the site, and the caller walk of the entry test followed the call out to a generator whose body it took for a placed run (N1, the
+//                     check of B1)
+//             rootself   the site is in the callback of `createRoot` that is a NAMED function expression handing itself on, `let s; createRoot(function f() { if (!s) { s = f; return; } <site> })`
+//                     (module scope: the root runs once there and saves `f`), which the host calls, `s!()`: a run the primitive does not make has no owner, and the entry test
+//                     stopped at the owner-creating layer before it read the function's references (N2, the check of B1)
 //   hosts   apply (an effect's apply: PRIMITIVE_IN_EFFECT_CALLBACK), every route; tracked and settled (SC3001's leaf owners: PRIMITIVE_IN_FORBIDDEN_SCOPE,
 //           CLEANUP_IN_FORBIDDEN_SCOPE), the `view` route only (the leaf codes rest on the owner graph's silence the component-render premise reached)
 //
@@ -28,7 +35,7 @@
 // contexts, the direct binding bare (`erShape`), not crossed by the census, out of api-fire's plan.
 import { contain, decl, domExpr, expr, fn, jsx, namedButton, num, prim, ref, ret } from "./model.mjs";
 
-export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack"];
+export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself"];
 export const ER_HOSTS = ["apply", "tracked", "settled"];
 /** The (route, host) pairs the grid places: every route on an apply, and the `view` route on the two leaf hosts. */
 const PLACED = [...ER_ROUTES.map((route) => [route, "apply"]), ["view", "tracked"], ["view", "settled"]];
@@ -121,6 +128,23 @@ export function erContext(context, stmts, kit) {
       const it = kit.name("it");
       const frame = contain("frame", 9, stmts, { head: `function* ${g}() { untrack(() => `, close: `); yield 1; }`, imports: ["untrack"] });
       return { hoisted: [frame, expr(domExpr(`const ${it} = ${g}()`))], body: [placeIn(host, runs(it, `void [...${it}]`))], view: [] };
+    }
+    case "genhelper": {
+      // The helper is written beside the generator, inside a module-level `createRoot` (so the graph holds an owned context for it and no function stands around the
+      // root's callback for B3 to ask about), and called from the generator's body; the root makes the iterator (the body does not run yet) and the host steps it.
+      const hh = kit.name("hh");
+      const g = kit.name("g");
+      const it = kit.name("it");
+      const frame = contain("frame", 9, stmts, { head: `createRoot(() => {\n  function ${hh}() `, close: `\n  function* ${g}() { ${hh}(); yield 1; }\n  ${it} = ${g}();\n});`, imports: ["createRoot"] });
+      return { hoisted: [expr(domExpr(`let ${it}: Generator<number> | undefined`)), frame], body: [placeIn(host, runs(it, `for (const _ of ${it}!) { void _; }`))], view: [] };
+    }
+    case "rootself": {
+      // The root runs once at module scope and saves its callback (a named function expression); the host calls the saved function, which runs on its own stack with no owner.
+      const f = kit.name("f");
+      const sv = kit.name("sv");
+      const guard = expr(domExpr(`if (!${sv}) { ${sv} = ${f}; return; }`));
+      const frame = contain("frame", 9, [guard, ...stmts], { head: `createRoot(function ${f}() `, close: ");", imports: ["createRoot"] });
+      return { hoisted: [expr(domExpr(`let ${sv}: (() => void) | undefined`)), frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: [] };
     }
     default: throw new Error(`no entry-by-reference route ${route}`);
   }

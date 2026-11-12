@@ -27,9 +27,11 @@
 //!   callback of an in-place primitive in a generator's body is the generator's code, up to the layer whose callback runs under an owner its primitive
 //!   creates, which is current there whoever steps what is around it: B1, the re-review of #220);
 //! - no layer around it is entered by a route the graph has no edge for ([`super::owner_emission::layer_entry_open_by_reference`], ADR 0868: a function stored,
-//!   assigned, handed on or a method, a reference that is not a direct call or an inline run), asked without the component-render premise: a function that
-//!   returns JSX is entered by renders alone only where every reference of its binding is a JSX tag. The primitive-wrapped silence needs no such fact: the
-//!   primitive's own run is the entry;
+//!   assigned, handed on or a method, a reference that is not a direct call or an inline run), asked with the universe's premises
+//!   ([`super::owner_emission`]'s `Premises::Universe`): a function that returns JSX is entered by renders alone only where every reference of its binding is a
+//!   JSX tag (F1); a layer that is a generator is an open entry, written around the site or reached as the caller at the end of a call (B1, N1); and a callback
+//!   an owner-creating primitive runs is entered by it alone only where nothing references it (N2). The primitive-wrapped silence needs no entry fact of its
+//!   own beyond the last: the primitive's own run is the entry;
 //! - no package the build does not read may run the function ([`crate::package_hand_off::UnreadPackageHandOff`], ADR 0967): such a package may call it
 //!   under a leaf owner, or on an effect's apply, through an entry no edge shows. The census silence rests on this too: a package may open the leaf scope the
 //!   project's own primitives do not.
@@ -116,7 +118,11 @@ fn generator_layer_around(
         if function.generator {
             return true;
         }
-        if super::owner_emission::creates_owner_for(file, function.span, lookup) {
+        // The owner is current there whoever steps what is around it only where nothing but the primitive enters the callback (N2: a named function expression
+        // that saved itself is run by whoever calls it).
+        if super::owner_emission::creates_owner_for(file, function.span, lookup)
+            && super::owner_emission::referenced_only_by_entry(file, function, lookup)
+        {
             return false;
         }
     }

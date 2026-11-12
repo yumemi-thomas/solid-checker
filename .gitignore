@@ -1457,3 +1457,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-root-generator/node_modules/**
 !fixtures/reactive-ir/owner-call-generator-layer/node_modules/
 !fixtures/reactive-ir/owner-call-generator-layer/node_modules/**
+!fixtures/reactive-ir/owner-call-layer-stops/node_modules/
+!fixtures/reactive-ir/owner-call-layer-stops/node_modules/**
