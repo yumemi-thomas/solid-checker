@@ -806,8 +806,9 @@ impl<'p> Endings<'p> {
             credited: None,
             uncredited: None,
         };
+        // The held ending is kept unless the new one is strictly stronger (an empty slot is filled below).
         let stronger = |slot: &Option<Ending<'p>>, ending: &Ending<'p>| {
-            slot.as_ref().is_none_or(|held| ending.class < held.class)
+            !slot.as_ref().is_some_and(|held| ending.class >= held.class)
         };
         for span in std::iter::once(site.at).chain(site.alternates.iter().copied()) {
             for ending in self
