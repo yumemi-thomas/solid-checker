@@ -122,7 +122,9 @@ struct Walk<'m> {
     /// The calls this walk has filed an unresolved invocation for (ADR 0964): a set of its own, so that a row the hand-off (ADR 0669)
     /// or the inexact callee (ADR 0879) files at the same callee is neither pre-empted nor pre-empts it.
     invoked: HashSet<(String, u64, u64)>,
-    visited: HashSet<Span>,
+    /// The calls and tagged templates this walk has entered, by file and span (slice 9): a span is an offset within one file, so two
+    /// files' calls at the same offsets are two calls, and the first must not hide the second.
+    visited: HashSet<(Arc<str>, Span)>,
     /// Function literals queued as members, which own their obligations.
     queued: HashSet<(String, Span)>,
     /// Functions whose prefix the walk has reported as run on the
@@ -2593,7 +2595,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         call: &'f CallFact,
         depth: usize,
     ) {
-        if !walk.visited.insert(call.span) {
+        if !walk.visited.insert((file.path.shared(), call.span)) {
             return;
         }
         if depth > MAX_REGION_DEPTH {
@@ -3184,7 +3186,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                     .map(|(call, _)| callee_text(file, call.callee))
             };
             let unplaced = if candidate.method_name.is_some()
-                || crate::local_access::member_assigned(file, candidate)
+                || crate::local_access::assigned_function(file, candidate)
                 || crate::local_access::object_slot_value(file, candidate)
             {
                 (created_after || suspends_after(candidate.span.end)).then_some(None)
@@ -3280,7 +3282,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         template: &TaggedTemplateFact,
         depth: usize,
     ) {
-        if !walk.visited.insert(template.span) {
+        if !walk.visited.insert((file.path.shared(), template.span)) {
             return;
         }
         let tag = file.ast.peel_ts_sugar_span(template.tag);

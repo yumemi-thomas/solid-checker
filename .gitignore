@@ -1359,6 +1359,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-unmodelled-slot/node_modules/**
 !fixtures/reactive-ir/flush-in-action-unmodelled-slot/node_modules/
 !fixtures/reactive-ir/flush-in-action-unmodelled-slot/node_modules/**
+!fixtures/reactive-ir/flush-in-tracked-named-async/node_modules/
+!fixtures/reactive-ir/flush-in-tracked-named-async/node_modules/**
 !fixtures/reactive-ir/generator-stepped-in-apply/node_modules/
 !fixtures/reactive-ir/generator-stepped-in-apply/node_modules/**
 !fixtures/reactive-ir/package-action-step/node_modules/
@@ -1387,3 +1389,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/stored-function-after-await/node_modules/**
 !fixtures/reactive-ir/stored-function-after-await-none/node_modules/
 !fixtures/reactive-ir/stored-function-after-await-none/node_modules/**
+!fixtures/reactive-ir/after-await-cross-file-same-span/node_modules/
+!fixtures/reactive-ir/after-await-cross-file-same-span/node_modules/**
+!fixtures/reactive-ir/later-assigned-function/node_modules/
+!fixtures/reactive-ir/later-assigned-function/node_modules/**
+!fixtures/reactive-ir/primitive-handed-value/node_modules/
+!fixtures/reactive-ir/primitive-handed-value/node_modules/**

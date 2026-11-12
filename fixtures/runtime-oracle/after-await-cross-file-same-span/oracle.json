@@ -1,0 +1,1 @@
+{"note": "slice 9A: the calls of two files at the same offsets (the SC1002 walk keyed visited by span alone); the same shapes are in fixtures/reactive-ir/after-await-cross-file-same-span"}

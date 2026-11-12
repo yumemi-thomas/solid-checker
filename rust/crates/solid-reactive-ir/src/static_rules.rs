@@ -319,9 +319,13 @@ fn primitive_value_references(
                     crate::blockers::PRIMITIVE_IDENTITY_UNPROVEN,
                 )
             };
+            // Batch 11 (ADR 0825 amended): a primitive handed to a call as an argument is run by the call's callee, and the frame the
+            // runtime reports for that run stands at the call, not at the argument, where this row stands; the judges cover a withholding
+            // at a frame's position only. A companion row at the handing call's start, for a primitive the binder confirmed.
+            let handing = proven.then(|| handing_call(file, value)).flatten();
             defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                    callee,
+                    callee: callee.clone(),
                     member: None,
                 },
                 location: location(file.path.shared(), span),
@@ -329,9 +333,42 @@ fn primitive_value_references(
                 fixes: vec![],
                 uncertain: true,
             });
+            if let Some(call) = handing {
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee,
+                        member: None,
+                    },
+                    location: location(file.path.shared(), call.span),
+                    analysis_context: crate::PRIMITIVE_HANDED.to_owned(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
         }
     }
     defects
+}
+
+/// The call a primitive reference is handed to (batch 11): the innermost call one of whose arguments holds `reference` with no function between
+/// them (the argument itself, an element of an array literal, a spread argument), whose callee runs it or stores it. A function literal argument
+/// holds code, not the value; a call written in another function runs when that function does.
+fn handing_call(
+    file: &solid_facts::FileFacts,
+    reference: solid_facts::core::Span,
+) -> Option<&solid_facts::ast::CallFact> {
+    let ast = &file.ast;
+    let own = crate::owners::containing_ast_function(ast, reference).map(|function| function.span);
+    ast.arguments_containing(reference)
+        .filter(|(call, index)| {
+            ast.function_at(ast.peel_ts_sugar_span(call.arguments[*index].span))
+                .is_none()
+                && crate::owners::containing_ast_function(ast, call.span)
+                    .map(|function| function.span)
+                    == own
+        })
+        .map(|(call, _)| call)
+        .min_by_key(|call| call.span.end - call.span.start)
 }
 
 /// SC1003: a reactive object destructured outside tracking. Component

@@ -448,6 +448,9 @@ pub(crate) fn collect_project<'facts>(
                             }
                         )
                     })
+                    // The companion of a primitive handed to a call (batch 11, ADR 0825 amended) names the primitive, not a source: the call
+                    // may hand other values, and a row at the call would end the walk of a source it reaches.
+                    .filter(|defect| defect.analysis_context != crate::PRIMITIVE_HANDED)
                     .map(|defect| &defect.location),
             )
             // ADR 0874: a withheld call's rows are about its target; the

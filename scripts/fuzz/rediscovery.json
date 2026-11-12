@@ -19691,5 +19691,76 @@
    "mx-flush-in-tracked-queue-callback-rh-defprop-set-tracked-x-direct-none"
   ],
   "rediscovered": "main ec68d519d (release, checker sha256 d5dba3acbd27…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 52 programs (13 forms on the two leaf hosts, in the callback and at module scope): false-clean 48, recall-gap 4; `make fuzz-focus` exits 1. The fix (release, checker sha256 b0e257c3ccb8…, same host): recall-gap 52, 0 false clean, and the 52 `-never` twins 0 false positive (uncertifiable 52; 26 of them were clean on main); 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site (`flush()`) in an async callback of a leaf owner's `isPending`, named at module scope (`const cb = async () => { flush(); }; createTrackedEffect(() => { n(); isPending(cb); })`) or reached through a function the callback calls (`isPending(() => cb())`): the throw is the async function's rejection, which `isPending` does not catch; Chrome (rc.21) throws FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush, and the checker was silent (the program was certified clean for SC3001; in an `onSettled` host SC2008's uncertifiable row at the flush covers nothing of the claim). The literal `isPending(async () => flush())` is ADR 0959's obligation.",
+  "found": "slice 5's lead (the batch 11 research briefs, probe `b5-ispending-named-async-tracked`, 2026-11-12), Chrome-confirmed on main 3b22442d4 by mac-b10-4; as the named-callback forms of `nm-shapes.mjs` (`nm-<form>-<host>`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0959 amended (batch 11, slice 5's lead): a slot that takes what its callback throws takes only the throw of a callback proven synchronous end to end (`LeafScopeResolution::entered_async`): an async callback, or an async function a callback calls, keeps the flush as SC3001's uncertifiable row (`leaf-owner-unproven`) at the slot call, never a violation; on the fix these programs are recall-gap, 0 false clean",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-nm-async-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-nm-async-settled-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-nm-wrap-async-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-nm-wrap-async-settled-x-direct-none"
+  ],
+  "rediscovered": "main 3b22442d4 (release, checker sha256 96e691ce188b…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 4 misuse programs (an async callback and an async function a sync arrow calls, on `createTrackedEffect` and `onSettled`): false-clean 4; `make fuzz-focus` exits 1. The 8 twins (the flush after an `await`, a sync callback, a sync function a sync arrow calls, a generator, on both hosts): 0 false positive (clean 6, uncertifiable 2: SC2008's `flush-in-effect-callback` row in `onSettled`, as on main). The fix (release, checker sha256 95eef08ff59d…, same host): recall-gap 4, 0 false clean, the twins unchanged; 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's proof through a call lost where two project files' calls stand at the same byte offsets with the same length: the after-await walk (SC1002) kept the calls it had entered in a set keyed by span alone, so the call in the second file was skipped and the read it reaches kept only the hand-off nets' uncertifiable rows (`handed-read-after-await`, `function-run-unplaced`), where the same program with the call one byte away is a violation. Never silent: 12 programs probed (memo and effect hosts; a project helper, an immediately invoked arrow and function expression, a tagged template, `forEach`, `map`, a `.then` continuation), an uncertifiable row of SC1002 on the old build in each",
+  "found": "the batch 11 slice 9 brief (research-b11-briefs/slice-9.md, depth-audit top 4; probes vis-collide and vis-control), reproduced by mac-b10-4 on 84343cabf",
+  "fixed": "ADR 0961 amended (batch 11, slice 9A): `Walk::visited` is keyed by file and span; the real oracle (Chrome rc.21) on fixtures/runtime-oracle/after-await-cross-file-same-span: covered-uncertifiable x4 on 84343cabf (checker sha256 of rel-46), covered-violation x4 now, the silent twin quiet",
+  "outside": "the generator prints one App.tsx and its helpers.ts from the model, so two files' calls never stand at the same offsets with the same length (the equality needs comment padding after printing), and the old build was never silent in a form probed, so no cell could fail on it: fixtures/reactive-ir/after-await-cross-file-same-span, its runtime-oracle twin and scripts/fixture-same-span.test.mjs hold it; an aw-xfile axis is open work (docs/open-work.md)"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site (`flush()` in an effect's apply) in a function assigned to a variable after its declaration (`let h = () => {}; h = () => { <site> }; h();`, a `let` with no initializer, a function that sets it) and called through the name was certified with no row: the calls of the name resolve to the initializer (or to nothing), the assigned function has no binding name, and `runs_unplaced_once` read a nameless function as one nobody calls",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the unprobed slice 5/7 leads of the research briefs (research-b11-briefs/index.md), probed with the real oracle (`unproven-clean` in 6 programs: the action and effect hosts, three forms) and the pattern lane (false clean, the three effect programs); then the cells of la-shapes.mjs (`la-<form>-<host>`: 15 false cleans on 1a87feae8)",
+  "fixed": "ADR 0535 amended (batch 11): `assigned_function` (local_access.rs, was `member_assigned`) answers a function written as the value of any assignment, a variable's too, so every walk that asks who calls a function with no binding name (`function_escapes_unfollowed`, `runs_unplaced_once`, the effect-phase origin, the read nets) reads it as handed where nothing places it: an uncertifiable row (`function-run-unplaced`), never a violation",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-la-let-later-effect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-la-let-noinit-effect-apply-x-direct-none",
+   "mx-flush-in-effect-callback-la-let-other-effect-apply-x-direct-none"
+  ],
+  "rediscovered": "main 1a87feae8 (release build of the fix's tree with the one-line predicate reverted, checker sha256 945672e17f2f…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 6 programs (six forms on the host): false-clean 3, recall-gap 3; `make fuzz-focus` exits 1. The fix (checker sha256 98e63158cb5c…, same host): recall-gap 6, 0 false clean, and the 6 `-never` twins 0 false positive (clean 2, uncertifiable 4 on main; uncertifiable 6 now: a function assigned and never called is not proven never called); 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site (a primitive created in an effect's apply) in a function assigned to a variable after its declaration (`let h = () => {}; h = () => { <site> }; h();`, a `let` with no initializer, a function that sets it) and called through the name was certified with no row: the calls of the name resolve to the initializer (or to nothing), the assigned function has no binding name, and `runs_unplaced_once` read a nameless function as one nobody calls",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the unprobed slice 5/7 leads of the research briefs (research-b11-briefs/index.md), probed with the real oracle (`unproven-clean` in 6 programs: the action and effect hosts, three forms) and the pattern lane (false clean, the three effect programs); then the cells of la-shapes.mjs (`la-<form>-<host>`: 15 false cleans on 1a87feae8)",
+  "fixed": "ADR 0535 amended (batch 11): `assigned_function` (local_access.rs, was `member_assigned`) answers a function written as the value of any assignment, a variable's too, so every walk that asks who calls a function with no binding name (`function_escapes_unfollowed`, `runs_unplaced_once`, the effect-phase origin, the read nets) reads it as handed where nothing places it: an uncertifiable row (`function-run-unplaced`), never a violation",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-la-let-later-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-la-let-later-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-la-let-later-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-la-let-noinit-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-la-let-noinit-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-la-let-noinit-effect-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-la-let-other-effect-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-la-let-other-effect-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-la-let-other-effect-apply-effect-direct-none"
+  ],
+  "rediscovered": "main 1a87feae8 (release build of the fix's tree with the one-line predicate reverted, checker sha256 945672e17f2f…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 18 programs (six forms on the host): false-clean 9, recall-gap 9; `make fuzz-focus` exits 1. The fix (checker sha256 98e63158cb5c…, same host): recall-gap 18, 0 false clean, and the 18 `-never` twins 0 false positive (clean 4, uncertifiable 14 on main; uncertifiable 18 now: a function assigned and never called is not proven never called); 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site (`flush()` in an action's step) in a function assigned to a variable after its declaration (`let h = () => {}; h = () => { <site> }; h();`, a `let` with no initializer, a function that sets it) and called through the name was certified with no row: the calls of the name resolve to the initializer (or to nothing), the assigned function has no binding name, and `runs_unplaced_once` read a nameless function as one nobody calls",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the unprobed slice 5/7 leads of the research briefs (research-b11-briefs/index.md), probed with the real oracle (`unproven-clean` in 6 programs: the action and effect hosts, three forms) and the pattern lane (false clean, the three effect programs); then the cells of la-shapes.mjs (`la-<form>-<host>`: 15 false cleans on 1a87feae8)",
+  "fixed": "ADR 0535 amended (batch 11): `assigned_function` (local_access.rs, was `member_assigned`) answers a function written as the value of any assignment, a variable's too, so every walk that asks who calls a function with no binding name (`function_escapes_unfollowed`, `runs_unplaced_once`, the effect-phase origin, the read nets) reads it as handed where nothing places it: an uncertifiable row (`function-run-unplaced`), never a violation",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-la-let-later-action-x-direct-none",
+   "mx-flush-in-action-la-let-noinit-action-x-direct-none",
+   "mx-flush-in-action-la-let-other-action-x-direct-none"
+  ],
+  "rediscovered": "main 1a87feae8 (release build of the fix's tree with the one-line predicate reverted, checker sha256 945672e17f2f…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 6 programs (six forms on the host): false-clean 3, recall-gap 3; `make fuzz-focus` exits 1. The fix (checker sha256 98e63158cb5c…, same host): recall-gap 6, 0 false clean, and the 6 `-never` twins 0 false positive (clean 2, uncertifiable 4 on main; uncertifiable 6 now: a function assigned and never called is not proven never called); 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "A Solid primitive handed to a call by value (`untrack(flush)`, `run(flush)`, `[1].forEach(flush)`, `run(...[flush])`, `new Map([[\"k\", flush]]).get(\"k\")!()` in an effect's apply: FLUSH_IN_EFFECT_CALLBACK; `runResolve(resolve, \u2026)` in a memo: RESOLVE_IN_REACTIVE_SCOPE) kept only SC9012 `primitive-value` at the argument, and Chrome's frame for what the callee does with it stands at the call, so the pattern lane judged each false clean (`a withholding starts on a frame's line at another column`)",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the research briefs' unprobed slice 5/7 leads (a flush handed by reference, a `resolve` alias), judged by the pattern lane (the raw oracle's thrown errors carry no frames, so its `unproven-clean` there was an attribution gap)",
+  "fixed": "ADR 0825 amended (batch 11; owner ruling 5c, no judge change): a companion SC9012 row (`primitive-handed`) at the start of the call a confirmed primitive is handed to as an argument (`handing_call`, `primitive_value_references`)",
+  "outside": "the generator's sites are calls it registers, and a primitive handed by value has no call node of its own, so no cell can express it; scripts/fuzz/patterns/byvalue/* hold it (`make fuzz-patterns`): on main 1a87feae8 (release build with the 5c change absent, checker sha256 945672e17f2f\u2026; Chrome host, producer 76fe73f958ae\u2026) six NEW false clean of nine, the three deferred twins (a microtask, a `then`, a timer) fine; with the fix (checker sha256 ffb608bc0190\u2026) 9 of 9 fine, 0 false clean, 0 false positive"
  }
 ]
