@@ -9,7 +9,10 @@
 //! of a function (and of every holder it is copied into) is read at its position, and a position is one of
 //!
 //! - a call (`f()`, `new C()`, a tag, `f.call(…)`, a method of a holder the project declares): the value runs on the stack of the function the call is written in, so it
-//!   is handed when a package may run *that* function (the same question, asked of the owner). A component's closing tag (`</Card>`) names it as the opening one does;
+//!   is handed when a package may run *that* function (the same question, asked of the owner). A component's closing tag (`</Card>`) names it as the opening one does.
+//!   Code in an element's prop, spread or child expression (no function between) runs where that element evaluates it: the compiler makes it a getter of a component's
+//!   props, read when the component reads the prop, so under a component nothing here reads (`<Pkg>{helper()}</Pkg>`, `<Pkg>{list.map(() => <Own />)}</Pkg>`) it is
+//!   handed;
 //! - an argument of a call: the receiver decides ([`Receiver`]): a dialect primitive and the standard library's inline callbacks run it before they return, on the stack
 //!   of the function the call is written in; a reviewed fresh-stack scheduler, a DOM listener registration and a reviewed test runner's registration run it elsewhere and
 //!   keep nothing; a project function the call graph resolves exactly goes on in its parameter (a component's props are its first parameter, a reflective call's forwarded
@@ -116,11 +119,13 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         }
     }
 
-    /// Whether a function that owns `span` (or one that, through exact call edges, runs it) may be run by a package nothing here reads.
+    /// Whether a function that owns `span` (or one that, through exact call edges, runs it) may be run by a package nothing here reads, or the element whose prop or
+    /// child expression holds `span` may evaluate it there (`<Pkg>{(flush(), "x")}</Pkg>`).
     pub(crate) fn may_run(&self, file: &'a FileFacts, span: Span) -> bool {
         file.ast
             .functions_owning(span)
             .any(|function| self.function(file, function))
+            || self.evaluated_by_element(file, span, &mut Walk::default())
     }
 
     fn function(&self, file: &'a FileFacts, function: &'a FunctionFact) -> bool {
@@ -191,15 +196,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         {
             return true;
         }
+        // A call site runs where it is written: in the function that owns it, or where the element whose prop or child expression holds it evaluates it
+        // (`<Pkg>{helper()}</Pkg>`: the re-review of #222, N1).
         self.lookup
             .function_call_sites(file.path.as_str(), function.span)
             .into_iter()
-            .any(|(caller_file, call_site)| {
-                caller_file
-                    .ast
-                    .functions_owning(call_site)
-                    .any(|caller| self.function_in(caller_file, caller, walk))
-            })
+            .any(|(caller_file, call_site)| self.runs_where_written(caller_file, call_site, walk))
     }
 
     /// Whether the module exports the function: `export function f`, `export const f = () => …`, `export default () => …`, an export specifier of its binding, or a
@@ -478,6 +480,45 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         file.ast
             .functions_owning(at)
             .any(|owner| self.function_in(file, owner, walk))
+            || self.evaluated_by_element(file, at, walk)
+    }
+
+    /// Whether the element whose prop, spread or child expression holds `at` (the innermost one, with no function between) may evaluate it on a package's stack. The
+    /// compiler makes such an expression a getter of a component's props, so it runs when the component reads the prop, not where it is written: an unread package's
+    /// component may read it anywhere (`<Pkg>{helper()}</Pkg>`, `<Pkg>{list.map(() => <Own />)}</Pkg>`, `<Pkg render={make()} />`), a project component where its
+    /// first parameter goes, a dialect's where the element is. An intrinsic element evaluates it where the element is created, and so does any element besides (the
+    /// review of #222, N1).
+    fn evaluated_by_element(&self, file: &'a FileFacts, at: Span, walk: &mut Walk) -> bool {
+        let ast = &file.ast;
+        let Some((index, element)) = ast
+            .jsx_elements
+            .iter()
+            .enumerate()
+            .filter(|(_, element)| {
+                element.span != at
+                    && element.span.contains(at)
+                    && !ast
+                        .functions_containing(at)
+                        .any(|function| element.span.contains(function.span))
+            })
+            .min_by_key(|(_, element)| element.span.end - element.span.start)
+        else {
+            return false;
+        };
+        // The tag names the component: not an expression the element evaluates.
+        if element.name.span.contains(at)
+            || element.closing_name.is_some_and(|name| name.contains(at))
+        {
+            return false;
+        }
+        if self.element_created_in(file, element.span, walk) {
+            return true;
+        }
+        if is_intrinsic_tag(file, element) || self.dynamic_string_tag(file, element) {
+            return false;
+        }
+        let receiver = self.element_receiver(file, index, element);
+        self.receiver_hands(file, receiver, walk)
     }
 
     /// Whether what the receiver does with the value hands it to a package.

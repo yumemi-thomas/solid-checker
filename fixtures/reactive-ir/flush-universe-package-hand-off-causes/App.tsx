@@ -1,6 +1,6 @@
 import { flush } from "solid-js";
 import { Dynamic } from "@solidjs/web";
-import { Frame, runStep } from "steplib";
+import { Frame, Pkg, runStep } from "steplib";
 
 // Batch 11, the review of #217 (causes A to E): a context places a value only when it CARRIES it. The program names no action, effect or leaf primitive, so the program censuses say
 // the three flush codes cannot arise; `steplib` (its source is not read: its manifest names no Solid package) calls `action` itself and runs what it is handed as a step. Each
@@ -400,4 +400,70 @@ function TwinUnderDiv(props: { children?: unknown }) {
 }
 setTimeout(() => {
   void (<div><TwinUnderDiv>{"x"}</TwinUnderDiv></div>);
+});
+
+// ---- the re-review of #222, N1: an expression in an unread component's children or props runs when the component reads it (the compiler makes it a getter), so what it
+// calls or creates there is handed, whatever function it is written in
+function MapOwn() {
+  flush();
+  return null;
+}
+setTimeout(() => {
+  void (<Frame>{[1].map(() => <MapOwn />)}</Frame>);
+});
+function frameHelper() {
+  flush();
+  return null;
+}
+setTimeout(() => {
+  void (<Frame>{frameHelper()}</Frame>);
+});
+function renderMake() {
+  flush();
+  return () => {};
+}
+setTimeout(() => {
+  void (<Pkg render={renderMake()} />);
+});
+function IifeOwn() {
+  flush();
+  return null;
+}
+setTimeout(() => {
+  void (<Frame>{(() => <IifeOwn />)()}</Frame>);
+});
+const mapRef = () => {
+  flush();
+};
+setTimeout(() => {
+  void (<Frame>{[1].map(() => <div ref={mapRef} />)}</Frame>);
+});
+function VoidOwn() {
+  flush();
+  return null;
+}
+setTimeout(() => {
+  void (<Frame>{void (<VoidOwn />)}</Frame>);
+});
+function TypeofOwn() {
+  flush();
+  return null;
+}
+setTimeout(() => {
+  void (<Frame>{typeof (<TypeofOwn />)}</Frame>);
+});
+const directFlushInChild = 0;
+setTimeout(() => {
+  void (<Frame>{(flush(), directFlushInChild)}</Frame>);
+});
+// twin: a project component that reads its children in its own body, rendered in a timer's callback
+function TwinMapOwn() {
+  flush();
+  return null;
+}
+function Holder(props: { children?: unknown }) {
+  return <div>{props.children as never}</div>;
+}
+setTimeout(() => {
+  void (<Holder>{[1].map(() => <TwinMapOwn />)}</Holder>);
 });

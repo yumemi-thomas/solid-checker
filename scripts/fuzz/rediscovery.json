@@ -20239,5 +20239,28 @@
    "mx-flush-in-tracked-queue-callback-ph-chainrecv-leaf-x-direct-none"
   ],
   "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 28 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 28 of 28 agree on each build): #222's head 9b8fc91b1 fails `make fuzz-focus` (focus exit 1, 14 false clean, the 14 twins clean); main 56aa6c126 fails it too (7 false clean: chainrecv on three hosts, spreadref, spreadvar, childfn, framebare; chainconst, chainassign and framechild keep their rows there); the fix exits 0, \"nothing needs a look\" (14 recall-gap, the 14 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the ten new `pkghand` programs false clean on #222's head, 41 of 41 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` that an installed package the build does not read runs as an action's step, was certified with no row when the function that flushes is reached from an expression in that package's component's children or props: the compiler makes the expression a getter the component reads inside its step, but `runs_where_written` placed it on the stack of the function the JSX is written in (a timer's callback): `<StepView>{[1].map(() => <Own />)}</StepView>`, `{helper()}`, `render={make()}`, `{(() => <Own />)()}`, `{[1].map(() => <div ref={cb} />)}`, `{void (<Own />)}`, `{typeof (<Own />)}`. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Fable re-review of #222 at 5e6efd4f5 (N1 and its table, probes P50/P52/P53/P54/P62/P83/P97/P99 by reading); confirmed by Mac 5 in Chrome (rc.21 oracle, pattern lane `pkghand/frame-map-step`, `frame-call-step`, `render-call-step`, `frame-iife-step`, `frame-map-ref-step`, `frame-flush-step`, `frame-void-step`, `frame-typeof-step`: FLUSH_IN_ACTION in all eight) on main 56aa6c126, #222's 9b8fc91b1 and 5e6efd4f5: the `map` form kept its rows on main and lost them with cause A (9b8fc91b1), the other seven were false clean on all three builds",
+  "fixed": "ADR 0967 amended (the re-review of #222, N1, `package_hand_off.rs`): code in an element's prop, spread or child expression with no function between runs where that element evaluates it (`evaluated_by_element`, asked by `runs_where_written`, by a declared function's call sites and by `may_run` for the flush itself): the innermost such element's creation, and for a component its receiver (a component nothing here reads hands it; a project component follows its first parameter)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-framemap-step-x-direct-none",
+   "mx-flush-in-action-ph-framecall-step-x-direct-none",
+   "mx-flush-in-action-ph-framerender-step-x-direct-none",
+   "mx-flush-in-action-ph-frameiife-step-x-direct-none",
+   "mx-flush-in-action-ph-framemapref-step-x-direct-none",
+   "mx-flush-in-action-ph-framevoid-step-x-direct-none",
+   "mx-flush-in-action-ph-frametypeof-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 14 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 7 of 7 agree on each build): main 56aa6c126 fails `make fuzz-focus` (focus exit 1, 6 false clean; `framemap` keeps its rows there), #222's 9b8fc91b1 and 5e6efd4f5 fail it (7 false clean each, the 7 twins clean), the fix exits 0, \"nothing needs a look\" (7 recall-gap, the 7 twins uncertifiable). Per-program diff of the flush codes' six default grids and full recall grids against 5e6efd4f5: no shared program moved, the 14 new ones added. Pattern lane: the eight `frame-*`/`render-call` programs false clean on 5e6efd4f5, 49 of 49 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site written in the child expression of an unread package's component itself (`<StepView>{(flush(), null)}</StepView>` in a timer's callback): the flush's own function is the timer's callback, so the census reason stood, but the component reads the getter, and runs the flush, inside its step. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Fable re-review of #222 at 5e6efd4f5 (N1 and its table, probes P50/P52/P53/P54/P62/P83/P97/P99 by reading); confirmed by Mac 5 in Chrome (rc.21 oracle, pattern lane `pkghand/frame-map-step`, `frame-call-step`, `render-call-step`, `frame-iife-step`, `frame-map-ref-step`, `frame-flush-step`, `frame-void-step`, `frame-typeof-step`: FLUSH_IN_ACTION in all eight) on main 56aa6c126, #222's 9b8fc91b1 and 5e6efd4f5: the `map` form kept its rows on main and lost them with cause A (9b8fc91b1), the other seven were false clean on all three builds",
+  "fixed": "ADR 0967 amended (the re-review of #222, N1, `package_hand_off.rs`): code in an element's prop, spread or child expression with no function between runs where that element evaluates it (`evaluated_by_element`, asked by `runs_where_written`, by a declared function's call sites and by `may_run` for the flush itself): the innermost such element's creation, and for a component its receiver (a component nothing here reads hands it; a project component follows its first parameter); `may_run` asks it of the flush's own span",
+  "outside": "a route's site is the statements of a function the frame writes (ph-shapes.mjs `head`/`close` around a block), so no generated program writes a site as an expression in a JSX child; the fixture flush-universe-package-hand-off-causes (the line after `directFlushInChild`, three rows) and the pattern `pkghand/frame-flush-step` (false clean on main, 9b8fc91b1 and 5e6efd4f5; fine on the fix) hold it"
  }
 ]
