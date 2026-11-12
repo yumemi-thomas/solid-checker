@@ -21,6 +21,12 @@
 //                         arguments or facts ends silently for the case no arm names (ADR 0945, G4). Whether a hit-less walk means
 //                         "clean" or "unknown" is the caller's, so each hit states what the unmatched case is, or becomes an
 //                         uncertifiable result.
+//   prose-hand-off        a comment that hands a case to another check ("SC2006's claim", "that function's to judge", "left to the ... pass", "not
+//                         this walk's") with a drop in the next twenty code lines (`continue;`, `return None`, `return false`, `=> None`, a
+//                         `.retain(`, or a kind filter beside a `record(` or `push(`) and no `Delegate::` there (ADR 0942, batch 11 slice 10b):
+//                         the case is dropped on a sentence. A hand-off to another rule's claim is the typed `Delegate`, which ends the site only
+//                         where that rule has a row; each hit states the proof that makes the drop sound (the other check does answer, and
+//                         where), or becomes a `Delegate` or an uncertifiable row.
 //   finding-filter        a `retain`, `retain_mut`, `extract_if`, a `dedup*` of rows or sites or a rows-assigned-from-`filter` over a collection that holds
 //                         findings, sites, rows or the facts they stand on (ADR 0958): code that discards findings or sites by path,
 //                         kind, rule or location. A finding leaves the report only through the attribution seam
@@ -33,7 +39,8 @@
 //   dead-premise-kind     a `PremiseKind` no producer, drop pass or stage names: a claim nothing makes.
 //   named ends            the `site_silences!` list (ADR 0936): `endIds` throws on a missing list, a duplicate id, or an id with no producer file.
 //
-// Limits: the scan is line-based over comment-stripped sources. A text chain split across lines or through a binding (`let each =
+// Limits: the scan is line-based over comment-stripped sources (the `prose-hand-off` pass reads the comments themselves, one line at a
+// time: a phrase split across two comment lines is not seen). A text chain split across lines or through a binding (`let each =
 // file.source_text(..)?; each.strip_prefix('[')`), a spelling compared through a variable, and a default written as an `if let ... else
 // { true }` are not seen; and a pattern it flags may be a false positive (a role argument, a match pattern). The baseline therefore counts
 // shapes, and a stated reason covers every hit of its file and kind: it is stated only after each of them was read.
@@ -50,7 +57,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import process from "node:process";
 
-import { ROOT, SOURCE_ROOT, codeLines, sourceFiles } from "./ir-read-lint.mjs";
+import { ROOT, SOURCE_ROOT, codeLines, sourceFiles, testItemLines } from "./ir-read-lint.mjs";
 import { EMPTY_REASONS } from "./lib/proof-log.mjs";
 
 export const ALLOWLIST = join(ROOT, "scripts", "proof-lint.allowlist.json");
@@ -112,7 +119,16 @@ const KINDS = {
   ],
 };
 
-export const KIND_NAMES = ["untagged-silent-role", ...Object.keys(KINDS)];
+/** ADR 0942 (batch 11, slice 10b): the comment phrases that hand a case to another check. A phrase is a claim in prose; the typed form is `Delegate`. */
+export const HAND_OFF_PHRASE = /\b(?:SC\d{4}|[a-z][a-z-]+)'s (?:claim|to judge|to report|to answer)\b|left to the [\w -]+ pass|not this walk's/;
+/** How many code lines after the comment the drop (or the `Delegate`) is looked for in: twenty, because the `SC2006's claim` hand-off of cleanup.rs has its kind filter 19 code lines below its comment. */
+export const HAND_OFF_WINDOW = 20;
+const HAND_OFF_DROPS = [/\bcontinue\s*;/, /\breturn\s+None\b/, /\breturn\s+false\b/, /=>\s*None\b/, /\.\s*retain(?:_mut)?\s*\(/];
+/** A kind filter (`!= ..Kind::X`, `matches!(kind, ..)`) is a drop only beside a `record(` or `push(` it guards. */
+const HAND_OFF_KIND_FILTER = [/(?:!=|==)\s*[\w:]*Kind::/, /\bmatches!\s*\(\s*[\w.]*kind\b/];
+const HAND_OFF_RECORD = /\b(?:record|push)\s*\(/;
+
+export const KIND_NAMES = ["untagged-silent-role", ...Object.keys(KINDS), "prose-hand-off"];
 
 /** The normalized text of a line: whitespace collapsed, so a reflow is the same hit. */
 const normal = (line) => line.replace(/\s+/g, " ").trim();
@@ -157,6 +173,28 @@ function taggedLines(lines) {
   return tagged;
 }
 
+/**
+ * The comments of one source text that hand a case to another check above code that drops it: `[{ line (1-based), kind, text }]`. A comment
+ * line matching [`HAND_OFF_PHRASE`] outside a test item is a hit when one of the next [`HAND_OFF_WINDOW`] code lines (comments and blank
+ * lines do not count) is a drop and none of them names a `Delegate::`.
+ */
+export function proseHandOffs(text) {
+  const lines = text.split("\n");
+  const inTest = testItemLines(text);
+  const code = codeLines(text);
+  const hits = [];
+  lines.forEach((line, index) => {
+    if (inTest[index] || !/^\s*\/\/[/!]?/.test(line) || !HAND_OFF_PHRASE.test(line)) return;
+    const window = [];
+    for (let at = index + 1; at < lines.length && window.length < HAND_OFF_WINDOW; at += 1) if (code[at].trim()) window.push(code[at]);
+    if (window.some((candidate) => /\bDelegate::/.test(candidate))) return;
+    const drops = window.some((candidate) => HAND_OFF_DROPS.some((pattern) => pattern.test(candidate)));
+    const filtered = window.some((candidate) => HAND_OFF_KIND_FILTER.some((pattern) => pattern.test(candidate))) && window.some((candidate) => HAND_OFF_RECORD.test(candidate));
+    if (drops || filtered) hits.push({ line: index + 1, kind: "prose-hand-off", text: normal(line) });
+  });
+  return hits;
+}
+
 /** The hits of one source text: `[{ line (1-based), kind, text }]`. Test modules are excluded; `producer` says whether roles are produced here, `owner` whether the file owns the primitive vocabulary. */
 export function hitsOf(text, producer = true, owner = false, only = null) {
   const lines = codeLines(text);
@@ -173,6 +211,7 @@ export function hitsOf(text, producer = true, owner = false, only = null) {
       if (patterns.some((pattern) => pattern.test(line))) hits.push({ line: index + 1, kind, text: normal(line) });
     }
   });
+  if (!only || only === "prose-hand-off") hits.push(...proseHandOffs(text));
   return hits;
 }
 
