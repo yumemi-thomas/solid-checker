@@ -14,15 +14,17 @@
 //! - a JSX prop, a spread attribute or a child expression of a component the program does not read (`<Pkg render={() => flush()} />`, `<Pkg>{() => flush()}</Pkg>`),
 //!   and a `use:` directive;
 //! - a project function's parameter that goes on to any of these (`function wrap(f) { pkg.run(f) }`);
-//! - a caller: a function whose exact call edge reaches the function (a helper the handed callback calls), asked the same way.
+//! - a caller: a function whose exact call edge reaches the function (a helper the handed callback calls), asked the same way;
+//! - a return: a function that returns it, whose calls evaluate to it (`pkg.run(make())`, an immediately invoked function), and a reflective call that forwards its
+//!   arguments (`pkg.run.call(null, cb)`, `Reflect.apply(pkg.run, null, [cb])`, `pkg.run.bind(null, cb)`).
 //!
 //! What receives the value decides ([`Receiver`]): a dialect primitive, a reviewed test runner's registration (by the callee's identity, whatever the project proves of when
 //! the runner runs a suite body: `reviewed_test_runner_registration`), the standard library, a package the build reads as source, a DOM element and a project function
 //! whose parameter is followed know their behavior; a declaration in a package the build does not read, a callee nothing resolves and a
 //! project slot no function body defines (a function-typed parameter or field: it may hold a package's function) do not.
 //!
-//! Not followed, named in `docs/open-work.md`: a value a project function returns (`pkg.run(makeCallback())`), a method of a class whose instance is handed, an assignment into
-//! an object a package exports, a project component's props, and an export a framework enters from outside.
+//! Not followed, named in `docs/open-work.md`: a value kept in a collection or a property and read elsewhere (`handlers.add(cb)`, `handlers.forEach(pkg.run)`), a method of a
+//! class whose instance is handed, an assignment into an object a package exports, a project component's props, and an export a framework enters from outside.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -215,6 +217,53 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 return true;
             }
         }
+        self.returned(file, at, walk)
+    }
+
+    /// A function returns the value (a `return`, an arrow's expression body): the calls of that function evaluate to it (`make()`, an immediately invoked function),
+    /// so each is a position the value is at.
+    fn returned(&self, file: &'a FileFacts, at: Span, walk: &mut Walk) -> bool {
+        let ast = &file.ast;
+        let returns = |ret: &solid_facts::ast::ReturnFact| {
+            ret.argument.is_some_and(|argument| {
+                let argument = ast.peel_ts_sugar_span(argument);
+                argument.contains(at) && !crosses(ast, argument, at)
+            })
+        };
+        for function in ast.functions_containing(at) {
+            if function.span == at {
+                continue;
+            }
+            let owned = |ret: &solid_facts::ast::ReturnFact| {
+                ast.innermost_function_owning(ret.span)
+                    .is_some_and(|owner| owner.span == function.span)
+            };
+            let returned = function.expression_return.as_ref().is_some_and(returns)
+                || ast
+                    .returns_within(function.body)
+                    .any(|ret| returns(ret) && owned(ret));
+            if !returned {
+                continue;
+            }
+            let mut calls: Vec<(&'a FileFacts, Span)> = ast
+                .calls_with_peeled_callee(function.span)
+                .map(|call| (file, call.span))
+                .collect();
+            for (caller_file, callee) in self
+                .lookup
+                .function_call_sites(file.path.as_str(), function.span)
+            {
+                if let Some(call) = caller_file.ast.calls_with_peeled_callee(callee).next() {
+                    calls.push((caller_file, call.span));
+                }
+            }
+            if calls
+                .into_iter()
+                .any(|(holder, span)| self.position(holder, span, walk))
+            {
+                return true;
+            }
+        }
         false
     }
 
@@ -327,7 +376,29 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 Receiver::Unread
             };
         }
-        self.declaration_receiver(lookup.resolved_callee_call(file, call.callee))
+        let resolved = lookup.resolved_callee_call(file, call.callee);
+        // `f.call(this, …)`, `f.apply(this, […])`, `f.bind(this, …)`, `Reflect.apply(f, this, […])` hand their arguments to `f`: the standard declaration is the
+        // forwarder's, the receiver of the value is the function it forwards to.
+        if let Some(target) = resolved.and_then(|resolved| forwarding_target(file, call, resolved))
+        {
+            return self.target_receiver(file, target);
+        }
+        self.declaration_receiver(resolved)
+    }
+
+    /// What a forwarded argument reaches: a project function (analyzed) is known; any other target (a package's function, a value nothing resolves) is not.
+    fn target_receiver(&self, file: &'a FileFacts, target: Span) -> Receiver<'a> {
+        let project_function = self
+            .lookup
+            .entities()
+            .value_symbol(file, target)
+            .and_then(|symbol| self.lookup.function_for_symbol(symbol.as_str()))
+            .is_some();
+        if project_function {
+            Receiver::Known
+        } else {
+            Receiver::Unread
+        }
     }
 
     /// The receiver a resolved call's declaration names: the standard library and a package the build reads as source are known; a declaration in a package it does not
@@ -445,6 +516,33 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             }
             _ => Receiver::Unread,
         }
+    }
+}
+
+/// The expression a standard reflective call forwards its arguments to: the object of `f.call(…)`, `f.apply(…)` and `f.bind(…)`, the first argument of `Reflect.apply(f, …)`
+/// and `Reflect.construct(f, …)`. The declaration is the resolved standard one (ECMAScript 20.2.3, 28.1), never a spelling.
+fn forwarding_target(
+    file: &FileFacts,
+    call: &CallFact,
+    resolved: &typefacts::ResolvedCall,
+) -> Option<Span> {
+    match crate::runtime_semantics::standard_call_name(resolved)? {
+        "Function.call"
+        | "CallableFunction.call"
+        | "NewableFunction.call"
+        | "Function.apply"
+        | "CallableFunction.apply"
+        | "NewableFunction.apply"
+        | "Function.bind"
+        | "CallableFunction.bind"
+        | "NewableFunction.bind" => file
+            .ast
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))
+            .map(|member| member.object),
+        "Reflect.apply" | "Reflect.construct" => {
+            call.arguments.first().map(|argument| argument.span)
+        }
+        _ => None,
     }
 }
 

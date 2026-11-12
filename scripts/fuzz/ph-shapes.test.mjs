@@ -22,10 +22,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are eleven routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller"]);
+  it("are thirteen routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(66);
+    expect(PH_CONTEXT_NAMES).toHaveLength(78);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -70,6 +70,11 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     const wrap = textOf("FLUSH_IN_ACTION", "ph-wrap-step");
     expect(wrap.some((line) => /^function wrap\d+\(run: \(\) => void\) \{$/.test(line))).toBe(true);
     expect(wrap).toContain("runStep(run);");
+    const returned = textOf("FLUSH_IN_ACTION", "ph-return-step");
+    expect(returned.some((line) => /^function make\d+\(\) \{$/.test(line))).toBe(true);
+    expect(returned.some((line) => /^runStep\(make\d+\(\)\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-call-step").some((line) => line.startsWith("runStep.call(null, () => {"))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-call-step-never").some((line) => line.startsWith("skipRun.call(null, () => {"))).toBe(true);
     const caller = textOf("FLUSH_IN_ACTION", "ph-caller-step");
     expect(caller.some((line) => /^function helper\d+\(\) \{$/.test(line))).toBe(true);
     expect(caller.some((line) => /^runStep\(\(\) => helper\d+\(\)\);$/.test(line))).toBe(true);

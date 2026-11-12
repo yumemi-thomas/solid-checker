@@ -197,6 +197,46 @@ export function Caller() {
   return <p>x</p>;
 }
 
+// ---- a function a project function returns (a call evaluates to it) and a reflective call that forwards its arguments to the package's function
+function make() {
+  return () => {
+    flush();
+  };
+}
+export function Returned() {
+  setTimeout(() => {
+    void runStep(make());
+  });
+  return <p>x</p>;
+}
+
+const immediate = (() => () => {
+  flush();
+})();
+export function Immediate() {
+  setTimeout(() => {
+    void runStep(immediate);
+  });
+  return <p>x</p>;
+}
+
+export function Reflected() {
+  setTimeout(() => {
+    void runStep.call(null, () => {
+      flush();
+    });
+    void Reflect.apply(runStep, null, [
+      () => {
+        flush();
+      },
+    ]);
+    void runStep.bind(null, () => {
+      flush();
+    })();
+  });
+  return <p>x</p>;
+}
+
 // ---- the package named another way: through a namespace import and through an alias (the callee is resolved by its declaration, never by its spelling)
 export function Namespace() {
   setTimeout(() => {

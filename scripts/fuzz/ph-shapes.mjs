@@ -16,6 +16,8 @@
 //             children   `<StepView>{() => { <site> }}</StepView>`: a child expression of one
 //             wrap       `function wrap1(run) { runStep(run) }`, `wrap1(() => { <site> })`: through a project function's parameter
 //             caller     `function helper1() { <site> }`, `runStep(() => helper1())`: a function the handed callback calls
+//             return     `function make1() { return () => { <site> }; }`, `runStep(make1())`: a function a project function returns
+//             call       `runStep.call(null, () => { <site> })`: a reflective call that forwards its arguments to the package's function
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
 //           FLUSH_IN_TRACKED_QUEUE_CALLBACK)
 //
@@ -26,7 +28,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -87,6 +89,11 @@ const ROUTE_FRAMES = {
     const helper = n("helper");
     return { head: `function ${helper}() `, close: `\nsetTimeout(() => {\n  ${f}(() => ${helper}());\n});` };
   },
+  return: (f, n) => {
+    const make = n("make");
+    return { head: `function ${make}() {\n  return () => `, close: `;\n}\nsetTimeout(() => {\n  ${f}(${make}());\n});` };
+  },
+  call: (f) => ({ head: `setTimeout(() => {\n  ${f}.call(null, () => `, close: `);\n});` }),
 };
 
 /** The files of `fz-step`: a manifest naming no Solid package, so the checker does not read its source. */
