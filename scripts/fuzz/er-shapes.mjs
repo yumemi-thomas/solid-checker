@@ -14,6 +14,13 @@
 //                     apply steps the iterator, and a generator's body is no plain site (F2)
 //             root    the callback of `createRoot` is a GENERATOR that the host steps, `createMemo(() => createRoot(function* () { <site>; yield 1; }))` and
 //                     `createEffect(() => m(), (it) => { it.next(); })`: its body runs after the root's owner is gone (F3)
+//             genlayer   the site is in an ARROW the generator's body calls, `function* g() { const f = () => { <site> }; f(); yield 1; }`, with the generator and its iterator
+//                     (`const it = g()`) written at MODULE scope, which the host steps with a `for...of`: the generator's own body holds no site, and the test of the
+//                     innermost function saw a plain arrow (B1, the re-review of #220). At module scope because the harness's entry hands every export of App.tsx to the
+//                     real `render`, a hand-off B3 (ADR 0967) answers with a row for everything written inside an exported component, on every build: the run of a
+//                     generator whose call is at module scope has no function around it, so no row but the one the fix files stands there
+//             genuntrack the site is in an `untrack` callback the generator's body runs in place, `function* g() { untrack(() => { <site> }); yield 1; }` (module scope too), which
+//                     the host steps by spread (`[...it]`): the same layer, another in-place form (B1)
 //   hosts   apply (an effect's apply: PRIMITIVE_IN_EFFECT_CALLBACK), every route; tracked and settled (SC3001's leaf owners: PRIMITIVE_IN_FORBIDDEN_SCOPE,
 //           CLEANUP_IN_FORBIDDEN_SCOPE), the `view` route only (the leaf codes rest on the owner graph's silence the component-render premise reached)
 //
@@ -21,7 +28,7 @@
 // contexts, the direct binding bare (`erShape`), not crossed by the census, out of api-fire's plan.
 import { contain, decl, domExpr, expr, fn, jsx, namedButton, num, prim, ref, ret } from "./model.mjs";
 
-export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root"];
+export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack"];
 export const ER_HOSTS = ["apply", "tracked", "settled"];
 /** The (route, host) pairs the grid places: every route on an apply, and the `view` route on the two leaf hosts. */
 const PLACED = [...ER_ROUTES.map((route) => [route, "apply"]), ["view", "tracked"], ["view", "settled"]];
@@ -57,7 +64,7 @@ function placeIn(host, held) {
   }
 }
 
-/** The placement of `stmts` for an `er-*` context (`{ body, view }`), or undefined for any other. */
+/** The placement of `stmts` for an `er-*` context (`{ body, view }`, and `hoisted` for module code), or undefined for any other. */
 export function erContext(context, stmts, kit) {
   const parts = erParts(context);
   if (!parts) return undefined;
@@ -99,6 +106,21 @@ export function erContext(context, stmts, kit) {
       const frame = contain("frame", 9, stmts, { head: `const ${m} = createMemo(() => createRoot(function* () `, close: "));", after: ["yield 1;"], imports: ["createMemo", "createRoot"] });
       const effect = never ? `createEffect(() => ${m}(), () => { void ${m}; })` : `createEffect(() => ${m}(), (it) => { it.next(); })`;
       return { body: [frame, expr(domExpr(effect, undefined, ["createEffect"]))], view: [] };
+    }
+    case "genlayer": {
+      // The generator's body calls an arrow that holds the site; the host steps the generator with a `for...of`, which no SC9012 covers (`it.next()` is a call the checker cannot
+      // follow). The generator and its iterator are module code (`hoisted`).
+      const g = kit.name("g");
+      const f = kit.name("f");
+      const it = kit.name("it");
+      const frame = contain("frame", 9, stmts, { head: `function* ${g}() { const ${f} = () => `, close: `; ${f}(); yield 1; }` });
+      return { hoisted: [frame, expr(domExpr(`const ${it} = ${g}()`))], body: [placeIn(host, runs(it, `for (const _ of ${it}) { void _; }`))], view: [] };
+    }
+    case "genuntrack": {
+      const g = kit.name("g");
+      const it = kit.name("it");
+      const frame = contain("frame", 9, stmts, { head: `function* ${g}() { untrack(() => `, close: `); yield 1; }`, imports: ["untrack"] });
+      return { hoisted: [frame, expr(domExpr(`const ${it} = ${g}()`))], body: [placeIn(host, runs(it, `void [...${it}]`))], view: [] };
     }
     default: throw new Error(`no entry-by-reference route ${route}`);
   }

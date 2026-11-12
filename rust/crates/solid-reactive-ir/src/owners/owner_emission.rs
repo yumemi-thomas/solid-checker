@@ -1218,7 +1218,7 @@ const LAYER_CALLER_DEPTH: usize = 8;
 /// Whether `function` is the whole argument the dialect gives an owner it
 /// creates (`CallbackOwner::Creates`): who enters what is around that call
 /// changes nothing inside.
-fn creates_owner_for(
+pub(super) fn creates_owner_for(
     file: &solid_facts::FileFacts,
     function: Span,
     lookup: &SemanticLookup<'_>,

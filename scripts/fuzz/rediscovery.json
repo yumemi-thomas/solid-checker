@@ -20119,5 +20119,18 @@
    "mx-primitive-in-effect-callback-er-root-apply-effect-direct-none"
   ],
   "rediscovered": "the head of #220 (280f766c1, release build): 3 false-clean programs; the fix: none (3 recall-gap programs, an uncertifiable row stands)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation written in a layer INSIDE a generator (an arrow the generator's body calls, an IIFE, or an `untrack` callback it runs in place) that an effect's apply steps with a `for...of` or a spread, was certified with no row: the role silence and the graph's two asked whether the INNERMOST function is a generator, so a plain arrow inside one was a plain site, and the role engine, which places a generator's body by the call that makes the iterator, put the site where the iterator is made (module scope, or rendering). Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable re-review of #220 (slice 6, ADR 0969), item B1 (probes2/r6q-forof-certified, r6r-spread-untrack-certified); the programs certify on the head of #220 and on main",
+  "fixed": "ADR 0969, B1: the plain test of the owner-call universe asks every function layer around the site, up to the layer whose callback runs under an owner its primitive creates (`generator_layer_around`, `owners/leaf_universe.rs`). Fixture owner-call-generator-layer; the cells er-genlayer-apply and er-genuntrack-apply (generator and iterator at module scope: the harness's entry hands every export to `render`, a hand-off B3 answers with a row for everything inside an exported component on every build)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-genuntrack-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-genuntrack-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-genuntrack-apply-effect-direct-none"
+  ],
+  "rediscovered": "the head of #220 (36bc78c73-equivalent release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable row stands; the legal twins of the cell become uncertifiable, the named cost). The `genlayer` route is covered on both builds by the ADR 0710 row at the creation, so it is a cell, not an id"
  }
 ]

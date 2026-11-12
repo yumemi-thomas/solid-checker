@@ -21,10 +21,10 @@ const textOf = (code, context) => {
 };
 
 describe("the er contexts (a function reached by a reference)", () => {
-  it("are six routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root"]);
+  it("are eight routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack"]);
     expect(ER_HOSTS).toEqual(["apply", "tracked", "settled"]);
-    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (6 + 2));
+    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (8 + 2));
     for (const name of ER_CONTEXT_NAMES) {
       const parts = erParts(name);
       expect(parts, name).not.toBeNull();
@@ -82,6 +82,24 @@ describe("the er contexts (a function reached by a reference)", () => {
     const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-root-apply-never");
     expect(twin).toContain("createEffect(() => m1(), () => { void m1; });");
     expect(twin.join("\n")).not.toContain("it.next()");
+  });
+  it("print the generator-layer routes: the site in an arrow or an untrack callback the generator's body runs, stepped by for...of or spread (the twin only keeps the iterator)", () => {
+    const layer = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-genlayer-apply");
+    const at = layer.findIndex((line) => line.startsWith("function* g1() { const f1 = () => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(layer.slice(at).join(" ")).toContain("}; f1(); yield 1; }");
+    expect(layer).toContain("const it1 = g1();");
+    expect(layer.join("\n")).toContain("for (const _ of it1) { void _; }");
+    const layerTwin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-genlayer-apply-never");
+    expect(layerTwin).toContain("void it1;");
+    expect(layerTwin.join("\n")).not.toContain("for (const _ of");
+    const untracked = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-genuntrack-apply");
+    expect(untracked.findIndex((line) => line.startsWith("function* g1() { untrack(() => {"))).toBeGreaterThan(-1);
+    expect(untracked.join(" ")).toContain("}); yield 1; }");
+    expect(untracked).toContain("void [...it1];");
+    const untrackedTwin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-genuntrack-apply-never");
+    expect(untrackedTwin).toContain("void it1;");
+    expect(untrackedTwin.join("\n")).not.toContain("[...it1]");
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(erShape("er-view-apply", { binding: "alias", layer: "none" })).toBe(false);

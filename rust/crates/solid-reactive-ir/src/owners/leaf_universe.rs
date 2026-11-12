@@ -23,7 +23,9 @@
 //! uncertifiable row; the review of #220 found `EffectCreationRunsOffApply` and `EffectCreationOwnerSetAround`, then in `static_api`, asking less than the others):
 //!
 //! - the site is written directly in a function (not a parameter list, which runs when its argument is omitted; not after a suspension of an async function,
-//!   which runs from a later task; not in a generator, whose body runs where an iterator is stepped);
+//!   which runs from a later task; not in a generator, or in a layer written inside one, whose body runs where an iterator is stepped: an arrow, an IIFE or a
+//!   callback of an in-place primitive in a generator's body is the generator's code, up to the layer whose callback runs under an owner its primitive
+//!   creates, which is current there whoever steps what is around it: B1, the re-review of #220);
 //! - no layer around it is entered by a route the graph has no edge for ([`super::owner_emission::layer_entry_open_by_reference`], ADR 0868: a function stored,
 //!   assigned, handed on or a method, a reference that is not a direct call or an inline run), asked without the component-render premise: a function that
 //!   returns JSX is entered by renders alone only where every reference of its binding is a JSX tag. The primitive-wrapped silence needs no such fact: the
@@ -53,7 +55,8 @@ enum Decline {
     InstanceFieldInitializer,
     /// The site is in a parameter list: it runs when a call omits its argument, which no entry places.
     ParameterList,
-    /// The site is in a generator: its body runs where an iterator is stepped, which no owner edge follows.
+    /// The site is in a generator, or in a layer written inside one (up to the layer whose callback runs under an owner its primitive creates): its body runs where an
+    /// iterator is stepped, which no owner edge follows.
     GeneratorBody,
     /// The site follows a suspension of its async function: it runs from a later task, which no owner edge follows.
     AfterSuspension,
@@ -96,6 +99,28 @@ impl Decline {
 enum Group {
     Leaf,
     Effect,
+}
+
+/// Whether a generator is a layer around `span`, the innermost layer first, up to the layer whose callback runs under an owner its primitive creates (the owner is
+/// current there whoever steps what is around it): the site's code is then a generator's, which runs where an iterator is stepped. B1, the re-review of #220: the
+/// test asked the innermost function only, so a creation in an arrow, an IIFE or an `untrack` callback written inside a generator stepped from an apply was plain, and
+/// the role engine, which places a generator's body by the call that makes the iterator, certified it.
+fn generator_layer_around(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let mut layers = file.ast.functions_owning(span).collect::<Vec<_>>();
+    layers.sort_by_key(|function| function.span.end - function.span.start);
+    for function in layers {
+        if function.generator {
+            return true;
+        }
+        if super::owner_emission::creates_owner_for(file, function.span, lookup) {
+            return false;
+        }
+    }
+    false
 }
 
 /// Records the silences of every owner-call site of the project's files in `ends`, and the declines (proof log only) of the groups of codes none answers. `client_build` is
@@ -234,7 +259,7 @@ pub(super) fn silences(
             // directly in a function runs, not a parameter list, a generator's body or a later task.
             let plain = if crate::owners::in_parameter_list(ast, call.span) {
                 Err(Decline::ParameterList)
-            } else if function.generator {
+            } else if generator_layer_around(file, call.span, lookup) {
                 Err(Decline::GeneratorBody)
             } else if crate::execution_role::may_follow_suspension(file, call.span) {
                 Err(Decline::AfterSuspension)
