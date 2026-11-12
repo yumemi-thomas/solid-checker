@@ -808,12 +808,12 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
     }])
 }
 
-fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
-    // The grouping of defect kinds into finding families lives once, in
-    // `StaticDefectKind::family`; this dialect only names its own rule for
-    // each family. A new defect kind therefore cannot reach the catalog
-    // without both the family mapping and this arm being written.
-    let rule = match defect.kind.family() {
+/// The rule a defect family is reported under. The grouping of defect kinds into finding families lives once, in `StaticDefectKind::family`; this
+/// dialect only names its own rule for each family. A new defect kind therefore cannot reach the catalog without both the family mapping and this
+/// arm being written. The analysis asks the same answer as `StaticDefectFamily::rule_name` (which the site accounting reads to tell which runtime
+/// code a defect answers): `defect_family_rule_names_match_the_analysis` holds the two together.
+fn family_rule(family: StaticDefectFamily) -> Rule {
+    match family {
         StaticDefectFamily::ReactiveObjectDestructure => Rule::ComponentPropsDestructure,
         StaticDefectFamily::ReactiveReadAfterAwait => Rule::ReactiveReadAfterAwait,
         StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
@@ -828,7 +828,11 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
         StaticDefectFamily::DirectMutation => Rule::NoStoreMutationOutsideSetter,
         StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
-    };
+    }
+}
+
+fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
+    let rule = family_rule(defect.kind.family());
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
     let mut message = text.message;
     // This suffix names *one* source of uncertainty: a component whose call
@@ -1151,9 +1155,9 @@ mod source_argument_evidence_tests {
 
 #[cfg(test)]
 mod after_await_obligation_tests {
-    use solid_reactive_ir::{FindingSeed, StaticDefect, project_finding};
+    use solid_reactive_ir::{FindingSeed, StaticDefect, StaticDefectFamily, project_finding};
 
-    use super::Catalog;
+    use super::{Catalog, family_rule};
 
     fn sc1002(obligation: serde_json::Value, uncertain: bool) -> String {
         let mut kind =
@@ -1229,5 +1233,18 @@ mod after_await_obligation_tests {
         assert!(!unknown.contains("call sites"), "{unknown}");
         let proven = sc1002(serde_json::Value::Null, false);
         assert!(!proven.contains("proof obligation"), "{proven}");
+    }
+
+    /// The analysis names the rule of a defect family itself (`StaticDefectFamily::rule_name`, what the site accounting asks of a defect that stands at a
+    /// site); the catalog names it once more. The two cannot drift: every family answers the same name.
+    #[test]
+    fn defect_family_rule_names_match_the_analysis() {
+        for family in StaticDefectFamily::ALL {
+            assert_eq!(
+                family_rule(family).metadata().name,
+                family.rule_name(),
+                "{family:?}"
+            );
+        }
     }
 }

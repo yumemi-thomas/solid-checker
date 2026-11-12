@@ -986,14 +986,20 @@ pub(crate) struct SiteRecord<'a> {
     pub(crate) source: &'a str,
     /// The syntactic form: `call`, `member`, `assignment`, `delete`, `mutator`.
     pub(crate) via: &'a str,
+    /// The Solid dev code this line is about (`STRICT_READ_UNTRACKED`): a site has one line per code it may raise (batch 11, slice 4).
+    pub(crate) code: &'a str,
     pub(crate) location: &'a Location,
     /// The other spans a row, obligation or silence that answers for the site
     /// may sit at (the links of a member chain, a call that has it as callee).
     pub(crate) alternates: &'a [Span],
-    /// `row`, `census`, `discarded` or `none`.
+    /// `row`, `census`, `defect`, `violation`, `discarded` or `none`: the strongest ending that answers the code.
     pub(crate) end: &'a str,
-    /// The row's table and role, or the census's blocker.
+    /// The row's table and role, or the census's blocker (for a `none` line, the ending that stands and answers another code).
     pub(crate) detail: &'a str,
+    /// What the ending is: `table:<t>`, `census`, `rule:<name>[:u]` or `discarded` (for a `none` line, the one that stands and answers another code).
+    pub(crate) by: &'a str,
+    /// Whether the ending answers the code (`false` on a `none` line).
+    pub(crate) credited: bool,
 }
 
 pub(crate) fn site(record: &SiteRecord<'_>) {
@@ -1009,8 +1015,11 @@ pub(crate) fn site(record: &SiteRecord<'_>) {
             "source": record.source,
             "via": record.via,
             "alt": record.alternates.iter().map(|span| [span.start, span.end]).collect::<Vec<_>>(),
+            "code": record.code,
             "end": record.end,
             "detail": record.detail,
+            "by": record.by,
+            "credited": record.credited,
         })),
     );
 }
@@ -1053,18 +1062,34 @@ pub(crate) fn candidate(record: &CandidateRecord<'_>) {
 /// it rests on. The accounting passes of ADRs 0886 and 0838 and
 /// [`crate::site_accounting`] (the producers' named ends, ADR 0936) write it.
 pub(crate) fn silent(rule: &str, location: &Location, proof: &str, premises: &[Premise]) {
+    silent_codes(rule, location, proof, premises, &[]);
+}
+
+/// [`silent`] for a producer's named end, with the runtime codes it is a proof for (batch 11, slice 4): the gate asks of a site's code that a silence at
+/// its span names it. An empty list writes none (the other accounting passes' silences are not about a code of the site universe).
+pub(crate) fn silent_codes(
+    rule: &str,
+    location: &Location,
+    proof: &str,
+    premises: &[Premise],
+    codes: &[&str],
+) {
     if !enabled() {
         return;
+    }
+    let mut line = json!({
+        "k": "silent",
+        "rule": rule,
+        "proof": proof,
+        "premises": premises_value(premises),
+    });
+    if !codes.is_empty() {
+        line["codes"] = json!(codes);
     }
     emit(
         location.path.as_ref(),
         Some(location_pair(location)),
-        object(json!({
-            "k": "silent",
-            "rule": rule,
-            "proof": proof,
-            "premises": premises_value(premises),
-        })),
+        object(line),
     );
 }
 

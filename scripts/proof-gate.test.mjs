@@ -6,17 +6,20 @@ import { describe, test } from "vitest";
 
 import { ROOT } from "./proof-gate.mjs";
 import { fixtureProjects } from "./lib/fixture-projects.mjs";
-import { EMPTY_REASONS, gapProblems, hitKey, proofHits, proofLogLines, proofStats, pruneCandidates, resolvedLine } from "./lib/proof-log.mjs";
+import { EMPTY_REASONS, SITE_CODE, gapProblems, hitKey, proofHits, proofLogLines, proofStats, pruneCandidates, resolvedLine } from "./lib/proof-log.mjs";
 
 const F = "/p/App.tsx";
 const at = (s, e = s + 3) => ({ f: F, s, e });
 const decision = (s, extra = {}) => ({ k: "decision", ...at(s), t: "read", role: "UntrackedRendering", arm: "callee_roles.inside-component", arms: [], default: false, silent: false, ...extra });
-const site = (s, extra = {}) => ({ k: "site", ...at(s), t: "read", source: "accessor", via: "call", end: "none", detail: "", ...extra });
+// The writer sets the code of every site line: the table's first (`SITE_CODE`) unless the line is another code of the site.
+const site = (s, extra = {}) => ({ k: "site", ...at(s), t: "read", code: SITE_CODE[extra.t ?? "read"], source: "accessor", via: "call", end: "none", detail: "", ...extra });
 const row = (s, extra = {}) => ({ k: "row", ...at(s), t: "read", role: "TrackedJsx", reported: false, why: "role-does-not-report", ...extra });
 const finding = (s, extra = {}) => ({ k: "finding", ...at(s), code: "SC1001", kind: "violation", ctx: "", ...extra });
 const verdict = (s, extra = {}) => ({ ...finding(s, extra), k: "verdict" });
 const drop = (s, extra = {}) => ({ k: "drop", ...at(s), code: "SC1001", from: "violation", ctx: "", pass: "ExecutionPaths", premises: [], ...extra });
 const silent = (s, extra = {}) => ({ k: "silent", ...at(s), rule: "row:reads", proof: "ApplyExecution::Absent", premises: [], ...extra });
+// A producer's named end as the writer logs it (`SiteEnds::log`): `rule: "end"`, the premises it rests on, and the codes the dialect's policy says it answers.
+const named = (s, codes, extra = {}) => silent(s, { rule: "end", proof: "local_access.discover_member.placed-elsewhere", premises: [{ kind: "CallEdgePlaces", at: [40, 43] }], codes, ...extra });
 const attributed = (s, to, extra = {}) => ({ k: "attributed", ...at(s), code: "SC1001", pass: "DependencySource", to, ...extra });
 const kinds = (lines) => proofHits(lines).map((hit) => `${hit.check}/${hit.kind}`);
 
@@ -41,6 +44,65 @@ describe("C2(c): a package finding the dependency-source drop discarded stands a
   });
 });
 
+describe("a site has one line per Chrome code (batch 11, slice 4): the checks are asked of each (site, code)", () => {
+  const OPTIMISTIC = "OPTIMISTIC_WRITE_BEFORE_LOAD";
+  const WRITE = "REACTIVE_WRITE_IN_OWNED_SCOPE";
+  const line = (s, code, extra = {}) => site(s, { t: "write", code, ...extra });
+
+  test("the classifier's decisions are about the table's first code: a reporting write decision speaks for the write line, not for SC2009's", () => {
+    const writeDecision = decision(10, { t: "write", role: "UntrackedRendering" });
+    assert.deepEqual(kinds([line(10, WRITE), writeDecision]), ["C2/reporting-decision-no-row"]);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC), writeDecision]), ["C1/no-decision"]);
+  });
+
+  test("a line whose ending answers its code is ended; one whose code only another ending answers is a hit again", () => {
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, { end: "row" })]), []);
+    // `none`: an ending stands at the span but answers another code (`credited: false`), so it ends nothing for this one.
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, { by: "rule:no-write-in-pure-computation", credited: false })]), ["C1/no-decision"]);
+  });
+
+  test("a named end ends the codes it lists and no other", () => {
+    const end = named(10, [WRITE]);
+    assert.deepEqual(kinds([line(10, WRITE), decision(10, { t: "write" }), end]), []);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC), end]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC), named(10, [WRITE, OPTIMISTIC])]), []);
+  });
+
+  test("F1 (the review of #218): a silent line that lists no code ends no code, whatever pass wrote it; a site line with no code is ended by none", () => {
+    const write = [line(10, WRITE), decision(10, { t: "write" })];
+    const reports = ["C2/reporting-decision-no-row"];
+    // The writer omits an empty `codes` list (the end's removed row answers no code of the universe, and the checker files the code's row), and a log from before the field has none.
+    assert.deepEqual(kinds([...write, named(10, undefined)]), reports);
+    assert.deepEqual(kinds([...write, named(10, [])]), reports);
+    // The other passes' lines at the span: a pending proof, a `row:*` stage, a flush proof, SC4001.
+    for (const other of [
+      silent(10, { rule: "SC5003", proof: "PendingSafe::NotRenderEffect" }),
+      silent(10, { rule: "row:reads", proof: "ApplyExecution::Absent" }),
+      silent(10, { rule: "SC3001", proof: "FlushSafe::TestRunner" }),
+      silent(10, { rule: "SC4001", proof: "ContextProof::OwnedContext" }),
+    ]) {
+      assert.deepEqual(kinds([...write, other]), reports, other.rule);
+    }
+    // Not even a line that lists the code, when it is not a named end.
+    assert.deepEqual(kinds([...write, silent(10, { rule: "row:reads", codes: [WRITE] })]), reports);
+    // A site line with no `code` (a log from before slice 4) has no code for an end to list; its decisions are the table's.
+    assert.deepEqual(kinds([site(10, { t: "write", code: undefined }), named(10, [WRITE])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([site(10, { t: "write", code: undefined }), decision(10, { t: "write" })]), reports);
+  });
+
+  test("a named end at an alternate span of the site lists its code too", () => {
+    const composite = { alt: [[11, 19]] };
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, composite), named(11, [OPTIMISTIC], { e: 19 })]), []);
+    assert.deepEqual(kinds([line(10, OPTIMISTIC, composite), named(11, [WRITE], { e: 19 })]), ["C1/no-decision"]);
+  });
+
+  test("the stats count the lines by code", () => {
+    const stats = proofStats([line(10, WRITE, { end: "row" }), line(10, OPTIMISTIC), site(20, { code: "STRICT_READ_UNTRACKED" }), site(30, { code: undefined })]);
+    assert.equal(stats.sites, 4);
+    assert.deepEqual(stats.siteCodes, { [WRITE]: 1, [OPTIMISTIC]: 1, STRICT_READ_UNTRACKED: 1 });
+  });
+});
+
 describe("C2: a reporting decision with nothing ending the site", () => {
   test("audit candidate S1: the classifier says the read reports, the producer left no row, no finding and no proof", () => {
     assert.deepEqual(kinds([site(10), decision(10)]), ["C2/reporting-decision-no-row"]);
@@ -52,7 +114,7 @@ describe("C2: a reporting decision with nothing ending the site", () => {
   });
 
   test("a named silence, a row, a census obligation or the compiler's discard ends the site", () => {
-    assert.deepEqual(kinds([site(10), decision(10), silent(10)]), []);
+    assert.deepEqual(kinds([site(10), decision(10), named(10, [SITE_CODE.read])]), []);
     assert.deepEqual(kinds([site(10, { end: "row" }), decision(10)]), []);
     assert.deepEqual(kinds([site(10, { end: "census" }), decision(10)]), []);
     assert.deepEqual(kinds([site(10, { end: "discarded" }), decision(10)]), []);
@@ -63,12 +125,12 @@ describe("C2: a reporting decision with nothing ending the site", () => {
     assert.deepEqual(kinds([site(10, composite), decision(11)]), ["C2/reporting-decision-no-row"]);
     assert.deepEqual(kinds([site(10, composite), decision(11, { role: "TrackedJsx", silent: true, arm: "callee_roles.tracked-callback" })]), []);
     // A named silence at an alternate span is the site's account too.
-    assert.deepEqual(kinds([site(10, composite), decision(11), silent(11, { e: 19 })]), []);
+    assert.deepEqual(kinds([site(10, composite), decision(11), named(11, [SITE_CODE.read], { e: 19 })]), []);
   });
 
   test("a props member read with no row is C2 like any other; a named props-static end is its account", () => {
     assert.deepEqual(kinds([site(10, { source: "props", via: "member" }), decision(10)]), ["C2/reporting-decision-no-row"]);
-    const end = silent(10, { rule: "end", proof: "local_access.discover_member.props-static", premises: [{ kind: "PropsCallersStatic", at: [3, 4] }] });
+    const end = silent(10, { rule: "end", proof: "local_access.discover_member.props-static", premises: [{ kind: "PropsCallersStatic", at: [3, 4] }], codes: [SITE_CODE.read] });
     assert.deepEqual(kinds([site(10, { source: "props", via: "member" }), decision(10), end]), []);
   });
 
@@ -142,7 +204,7 @@ describe("C3: a silent row's role comes from a tagged, non-default arm", () => {
 });
 
 describe("a producer's named end rests on a premise that names code", () => {
-  const end = (s, premises, extra = {}) => silent(s, { rule: "end", proof: "local_access.discover_member.placed-elsewhere", premises, ...extra });
+  const end = (s, premises, extra = {}) => silent(s, { rule: "end", proof: "local_access.discover_member.placed-elsewhere", premises, codes: [SITE_CODE.read], ...extra });
 
   test("a fact kind with the span of the code it is about is the site's account", () => {
     const premises = [{ kind: "CallEdgePlaces", at: [40, 43] }, { kind: "CallEdgePlaces", at: [4, 5], in: "/p/B.tsx" }];
@@ -154,8 +216,8 @@ describe("a producer's named end rests on a premise that names code", () => {
     assert.deepEqual(kinds([site(10), decision(10), end(10, [{ kind: "CarrierPlacesRead", at: null }])]), ["C3/label-only-end"]);
   });
 
-  test("the typed proofs of the accounting passes are not named ends", () => {
-    assert.deepEqual(kinds([site(10), decision(10), silent(10, { rule: "SC4001", proof: "ContextProof::OwnedContext" })]), []);
+  test("the typed proofs of the accounting passes are not named ends: they are no label-only end, and they end no code of the universe", () => {
+    assert.deepEqual(kinds([site(10), decision(10), silent(10, { rule: "SC4001", proof: "ContextProof::OwnedContext" })]), ["C2/reporting-decision-no-row"]);
   });
 
   test("a label-only end is never an accepted gap, whatever it says", () => {

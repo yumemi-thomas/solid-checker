@@ -31,8 +31,8 @@ use typefacts::Location;
 
 use crate::pipeline::AnalysisContext;
 use crate::proof_log::{self, Premise, PremiseKind};
-use crate::proof_universe::{self, Endings, Site};
-use crate::{HashSet, Program, StaticViolation};
+use crate::proof_universe::{self, Endings, RemovedBy, Site, SiteCode};
+use crate::{HashMap, HashSet, Program, StaticViolation};
 
 macro_rules! site_silences {
     ($($(#[$meta:meta])* $variant:ident => $id:literal,)*) => {
@@ -186,6 +186,87 @@ site_silences! {
     OnFlushRoleAllows => "static_api.on-flush.role-allows",
 }
 
+impl SiteSilence {
+    /// The codes the silence is a proof for, the producer's own: a silence answers the code of the table its site is in, never another code of a site that
+    /// shares the span (batch 11, slice 4). One arm per variant, no wildcard: a new silence names its codes or the build fails. A silence that removes a
+    /// row (`removed`, `removed_with`) names none here: it answers the codes the removed row's ending answered ([`SiteEnd::answers`]).
+    pub(crate) const fn codes(self) -> &'static [SiteCode] {
+        use SiteCode::{ActionCall, OnFlush, ReactiveWrite, StoreWrite, StrictRead};
+        match self {
+            // The reads: an accessor's call, a store or props member Get.
+            Self::AsyncSitesDormantCallbackArgument
+            | Self::CallDormantCallbackArgument
+            | Self::CallHandedSilent
+            | Self::CallNamedAtTrackedPosition
+            | Self::MemberMergeViewPlain
+            | Self::MemberNamedAtTrackedPosition
+            | Self::MemberPlacedElsewhere
+            | Self::MemberPropsStatic
+            | Self::MemberRefPropCall
+            | Self::MemberStoreThenExempt
+            | Self::MemberViewHidesKey
+            | Self::HelperCallsAccounted
+            | Self::UnreachedReadTrackedPosition
+            | Self::UnreachedReadPlacedElsewhere
+            | Self::CallPlacedElsewhere
+            | Self::CallRoleDoesNotReport
+            | Self::CallSetterGuardThrowsFirst
+            | Self::CallSetterCallbackRoleSilent
+            | Self::NoWindowModuleScope
+            | Self::NoWindowAfterAwait
+            | Self::NoWindowNothingEnters
+            | Self::MemberRoleDoesNotReport => &[StrictRead],
+            // A setter that meets no owned-scope write guard: the owned-scope write only. An optimistic setter of an async source takes the other
+            // branch of `push_setter_write` (SC2009) before it reaches these.
+            Self::SetterOptimisticSignalUnguarded | Self::SetterOptimisticStoreUnguarded => {
+                &[ReactiveWrite]
+            }
+            // A setter or action call outside every function (module initialization has no owner) or in a function nothing reaches: the codes that
+            // need an owner. An optimistic write before the load needs none, so a call at module scope keeps that code.
+            Self::UnreachedWriteCannotRun => &[ReactiveWrite, ActionCall],
+            // The store writes: an assignment, a `delete`, an in-place array method, through a store or props root.
+            Self::DirectCreateMutable
+            | Self::DirectDestructuredPropValue
+            | Self::DirectExemptStanding
+            | Self::DirectLogicalAssignmentSkips
+            | Self::DirectShallowStoreRoot
+            | Self::DirectTscNullishLink
+            | Self::DirectTscRejectsRootWrite
+            | Self::DeleteExemptStanding
+            | Self::DeleteShallowStoreRoot
+            | Self::DeleteTscNullishLink
+            | Self::DeleteTscOperandAssertion
+            | Self::DeleteTscRejectsDelete
+            | Self::MutatorExemptStanding
+            | Self::MutatorNotArrayMethod
+            | Self::MutatorShallowStoreRoot
+            | Self::MutatorTscNullishLink
+            | Self::ContainerPropStatic
+            | Self::HandedRootPlain
+            | Self::FlowCallersPassNoStore
+            | Self::FlowShallowStoreRoot
+            | Self::FlowTscNullishLink => &[StoreWrite],
+            Self::OnFlushRoleAllows => &[OnFlush],
+            // The passes that remove a row: the codes the removed row's ending answered.
+            Self::ApplyNeverRuns
+            | Self::ClosedProgramExportDischarge
+            | Self::ArgumentPrimitiveDischarge
+            | Self::ArgumentMemberPrimitiveDischarge => &[],
+        }
+    }
+
+    /// Whether the silence names the row it removed instead of codes: it is recorded only by [`SiteEnds::removed`] and [`SiteEnds::removed_with`].
+    pub(crate) const fn removes_a_row(self) -> bool {
+        matches!(
+            self,
+            Self::ApplyNeverRuns
+                | Self::ClosedProgramExportDischarge
+                | Self::ArgumentPrimitiveDischarge
+                | Self::ArgumentMemberPrimitiveDischarge
+        )
+    }
+}
+
 /// `SOLID_CHECKER_IR_ABLATE_SILENCE=<id>[,<id>...]` (or `all`): the named
 /// silences are not recorded, so the sites they end have no ending and get an
 /// uncertifiable row. A test and measurement hook (the mutation test, and the
@@ -220,11 +301,22 @@ pub(crate) struct SiteEnd {
     site: Span,
     silence: SiteSilence,
     premises: Vec<Premise>,
+    /// The ending of the row a pass removed, for a silence that names it ([`SiteSilence::removes_a_row`]).
+    removed: Option<RemovedBy>,
 }
 
 impl SiteEnd {
     fn location(&self) -> Location {
         self.site.location(Arc::clone(&self.path))
+    }
+
+    /// Whether the end is a proof for `code` of a site at its span: the codes the silence names, or the codes the removed row's ending would have answered
+    /// (one function for that, [`proof_universe::credits`]).
+    fn answers(&self, policy: Option<&solid_dialect::CodePolicy>, code: SiteCode) -> bool {
+        match &self.removed {
+            Some(by) => proof_universe::credits(policy, code, &by.by()),
+            None => self.silence.codes().contains(&code),
+        }
     }
 }
 
@@ -257,7 +349,13 @@ impl SiteEnds {
         at: impl FnOnce() -> Option<Span>,
     ) {
         if let Some(span) = at() {
-            self.push(path, site, silence, vec![Premise::at(kind, Some(span))]);
+            self.push(
+                path,
+                site,
+                silence,
+                vec![Premise::at(kind, Some(span))],
+                None,
+            );
         }
     }
 
@@ -283,14 +381,21 @@ impl SiteEnds {
         let mut premises = premises();
         premises.retain(|premise| premise.at.is_some());
         if !premises.is_empty() {
-            self.push(path, site, silence, premises);
+            self.push(path, site, silence, premises, None);
         }
     }
 
     /// An end for a row a pass removed from the draft, on the one fact it
-    /// removed it on, about the code of the row itself.
-    pub(crate) fn removed(&mut self, location: &Location, silence: SiteSilence, kind: PremiseKind) {
-        self.removed_with(location, silence, &[kind]);
+    /// removed it on, about the code of the row itself. `by` is what the removed row was (a read, a violation of a rule, an SC9012): the site ends for the
+    /// codes that ending answered and for no other (batch 11, slice 4).
+    pub(crate) fn removed(
+        &mut self,
+        location: &Location,
+        silence: SiteSilence,
+        kind: PremiseKind,
+        by: RemovedBy,
+    ) {
+        self.removed_with(location, silence, &[kind], by);
     }
 
     /// `removed` for a removal that rests on several facts, each about the code of the row itself.
@@ -299,6 +404,7 @@ impl SiteEnds {
         location: &Location,
         silence: SiteSilence,
         kinds: &[PremiseKind],
+        by: RemovedBy,
     ) {
         let (Ok(start), Ok(end)) = (
             u32::try_from(location.start_byte),
@@ -315,18 +421,32 @@ impl SiteEnds {
                 .iter()
                 .map(|kind| Premise::at(*kind, Some(site)))
                 .collect(),
+            Some(by),
         );
     }
 
-    fn push(&mut self, path: Arc<str>, site: Span, silence: SiteSilence, premises: Vec<Premise>) {
+    fn push(
+        &mut self,
+        path: Arc<str>,
+        site: Span,
+        silence: SiteSilence,
+        premises: Vec<Premise>,
+        removed: Option<RemovedBy>,
+    ) {
         if ablated(silence) {
             return;
         }
+        debug_assert_eq!(
+            silence.removes_a_row(),
+            removed.is_some(),
+            "{silence:?}: a silence that removes a row names the row's ending, any other names codes"
+        );
         self.0.push(SiteEnd {
             path,
             site,
             silence,
             premises,
+            removed,
         });
     }
 
@@ -371,19 +491,91 @@ impl SiteEnds {
         self.0.iter().map(|end| end.silence).collect()
     }
 
-    /// The spans a silence names, by file.
-    fn named(&self) -> HashSet<(&str, u32, u32)> {
-        self.0
-            .iter()
-            .map(|end| (end.path.as_ref(), end.site.start, end.site.end))
-            .collect()
+    /// The silences by the span they name, by file.
+    fn named(&self) -> HashMap<(&str, u32, u32), Vec<&SiteEnd>> {
+        let mut named: HashMap<(&str, u32, u32), Vec<&SiteEnd>> = HashMap::default();
+        for end in &self.0 {
+            named
+                .entry((end.path.as_ref(), end.site.start, end.site.end))
+                .or_default()
+                .push(end);
+        }
+        named
     }
 
-    /// Writes each end as a `silent` line (the proof log's named ends).
-    fn log(&self) {
+    /// Writes each end as a `silent` line (the proof log's named ends), with the codes it answers under the dialect's policy.
+    fn log(&self, dialect: &dyn solid_dialect::Dialect) {
         for end in &self.0 {
-            proof_log::silent("end", &end.location(), end.silence.id(), &end.premises);
+            let codes = SiteCode::ALL
+                .iter()
+                .copied()
+                .filter(|code| {
+                    end.answers(dialect.code_policy(code.runtime_code()).as_ref(), *code)
+                })
+                .map(SiteCode::name)
+                .collect::<Vec<_>>();
+            proof_log::silent_codes(
+                "end",
+                &end.location(),
+                end.silence.id(),
+                &end.premises,
+                &codes,
+            );
         }
+    }
+}
+
+/// What a row a pass removes was, as an ending: the codes of the site universe it answered ([`RemovedBy`]). `None` for a row no site of the universe ends on
+/// (a missing owner, a leaf operation): the removal is not recorded, as before. One impl per row type, so a new table the gate retains names its answer.
+pub(crate) trait RemovedRow {
+    fn ended_by(&self) -> Option<RemovedBy>;
+}
+
+impl RemovedRow for crate::ReactiveRead {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        RemovedBy::of(&proof_universe::READ_ROW)
+    }
+}
+
+impl RemovedRow for crate::ReactiveWrite {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        RemovedBy::of(&proof_universe::WRITE_ROW)
+    }
+}
+
+impl RemovedRow for crate::ActionInvocation {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        RemovedBy::of(&proof_universe::ACTION_ROW)
+    }
+}
+
+impl RemovedRow for crate::AsyncRead {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        RemovedBy::of(&proof_universe::ASYNC_READ_ROW)
+    }
+}
+
+impl RemovedRow for crate::StaticDefect {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        Some(RemovedBy::defect(self))
+    }
+}
+
+impl RemovedRow for StaticViolation {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        Some(RemovedBy::violation(self))
+    }
+}
+
+impl RemovedRow for crate::OwnerRequirement {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        None
+    }
+}
+
+impl RemovedRow for crate::LeafOwnerOperation {
+    fn ended_by(&self) -> Option<RemovedBy> {
+        None
     }
 }
 
@@ -444,89 +636,68 @@ pub(crate) fn delegate_row(
     }
 }
 
-/// The uncertifiable row of `site`: the rule's own code, the family's blocker.
-fn unaccounted_row(file: &FileFacts, site: &Site) -> StaticViolation {
-    let (id, rule, blocker, noun) = match site.table {
-        "read" => (
-            "SC1001",
-            "strict-read-untracked",
-            crate::blockers::STRICT_READ_UNACCOUNTED,
-            "read",
-        ),
-        "write" => (
-            "SC2001",
-            "no-write-in-pure-computation",
-            crate::blockers::WRITE_UNACCOUNTED,
-            "write",
-        ),
-        "action" => (
-            "SC2002",
-            "action-called-in-owned-scope",
-            crate::blockers::ACTION_UNACCOUNTED,
-            "action call",
-        ),
-        "store-write" => (
-            "SC2003",
-            "no-store-mutation-outside-setter",
-            crate::blockers::STORE_WRITE_UNACCOUNTED,
-            "store write",
-        ),
-        _ => (
-            "SC3002",
-            "on-flush-in-owned-scope",
-            crate::blockers::ON_FLUSH_UNACCOUNTED,
-            "onFlush call",
-        ),
-    };
+/// The uncertifiable row of `code` at `site`: the code's home rule, its blocker.
+fn unaccounted_row(file: &FileFacts, site: &Site, code: SiteCode) -> StaticViolation {
+    let home = code.home();
     let text = file.source_text(site.at).unwrap_or("this site");
     let text = text.get(..text.len().min(48)).unwrap_or(text);
     StaticViolation {
-        id: id.into(),
-        rule: rule.into(),
+        id: home.id.into(),
+        rule: home.rule.into(),
         message: format!(
-            "this {noun} (`{}`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+            "this {} (`{}`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+            home.noun,
             text.trim()
         ),
         hint: "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does.".into(),
         location: site.at.location(file.path.shared()),
-        analysis_context: blocker.into(),
+        analysis_context: home.blocker.into(),
         fixes: vec![],
         uncertain: true,
     }
 }
 
-/// Ends every site of the universe in the final `program`, or gives it an
-/// uncertifiable row. Run once per build, after every producer and pass that
-/// adds or removes a row and before the reachability queries over the rows.
+/// Ends every code of every site of the universe in the final `program`, or gives it the uncertifiable row of the code's own rule. Run once per build,
+/// after every producer and pass that adds or removes a row and before the reachability queries over the rows. A site ends for a code only by an
+/// ending that answers that code (a row of its table, an SC9012, a finding of a rule the dialect's policy says claims it, the compiler's discard) or by a
+/// silence that names it; what stands at the span for another code ends nothing here (batch 11, slice 4).
 pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program, ends: &SiteEnds) {
     let universe = proof_universe::sites(ctx);
     let named = ends.named();
+    let dialect = ctx.dialect;
     let logging = proof_log::enabled();
     let mut rows = Vec::new();
     {
         let endings = Endings::of(program);
-        let mut filed: HashSet<(&str, u32, u32, &str)> = HashSet::default();
+        let mut filed: HashSet<(&str, u32, u32, SiteCode)> = HashSet::default();
         for (file, site) in &universe {
-            if let Some((class, detail)) = endings.end(file, site) {
+            for &code in site.codes {
+                let end = endings.end(dialect, file, site, code);
                 if logging {
-                    proof_universe::log_site(file, site, class.name(), &detail.text());
+                    proof_universe::log_site(file, site, code, &end);
                 }
-                continue;
-            }
-            if logging {
-                proof_universe::log_site(file, site, "none", "");
-            }
-            let path = file.path.as_str();
-            let silenced = std::iter::once(site.at)
-                .chain(site.alternates.iter().copied())
-                .any(|span| named.contains(&(path, span.start, span.end)));
-            if !silenced && filed.insert((path, site.at.start, site.at.end, site.table)) {
-                rows.push(unaccounted_row(file, site));
+                if end.credited.is_some() {
+                    continue;
+                }
+                let path = file.path.as_str();
+                let policy = dialect.code_policy(code.runtime_code());
+                let silenced = std::iter::once(site.at)
+                    .chain(site.alternates.iter().copied())
+                    .any(|span| {
+                        named
+                            .get(&(path, span.start, span.end))
+                            .is_some_and(|here| {
+                                here.iter().any(|end| end.answers(policy.as_ref(), code))
+                            })
+                    });
+                if !silenced && filed.insert((path, site.at.start, site.at.end, code)) {
+                    rows.push(unaccounted_row(file, site, code));
+                }
             }
         }
     }
     if logging {
-        ends.log();
+        ends.log(dialect);
         // Batch 11, slice 0 (measurement only): the candidate sites of the rules with no universe, written beside the endings above; it returns nothing.
         if crate::proof_candidates::enabled() {
             crate::proof_candidates::log(ctx, &universe);
@@ -648,9 +819,9 @@ mod tests {
             || Some(Span::new(2, 9)),
         );
         let named = ends.named();
-        assert!(named.contains(&("/p/App.tsx", 2, 9)));
-        assert!(!named.contains(&("/p/App.tsx", 2, 8)));
-        assert!(!named.contains(&("/p/Other.tsx", 2, 9)));
+        assert!(named.contains_key(&("/p/App.tsx", 2, 9)));
+        assert!(!named.contains_key(&("/p/App.tsx", 2, 8)));
+        assert!(!named.contains_key(&("/p/Other.tsx", 2, 9)));
     }
 
     fn leaf(
@@ -794,8 +965,152 @@ mod tests {
             &location,
             SiteSilence::ApplyNeverRuns,
             PremiseKind::ApplyNeverRuns,
+            RemovedBy::Census,
         );
         assert_eq!(ends.silences(), vec![SiteSilence::ApplyNeverRuns]);
-        assert!(ends.named().contains(&("/p/App.tsx", 4, 11)));
+        assert!(ends.named().contains_key(&("/p/App.tsx", 4, 11)));
+    }
+
+    /// Every silence names the codes it is a proof for, except the ones that remove a row, which answer what the removed row answered. One arm per
+    /// variant in `codes()`: a silence added without its codes is a compile error.
+    #[test]
+    fn every_silence_names_its_codes() {
+        for silence in SiteSilence::ALL {
+            assert_eq!(
+                silence.codes().is_empty(),
+                silence.removes_a_row(),
+                "{silence:?}: a silence names codes, or the row it removed, never both and never neither"
+            );
+        }
+    }
+
+    fn end_of(silence: SiteSilence, removed: Option<RemovedBy>) -> SiteEnd {
+        SiteEnd {
+            path: "/p/App.tsx".into(),
+            site: Span::new(0, 5),
+            silence,
+            premises: Vec::new(),
+            removed,
+        }
+    }
+
+    #[test]
+    fn a_silence_answers_the_codes_of_its_own_table_and_no_other() {
+        use solid_dialect::Dialect;
+        let policy = |code: SiteCode| solid_dialect::Solid2.code_policy(code.runtime_code());
+        // A read silence ends a read, never the write or the optimistic write at the same span.
+        let read = end_of(SiteSilence::MemberPropsStatic, None);
+        assert!(read.answers(policy(SiteCode::StrictRead).as_ref(), SiteCode::StrictRead));
+        assert!(!read.answers(
+            policy(SiteCode::ReactiveWrite).as_ref(),
+            SiteCode::ReactiveWrite
+        ));
+        // A call outside every function has no owner: the owned-scope codes end, the optimistic write before the load does not.
+        let module = end_of(SiteSilence::UnreachedWriteCannotRun, None);
+        for code in [SiteCode::ReactiveWrite, SiteCode::ActionCall] {
+            assert!(module.answers(policy(code).as_ref(), code), "{code:?}");
+        }
+        assert!(!module.answers(
+            policy(SiteCode::OptimisticWrite).as_ref(),
+            SiteCode::OptimisticWrite
+        ));
+        // The unguarded optimistic setter ends the owned-scope write only.
+        let unguarded = end_of(SiteSilence::SetterOptimisticSignalUnguarded, None);
+        assert!(unguarded.answers(
+            policy(SiteCode::ReactiveWrite).as_ref(),
+            SiteCode::ReactiveWrite
+        ));
+        assert!(!unguarded.answers(
+            policy(SiteCode::OptimisticWrite).as_ref(),
+            SiteCode::OptimisticWrite
+        ));
+    }
+
+    #[test]
+    fn a_removed_row_ends_the_codes_it_answered() {
+        use solid_dialect::Dialect;
+        let policy = |code: SiteCode| solid_dialect::Solid2.code_policy(code.runtime_code());
+        let removed = |by| end_of(SiteSilence::ApplyNeverRuns, Some(by));
+        // A read removed from an apply that never runs ends the read; an SC9012 every code that names a line; a style finding or an async read's row none.
+        let read = removed(RemovedBy::of(&proof_universe::READ_ROW).unwrap());
+        assert!(read.answers(policy(SiteCode::StrictRead).as_ref(), SiteCode::StrictRead));
+        assert!(!read.answers(
+            policy(SiteCode::ReactiveWrite).as_ref(),
+            SiteCode::ReactiveWrite
+        ));
+        let census = removed(RemovedBy::Census);
+        for code in SiteCode::ALL {
+            assert!(census.answers(policy(code).as_ref(), code), "{code:?}");
+        }
+        let style = removed(RemovedBy::Rule {
+            name: "prefer-show".into(),
+            uncertain: false,
+        });
+        let pending = removed(RemovedBy::of(&proof_universe::ASYNC_READ_ROW).unwrap());
+        for code in SiteCode::ALL {
+            assert!(!style.answers(policy(code).as_ref(), code), "{code:?}");
+            assert!(!pending.answers(policy(code).as_ref(), code), "{code:?}");
+        }
+    }
+
+    #[test]
+    fn a_site_gets_the_uncertifiable_row_of_its_own_code() {
+        let source = "export const a = 1;\n";
+        let ast = solid_facts::ast::extract("/p/App.tsx", source).unwrap();
+        let file = FileFacts {
+            generation: solid_facts::core::Generation::new(1).unwrap(),
+            path: solid_facts::core::SourcePath::new("/p/App.tsx").unwrap(),
+            source_hash: ast.source.hash.clone(),
+            source: source.into(),
+            compiler: Arc::new(solid_facts::compiler::ExecutionMap {
+                compiler_facts_protocol: solid_facts::compiler::COMPILER_FACTS_PROTOCOL,
+                source_hash: ast.source.hash.clone(),
+                semantic_model: Default::default(),
+                tracked_regions: vec![],
+                untracked_regions: vec![],
+                discarded_regions: vec![],
+                ownership_regions: vec![],
+                callback_roles: vec![],
+                jsx_operations: vec![],
+            }),
+            ast: Arc::new(ast),
+        };
+        let site = Site {
+            table: "write",
+            source: "setter",
+            via: "call",
+            at: Span::new(13, 14),
+            alternates: Vec::new(),
+            codes: &[SiteCode::ReactiveWrite, SiteCode::OptimisticWrite],
+        };
+        let write = unaccounted_row(&file, &site, SiteCode::ReactiveWrite);
+        assert_eq!(
+            (
+                write.id.as_str(),
+                write.rule.as_str(),
+                write.analysis_context.as_str()
+            ),
+            (
+                "SC2001",
+                "no-write-in-pure-computation",
+                crate::blockers::WRITE_UNACCOUNTED
+            )
+        );
+        let optimistic = unaccounted_row(&file, &site, SiteCode::OptimisticWrite);
+        assert_eq!(
+            (
+                optimistic.id.as_str(),
+                optimistic.rule.as_str(),
+                optimistic.analysis_context.as_str()
+            ),
+            (
+                "SC2009",
+                "optimistic-write-before-load",
+                crate::blockers::OPTIMISTIC_WRITE_UNACCOUNTED
+            )
+        );
+        // Never a violation: an obligation, at the site, that yields to any row that stands.
+        assert!(write.uncertain && optimistic.uncertain);
+        assert_eq!(write.location, optimistic.location);
     }
 }

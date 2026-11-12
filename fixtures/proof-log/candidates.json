@@ -1,6 +1,76 @@
 {
   "version": 1,
   "candidates": {
+    "reactive-ir/caught-handed-read|fixtures/reactive-ir/caught-handed-read/App.tsx|1265-1274|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/caught-handed-read/App.tsx:51:11"
+    },
+    "reactive-ir/caught-handed-read|fixtures/reactive-ir/caught-handed-read/App.tsx|548-557|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/caught-handed-read/App.tsx:15:13"
+    },
+    "reactive-ir/caught-handed-read|fixtures/reactive-ir/caught-handed-read/App.tsx|873-882|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/caught-handed-read/App.tsx:33:13"
+    },
+    "reactive-ir/ending-by-code-other-rule|fixtures/reactive-ir/ending-by-code-other-rule/App.tsx|1353-1364|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx:29:3"
+    },
+    "reactive-ir/ending-by-code-other-rule|fixtures/reactive-ir/ending-by-code-other-rule/App.tsx|822-831|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/ending-by-code-other-rule/App.tsx:15:13"
+    },
+    "reactive-ir/handed-carrier-tracked|fixtures/reactive-ir/handed-carrier-tracked/g2a.tsx|199-203|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-carrier-tracked/g2a.tsx:6:22"
+    },
+    "reactive-ir/handed-carrier-tracked|fixtures/reactive-ir/handed-carrier-tracked/g2d-apply.tsx|121-124|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-carrier-tracked/g2d-apply.tsx:4:20"
+    },
+    "reactive-ir/handed-carrier-tracked|fixtures/reactive-ir/handed-carrier-tracked/g2d-map.tsx|121-124|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-carrier-tracked/g2d-map.tsx:4:20"
+    },
+    "reactive-ir/handed-carrier-tracked|fixtures/reactive-ir/handed-carrier-tracked/g2d-module.tsx|93-96|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-carrier-tracked/g2d-module.tsx:3:18"
+    },
+    "reactive-ir/handed-carrier-tracked|fixtures/reactive-ir/handed-carrier-tracked/g2f-sort.tsx|199-203|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-carrier-tracked/g2f-sort.tsx:6:22"
+    },
+    "reactive-ir/handed-net-guards|fixtures/reactive-ir/handed-net-guards/g2a.tsx|199-203|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-net-guards/g2a.tsx:6:22"
+    },
+    "reactive-ir/handed-net-guards|fixtures/reactive-ir/handed-net-guards/g2d-under-loading.tsx|130-133|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-net-guards/g2d-under-loading.tsx:4:20"
+    },
+    "reactive-ir/handed-net|fixtures/reactive-ir/handed-net/c6-tagged.tsx|247-251|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-net/c6-tagged.tsx:10:13"
+    },
+    "reactive-ir/handed-net|fixtures/reactive-ir/handed-net/p1-timer.tsx|217-220|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
+      "at": "fixtures/reactive-ir/handed-net/p1-timer.tsx:4:22"
+    },
     "reactive-ir/impostor-prototype-own|fixtures/reactive-ir/impostor-prototype-own/App.tsx|416-422|C3/untagged": {
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent write row whose role no tagged arm answered (untagged)",
@@ -25,6 +95,26 @@
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent read row whose role no tagged arm answered (no-decision)",
       "at": "fixtures/reactive-ir/jsx-creation-sites/App.tsx:111:41"
+    },
+    "reactive-ir/local-alias-literal-slots|fixtures/reactive-ir/local-alias-literal-slots/App.tsx|1131-1139|C1/no-decision": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a setter call whose primitive no fact resolves: the fail-closed OPTIMISTIC_WRITE_BEFORE_LOAD code carries SC2009 `optimistic-write-unaccounted` beside SC2001's violation; slice 8 names SC2009's silences",
+      "at": "fixtures/reactive-ir/local-alias-literal-slots/App.tsx:38:5"
+    },
+    "reactive-ir/optimistic-write-site-code|fixtures/reactive-ir/optimistic-write-site-code/App.tsx|1004-1012|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx:18:3"
+    },
+    "reactive-ir/optimistic-write-site-code|fixtures/reactive-ir/optimistic-write-site-code/App.tsx|1871-1879|C1/no-decision": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "a setter call whose primitive no fact resolves: the fail-closed OPTIMISTIC_WRITE_BEFORE_LOAD code carries SC2009 `optimistic-write-unaccounted` beside SC2001's violation; slice 8 names SC2009's silences",
+      "at": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx:37:5"
+    },
+    "reactive-ir/optimistic-write-site-code|fixtures/reactive-ir/optimistic-write-site-code/App.tsx|762-773|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx:10:3"
     },
     "reactive-ir/own-setter-wrapper-identity|fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx|1267-1329|C3/no-decision": {
       "owner": "proof-log phase B (tag the producing return)",
@@ -55,6 +145,26 @@
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent write row whose role no tagged arm answered (untagged)",
       "at": "fixtures/reactive-ir/prop-callback-roles/App.tsx:32:23"
+    },
+    "reactive-ir/rc21-optimistic-before-load|fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx|1026-1037|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx:32:5"
+    },
+    "reactive-ir/rc21-optimistic-before-load|fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx|340-351|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx:7:3"
+    },
+    "reactive-ir/rc21-optimistic-before-load|fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx|355-398|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx:8:3"
+    },
+    "reactive-ir/rc21-optimistic-before-load|fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx|977-988|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx:29:23"
     },
     "reactive-ir/render-time-reads|fixtures/reactive-ir/render-time-reads/App.tsx|780-787|C2/reporting-decision-no-row": {
       "owner": "Phase D follow-up (a value-flow proof; ADR 0936)",

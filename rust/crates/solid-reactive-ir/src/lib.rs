@@ -1229,6 +1229,45 @@ pub enum StaticDefectFamily {
 }
 
 impl StaticDefectFamily {
+    /// Every family, for the tests that hold a mapping over the families exhaustive.
+    pub const ALL: [Self; 12] = [
+        Self::ReactiveObjectDestructure,
+        Self::ReactiveReadAfterAwait,
+        Self::ComponentReturnsConditionally,
+        Self::PackageBehaviorUnavailable,
+        Self::MissingEffectFunction,
+        Self::ReactiveSourceUncaptured,
+        Self::ReactiveDispatchUnresolved,
+        Self::ExpectedFunctionGotExpression,
+        Self::HandlerOwnerUnresolved,
+        Self::UncalledAccessor,
+        Self::DirectMutation,
+        Self::ServerFunctionRichArgument,
+    ];
+
+    /// The name of the catalog rule a finding of this family is reported under (the dialect's `Rule::metadata().name`), which is what a runtime
+    /// code's policy names (`solid_dialect::CodePolicy`): the same answer the dialect's rule catalog gives, held to it by a test in the rules
+    /// crate, so a site's ending can be asked which code it answers. It differs from [`Self::dedup_identity`] for two families: a source handed
+    /// to a package callee is SC9012's own, and a handler the checker cannot place is `missing-owner`'s uncertain side.
+    #[must_use]
+    pub const fn rule_name(self) -> &'static str {
+        match self {
+            Self::ReactiveObjectDestructure => "no-destructure",
+            Self::ReactiveReadAfterAwait => "reactive-read-after-await",
+            Self::ComponentReturnsConditionally => "components-return-once",
+            Self::PackageBehaviorUnavailable => "package-behavior-unavailable",
+            Self::MissingEffectFunction => "missing-effect-function",
+            Self::ReactiveSourceUncaptured | Self::ReactiveDispatchUnresolved => {
+                "reactive-dispatch-unresolved"
+            }
+            Self::ExpectedFunctionGotExpression => "reactive-handler-frozen",
+            Self::HandlerOwnerUnresolved => "missing-owner",
+            Self::UncalledAccessor => "uncalled-accessor",
+            Self::DirectMutation => "no-store-mutation-outside-setter",
+            Self::ServerFunctionRichArgument => "server-function-rich-argument",
+        }
+    }
+
     /// The stable dedup identity for this family, used as the key of the
     /// draft's one-diagnostic-per-(identity, path, offset) set.
     #[must_use]

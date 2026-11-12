@@ -330,6 +330,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/c6-tagged.tsx",
+      "start": 247,
+      "end": 251,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -525,6 +536,17 @@
       "path": "fixtures/reactive-ir/handed-net/n9.tsx",
       "start": 157,
       "end": 167,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "strict-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-net/p1-timer.tsx",
+      "start": 217,
+      "end": 220,
       "fixes": 0
     },
     {

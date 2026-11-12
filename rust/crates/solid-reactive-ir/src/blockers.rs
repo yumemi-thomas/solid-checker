@@ -139,6 +139,9 @@ pub(crate) const FLUSH_IN_ACTION_UNACCOUNTED: &str = "flush-in-action-unaccounte
 pub(crate) const FLUSH_IN_EFFECT_UNACCOUNTED: &str = "flush-in-effect-unaccounted";
 /// The same for SC3001: whether the flush runs in a leaf owner's callback is not decided (shared with slice 6's leaf universe).
 pub(crate) const LEAF_FLUSH_UNACCOUNTED: &str = "leaf-operation-unaccounted";
+/// Batch 11, slice 4: a setter call whose source may be an optimistic one that has not answered (or whose primitive is not resolved) with no SC2009
+/// row, SC9012, discard or named silence: the code's own uncertifiable row.
+pub(crate) const OPTIMISTIC_WRITE_UNACCOUNTED: &str = "optimistic-write-unaccounted";
 /// ADR 0838: a pending rule's claim at a read no producer accounted for: no
 /// row of that rule, no SC9012 at the read, no recorded reason.
 pub(crate) const ASYNC_READ_UNACCOUNTED: &str = "async-read-unaccounted";
