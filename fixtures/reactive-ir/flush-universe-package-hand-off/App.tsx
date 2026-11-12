@@ -1,5 +1,6 @@
-import { flush, untrack } from "solid-js";
-import { Pkg, runAll, runStep, runWith } from "steplib";
+import { flush } from "solid-js";
+import * as steps from "steplib";
+import { Pkg, runAll, runStep, runStep as go, runWith } from "steplib";
 import { holder, shared } from "./Shared";
 
 // Batch 11, the B3 PR after #213 (ADR 0967): a flush in a function an installed package the build does not read as source may run gets no census reason. The program
@@ -196,18 +197,47 @@ export function Caller() {
   return <p>x</p>;
 }
 
+// ---- the package named another way: through a namespace import and through an alias (the callee is resolved by its declaration, never by its spelling)
+export function Namespace() {
+  setTimeout(() => {
+    void steps.runStep(() => {
+      flush();
+    });
+  });
+  return <p>x</p>;
+}
+
+export function Aliased() {
+  setTimeout(() => {
+    void go(() => {
+      flush();
+    });
+  });
+  return <p>x</p>;
+}
+
+// ---- a local function that shadows the package's name is a project function (analyzed, silent): the spelling `runStep` names the declaration that is in scope
+export function Shadowed() {
+  const runStep = (cb: () => void) => {
+    cb();
+  };
+  setTimeout(() => {
+    runStep(() => {
+      flush();
+    });
+  });
+  return <p>x</p>;
+}
+
 // ---- silent: nothing a package does can run these on the census's reasons
-// The standard library and the dialect run a callback as the program's own code (a scheduler, an inline carrier, a promise, a primitive), a DOM element's handler is the
-// browser's, and a project function that only calls its parameter is analyzed.
+// The standard library runs a callback as the program's own code (a scheduler, an inline carrier, a promise), a DOM element's handler is the browser's, and a project function
+// that only calls its parameter is analyzed.
 export function Known() {
   setTimeout(() => {
     [1].forEach(() => {
       flush();
     });
     void Promise.resolve().then(() => {
-      flush();
-    });
-    untrack(() => {
       flush();
     });
     call(() => {

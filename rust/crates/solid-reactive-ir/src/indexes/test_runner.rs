@@ -51,6 +51,23 @@ impl SemanticLookup<'_> {
         }
     }
 
+    /// Whether `call` registers a test, a suite body or a hook with a reviewed test runner, whenever the runner runs a suite body: the identity of the callee
+    /// ([`Self::test_runner_callback`] without the suite-body timing it also answers). The runner runs what it is handed on its own stack and never as a step of
+    /// an action, an effect's apply or a leaf callback, whether it runs a suite body inline, later or (unproven) either; a caller that asks who runs the callback
+    /// (ADR 0967) needs the first, one that places the callback in time needs the second.
+    pub(crate) fn reviewed_test_runner_registration(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        if call.construct || Self::is_curried_preliminary_call(file, call.callee) {
+            return false;
+        }
+        Self::registration_root(file, call.callee)
+            .and_then(|(root, _)| self.registration_root_runner(file, root))
+            .is_some()
+    }
+
     /// Whether `callee` ends in a member that takes data and returns the
     /// registration function (`describe.each`, `it.skipIf`): a call of it is
     /// the preliminary call of a curried registration, never the registration.

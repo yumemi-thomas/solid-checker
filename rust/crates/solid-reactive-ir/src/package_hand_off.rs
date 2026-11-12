@@ -16,8 +16,9 @@
 //! - a project function's parameter that goes on to any of these (`function wrap(f) { pkg.run(f) }`);
 //! - a caller: a function whose exact call edge reaches the function (a helper the handed callback calls), asked the same way.
 //!
-//! What receives the value decides ([`Receiver`]): a dialect primitive, a reviewed test runner's registration, the standard library, a package the build reads as source, a
-//! DOM element and a project function whose parameter is followed know their behavior; a declaration in a package the build does not read, a callee nothing resolves and a
+//! What receives the value decides ([`Receiver`]): a dialect primitive, a reviewed test runner's registration (by the callee's identity, whatever the project proves of when
+//! the runner runs a suite body: `reviewed_test_runner_registration`), the standard library, a package the build reads as source, a DOM element and a project function
+//! whose parameter is followed know their behavior; a declaration in a package the build does not read, a callee nothing resolves and a
 //! project slot no function body defines (a function-typed parameter or field: it may hold a package's function) do not.
 //!
 //! Not followed, named in `docs/open-work.md`: a value a project function returns (`pkg.run(makeCallback())`), a method of a class whose instance is handed, an assignment into
@@ -91,7 +92,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     }
 
     /// The function as a value (written where it is, or named by its binding's references), and the functions that call it.
-    fn function_in(&self, file: &'a FileFacts, function: &'a FunctionFact, walk: &mut Walk) -> bool {
+    fn function_in(
+        &self,
+        file: &'a FileFacts,
+        function: &'a FunctionFact,
+        walk: &mut Walk,
+    ) -> bool {
         let key = (file.path.shared(), function.span);
         if !walk.functions.insert(key.clone()) {
             return false;
@@ -143,7 +149,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         }
         // The value is called, not handed: `f()`, `(() => …)()`, a tag.
         if ast.calls_with_peeled_callee(at).next().is_some()
-            || ast.tagged_templates.iter().any(|template| template.tag == at)
+            || ast
+                .tagged_templates
+                .iter()
+                .any(|template| template.tag == at)
         {
             return false;
         }
@@ -180,9 +189,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             }
         }
         for binding in &ast.bindings {
-            let held = binding
-                .initializer
-                .is_some_and(|initializer| initializer.contains(at) && !crosses(ast, initializer, at));
+            let held = binding.initializer.is_some_and(|initializer| {
+                initializer.contains(at) && !crosses(ast, initializer, at)
+            });
             if held
                 && binding
                     .names
@@ -237,7 +246,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
 
     /// The references to the binding named at `name` in other files (a reference to an import's local name is the import itself: `true`, its uses are the local
     /// binding's), as `foreign_reference_hand_offs` reads them for a function.
-    fn foreign_references(&self, file: &'a FileFacts, name: Span) -> Vec<(&'a FileFacts, Span, bool)> {
+    fn foreign_references(
+        &self,
+        file: &'a FileFacts,
+        name: Span,
+    ) -> Vec<(&'a FileFacts, Span, bool)> {
         let lookup = self.lookup;
         let Some(symbol) = lookup.entities().exact(&name.location(file.path.shared())) else {
             return Vec::new();
@@ -300,7 +313,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     fn call_receiver(&self, file: &'a FileFacts, call: &CallFact, index: usize) -> Receiver<'a> {
         let lookup = self.lookup;
         if lookup.primitive_at_call(file, call.span).is_some()
-            || lookup.test_runner_callback(file, call).is_some()
+            || lookup.reviewed_test_runner_registration(file, call)
         {
             return Receiver::Known;
         }
@@ -350,16 +363,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let ast = &file.ast;
         let holds = |outer: Span| outer.contains(at) && !crosses(ast, outer, at);
         let attribute_holds = |attribute: &JsxAttributeFact| {
-            attribute
-                .value
-                .or(attribute.expression)
-                .is_some_and(|value| holds(value))
+            attribute.value.or(attribute.expression).is_some_and(holds)
         };
-        let directive = |attribute: &&JsxAttributeFact| {
-            attribute
-                .namespace
-                .is_some_and(|namespace| file.source_text(namespace) == Some("use"))
-        };
+        // A `use:name` directive is the one namespaced attribute whose local name the binder resolves to a declaration (`directive_binding`).
+        let directive = |attribute: &&JsxAttributeFact| attribute.directive_binding.is_some();
         // A `use:` directive is a call of the function the name resolves to, with the attribute's value as its accessor.
         if element
             .attributes
@@ -376,14 +383,19 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .any(attribute_holds)
             || element.spreads.iter().any(|spread| holds(spread.argument))
             || element.children.iter().any(|child| holds(*child));
-        component_gets_it && matches!(self.element_receiver(file, index, element), Receiver::Unread)
+        component_gets_it
+            && matches!(
+                self.element_receiver(file, index, element),
+                Receiver::Unread
+            )
     }
 
-    /// A `use:name` directive whose function is no project function.
+    /// A `use:name` directive whose function is no project function: the declaration the binder resolved its name to (`directive_binding`) is no project function's
+    /// binding (a package's import, or nothing the program declares).
     fn directive_unread(&self, file: &'a FileFacts, attribute: &JsxAttributeFact) -> bool {
-        self.lookup
-            .entities()
-            .value_symbol(file, attribute.local_name)
+        attribute
+            .directive_binding
+            .and_then(|declaration| self.lookup.entities().at(file.path.as_str(), declaration))
             .and_then(|symbol| self.lookup.function_for_symbol(symbol.as_str()))
             .is_none()
     }
@@ -391,7 +403,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     /// What a JSX element's props, children and spreads are handed to: an intrinsic element is the DOM's (its handlers run on the browser's own stack); a dialect export is
     /// known; a project function's parameter is the props object (not followed, named in the open work); a component declared in a package the build reads as source is
     /// known; any other is not.
-    fn element_receiver(&self, file: &'a FileFacts, index: usize, element: &JsxElementFact) -> Receiver<'a> {
+    fn element_receiver(
+        &self,
+        file: &'a FileFacts,
+        index: usize,
+        element: &JsxElementFact,
+    ) -> Receiver<'a> {
         let lookup = self.lookup;
         let name = file.source_text(element.name.span).unwrap_or_default();
         // The language's own rule of a tag: a plain name that starts with a lowercase letter is an intrinsic element, anything else is a value.
