@@ -48,6 +48,7 @@ import { PL_CONTEXT_NAMES } from "./primitive-layer-shapes.mjs";
 import { ENTRY_CONTEXT_NAMES } from "./entry-shapes.mjs";
 import { OB_CONTEXT_NAMES, obShape } from "./ob-shapes.mjs";
 import { SF_CONTEXT_NAMES, sfShape } from "./sf-shapes.mjs";
+import { NM_CONTEXT_NAMES, nmShape } from "./nm-shapes.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
@@ -392,7 +393,7 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
 // await); `no-owner-context-aw-shared-*` keeps the shape.
 // ADR 0940: the `pl-*` contexts are the ten codes' cells, each measured (primitive-layer-shapes.mjs `PL_MEASURED`); a pair left out of them reports another code first,
 // never runs its site, or has a throw hidden by a later one, which the generic judge cannot score, so the census leaves them out for every code.
-const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
@@ -474,6 +475,8 @@ function recallAxesOf(code, context, base, variants, options = {}) {
   if (OB_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => obShape(context, shape));
   // ADR 0964: an `sf-*` cell takes one base shape (sf-shapes.mjs `sfShape`): its question is how the stored function is invoked, not the spelling of the site.
   if (SF_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => sfShape(context, shape));
+  // An `nm-*` cell takes one base shape (nm-shapes.mjs `nmShape`): its question is the named callback, not the spelling of the site.
+  if (NM_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => nmShape(context, shape));
   if (context.startsWith("aw-then-computed")) return shapes.filter((shape) => (shape.binding === "direct" && /^(none|closure.*|helper.*)$/.test(shape.layer ?? "none")) || (shape.binding === "alias" && shape.layer === "none"));
   return shapes;
 }

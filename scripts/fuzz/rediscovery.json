@@ -19351,5 +19351,19 @@
    "mx-untracked-read-after-await-sf-promise-memo-async-x-direct-none"
   ],
   "rediscovered": "the batch-10 head 647b0ccce (release, checker sha256 2fb2a34fa91c\u2026, producer 76fe73f958ae\u2026; fast host): the cells' 14 programs: false-clean 10 (foreach, const, mapget, bus and promise on both hosts), recall-gap 2 (index), agree 2 (param). The fix (release, checker sha256 d5dba3acbd27\u2026; Chrome host and the real oracle, `--runtime-diff all`, no cache): recall-gap 12, agree 2, 0 false clean, and the 28 twins (`-never`, `-before`) 0 false positive; Chrome and the fast host agree on all 42 programs: 0 behaviour, 0 attribution and 0 inconclusive differences."
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site (`flush()`) in an async callback of a leaf owner's `isPending`, named at module scope (`const cb = async () => { flush(); }; createTrackedEffect(() => { n(); isPending(cb); })`) or reached through a function the callback calls (`isPending(() => cb())`): the throw is the async function's rejection, which `isPending` does not catch; Chrome (rc.21) throws FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush, and the checker was silent (the program was certified clean for SC3001; in an `onSettled` host SC2008's uncertifiable row at the flush covers nothing of the claim). The literal `isPending(async () => flush())` is ADR 0959's obligation.",
+  "found": "slice 5's lead (the batch 11 research briefs, probe `b5-ispending-named-async-tracked`, 2026-11-12), Chrome-confirmed on main 3b22442d4 by mac-b10-4; as the named-callback forms of `nm-shapes.mjs` (`nm-<form>-<host>`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0959 amended (batch 11, slice 5's lead): a slot that takes what its callback throws takes only the throw of a callback proven synchronous end to end (`LeafScopeResolution::entered_async`): an async callback, or an async function a callback calls, keeps the flush as SC3001's uncertifiable row (`leaf-owner-unproven`) at the slot call, never a violation; on the fix these programs are recall-gap, 0 false clean",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-nm-async-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-nm-async-settled-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-nm-wrap-async-tracked-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-nm-wrap-async-settled-x-direct-none"
+  ],
+  "rediscovered": "main 3b22442d4 (release, checker sha256 96e691ce188b…, producer 76fe73f958ae…; Chrome host and the real oracle, `--runtime-diff all`): the cells' 4 misuse programs (an async callback and an async function a sync arrow calls, on `createTrackedEffect` and `onSettled`): false-clean 4; `make fuzz-focus` exits 1. The 8 twins (the flush after an `await`, a sync callback, a sync function a sync arrow calls, a generator, on both hosts): 0 false positive (clean 6, uncertifiable 2: SC2008's `flush-in-effect-callback` row in `onSettled`, as on main). The fix (release, checker sha256 95eef08ff59d…, same host): recall-gap 4, 0 false clean, the twins unchanged; 0 behaviour, 0 attribution and 0 inconclusive differences."
  }
 ]

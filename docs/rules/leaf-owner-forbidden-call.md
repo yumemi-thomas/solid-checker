@@ -59,7 +59,11 @@ Tracking is off in `untrack` and `runWithOwner`, so `resolve` and `until` there
 create a root under the leaf (this rule's, not the observer guard's). A call
 that takes what its callback throws (`isPending`) leaves a plain throw
 (`flush()`, the observer guard) unreported, while a cleanup or a creation the
-leaf refuses emits its diagnostic first and is reported. `runWithOwner(null |
+leaf refuses emits its diagnostic first and is reported. The throw it takes is
+the one a callback proven synchronous makes: an `async` callback, named or the
+function a callback calls, throws a rejection the call does not catch, so its
+`flush()` is an uncertifiable row at the call (`leaf-owner-unproven`), never a
+violation. `runWithOwner(null |
 undefined, …)` and an owner captured in a component body have no leaf owner
 (silent); the `getOwner()` of the leaf's own function is the leaf's (reported);
 any other owner value, a primitive attributed without the binder's

@@ -14,7 +14,7 @@
 //! `fixtures/tsc-oracle/README.md`.
 
 use crate::HashMap;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use solid_dialect::{CleanupRule, Primitive, SlotObserver, SlotOwner, SlotRun, SlotThrows};
 use solid_facts::FileFacts;
@@ -218,6 +218,7 @@ fn slot_callback_operations(
         // suppress the same body entered directly later in the walk (`isPending(g); g();`, ADR 0961); the entries
         // above it still end a cycle.
         let mut entered = visited.clone();
+        let outer_async = resolution.entered_async.replace(false);
         complete &= argument_body_operations(
             resolution,
             file,
@@ -227,6 +228,8 @@ fn slot_callback_operations(
             depth,
             guaranteed,
         );
+        let through_async = resolution.entered_async.get();
+        resolution.entered_async.set(outer_async || through_async);
         for (kind, guaranteed, identity_unproven, sites) in inner {
             let Some((kind, owner_unproven)) = through_slots_kind(kind, &crossed) else {
                 continue;
@@ -235,6 +238,19 @@ fn slot_callback_operations(
             // nothing for. What `resolve` and `until` do under an observer is left to the stored-throw pass,
             // which knows the host: an obligation in a tracked effect, a refused creation in `onSettled`.
             if crossed.swallows && matches!(kind, crate::LeafOwnerOperationKind::Flush) {
+                if !through_async {
+                    continue;
+                }
+                // The callback or a function it calls is `async`: the throw is a rejection the slot does not take, which Chrome
+                // reports (rc.21, the named `async () => { flush(); }` of `isPending`). As ADR 0959 reads the literal form,
+                // an obligation of the rule that asked, never a violation.
+                record(
+                    kinds,
+                    crate::LeafOwnerOperationKind::UnmodelledSlot,
+                    false,
+                    identity_unproven || crossed.identity_unproven,
+                    sites,
+                );
                 continue;
             }
             record(
@@ -263,6 +279,7 @@ fn push_reached(
     kinds: Reached,
     complete: bool,
     crossed: Option<&Crossed>,
+    through_async: bool,
     step_unproven: bool,
     lookup: &SemanticLookup<'_>,
 ) {
@@ -313,9 +330,15 @@ fn push_reached(
                 operations,
                 operation(kind.clone(), stepper, Vec::new()),
                 crossed,
+                through_async,
             );
         }
-        push_crossed(operations, operation(kind, at, sites), crossed);
+        push_crossed(
+            operations,
+            operation(kind, at, sites),
+            crossed,
+            through_async,
+        );
     }
     if !complete {
         operations.push(LeafOwnerOperation {
@@ -367,11 +390,19 @@ fn generator_steppers(
 /// emits its diagnostic before it throws, so it is.
 fn push_crossed(
     operations: &mut Vec<LeafOwnerOperation>,
-    operation: LeafOwnerOperation,
+    mut operation: LeafOwnerOperation,
     crossed: Option<&Crossed>,
+    through_async: bool,
 ) {
     if crossed.is_some_and(|crossed| crossed.swallows) && operation.fails_with_plain_throw() {
-        return;
+        if !through_async {
+            return;
+        }
+        // Reached through an `async` function: the throw is a rejection the slot does not take, an obligation of this rule
+        // (the coarse rule of ADR 0959), never a violation.
+        operation.kind = crate::LeafOwnerOperationKind::UnmodelledSlot;
+        operation.uncertain = true;
+        operation.possible = true;
     }
     operations.push(operation);
 }
@@ -388,11 +419,13 @@ pub(super) fn leaf_owner_operations_for_file(
     let entities = lookup.entities();
     let dialect = lookup.dialect;
     let completions = RefCell::default();
+    let entered_async = Cell::new(false);
     let resolution = LeafScopeResolution {
         lookup,
         symbol_names,
         tables,
         completions: &completions,
+        entered_async: &entered_async,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -778,6 +811,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                 },
                 crossed.as_ref(),
+                false,
             );
         }
         for call in &callback_file.ast.calls {
@@ -978,6 +1012,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 // scope, so a forbidden operation inside it executes here.
                 let mut kinds = Vec::new();
                 let mut visited = Vec::new();
+                let outer_async = resolution.entered_async.replace(false);
                 let complete = helper_forbidden_operations(
                     resolution,
                     callback_file,
@@ -988,6 +1023,8 @@ pub(super) fn leaf_owner_operations_for_file(
                     None,
                     true,
                 );
+                let through_async = resolution.entered_async.get();
+                resolution.entered_async.set(outer_async || through_async);
                 if kinds.is_empty() && complete {
                     continue;
                 }
@@ -1000,6 +1037,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     kinds,
                     complete,
                     crossed.as_ref(),
+                    through_async,
                     step_unproven(call.span),
                     lookup,
                 );
@@ -1031,6 +1069,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         named,
                         named_complete,
                         crossed.as_ref(),
+                        false,
                         step_unproven(call.span),
                         lookup,
                     );
@@ -1086,6 +1125,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                 },
                 crossed.as_ref(),
+                false,
             );
         }
         // ADR 0537: a tagged template written in the callback's own extent
@@ -1479,6 +1519,10 @@ struct LeafScopeResolution<'a, 'lookup> {
     tables: crate::late_chunks::DiscoveryTables<'a>,
     /// ADR 0275: per function, the calls it runs on every normal completion.
     completions: &'a RefCell<HashMap<(String, Span), Vec<Span>>>,
+    /// Whether the walk in progress entered an `async` function: the synchronous throw of a flush in one is a rejection of the
+    /// promise it returns, which no slot that takes what its callback throws (`isPending`) catches (ADR 0960's measure of the
+    /// literal form). A walk saves the flag before the callback it asks about and reads it after.
+    entered_async: &'a Cell<bool>,
 }
 
 /// A forbidden operation the walk reached, and whether the leaf scope's call
@@ -2433,6 +2477,10 @@ fn function_forbidden_operations(
         return true;
     }
     visited.push(key);
+    // What an `async` function throws on its synchronous prefix is a rejection, which a slot that takes a throw does not take.
+    if helper.r#async {
+        resolution.entered_async.set(true);
+    }
     let dialect = lookup.dialect;
     let entities = lookup.entities();
     // The parameter list runs on entry: its defaults, top-level or nested in
