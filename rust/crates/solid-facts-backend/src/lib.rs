@@ -60,6 +60,8 @@ mod release_scope;
 pub mod runtime_resolution;
 pub mod source_redirects;
 mod suppression;
+#[cfg(feature = "what-if")]
+mod what_if_filter;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};

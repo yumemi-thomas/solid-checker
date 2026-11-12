@@ -163,6 +163,165 @@ fn an_assumed_hazard_the_program_lacks_flips_nothing_and_taints_nothing() {
     assert_eq!(report["status"], baseline["status"]);
 }
 
+/// The kind of each finding's `blockedBy`, where it has one.
+fn blocked_kinds(report: &Value) -> Vec<String> {
+    findings(report)
+        .iter()
+        .filter_map(|finding| finding["blockedBy"]["kind"].as_str())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The report of the fixture `name` (`fixtures/reactive-ir/<name>`, the browser development build) with `assume` assumed.
+fn check_fixture(name: &str, assume: &[&str]) -> Value {
+    let assumed = assume.join(",");
+    let tsconfig = fixture(name).join("tsconfig.json");
+    let mut command = Command::new(BINARY);
+    command
+        .env("SOLID_TYPEFACTS_BIN", typefacts())
+        .env("SOLID_CHECKER_DAEMON", "0")
+        .args(["--format", "json", "--runtime-target", "browser"])
+        .args(["--runtime-build", "development", "--project"])
+        .arg(tsconfig);
+    if !assume.is_empty() {
+        command.args(["--assume", &assumed]);
+    }
+    let output = command.output().unwrap();
+    assert!(
+        output.status.success() || output.status.code() == Some(1),
+        "{name} {assume:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("{name} {assume:?}: not JSON ({error})"))
+}
+
+// ADR 0965: a typed cause is a hazard too. `Premise(<blockedBy.kind>)` takes every uncertifiable finding of that kind out of the report, says so, and leaves the rest of
+// the report to the baseline's but for the taint.
+#[test]
+fn an_assumed_premise_takes_the_rows_of_its_blocker_out_and_taints_the_rest() {
+    let fixture_name = "stored-function-after-await";
+    let baseline = check_fixture(fixture_name, &[]);
+    let kind = "unresolved-invocation";
+    assert!(
+        blocked_kinds(&baseline).iter().any(|found| found == kind),
+        "the fixture holds rows of `{kind}`: {:?}",
+        blocked_kinds(&baseline)
+    );
+    let id = format!("Premise({kind})");
+    let report = check_fixture(fixture_name, &[id.as_str()]);
+    assert_eq!(
+        report["assumed"],
+        json!({ "hazards": [id.as_str()], "flipped": [id.as_str()] })
+    );
+    assert!(
+        blocked_kinds(&report).iter().all(|found| found != kind),
+        "a row of the assumed cause is left: {:?}",
+        blocked_kinds(&report)
+    );
+    // Only those rows left: every other finding of the baseline stands (by rule, kind, place and blocker), each marked with the premise.
+    let key = |finding: &Value| {
+        (
+            finding["rule"].as_str().unwrap_or("").to_owned(),
+            finding["kind"].as_str().unwrap_or("").to_owned(),
+            finding["primaryLocation"].to_string(),
+            finding["blockedBy"]["kind"]
+                .as_str()
+                .unwrap_or("")
+                .to_owned(),
+        )
+    };
+    let kept = findings(&baseline)
+        .iter()
+        .filter(|finding| finding["blockedBy"]["kind"] != kind)
+        .map(key)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        untainted(&report).iter().map(key).collect::<Vec<_>>(),
+        kept,
+        "the assumption moved a finding of another cause"
+    );
+    assert!(
+        findings(&report).len() < findings(&baseline).len(),
+        "the assumption lifted nothing"
+    );
+    for finding in findings(&report) {
+        assert_eq!(
+            finding["premises"],
+            json!([{ "kind": "assumed", "hazards": [id.as_str()] }]),
+            "{finding:#}"
+        );
+    }
+    // A violation is no uncertifiable row: the cause does not touch it.
+    assert!(
+        findings(&report)
+            .iter()
+            .any(|finding| finding["kind"] == "violation"),
+        "{report:#}"
+    );
+}
+
+#[test]
+fn every_cause_of_a_program_assumed_away_certifies_it() {
+    // The fixture's three rows are two `standard-member-impostor` and one `function-run-unplaced`: the baseline's blockers are exactly those two kinds, and assuming both
+    // away leaves nothing, so the status is the assumption's.
+    let baseline = check(&[]);
+    let mut kinds = blocked_kinds(&baseline);
+    kinds.sort();
+    kinds.dedup();
+    assert_eq!(kinds, ["function-run-unplaced", "standard-member-impostor"]);
+    let one = check(&["Premise(standard-member-impostor)"]);
+    assert_eq!(one["status"], "uncertifiable", "{one:#}");
+    assert_eq!(blocked_kinds(&one), ["function-run-unplaced"]);
+    let both = check(&[
+        "Premise(standard-member-impostor)",
+        "Premise(function-run-unplaced)",
+    ]);
+    assert_eq!(both["status"], "certified", "{both:#}");
+    assert!(findings(&both).is_empty(), "{both:#}");
+    assert_eq!(
+        both["assumed"],
+        json!({
+            "hazards": ["Premise(standard-member-impostor)", "Premise(function-run-unplaced)"],
+            "flipped": ["Premise(function-run-unplaced)", "Premise(standard-member-impostor)"]
+        })
+    );
+}
+
+#[test]
+fn an_assumed_premise_no_row_carries_moves_no_finding() {
+    // A premise is present wherever the seam is asked (no census holds it), so the run is tainted: the findings are the baseline's but for the premise.
+    let baseline = check(&[]);
+    let report = check(&["Premise(search-depth-limit)"]);
+    assert_eq!(
+        report["assumed"],
+        json!({
+            "hazards": ["Premise(search-depth-limit)"],
+            "flipped": ["Premise(search-depth-limit)"]
+        })
+    );
+    assert_eq!(&untainted(&report), findings(&baseline));
+    assert_eq!(report["status"], baseline["status"]);
+}
+
+#[test]
+fn a_premise_id_that_is_no_blocker_kind_is_an_error() {
+    for id in [
+        "Premise()",
+        "Premise(App)",
+        "Premise(function-run-unplaced:detail)",
+    ] {
+        let output = run(&["--format", "json", "--assume", id]);
+        assert_eq!(output.status.code(), Some(2), "{id}");
+        assert!(output.stdout.is_empty(), "{id}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("names no hazard fact"),
+            "{id}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
 #[test]
 fn several_assumptions_are_one_assumption_and_an_id_twice_is_one() {
     for arguments in [

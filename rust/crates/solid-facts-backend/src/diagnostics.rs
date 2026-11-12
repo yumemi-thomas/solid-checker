@@ -689,6 +689,9 @@ impl DiagnosticSession {
             stage.end(solid_reactive_ir::DropPass::HostSuppression, &findings);
         }
         findings.extend(unknown_names);
+        // ADR 0965: a what-if run that assumed a typed cause away reports no uncertifiable finding that cause blocks, so the status below is the assumption's.
+        #[cfg(feature = "what-if")]
+        crate::what_if_filter::drop_assumed_causes(&program, &mut findings);
         // ADR 0933: the verdicts, as the backend returns them.
         solid_reactive_ir::record_verdicts(&findings);
         let metrics = analysis_metrics(facts, &program);

@@ -14,6 +14,8 @@ fixtures/upstream-parity/.staging/
 .DS_Store
 **/.DS_Store
 **/target/
+# `make build-what-if` (ADR 0950) builds into its own target directory.
+/rust/target-what-if/
 **/node_modules/
 !apps/solid-typefacts/testdata/forms/node_modules/
 !apps/solid-typefacts/testdata/forms/node_modules/pkg/
