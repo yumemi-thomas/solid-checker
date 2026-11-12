@@ -1650,7 +1650,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // out-of-band (event handler) onSettled, the helper call
                 // written inside the event handler, and the helper that only
                 // builds a nested function.
-                ("leaf-owner-forbidden-call", 17),
+                // ADR 0966 (batch 11, slice 5): one more, the uncertifiable `leaf-operation-unaccounted` row at the `flush()` in the
+                // out-of-band `onSettled` callback (App.tsx:58), which the owner graph proves is no leaf owner's: the accounting pass
+                // names no reason for it (that is the leaf universe's, slice 6).
+                ("leaf-owner-forbidden-call", 18),
                 // Three inline (the function-seeded createSignal, createMemo,
                 // createRoot) plus the dynamic-extent trackDouble() reached
                 // through its helper.
@@ -2448,15 +2451,21 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // ADR 0944: line 97 is `untrack(() => flush())`, an in-place callback of a primitive.
         // ADR 0961: line 106 is `wrap(function* () { flush(); })`: `wrap` may return the generator itself, so what steps it is
         // unproven, an uncertifiable SC2006 row and, beside it, SC2008's (one of `beside`).
+        // ADR 0966 (batch 11, slice 5): nine more, `flush-in-action-unaccounted`, one at each flush the walk proves outside a step and
+        // no reason of the accounting pass names: after an await, a `for await` or a `yield*` of an async generator body (51, 56, 62,
+        // 70: the census's continuation class excludes generators), an iteration of a loop that awaits (77), a parameter initializer
+        // (84), a generator no `action` is handed (112), an exported function with no caller (125) and an event handler (134).
         (
             "rc9-flush-in-action",
             &[14_u64, 20, 27, 32, 39, 44, 97][..],
-            &[106_u64][..],
-            1,
+            &[51_u64, 56, 62, 70, 77, 84, 106, 112, 125, 134][..],
+            34,
             1,
         ),
-        ("release-triple-flush-rc8", &[9, 15][..], &[][..], 0, 1),
-        ("release-triple-flush-rc3", &[][..], &[][..], 0, 1),
+        // ADR 0966: rc.8's `asyncAfterAwait` flush (23, a generator body the census's continuation class excludes) is one uncertifiable
+        // SC2006 row, and each flush of the two older triples has SC2008's (`beside`: 3); rc.3 has no SC2006 guard to account.
+        ("release-triple-flush-rc8", &[9, 15][..], &[23][..], 3, 1),
+        ("release-triple-flush-rc3", &[][..], &[][..], 3, 1),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             continue;
@@ -2484,7 +2493,10 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             "{fixture}: {findings:#?}"
         );
         // Beside them only the release notice, which every one of these
-        // triples gets: all are older than the audited rc.13 (ADR 0194).
+        // triples gets: all are older than the audited rc.13 (ADR 0194), and
+        // the accounting's rows (ADR 0966): at each flush the uncertifiable
+        // SC2008 and SC3001 rows, since the stubbed `solid-js` has no source to
+        // show that no apply or leaf callback runs a flush (`beside`).
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             notice,

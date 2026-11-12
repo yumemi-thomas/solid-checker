@@ -338,6 +338,16 @@ pub(crate) enum PremiseKind {
     /// A closed program, every way into the helper a call expression the
     /// graph resolves (ADR 0203).
     ClosedProgramCallers,
+    /// The argument at the site holds a primitive on every run, followed back
+    /// through at most four functions (ADR 0213's census, ADR 0320): it carries
+    /// no project member, so a use of the parameter nothing resolves reaches
+    /// none. The span is the site.
+    ArgumentPrimitive,
+    /// The member the callee invokes on the argument is not the project's: the
+    /// argument is a built-in value by origin, or a parameter or prop that holds
+    /// one on every entry (ADRs 0211-0214), or a literal whose own member is a
+    /// primitive. The span is the site.
+    ArgumentMemberPrimitive,
     /// Every call site of the component passes the prop a static value, so
     /// the property read is not a reactive read at all (the props index,
     /// `PropUse::Static`).
@@ -724,6 +734,17 @@ impl RowStage {
         rows: &[T],
         at: impl Fn(&T) -> &Location,
     ) {
+        self.end_by(|_| (proof, kinds), rows, at);
+    }
+
+    /// `end` for a pass whose removals rest on different facts: `proof_of` is asked once for each removed row, in
+    /// the order of the draft before the pass, and answers the proof and the premise kinds that row is written under.
+    pub(crate) fn end_by<'p, T>(
+        self,
+        mut proof_of: impl FnMut(&Location) -> (&'p str, &'p [PremiseKind]),
+        rows: &[T],
+        at: impl Fn(&T) -> &Location,
+    ) {
         let mut remaining: HashMap<&Location, usize> = HashMap::new();
         for row in rows {
             *remaining.entry(at(row)).or_default() += 1;
@@ -739,6 +760,7 @@ impl RowStage {
                 .ok()
                 .zip(u32::try_from(location.end_byte).ok())
                 .map(|(start, end)| Span::new(start, end));
+            let (proof, kinds) = proof_of(location);
             let premises = kinds
                 .iter()
                 .map(|kind| Premise::at(*kind, span))

@@ -80,6 +80,7 @@ pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHash
 /// See [`HashMap`].
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
+mod flush_accounting;
 pub mod package_boundary;
 mod pending_accounting;
 mod pipeline;
