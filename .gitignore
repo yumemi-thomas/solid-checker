@@ -1387,3 +1387,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/stored-function-after-await/node_modules/**
 !fixtures/reactive-ir/stored-function-after-await-none/node_modules/
 !fixtures/reactive-ir/stored-function-after-await-none/node_modules/**
+!fixtures/reactive-ir/after-await-cross-file-same-span/node_modules/
+!fixtures/reactive-ir/after-await-cross-file-same-span/node_modules/**
