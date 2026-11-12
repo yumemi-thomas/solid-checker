@@ -8106,6 +8106,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1002",
+      "context": "unresolved-invocation"
      }
     ]
    }
@@ -11037,6 +11042,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1002",
+      "context": ""
      }
     ]
    }
@@ -13211,6 +13221,11 @@
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
+      "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
       "context": "package-finding-at-entry"
      }
     ]
