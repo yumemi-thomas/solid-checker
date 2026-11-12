@@ -9219,7 +9219,7 @@ pub(crate) fn escapes_nested(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     containing_ast_function(&file.ast, span).is_some_and(|function| {
-        !lookup.function_may_be_component(file, function) && member_assigned(file, function)
+        !lookup.function_may_be_component(file, function) && assigned_function(file, function)
     })
 }
 
@@ -9360,7 +9360,7 @@ pub(crate) fn only_inline_carriers(
 ) -> Vec<solid_facts::core::Span> {
     if function.generator
         || function.r#async
-        || member_assigned(file, function)
+        || assigned_function(file, function)
         || object_slot_value(file, function)
     {
         return Vec::new();
@@ -9399,7 +9399,7 @@ pub(crate) fn handed_to_unknown_code(
     let Some(function) = containing_ast_function(&file.ast, span) else {
         return false;
     };
-    if member_assigned(file, function) {
+    if assigned_function(file, function) {
         return true;
     }
     let named_expression =
@@ -9416,16 +9416,19 @@ pub(crate) fn handed_to_unknown_code(
     })
 }
 
-/// ADR 0535: whether `function` is written as a member's value (`o.m = () =>
-/// …`, `this.m = …`): it runs wherever that member is called.
-pub(crate) fn member_assigned(
+/// ADR 0535: whether `function` is written as an assignment's value, a member's (`o.m = () => …`, `this.m = …`) or a
+/// variable's (`h = () => …`, a `let` written after its declaration; batch 11): it runs wherever that member or variable is
+/// called, and no call edge says so. The name was a member's only: a function written as a variable's value has no binding
+/// name (`let h = () => {}; h = () => flush(); h()` calls the initializer, to every index that resolves `h`), so every walk
+/// that asks who calls a nameless function read "nobody" and answered a site in it as placed nowhere: certified clean
+/// while Chrome throws.
+pub(crate) fn assigned_function(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
 ) -> bool {
     file.ast.assignments.iter().any(|assignment| {
         assignment.value == solid_facts::ast::AssignmentValueKind::Function
             && file.ast.peel_ts_sugar_span(assignment.value_span) == function.span
-            && file.ast.member_at(assignment.target).is_some()
     })
 }
 
@@ -9633,9 +9636,10 @@ fn function_handed_unfollowed(
             })
     };
     // ADR 0535: a function written as a member's value (`o.m = () => …`,
-    // `this.m = …`) runs wherever that member is called, which no summary
-    // follows: handed where nothing places it.
-    if member_assigned(file, function) {
+    // `this.m = …`) or a variable's (`h = () => …`, batch 11) runs wherever
+    // that member or variable is called, which no summary follows: handed
+    // where nothing places it.
+    if assigned_function(file, function) {
         return true;
     }
     if slot_handed(function.span) {

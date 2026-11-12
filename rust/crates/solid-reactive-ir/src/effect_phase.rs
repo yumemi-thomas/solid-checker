@@ -1023,7 +1023,7 @@ impl<'l, 'a> Walk<'l, 'a> {
         let entered_elsewhere = exported(self.lookup, file, literal);
         // ADR 0538: a member's value (`o.m = () => …`, `this.m = …`) runs
         // wherever that member is called.
-        if crate::local_access::member_assigned(file, literal) {
+        if crate::local_access::assigned_function(file, literal) {
             return self.unplaced_layer(file, literal.span, helper_calls);
         }
         let path = file.path.as_str();

@@ -3186,7 +3186,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                     .map(|(call, _)| callee_text(file, call.callee))
             };
             let unplaced = if candidate.method_name.is_some()
-                || crate::local_access::member_assigned(file, candidate)
+                || crate::local_access::assigned_function(file, candidate)
                 || crate::local_access::object_slot_value(file, candidate)
             {
                 (created_after || suspends_after(candidate.span.end)).then_some(None)
