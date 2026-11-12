@@ -236,24 +236,14 @@ impl StaticApiContext<'_> {
     /// a deferred callback, a directive apply, rendering, module code, or
     /// code the compiler discarded.
     fn runs_off_every_apply(&self, file: &FileFacts, site: Span, allowed: &[Span]) -> bool {
-        use crate::ExecutionRole as Role;
-        match crate::execution_role::semantic_execution_role(
+        crate::execution_role::runs_off_every_apply(
             file,
             site,
             allowed,
             self.entities,
             self.symbol_names,
             self.lookup,
-        ) {
-            Role::DeferredCallback
-            | Role::DirectiveApply
-            | Role::TrackedJsx
-            | Role::UntrackedRendering
-            | Role::DiscardedRendering
-            | Role::ModuleInitialization => true,
-            Role::EventCallback => !self.lookup.synchronous_event_dispatch_present(),
-            _ => false,
-        }
+        )
     }
 
     pub(super) fn check_file(&self, file: &FileFacts) -> StaticDirectiveFileResult {
@@ -1035,39 +1025,6 @@ impl StaticApiContext<'_> {
                     fixes: vec![],
                     uncertain: true,
                 });
-            }
-            // Batch 11 (slice 6): the owner-call universe lists every creation the dialect says throws on an effect's apply, and a creation no row stands at
-            // names why it cannot: the role engine places it off every effect's apply (a handler, a deferred callback, a directive apply, rendering, module
-            // code, discarded code), or an exact primitive's callback that creates an owner wraps it. Never a row; a creation with neither stays unaccounted
-            // for (the universe's uncertifiable row).
-            if let Some(created) = kind
-                && self.client_build()
-                && dialect
-                    .throws_creating_in_effect_callback(created, first_argument_is_function(call))
-                && !result.violations.iter().any(|violation| {
-                    violation.id == "SC6002"
-                        && violation.location == location(file.path.shared(), call.callee)
-                })
-            {
-                if self.runs_off_every_apply(file, call.span, &allowed) {
-                    result.ends.end_at(
-                        file,
-                        call.callee,
-                        crate::site_accounting::SiteSilence::EffectCreationRunsOffApply,
-                        crate::proof_log::PremiseKind::RoleDoesNotReport,
-                        || Some(call.callee),
-                    );
-                } else if let Some(wrapper) =
-                    owner_created_around_call(file, call.span, self.lookup)
-                {
-                    result.ends.end_at(
-                        file,
-                        call.callee,
-                        crate::site_accounting::SiteSilence::EffectCreationOwnerSetAround,
-                        crate::proof_log::PremiseKind::OwnerSetAround,
-                        || Some(wrapper),
-                    );
-                }
             }
             // ADR 0963: the leaf scope's net. A call a leaf owner's callback forbids (a creation, `onCleanup`,
             // `flush`) written where a route no call shows runs it (a getter or setter, a coercion method, an
@@ -2845,7 +2802,12 @@ fn owner_set_around(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -
 /// compute), through the layers that run in place and add no owner (`untrack`, `latest`: as owned as their call), or `None`. [`owner_set_around`] answers "sets
 /// or may set an owner", enough to decline an obligation; this is the proof an owner is current, so a `runWithOwner` whose owner is a value (it may be null) and
 /// one that detaches (it is null) are not.
-fn owner_created_around_call(
+///
+/// Every layer the climb crosses runs its code in the primitive's synchronous run: a generator's body runs where an iterator is stepped, a site in a parameter
+/// list runs where a call omits its argument, and one after a suspension of an async function runs from a later task, so none of them has the owner the primitive
+/// set around its callback (the review of #220, F3: `createRoot(function* () { createMemo(…) })` stepped from an apply). The owner stage's `plain` site is the
+/// same question asked of the innermost layer.
+pub(crate) fn owner_created_around_call(
     file: &FileFacts,
     site: Span,
     lookup: &SemanticLookup<'_>,
@@ -2853,6 +2815,12 @@ fn owner_created_around_call(
     let mut at = site;
     for _ in 0..16 {
         let function = file.ast.innermost_function_owning(at)?;
+        if function.generator
+            || crate::owners::in_parameter_list(&file.ast, at)
+            || crate::execution_role::may_follow_suspension(file, at)
+        {
+            return None;
+        }
         let (call, index) =
             file.ast
                 .arguments_containing(function.span)

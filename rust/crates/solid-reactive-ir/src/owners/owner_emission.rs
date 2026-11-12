@@ -1144,7 +1144,71 @@ pub(super) fn named_layer_entry_open(
         &caller_unplaced,
         &mut walked,
         LAYER_CALLER_DEPTH,
+        Renders::Trusted,
     )
+}
+
+/// [`named_layer_entry_open`] without the component-render premise, for the owner-call universe's silences (batch 11, slice 6, the review of #220, F1): a function
+/// that returns JSX is entered by renders alone only where every reference of its binding is a JSX tag, and one a reference enters (`pick = view`, a prop, an
+/// array element) is a layer like any other, whose references decide. A package that renders a component is no more trusted than one that calls it (the ruling:
+/// no component-render premise; a render by a package whose source is read is the proof batch's).
+pub(super) fn layer_entry_open_by_reference(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
+) -> bool {
+    let mut walked = HashSet::default();
+    layer_entry_open(
+        file,
+        span,
+        None,
+        lookup,
+        &caller_unplaced,
+        &mut walked,
+        LAYER_CALLER_DEPTH,
+        Renders::TagsOnly,
+    )
+}
+
+/// What the walk takes a function the census proves a component ([`SemanticLookup::function_proven_component`]: it returns JSX, and no call enters it) to be
+/// entered by.
+#[derive(Clone, Copy)]
+enum Renders {
+    /// Renders alone, whatever else references its binding (ADR 0868: the emission's premise, which an escaped component keeps).
+    Trusted,
+    /// Renders alone only when every reference of its binding is a JSX tag that renders it; any other reference is an entry the graph holds no edge for.
+    TagsOnly,
+}
+
+/// Whether every reference of `function`'s binding, in its file and the others, is the name of a JSX tag (the opening one or the closing one: the same
+/// reference), and a tag renders it: the one way a render enters a function and no value flows anywhere else. A function with no binding, or none a tag
+/// renders, is not.
+fn entered_by_tags_only(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(local) = crate::local_access::function_reference_hand_offs(file, function, lookup)
+    else {
+        return false;
+    };
+    let tag_name = |at: Span| {
+        file.ast
+            .jsx_elements
+            .iter()
+            .any(|element| element.name.span == at || element.closing_name == Some(at))
+    };
+    // The other files' references the call graph holds (a call, a render) are accounted for; any other reference there is a value flow.
+    if !local.iter().all(|(at, _)| tag_name(*at))
+        || !crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
+    {
+        return false;
+    }
+    !local.is_empty()
+        || !lookup
+            .function_call_site_references(file.path.as_str(), function.span)
+            .is_empty()
 }
 
 /// How many calls [`layer_entry_open`] follows out through a closed layer's
@@ -1175,6 +1239,7 @@ fn creates_owner_for(
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn layer_entry_open(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -1183,6 +1248,7 @@ fn layer_entry_open(
     caller_unplaced: &dyn Fn(&solid_facts::FileFacts, Span) -> bool,
     walked: &mut HashSet<(String, Span)>,
     depth: usize,
+    renders: Renders,
 ) -> bool {
     use crate::local_access::HandOff;
     let escapes = |hand_off: &HandOff| !matches!(hand_off, HandOff::Call | HandOff::Inline(_));
@@ -1197,7 +1263,12 @@ fn layer_entry_open(
         if region.is_some_and(|region| !region.contains(function.span)) {
             return false;
         }
-        if lookup.function_proven_component(file, function) {
+        if lookup.function_proven_component(file, function)
+            && match renders {
+                Renders::Trusted => true,
+                Renders::TagsOnly => entered_by_tags_only(file, function, lookup),
+            }
+        {
             return false;
         }
         // Reached through a caller, no candidate names the region.
@@ -1288,7 +1359,16 @@ fn layer_entry_open(
         }
         for reference in &local {
             let run = run_at(reference);
-            if layer_entry_open(file, run, None, lookup, caller_unplaced, walked, depth - 1) {
+            if layer_entry_open(
+                file,
+                run,
+                None,
+                lookup,
+                caller_unplaced,
+                walked,
+                depth - 1,
+                renders,
+            ) {
                 return true;
             }
         }
@@ -1305,6 +1385,7 @@ fn layer_entry_open(
                         caller_unplaced,
                         walked,
                         depth - 1,
+                        renders,
                     ))
             {
                 return true;

@@ -402,6 +402,30 @@ pub(super) fn semantic_execution_role(
     })
 }
 
+/// ADR 0710: whether the role of `site` runs off every effect apply's stack: an event handler (unless a synchronous dispatch may deliver it from an apply), a
+/// deferred callback, a directive apply, rendering, module code, or code the compiler discarded. The lexical role of the code: it says nothing of a function
+/// that is also entered by a route it does not follow (a handler or a timer callback saved to a variable and called from an apply), which the owner-call
+/// universe's silence asks on top of it (batch 11, slice 6; the review of #220, F2).
+pub(crate) fn runs_off_every_apply(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    match semantic_execution_role(file, site, allowed, entities, symbol_names, lookup) {
+        ExecutionRole::DeferredCallback
+        | ExecutionRole::DirectiveApply
+        | ExecutionRole::TrackedJsx
+        | ExecutionRole::UntrackedRendering
+        | ExecutionRole::DiscardedRendering
+        | ExecutionRole::ModuleInitialization => true,
+        ExecutionRole::EventCallback => !lookup.synchronous_event_dispatch_present(),
+        _ => false,
+    }
+}
+
 /// [`semantic_execution_role`] for a reactive read. A read in a function an
 /// intrinsic `ref` applies ([`crate::owners::ref_applied_element`]: the
 /// literal written in the attribute, the function a bare identifier there

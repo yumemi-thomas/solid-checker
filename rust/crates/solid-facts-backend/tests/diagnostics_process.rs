@@ -2485,15 +2485,18 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // `createEffect`, `createTrackedEffect` and the `resolve` calls, which
         // create a computation of their own), thirteen in all, because an
         // unread package may run an export under a leaf owner (B3, policy A);
-        // and one SC6002 `effect-creation-unaccounted` at the `resolve` the
-        // effect's apply callback calls.
+        // and SC6002 `effect-creation-unaccounted` at twelve of them (every
+        // creation an apply refuses, `createTrackedEffect` aside, the `resolve`
+        // the effect's own apply calls among them): the role silence asks, since
+        // the review of #220 (F2), that no package the build does not read may
+        // run the exported function.
         let leaf = assert_rule_findings(&findings, "leaf-owner-forbidden-call", 13);
         assert!(
             leaf.iter().all(|finding| finding["kind"] == "uncertifiable"
                 && finding["blockedBy"]["kind"] == "leaf-operation-unaccounted"),
             "{leaf:#?}"
         );
-        let apply = assert_rule_findings(&findings, "primitive-in-effect-callback", 1);
+        let apply = assert_rule_findings(&findings, "primitive-in-effect-callback", 12);
         assert!(
             apply
                 .iter()
@@ -2501,7 +2504,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                     && finding["blockedBy"]["kind"] == "effect-creation-unaccounted"),
             "{apply:#?}"
         );
-        assert_eq!(findings.len(), 4 + 13 + 1, "{findings:#?}");
+        assert_eq!(findings.len(), 4 + 13 + 12, "{findings:#?}");
     }
     if let Some(findings) = diagnostic_fixture("rc9-until-scope") {
         // rc.9's `until` carries resolve's observer guard, so the same four
@@ -3197,12 +3200,14 @@ fn searches_past_their_budget_are_uncertifiable() {
     // forwarding loop's row.
     // ADR 0969: the line also holds the `createEffect(...)` creation written in
     // the exported `Forwarded`, which the leaf universe does not end (an unread
-    // package may run the export under a leaf owner: B3), so its uncertifiable
-    // SC3001 `leaf-operation-unaccounted` row stands first on the line.
+    // package may run the export under a leaf owner or on an apply: B3), so its
+    // uncertifiable SC3001 `leaf-operation-unaccounted` and SC6002
+    // `effect-creation-unaccounted` rows stand first on the line.
     assert_eq!(
         short,
         [
             ("SC3001", "uncertifiable", "leaf-operation-unaccounted"),
+            ("SC6002", "uncertifiable", "effect-creation-unaccounted"),
             (
                 "SC9012",
                 "uncertifiable",
@@ -3218,6 +3223,7 @@ fn searches_past_their_budget_are_uncertifiable() {
         long,
         [
             ("SC3001", "uncertifiable", "leaf-operation-unaccounted"),
+            ("SC6002", "uncertifiable", "effect-creation-unaccounted"),
             ("SC9012", "uncertifiable", "parameter-use-unmodeled"),
             ("SC9012", "uncertifiable", "value-forwarded"),
         ]

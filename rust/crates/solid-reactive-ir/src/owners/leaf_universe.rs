@@ -1,9 +1,8 @@
-//! Batch 11, slice 6: the owner-graph and census silences of the owner-call universe.
+//! Batch 11, slice 6: the silences of the owner-call universe that rest on the owner graph, a census or the role engine.
 //!
 //! The universe ([`crate::proof_universe`], table `owner-call`) lists every call of `onCleanup` and of a creation the dialect refuses under a leaf owner
 //! (SC3001: CLEANUP_IN_FORBIDDEN_SCOPE, PRIMITIVE_IN_FORBIDDEN_SCOPE) or on an effect apply's stack with no owner set (SC6002: PRIMITIVE_IN_EFFECT_CALLBACK).
-//! A site no row, SC9012, discard or named silence ends gets the code's own uncertifiable row ([`crate::site_accounting`]). The silences named here rest on
-//! the owner graph, the one analysis that holds every entry into a function and the owner each gives, and on one census:
+//! A site no row, SC9012, discard or named silence ends gets the code's own uncertifiable row ([`crate::site_accounting`]). The silences named here:
 //!
 //! - [`SiteSilence::OwnerCallNeverRuns`]: ADR 0458's query proves no execution runs the site (every code);
 //! - [`SiteSilence::OwnerCallModuleScope`]: no function owns the site and no instance field's initializer holds it, so module evaluation runs it on a
@@ -13,15 +12,22 @@
 //! - [`SiteSilence::LeafOwnerAbsent`]: the context of the function that holds the site has an edge, no leaf bit, and is not the bare open-world seed of an
 //!   export (SC3001's two codes);
 //! - [`SiteSilence::OwnerCurrent`]: the same context gives an owner on every entry (owned, a leaf owner, or both: no unowned bit), so the effect callback's
-//!   guard (`inEffectCallback && context === null`) does not meet the creation (SC6002).
+//!   guard (`inEffectCallback && context === null`) does not meet the creation (SC6002);
+//! - [`SiteSilence::EffectCreationRunsOffApply`]: the role engine places the site off every effect's apply (a handler, a deferred callback, a directive apply,
+//!   rendering, module code, discarded code), and every layer around it is entered only the way that role says (SC6002);
+//! - [`SiteSilence::EffectCreationOwnerSetAround`]: an exact primitive whose callback creates an owner wraps the site, every layer the climb crosses running in
+//!   the primitive's synchronous run (SC6002).
 //!
-//! The graph's contexts are the entries it holds, so the last two answer only where those are every entry the program can make, and each rests on all of
-//! these facts of the site (a missing one is no silence, the site keeps its uncertifiable row):
+//! The graph's contexts are the entries it holds, and the role engine places a function from where it is written: they answer only where those are every entry
+//! the program can make. Each of the graph's silences and the role silence rests on all of these facts of the site (a missing one is no silence, the site keeps its
+//! uncertifiable row; the review of #220 found `EffectCreationRunsOffApply` and `EffectCreationOwnerSetAround`, then in `static_api`, asking less than the others):
 //!
 //! - the site is written directly in a function (not a parameter list, which runs when its argument is omitted; not after a suspension of an async function,
 //!   which runs from a later task; not in a generator, whose body runs where an iterator is stepped);
-//! - no layer around it is entered by a route the graph has no edge for ([`super::owner_emission::named_layer_entry_open`], ADR 0868: a function stored,
-//!   assigned, handed on or a method), a reference that is not a direct call or an inline run;
+//! - no layer around it is entered by a route the graph has no edge for ([`super::owner_emission::layer_entry_open_by_reference`], ADR 0868: a function stored,
+//!   assigned, handed on or a method, a reference that is not a direct call or an inline run), asked without the component-render premise: a function that
+//!   returns JSX is entered by renders alone only where every reference of its binding is a JSX tag. The primitive-wrapped silence needs no such fact: the
+//!   primitive's own run is the entry;
 //! - no package the build does not read may run the function ([`crate::package_hand_off::UnreadPackageHandOff`], ADR 0967): such a package may call it
 //!   under a leaf owner, or on an effect's apply, through an entry no edge shows. The census silence rests on this too: a package may open the leaf scope the
 //!   project's own primitives do not.
@@ -94,11 +100,14 @@ enum Group {
 
 /// Records the silences of every owner-call site of the project's files in `ends`, and the declines (proof log only) of the groups of codes none answers. `client_build` is
 /// the build SC6002's creation sites are asked on ([`crate::static_api::client_build`]).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn silences(
     files: &[&solid_facts::FileFacts],
     order: &[PathId],
     graph: &OwnerGraph,
     lookup: &SemanticLookup<'_>,
+    entities: &crate::EntitySymbols,
+    symbol_names: &crate::HashMap<crate::SymbolId, crate::SymbolId>,
     client_build: bool,
     ends: &mut SiteEnds,
 ) {
@@ -125,6 +134,8 @@ pub(super) fn silences(
             continue;
         };
         let ast = &file.ast;
+        // The callback positions the role engine takes as placed, for the role question (computed at the first creation that asks it).
+        let mut allowed: Option<Vec<Span>> = None;
         for call in &ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;
@@ -215,11 +226,12 @@ pub(super) fn silences(
                 );
                 open_leaf = false;
             }
-            let open_effect = effect;
+            let mut open_effect = effect;
             if !open_leaf && !open_effect {
                 continue;
             }
-            // The graph's context answers for the site only where the site is plain.
+            // Every answer below speaks for the site only where it is plain: the graph's context and the role engine's placement say where code written
+            // directly in a function runs, not a parameter list, a generator's body or a later task.
             let plain = if crate::owners::in_parameter_list(ast, call.span) {
                 Err(Decline::ParameterList)
             } else if function.generator {
@@ -229,21 +241,75 @@ pub(super) fn silences(
             } else {
                 Ok(())
             };
-            let context = match (plain, graph.node_context(*pid, function.span)) {
-                (Err(reason), _) => Err(reason),
-                (Ok(()), None) => Err(Decline::NoOwnerNode),
-                (Ok(()), Some(held)) => Ok(held),
-            };
-            let (node, context) = match context {
-                Ok(held) => held,
-                Err(reason) => {
-                    for (open, group) in [(open_leaf, Group::Leaf), (open_effect, Group::Effect)] {
-                        if open {
-                            decline(group, reason);
-                        }
+            if let Err(reason) = plain {
+                for (open, group) in [(open_leaf, Group::Leaf), (open_effect, Group::Effect)] {
+                    if open {
+                        decline(group, reason);
                     }
-                    continue;
                 }
+                continue;
+            }
+            // Whether a layer around the site is entered by a route the graph has no edge for, asked once and without the component-render premise
+            // (ADR 0868, and the ruling: a package that renders a component is no more trusted than one that calls it).
+            let mut entry_open_known: Option<bool> = None;
+            let mut entry_open = || {
+                *entry_open_known.get_or_insert_with(|| {
+                    super::owner_emission::layer_entry_open_by_reference(
+                        file,
+                        call.span,
+                        lookup,
+                        caller_unplaced,
+                    )
+                })
+            };
+            // SC6002's two silences that rest on no graph context (they were `static_api`'s until the review of #220, which found each asking less than the
+            // others: F2, F3). The role engine places the site off every effect's apply (a handler, a deferred callback, a directive apply, rendering, module
+            // code, discarded code), and every layer around the site is entered only the way that role says; or an exact primitive's callback that creates
+            // an owner wraps it.
+            if open_effect {
+                let allowed = allowed.get_or_insert_with(|| {
+                    crate::execution_role::allowed_callback_spans(file, lookup)
+                });
+                if crate::execution_role::runs_off_every_apply(
+                    file,
+                    call.span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                ) && !entry_open()
+                {
+                    ends.end_at(
+                        file,
+                        site,
+                        SiteSilence::EffectCreationRunsOffApply,
+                        PremiseKind::RoleDoesNotReport,
+                        || Some(site),
+                    );
+                    open_effect = false;
+                } else if let Some(wrapper) =
+                    crate::static_api::owner_created_around_call(file, call.span, lookup)
+                {
+                    ends.end_at(
+                        file,
+                        site,
+                        SiteSilence::EffectCreationOwnerSetAround,
+                        PremiseKind::OwnerSetAround,
+                        || Some(wrapper),
+                    );
+                    open_effect = false;
+                }
+            }
+            if !open_leaf && !open_effect {
+                continue;
+            }
+            let Some((node, context)) = graph.node_context(*pid, function.span) else {
+                for (open, group) in [(open_leaf, Group::Leaf), (open_effect, Group::Effect)] {
+                    if open {
+                        decline(group, Decline::NoOwnerNode);
+                    }
+                }
+                continue;
             };
             // Each group asks the context its own question.
             let leaf_answer = if !open_leaf {
@@ -269,23 +335,18 @@ pub(super) fn silences(
             } else {
                 Some(Ok(()))
             };
-            // The context says no entry is the forbidden one; it is every entry only where no layer around the site is entered by a route the graph has no edge for.
-            let entry_open = (matches!(leaf_answer, Some(Ok(())))
+            // The context says no entry is the forbidden one; it is every entry only where no layer around the site is entered by a route the graph has no
+            // edge for.
+            let entry_is_open = (matches!(leaf_answer, Some(Ok(())))
                 || matches!(effect_answer, Some(Ok(()))))
-                && super::owner_emission::named_layer_entry_open(
-                    file,
-                    call.span,
-                    None,
-                    lookup,
-                    caller_unplaced,
-                );
+                && entry_open();
             for (answer, group) in [(leaf_answer, Group::Leaf), (effect_answer, Group::Effect)] {
                 let Some(answer) = answer else {
                     continue;
                 };
                 match answer {
                     Err(reason) => decline(group, reason),
-                    Ok(()) if entry_open => decline(group, Decline::EntryByReference),
+                    Ok(()) if entry_is_open => decline(group, Decline::EntryByReference),
                     Ok(()) => match group {
                         Group::Leaf => ends.end_at(
                             file,

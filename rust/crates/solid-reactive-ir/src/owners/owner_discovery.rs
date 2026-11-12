@@ -1151,6 +1151,8 @@ pub(crate) fn find_missing_owners_incremental(
         &order,
         graph,
         lookup,
+        entities,
+        symbol_names,
         client_build,
         &mut owner_call_ends,
     );

@@ -200,10 +200,10 @@ site_silences! {
     LeafNoOpenerInProgram => "leaf_universe.account.no-opener-in-program",
     /// A creation the dialect says throws on an effect's apply, written where the role engine places it off every effect's apply (a handler, a deferred
     /// callback, a directive apply, rendering, module code, discarded code).
-    EffectCreationRunsOffApply => "static_api.check_file.effect-creation-runs-off-apply",
+    EffectCreationRunsOffApply => "leaf_universe.account.effect-creation-runs-off-apply",
     /// A creation the dialect says throws on an effect's apply, inside the callback of an exact owner-setting primitive (`runWithOwner`, `createRoot`, a
     /// computation's compute): an owner is current.
-    EffectCreationOwnerSetAround => "static_api.check_file.effect-creation-owner-set-around",
+    EffectCreationOwnerSetAround => "leaf_universe.account.effect-creation-owner-set-around",
 }
 
 impl SiteSilence {
