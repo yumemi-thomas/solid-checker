@@ -177,6 +177,11 @@ function a `new` runs, a helper those call) is an uncertifiable row of this rule
 primitive that opens a leaf scope. A function handed where nothing follows it is run by a call, which the walk answers
 itself (SC9012, `leaf-callback-opaque`): not this net's. The net adds no row where the walk's own operation stands (a helper's creation is reported at the helper call), and an opaque call's SC9012 row answers for no accessor or method written in its arguments.
 
+A function stored under a key the host reads by itself is such a route however it is written (batch 10c): a method, an arrow, a
+`function`, a name bound to one or an assigned member under a coercion key (`toString`, `valueOf`, `toJSON`), the promise or
+iterator protocol (`then`, `next`, `return`, `throw`), `handleEvent` or a computed key no literal decides; a trap of a `new Proxy`
+handler; the `get` or `set` of a descriptor handed to `Object.defineProperty` and its siblings. Any other key runs by a call.
+
 ## How to fix
 
 Return cleanup from the leaf callback; a trailing `onCleanup(fn)` has a safe

@@ -544,6 +544,62 @@ impl<'a> SemanticLookup<'a> {
         self.function_for_symbol(symbol)
     }
 
+    /// Batch 10c (ADR 0964, B1): whether `symbol` names a slot the project declares and no function body defines: a property of a
+    /// project type or a project object (`bus.cb`), a function-typed field, a variable of function type. Every declaration lies in
+    /// project source (no installed package, no standard library, no declaration file the program was not given), and no project
+    /// function is bound to the symbol: what a call of it runs is whatever the program stored there.
+    pub(crate) fn project_slot_without_body(&self, symbol: &str) -> bool {
+        self.note_symbol_declarations(symbol);
+        if self.function_for_symbol(symbol).is_some() {
+            return false;
+        }
+        self.symbol_declarations(symbol)
+            .is_some_and(|declarations| {
+                !declarations.is_empty()
+                    && declarations.iter().all(|declaration| {
+                        self.project_source(declaration.location.path.as_ref())
+                            && !self.declares_function(&declaration.location)
+                    })
+            })
+    }
+
+    /// [`Self::project_slot_without_body`] for the declaration a resolved call selected.
+    pub(crate) fn resolved_slot_without_body(
+        &self,
+        declaration: &typefacts::ResolvedDeclaration,
+    ) -> bool {
+        !declaration.standard_library
+            && self.project_source(declaration.location.path.as_ref())
+            && self.function_for_symbol(&declaration.symbol).is_none()
+            && !self.declares_function(&declaration.location)
+    }
+
+    /// Whether a project function is declared at `location` (the name of a method or of a function): the symbol a call site names
+    /// for a member need not be the one the function is indexed under (the entity at the declaration's own name), so the
+    /// declaration's location asks the same index the function was entered by.
+    fn declares_function(&self, location: &typefacts::Location) -> bool {
+        let path = location.path.as_ref();
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(location.start_byte),
+            u32::try_from(location.end_byte),
+        ) else {
+            return false;
+        };
+        let span = Span::new(start, end);
+        self.note_declaration_symbol_at(path, span);
+        self.entities
+            .at(path, span)
+            .map(SymbolId::as_str)
+            .or_else(|| self.method_symbol_ref(path, span))
+            .is_some_and(|symbol| self.function_for_symbol(symbol).is_some())
+    }
+
+    /// Whether `path` is a file of the project's own source: no bundled standard-library file (the producer names those
+    /// `bundled:/libs/...`) and none under an installed package.
+    fn project_source(&self, path: &str) -> bool {
+        !path.starts_with("bundled:") && crate::effect_phase::package_root(path).is_none()
+    }
+
     /// Records, for the computation recording, which symbol
     /// [`Self::method_symbol_ref`] names at `span` of `path`: an entity of the
     /// path, or else a resolved call's declaration in any file.

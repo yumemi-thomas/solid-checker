@@ -375,6 +375,13 @@ handed where nothing follows it is run by a call, and a parameter initializer is
 The row is coarse: a read in a member stands whatever the continuation touches and whatever the computation tracked before
 its first suspension.
 
+A function stored under a key the host reads by itself runs the same way, written as a method, an arrow, a `function`, a name
+bound to one or an assigned member (batch 10c): the keys of a coercion (`toString`, `toLocaleString`, `valueOf`, `toJSON`), the
+promise protocol (`then`), the iterator protocol (`next`, `return`, `throw`), `handleEvent`, a computed key no literal decides,
+the traps of a `new Proxy` handler and the `get` or `set` of a descriptor handed to `Object.defineProperty`,
+`Reflect.defineProperty`, `Object.defineProperties` or `Object.create`. A function stored under any other key runs by a call of
+its slot, below.
+
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous variant
@@ -400,3 +407,10 @@ inside it, so the row stands at that invocation, under the same region premise a
 suspension). A parameter whose caller hands a function the walk follows stays a violation (ADR 0669), and the row at the parameter's
 call stands beside it. The row is coarse: it stands whatever the stored value is (a clock a caller injects, a testing library's
 destructured query). A call before the `await` is a dependency of the computation, and an event handler is no continuation: no row.
+
+The same row stands where the call names a stored value another way (batch 10c): a member the project declares as a slot with no
+function body (`bus.cb()`, `holder.cb?.()`, a function-typed field, an interface method an object implements by a function
+value), `f.call(…)` and `f.apply(…)` on a stored value, a `let` the program writes again (its initializer is not the value), a
+`new` of a stored value (the row starts at the `new` keyword, where V8's frame stands) and a tagged template whose tag is a
+stored value. A class or an object method, a function declaration, a closed object literal's member and a global's or an import's
+member (`Math.max.apply`) are not this. The rows only add: no row the rule filed before is dropped or replaced by one of them.

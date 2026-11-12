@@ -285,6 +285,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 2828,
+      "end": 2832,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -315,6 +326,17 @@
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 3072,
       "end": 3073,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 3088,
+      "end": 3092,
       "fixes": 0
     },
     {
@@ -566,6 +588,17 @@
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 5094,
       "end": 5095,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 5139,
+      "end": 5143,
       "fixes": 0
     },
     {

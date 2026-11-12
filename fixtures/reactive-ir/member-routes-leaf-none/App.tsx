@@ -17,3 +17,15 @@ export function Plain() {
   new Built();
   return <div />;
 }
+
+// Batch 10c (B2): function-valued routes with no leaf owner in the program: no row either.
+const coercedArrow = {
+  toString: () => {
+    createMemo(() => 1);
+    return "";
+  },
+};
+export function PlainValues() {
+  void `${coercedArrow}`;
+  return <div />;
+}
