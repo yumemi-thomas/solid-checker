@@ -1,0 +1,3 @@
+# flush-universe-bare
+
+**Claim (batch 11, slice 5).** A program that names no primitive running a callback as an action's steps, deferring one to a later flush, or running one under a leaf owner (`project_steps_action_callbacks`, `project_defers_callbacks`, `project_opens_leaf_scope`) has no step, no apply and no leaf callback on any stack: each of the three codes ends on its own fact (`NoSteppedAction`, `NoDeferringPrimitive`, `NoLeafScope`), and the helper's flush has no row. Ablating them (`SOLID_CHECKER_IR_ABLATE_SILENCE=all`) gives the flush the three uncertifiable rows. See `flush-universe`.

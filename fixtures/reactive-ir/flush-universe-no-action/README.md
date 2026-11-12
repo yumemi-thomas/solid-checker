@@ -1,0 +1,3 @@
+# flush-universe-no-action
+
+**Claim (batch 11, slice 5).** A program that names no primitive running a callback as an action's steps (`project_steps_action_callbacks`) has no step on any stack: SC2006 ends every flush in it on that fact (`FlushSafe::NoSteppedAction`). The same program runs an effect's apply and opens a leaf scope, so the helper's flush (every invocation an event delivery) keeps an uncertifiable row of SC2008 (`flush-in-effect-unaccounted`) and of SC3001 (`leaf-operation-unaccounted`), and none of SC2006. Ablating `flush_accounting.account.no-stepped-action` gives it the third. See `flush-universe`.

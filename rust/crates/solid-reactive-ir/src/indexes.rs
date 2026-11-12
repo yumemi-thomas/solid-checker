@@ -37,8 +37,9 @@ mod components;
 pub(crate) use components::{binding_exported, unproven_component_status};
 mod compound;
 mod event_delivery;
-pub(crate) use event_delivery::spelled_dispatch;
+pub(crate) use event_delivery::{DispatchCaller, spelled_dispatch};
 mod flush_census;
+pub(crate) use flush_census::FlushSite;
 mod hand_outs;
 pub(crate) use hand_outs::{
     HAND_OUT_TABLES, HAND_OUT_TABLES_END, HAND_OUT_TABLES_FROM, HandOutTables,

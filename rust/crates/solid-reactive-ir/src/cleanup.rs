@@ -1396,14 +1396,38 @@ fn forbidden_operation_kind(
     primitive: &PrimitiveName,
 ) -> Option<crate::LeafOwnerOperationKind> {
     let kind = primitive.primitive()?;
-    leaf_forbids(dialect, file, call, kind).then(|| match kind {
+    leaf_forbids(dialect, file, call, kind)
+        .then(|| operation_kind(dialect, kind, || primitive.to_string()))
+}
+
+/// The kind a forbidden call of `kind` is filed under: the one mapping of a primitive to an operation kind, so the walks and the flush accounting
+/// (`flush_accounting.rs`) cannot answer differently. `spelling` is asked only by the kinds that carry the source spelling.
+fn operation_kind(
+    dialect: &dyn solid_dialect::Dialect,
+    kind: Primitive,
+    spelling: impl FnOnce() -> String,
+) -> crate::LeafOwnerOperationKind {
+    match kind {
         Primitive::OnCleanup => crate::LeafOwnerOperationKind::Cleanup,
         Primitive::Flush => crate::LeafOwnerOperationKind::Flush,
         _ if dialect.leaf_call_throws_observer_guard(kind) => {
-            crate::LeafOwnerOperationKind::ObserverGuarded(primitive.to_string())
+            crate::LeafOwnerOperationKind::ObserverGuarded(spelling())
         }
-        _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
-    })
+        _ => crate::LeafOwnerOperationKind::Primitive(spelling()),
+    }
+}
+
+/// Whether a call of `kind` is a forbidden operation the leaf walk files as SC3001's `Flush` kind (the dialect's cleanup rule forbids it under a
+/// leaf owner, and the one mapping above names it the flush): the question the flush accounting asks for SC3001.
+pub(crate) fn files_as_flush_operation(
+    dialect: &dyn solid_dialect::Dialect,
+    kind: Primitive,
+) -> bool {
+    !matches!(dialect.cleanup_rule(kind), CleanupRule::Never)
+        && matches!(
+            operation_kind(dialect, kind, String::new),
+            crate::LeafOwnerOperationKind::Flush
+        )
 }
 
 /// ADR 0711: whether the binder confirms the primitive attributed to `call`:

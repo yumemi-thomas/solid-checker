@@ -185,6 +185,11 @@ site_silences! {
 /// ranking of what stands on each silence alone), read once; unset, it costs a
 /// load. It can only add uncertifiable rows.
 fn ablated(silence: SiteSilence) -> bool {
+    ablated_id(silence.id())
+}
+
+/// [`ablated`] for any typed ending's id: the passes that keep their own endings (`flush_accounting`) read the same switch.
+pub(crate) fn ablated_id(id: &str) -> bool {
     static ABLATED: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     let list = ABLATED.get_or_init(|| {
         std::env::var("SOLID_CHECKER_IR_ABLATE_SILENCE")
@@ -197,7 +202,7 @@ fn ablated(silence: SiteSilence) -> bool {
             })
             .unwrap_or_default()
     });
-    !list.is_empty() && list.iter().any(|id| id == "all" || id == silence.id())
+    !list.is_empty() && list.iter().any(|listed| listed == "all" || listed == id)
 }
 
 /// One typed silence a producer recorded: the site it ended, the reason, and
@@ -575,9 +580,11 @@ mod tests {
         for module in [
             include_str!("owners/owner_discovery.rs"),
             include_str!("pending_accounting.rs"),
+            include_str!("flush_accounting.rs"),
         ] {
-            // The two accounting passes of ADR 0886 and ADR 0838 keep their own
-            // typed endings and their own universes.
+            // The accounting passes of ADR 0886 and ADR 0838 and the flush
+            // universe (batch 11, owner-approved) keep their own typed endings
+            // and their own universes.
             assert!(!module.contains("SiteSilence::"));
         }
     }

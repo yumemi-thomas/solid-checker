@@ -1397,3 +1397,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/primitive-handed-value/node_modules/**
 !fixtures/reactive-ir/then-unplaced-chain/node_modules/
 !fixtures/reactive-ir/then-unplaced-chain/node_modules/**
+!fixtures/reactive-ir/flush-universe/node_modules/
+!fixtures/reactive-ir/flush-universe/node_modules/**
+!fixtures/reactive-ir/flush-universe-no-action/node_modules/
+!fixtures/reactive-ir/flush-universe-no-action/node_modules/**
+!fixtures/reactive-ir/flush-universe-bare/node_modules/
+!fixtures/reactive-ir/flush-universe-bare/node_modules/**
+!fixtures/reactive-ir/flush-universe-test-runner/node_modules/
+!fixtures/reactive-ir/flush-universe-test-runner/node_modules/**

@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 397,
+      "end": 430,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -9,6 +20,39 @@
       "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
       "start": 421,
       "end": 428,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 607,
+      "end": 627,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 753,
+      "end": 773,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-read-role/components.tsx",
+      "start": 1026,
+      "end": 1046,
       "fixes": 0
     }
   ]

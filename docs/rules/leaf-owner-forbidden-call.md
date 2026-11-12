@@ -191,6 +191,10 @@ Remove `flush()` because leaf callbacks already run during settlement, or move
 the write and flush together to the event handler or imperative boundary that
 triggered the work.
 
+## Accounting (ADR 0966)
+
+Every flush the flush census lists ends, for this code, in a row of this rule at the site, an SC9012, the compiler's discard, or a typed reason (the program names no primitive that could put the flush where this code applies, or the flush's caller is on an empty stack: a scheduled callback, code past an `await`, module evaluation, a test runner's callback written directly, or a site nothing enters). A flush none of those ends gets an uncertifiable `SC3001` row, `leaf-operation-unaccounted`: the walks that place a flush also answer "placed off" for a function no call edge reaches, a body that may be a component and an owner set around the call, none of which is a proof, so those sites stay uncertifiable (never a violation).
+
 ## Related
 
 - [missing-owner](missing-owner.md) — operations with no owner at all
