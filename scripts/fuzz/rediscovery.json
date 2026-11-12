@@ -20479,9 +20479,89 @@
   "outside": "the shape has no caller in the program: the importer is another package's code, which the checker cannot see and a grid program cannot hold (every program is checked beside the harness's `main.tsx`, which renders each export by a tag, and the fuzzer's Chrome run loads nothing else). The cells em-nso-* write the open boundary and a caller IN the program (the module's namespace enumerated by a key built at run time): they are the rediscovery of the same fix (`entered_by_unseen_code` in the component stop), 10 programs the head certifies (3 NO_OWNER_CLEANUP, 4 NO_OWNER_EFFECT, 3 NO_OWNER_CONTEXT) and the fix does not. The unseen caller itself is Chrome-confirmed by the oracle's own case (oracle.json `external`) and pinned by the fixture pair"
  },
  {
-  "finding": "SC1001's site, a signal read in a helper a component's effect calls, was certified legal in an OPEN program where the helper is exported by a SPECIFIER (`function helper() { return count(); } export { helper }`, `export { helper as other }`, a `const` arrow exported so): `module_exports` (`execution_role/write_roles.rs`) took an export statement that contains the function, or Type Facts' export flag, for an export, so the read walks took the helper for unexported and claimed every caller visible, though an importer the program does not hold may call it in a component's body, where the read is untracked (rc.21 STRICT_READ_UNTRACKED). `export function helper` was an obligation (`entered_by_unseen_code`, ADR 0934)",
+  "finding": "SC1001's site, a signal read in a helper a component's effect calls, was certified legal in an OPEN program where the helper is exported by a SPECIFIER (`function helper() { return count(); } export { helper }`, `export { helper as other }`, a `const` arrow exported so, a `const` bound to a function expression with a name of its own: N1 of the second re-review of #221): `module_exports` (`execution_role/write_roles.rs`) took an export statement that contains the function, or Type Facts' export flag, for an export, so the read walks took the helper for unexported and claimed every caller visible, though an importer the program does not hold may call it in a component's body, where the read is untracked (rc.21 STRICT_READ_UNTRACKED). `export function helper` was an obligation (`entered_by_unseen_code`, ADR 0934)",
   "found": "batch 11 (mac-b10-4, 2026-11-13): found while fixing R1 of the re-review of #221 (the reviewer noted the general path may share the hole; probes sp-read-decl and sp-read-spec: SC1001 uncertifiable and certified); the same cause shows on the corpus as +236 rows of other rules (SC9012 parameter-* and SC2003 unproven-container-root in library code that publishes its functions by `export { .. }` lists)",
-  "fixed": "ADR 0970 (R1 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier; fixture exported-specifier-open-read (the head files SC1001 at `declared` only, the fix at the three specifier-exported helpers too; `local`, not exported, stays silent)",
+  "fixed": "ADR 0970 (R1 of the re-review of #221): `module_exports` asks `binding_exported` for an export specifier; fixture exported-specifier-open-read (the head files SC1001 at `declared` only, the fix at the five specifier-exported helpers too; `local`, not exported, stays silent)",
   "outside": "the false clean needs a caller the program does not hold (the helper has no other caller than the component's effect in the program): the grids have none (every program is checked beside the harness's `main.tsx`; a caller in the program, such as the namespace call of ADR 0934's `export-namespace-call`, is unresolved dispatch and an obligation on every build). The cells em-nss-*, em-nsa-* and em-nso-* (SC4001's three codes) rediscover the same cause, `module_exports` and the open boundary, with a caller in the program, 30 programs the head certifies (10 each) and the fix does not"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in a `const` bound to a function expression that carries a name of its own, published by an export specifier (`const K1 = function Own1() { <site>; return <span />; }; export { K1 }`) and rendered by a tag, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`): `module_exports` (`execution_role/write_roles.rs`) resolved the function to `function_binding_name`, which gives a function expression's own name before the `const` that holds it, so the export was not seen (`export { K1 }` resolves to the `const`, and `Own1` is visible inside the body only; N1 of the second re-review of #221). Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable second re-review of #221 at 03bfe0630 (rereview2.md, probes x-fnexpr, x-fnexpr2, x-fnexpr4, x-read-fnexpr), probed on the release build and in Chrome (oracle case owner-emission-specifier: Named and Same); 03bfe0630 certifies it",
+  "fixed": "ADR 0970 (N1 of the second re-review of #221): `module_exports` resolves the export from the specifier's side (`exported_as_binding`): the declaration the specifier's local resolves to is the function's own declaration, or the declarator whose initializer is the function. Cells em-nsf-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-nsf-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-nsf-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-nsf-apply-x-direct-none"
+  ],
+  "rediscovered": "03bfe0630 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsf-*-never, which call nothing) are clean on 03bfe0630 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in a `const` bound to a function expression that carries a name of its own, published by an export specifier (`const K1 = function Own1() { <site>; return <span />; }; export { K1 }`) and rendered by a tag, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`): `module_exports` (`execution_role/write_roles.rs`) resolved the function to `function_binding_name`, which gives a function expression's own name before the `const` that holds it, so the export was not seen (`export { K1 }` resolves to the `const`, and `Own1` is visible inside the body only; N1 of the second re-review of #221). Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable second re-review of #221 at 03bfe0630 (rereview2.md, probes x-fnexpr, x-fnexpr2, x-fnexpr4, x-read-fnexpr), probed on the release build and in Chrome (oracle case owner-emission-specifier: Named and Same); 03bfe0630 certifies it",
+  "fixed": "ADR 0970 (N1 of the second re-review of #221): `module_exports` resolves the export from the specifier's side (`exported_as_binding`): the declaration the specifier's local resolves to is the function's own declaration, or the declarator whose initializer is the function. Cells em-nsf-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-nsf-handler-effect-direct-none",
+   "mx-no-owner-effect-em-nsf-handler-render-direct-none",
+   "mx-no-owner-effect-em-nsf-timer-effect-direct-none",
+   "mx-no-owner-effect-em-nsf-timer-render-direct-none"
+  ],
+  "rediscovered": "03bfe0630 (release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsf-*-never, which call nothing) are clean on 03bfe0630 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in a `const` bound to a function expression that carries a name of its own, published by an export specifier (`const K1 = function Own1() { <site>; return <span />; }; export { K1 }`) and rendered by a tag, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`): `module_exports` (`execution_role/write_roles.rs`) resolved the function to `function_binding_name`, which gives a function expression's own name before the `const` that holds it, so the export was not seen (`export { K1 }` resolves to the `const`, and `Own1` is visible inside the body only; N1 of the second re-review of #221). Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable second re-review of #221 at 03bfe0630 (rereview2.md, probes x-fnexpr, x-fnexpr2, x-fnexpr4, x-read-fnexpr), probed on the release build and in Chrome (oracle case owner-emission-specifier: Named and Same); 03bfe0630 certifies it",
+  "fixed": "ADR 0970 (N1 of the second re-review of #221): `module_exports` resolves the export from the specifier's side (`exported_as_binding`): the declaration the specifier's local resolves to is the function's own declaration, or the declarator whose initializer is the function. Cells em-nsf-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-nsf-handler-x-direct-none",
+   "mx-no-owner-context-em-nsf-timer-x-direct-none",
+   "mx-no-owner-context-em-nsf-apply-x-direct-none"
+  ],
+  "rediscovered": "03bfe0630 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsf-*-never, which call nothing) are clean on 03bfe0630 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CLEANUP's site, an `onCleanup`, written in a `const` bound to a function expression that carries the SAME name as the binding, published by an export specifier (`const K1 = function K1() { <site>; return <span />; }; export { K1 }`) and rendered by a tag, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`): `module_exports` (`execution_role/write_roles.rs`) resolved the function to `function_binding_name`, which gives a function expression's own name before the `const` that holds it, so the export was not seen (the two declarations of one spelling are different bindings, and the specifier resolves to the `const`; N1 of the second re-review of #221). Chrome rc.21 reports NO_OWNER_CLEANUP at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable second re-review of #221 at 03bfe0630 (rereview2.md, probes x-fnexpr, x-fnexpr2, x-fnexpr4, x-read-fnexpr), probed on the release build and in Chrome (oracle case owner-emission-specifier: Named and Same); 03bfe0630 certifies it",
+  "fixed": "ADR 0970 (N1 of the second re-review of #221): `module_exports` resolves the export from the specifier's side (`exported_as_binding`): the declaration the specifier's local resolves to is the function's own declaration, or the declarator whose initializer is the function. Cells em-nsg-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-em-nsg-handler-x-direct-none",
+   "mx-no-owner-cleanup-em-nsg-timer-x-direct-none",
+   "mx-no-owner-cleanup-em-nsg-apply-x-direct-none"
+  ],
+  "rediscovered": "03bfe0630 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsg-*-never, which call nothing) are clean on 03bfe0630 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_EFFECT's site, a `createEffect` or `createRenderEffect`, written in a `const` bound to a function expression that carries the SAME name as the binding, published by an export specifier (`const K1 = function K1() { <site>; return <span />; }; export { K1 }`) and rendered by a tag, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`): `module_exports` (`execution_role/write_roles.rs`) resolved the function to `function_binding_name`, which gives a function expression's own name before the `const` that holds it, so the export was not seen (the two declarations of one spelling are different bindings, and the specifier resolves to the `const`; N1 of the second re-review of #221). Chrome rc.21 reports NO_OWNER_EFFECT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable second re-review of #221 at 03bfe0630 (rereview2.md, probes x-fnexpr, x-fnexpr2, x-fnexpr4, x-read-fnexpr), probed on the release build and in Chrome (oracle case owner-emission-specifier: Named and Same); 03bfe0630 certifies it",
+  "fixed": "ADR 0970 (N1 of the second re-review of #221): `module_exports` resolves the export from the specifier's side (`exported_as_binding`): the declaration the specifier's local resolves to is the function's own declaration, or the declarator whose initializer is the function. Cells em-nsg-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-em-nsg-handler-effect-direct-none",
+   "mx-no-owner-effect-em-nsg-handler-render-direct-none",
+   "mx-no-owner-effect-em-nsg-timer-effect-direct-none",
+   "mx-no-owner-effect-em-nsg-timer-render-direct-none"
+  ],
+  "rediscovered": "03bfe0630 (release build): 4 false-clean programs, Chrome confirming; the fix: none (4 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsg-*-never, which call nothing) are clean on 03bfe0630 and uncertifiable on the fix"
+ },
+ {
+  "finding": "NO_OWNER_CONTEXT's site, a `useContext`, written in a `const` bound to a function expression that carries the SAME name as the binding, published by an export specifier (`const K1 = function K1() { <site>; return <span />; }; export { K1 }`) and rendered by a tag, was certified with no row where the host's callback (a timer, a handler or an effect's apply) calls it through the module's own namespace by a key built at run time (`self[[\"K\",\"1\"].join(\"\") as \"K1\"]()`): `module_exports` (`execution_role/write_roles.rs`) resolved the function to `function_binding_name`, which gives a function expression's own name before the `const` that holds it, so the export was not seen (the two declarations of one spelling are different bindings, and the specifier resolves to the `const`; N1 of the second re-review of #221). Chrome rc.21 reports NO_OWNER_CONTEXT at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable second re-review of #221 at 03bfe0630 (rereview2.md, probes x-fnexpr, x-fnexpr2, x-fnexpr4, x-read-fnexpr), probed on the release build and in Chrome (oracle case owner-emission-specifier: Named and Same); 03bfe0630 certifies it",
+  "fixed": "ADR 0970 (N1 of the second re-review of #221): `module_exports` resolves the export from the specifier's side (`exported_as_binding`): the declaration the specifier's local resolves to is the function's own declaration, or the declarator whose initializer is the function. Cells em-nsg-*",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-em-nsg-handler-x-direct-none",
+   "mx-no-owner-context-em-nsg-timer-x-direct-none",
+   "mx-no-owner-context-em-nsg-apply-x-direct-none"
+  ],
+  "rediscovered": "03bfe0630 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsg-*-never, which call nothing) are clean on 03bfe0630 and uncertifiable on the fix"
  }
 ]

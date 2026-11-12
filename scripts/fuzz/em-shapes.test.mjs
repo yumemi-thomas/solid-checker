@@ -29,10 +29,10 @@ const textOf = (code, context) => {
 };
 
 describe("the em contexts (a JSX-returning function a variable holds, called where no owner is current)", () => {
-  it("are nine routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(EM_ROUTES).toEqual(["view", "gen", "self", "hoc", "eval", "ns", "nss", "nsa", "nso"]);
+  it("are eleven routes on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(EM_ROUTES).toEqual(["view", "gen", "self", "hoc", "eval", "ns", "nss", "nsa", "nso", "nsf", "nsg"]);
     expect(EM_HOSTS).toEqual(["handler", "timer", "apply"]);
-    expect(EM_CONTEXT_NAMES).toHaveLength(54);
+    expect(EM_CONTEXT_NAMES).toHaveLength(66);
     for (const name of EM_CONTEXT_NAMES) {
       const parts = emParts(name);
       expect(parts, name).not.toBeNull();
@@ -132,6 +132,23 @@ describe("the em contexts (a JSX-returning function a variable holds, called whe
       expect(alias, host).toContain('self[["O","ut1"].join("") as "Out1"]();');
       expect(alias.join("\n"), host).toContain("<K1 />");
       for (const route of ["nss", "nsa"]) {
+        const twin = textOf("NO_OWNER_CLEANUP", `em-${route}-${host}-never`);
+        expect(twin, `${route} ${host}`).toContain("void self;");
+        expect(twin.join("\n"), `${route} ${host}`).not.toContain("self[[");
+      }
+    }
+  });
+  it("print the nsf and nsg routes: a const bound to a function expression with a name of its own, published by a specifier (N1), called through the namespace by a key built at run time", () => {
+    for (const host of EM_HOSTS) {
+      const own = textOf("NO_OWNER_CLEANUP", `em-nsf-${host}`);
+      expect(own, host).toContain("const K1 = function Own1() {");
+      expect(own, host).toContain("export { K1 };");
+      expect(own.join("\n"), host).toContain("<K1 />");
+      expect(own, host).toContain('self[["K","1"].join("") as "K1"]();');
+      const same = textOf("NO_OWNER_CLEANUP", `em-nsg-${host}`);
+      expect(same, host).toContain("const K1 = function K1() {");
+      expect(same, host).toContain("export { K1 };");
+      for (const route of ["nsf", "nsg"]) {
         const twin = textOf("NO_OWNER_CLEANUP", `em-${route}-${host}-never`);
         expect(twin, `${route} ${host}`).toContain("void self;");
         expect(twin.join("\n"), `${route} ${host}`).not.toContain("self[[");

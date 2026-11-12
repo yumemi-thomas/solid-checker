@@ -19,6 +19,8 @@
 //   em-nss-<host>           the same with the component published by an export specifier, no export statement that contains the function (R1 of the re-review of #221):
 //                           `function K1() { <site>; return <p />; } export { K1 };`, called through `self["K1"]()`
 //   em-nsa-<host>           an arrow `const K1 = () => { .. }` published renamed (`export { K1 as Out1 }`, R1), called through `self["Out1"]()`
+//   em-nsf-<host>           a `const` bound to a function expression that carries a name of its own, published by a specifier (N1 of the second re-review of #221): `const K1 =
+//                           function Own1() { <site>; return <span />; }; export { K1 }`; `em-nsg-<host>` the same spelling, `const K1 = function K1() { .. }`
 //   em-nso-<host>           `em-ns` in an OPEN program (R2 and R3: a publishing manifest, `programBoundary: open`): the namespace census is a closed program's and code the
 //                           program does not hold may call any export; the caller in the program is the cell's, the unseen importer cannot be written (rediscovery.json)
 //   <route>-<host>-never    legal    the same declarations, the host runs nothing: the function is held (the generator not stepped, the saved function not called, the eval evaluating `1`) and never run, so no site runs
@@ -29,7 +31,7 @@
 // binding bare (`emShape`), not crossed by the census, out of api-fire's plan.
 import { button, contain, decl, domExpr, expr, fn, jsx, mounted, num, prim, ret } from "./model.mjs";
 
-export const EM_ROUTES = ["view", "gen", "self", "hoc", "eval", "ns", "nss", "nsa", "nso"];
+export const EM_ROUTES = ["view", "gen", "self", "hoc", "eval", "ns", "nss", "nsa", "nso", "nsf", "nsg"];
 export const EM_HOSTS = ["handler", "timer", "apply"];
 /** The hosts each code is judged in: the hosts where the runtime reports the code for a call with no owner current. */
 export const EM_CODES = {
@@ -127,6 +129,16 @@ export function emContext(context, stmts, kit) {
         ...hostOf([], k, run, { twin: "void self", shown: [mounted(kit.name("m"), domExpr(`<${k} />`))] }), hoisted, files: {}, importLines: ['import * as self from "./App";'],
         ...(route === "nso" ? { boundary: "open" } : {}),
       };
+    }
+    case "nsf": case "nsg": {
+      // N1 of the second re-review of #221: a `const` bound to a function expression that carries a name of its own, published by an export specifier. `nsf` gives the expression
+      // a name unlike the binding's (`const K1 = function Own1() { .. }`), `nsg` the same spelling (`const K1 = function K1() { .. }`): the specifier resolves to the `const`, and the
+      // name inside is visible in the body only. A tag renders `K1`; the host calls it through the module's namespace by a key built at run time.
+      const k = kit.name("K");
+      const own = route === "nsg" ? k : kit.name("Own");
+      const held = contain("frame", 9, stmts, { head: `const ${k} = function ${own}() `, close: ";", after: ["return <span />;"] });
+      const run = `self[${JSON.stringify([k.slice(0, 1), k.slice(1)])}.join("") as "${k}"]()`;
+      return { ...hostOf([], k, run, { twin: "void self", shown: [mounted(kit.name("m"), domExpr(`<${k} />`))] }), hoisted: [held, expr(domExpr(`export { ${k} }`))], files: {}, importLines: ['import * as self from "./App";'] };
     }
     default: throw new Error(`no emission route ${route}`);
   }

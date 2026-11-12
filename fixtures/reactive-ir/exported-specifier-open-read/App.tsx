@@ -19,6 +19,14 @@ function renamed() {
   return count();
 }
 const arrowed = () => count();
+// A `const` bound to a function expression that carries a name of its own (N1 of the second re-review of #221): the specifier resolves to the `const`, and `inner` is visible in
+// the body only. The export was not seen (`function_binding_name` gave the inner name first), so these two were certified legal.
+const named = function named() {
+  return count();
+};
+const third = function inner() {
+  return count();
+};
 // Control. Not exported: its only caller is the effect, so the read is tracked and legal.
 function local() {
   return count();
@@ -26,9 +34,9 @@ function local() {
 
 export function App() {
   createEffect(
-    () => declared() + specifier() + renamed() + arrowed() + local(),
+    () => declared() + specifier() + renamed() + arrowed() + named() + third() + local(),
     () => {},
   );
   return <div />;
 }
-export { specifier, renamed as other, arrowed };
+export { specifier, renamed as other, arrowed, named, third };

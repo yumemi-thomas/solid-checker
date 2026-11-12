@@ -5187,11 +5187,65 @@ pub(crate) fn entered_by_unseen_code(
             && (!lookup.program_closed || lookup.escapes_unnamed(path)))
 }
 
+/// Whether an export names a binding that holds `function`, resolved from the
+/// export's side: the declaration an export specifier's local resolves to
+/// (`export { Comp }`, `export { Comp as Other }`, `export default Comp`) is the
+/// function's own declaration (`function Comp() {}`), or a `const`, `let` or
+/// `var` declarator whose initializer is the function (`const Comp = () => {}`,
+/// `const Comp = function Inner() {}`, behind parentheses or TypeScript sugar).
+/// It is not the name the function carries: a function expression's own name
+/// (`Inner`) is visible inside its body only, so no export can name it, and the
+/// binding a specifier resolves to is the declarator's (N1 of the second
+/// re-review of #221: `function_binding_name` gives the inner name first).
+fn exported_as_binding(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    use solid_facts::ast::FunctionKind;
+    // The declarations that bind this function: its own (a function declaration) and the declarators whose initializer it is.
+    let own = function
+        .name
+        .as_ref()
+        .filter(|_| function.kind == FunctionKind::Declaration)
+        .map(|name| name.span);
+    let bound = own
+        .into_iter()
+        .chain(
+            file.ast
+                .bindings_initializer_containing(function.span)
+                .filter(|binding| {
+                    binding.initializer_function
+                        && binding.initializer.is_some_and(|initializer| {
+                            file.ast
+                                .functions_within(initializer)
+                                .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                                .is_some_and(|candidate| candidate.span == function.span)
+                        })
+                })
+                .flat_map(|binding| binding.names.iter().map(|name| name.span)),
+        )
+        .collect::<Vec<_>>();
+    !bound.is_empty()
+        && file
+            .ast
+            .exports
+            .iter()
+            .filter(|export| export.module.is_none())
+            .flat_map(|export| export.declarations.iter().chain(export.specifiers.iter()))
+            .any(|specifier| {
+                let declared = file
+                    .ast
+                    .reference_declaration(specifier.local.span)
+                    .unwrap_or(specifier.local.span);
+                bound.contains(&declared)
+            })
+}
+
 /// Whether the module publishes `function` itself: an export declaration of
 /// it, with no other function between, an export specifier naming the binding
-/// that holds it (`export { Comp }`, `export { Comp as Other }`,
-/// `export default Comp`: the binding is declared elsewhere in the file and the
-/// statement does not contain the function), or Type Facts' export flag on it.
+/// that holds it ([`exported_as_binding`]: the binding is declared elsewhere in
+/// the file and the statement does not contain the function), or Type Facts'
+/// export flag on it.
 pub(crate) fn module_exports(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -5204,8 +5258,7 @@ pub(crate) fn module_exports(
                     && export.span.contains(outer.span)
                     && outer.span.contains(function.span)
             })
-    }) || crate::owners::function_binding_name(file, function)
-        .is_some_and(|name| crate::indexes::binding_exported(file, name.span))
+    }) || exported_as_binding(file, function)
         || lookup
             .typescript_file(file.path.as_str())
             .is_some_and(|facts| {

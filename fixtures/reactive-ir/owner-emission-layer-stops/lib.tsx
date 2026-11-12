@@ -23,7 +23,17 @@ const Arrow = () => {
   onCleanup(() => {});
   return <p>arrow</p>;
 };
-export { Spec, Aliased as Renamed, Arrow as ArrowOut };
+// N1 (the second re-review of #221): a `const` bound to a function expression that carries a name of its own. The specifier resolves to the `const`; `Own` (and `Same`, the same
+// spelling twice) is visible inside the body only, and `function_binding_name` gave it first, so the export was not seen.
+const Named = function Own() {
+  onCleanup(() => {});
+  return <p>named</p>;
+};
+const Same = function Same() {
+  onCleanup(() => {});
+  return <p>same</p>;
+};
+export { Spec, Aliased as Renamed, Arrow as ArrowOut, Named, Same };
 
 export function Plain() {
   return (
@@ -33,6 +43,8 @@ export function Plain() {
       <Spec />
       <Aliased />
       <Arrow />
+      <Named />
+      <Same />
     </p>
   );
 }
