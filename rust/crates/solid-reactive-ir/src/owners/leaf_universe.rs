@@ -270,7 +270,7 @@ pub(super) fn silences(
                 let allowed = allowed.get_or_insert_with(|| {
                     crate::execution_role::allowed_callback_spans(file, lookup)
                 });
-                if crate::execution_role::runs_off_every_apply(
+                if crate::static_api::runs_off_every_apply(
                     file,
                     call.span,
                     allowed,

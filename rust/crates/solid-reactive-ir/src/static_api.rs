@@ -230,13 +230,41 @@ fn cleanup_return_unchecked(file: &FileFacts, call: &solid_facts::ast::CallFact)
     })
 }
 
+/// ADR 0710: whether the role of `site` runs off every effect apply's stack: an event handler (unless a synchronous dispatch may deliver it from an apply), a deferred
+/// callback, a directive apply, rendering, module code, or code the compiler discarded. The lexical role of the code: it says nothing of a function that is also entered by a
+/// route it does not follow (a handler or a timer callback saved to a variable and called from an apply), which the owner-call universe's silence asks on top of it
+/// (batch 11, slice 6; the review of #220, F2: the owner stage calls this).
+pub(crate) fn runs_off_every_apply(
+    file: &FileFacts,
+    site: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::ExecutionRole as Role;
+    match crate::execution_role::semantic_execution_role(
+        file,
+        site,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+    ) {
+        Role::DeferredCallback
+        | Role::DirectiveApply
+        | Role::TrackedJsx
+        | Role::UntrackedRendering
+        | Role::DiscardedRendering
+        | Role::ModuleInitialization => true,
+        Role::EventCallback => !lookup.synchronous_event_dispatch_present(),
+        _ => false,
+    }
+}
+
 impl StaticApiContext<'_> {
-    /// ADR 0710: a role that runs off every effect apply's stack: an event
-    /// handler (unless a synchronous dispatch may deliver it from an apply),
-    /// a deferred callback, a directive apply, rendering, module code, or
-    /// code the compiler discarded.
     fn runs_off_every_apply(&self, file: &FileFacts, site: Span, allowed: &[Span]) -> bool {
-        crate::execution_role::runs_off_every_apply(
+        runs_off_every_apply(
             file,
             site,
             allowed,
