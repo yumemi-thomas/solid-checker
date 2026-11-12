@@ -76,8 +76,8 @@ enum FlushSafe {
     /// The program names no primitive that runs a callback under a leaf owner (`project_opens_leaf_scope`): no tracked queue callback runs.
     NoLeafScope,
     /// A callback a reviewed host scheduler runs from an empty stack, written directly in it (the census's `FreshStack`): no step, apply or leaf
-    /// callback is below it. Only for a call in a function's body (not a parameter default) and when no function around it is a named function
-    /// expression that its own code calls again by name.
+    /// callback is below it. Only for code that runs when the callback runs ([`callback_runs_it`]: no parameter default, no generator, no named function expression
+    /// its own code calls again, no class field initializer, no JSX or tracked region written in the call).
     FreshStack,
     /// Code an `await` of its own async function dominates (the census's `AwaitContinuation`): it resumes from the microtask queue on an empty stack.
     /// Only for a call in a function's body: a parameter default runs wherever its function is called.
@@ -154,24 +154,18 @@ fn reasons(
     if !leaf {
         reasons.push(FlushSafe::NoLeafScope);
     }
-    // The census class says where the function around the call runs; it is a statement about this call's stack only when two facts of the call's own
-    // syntax hold. The call is written in the body of its function: a default value in a parameter list runs wherever that function is called, which the
-    // class of the code around it does not say (the review of #213, B2). And, for the classes that name a scheduler's or a runner's own call, no function around
-    // the call can be entered again by its own name: `setTimeout(function tick() { flush(); … tick(true) })` runs `tick` a second time on the stack of whatever
-    // calls the name, an action's step or an effect's apply (B1). A site that fails either gets no reason, so its uncertifiable row.
+    // The census class says where the function around the call runs; it is a statement about this call's stack only when facts of the call's own syntax hold
+    // ([`callback_runs_it`] for the scheduler's and the runner's classes, the first alone for the continuation after an await). The call is written in the body of its
+    // function: a default value in a parameter list runs wherever that function is called, which the class of the code around it does not say (the review of #213, B2).
     let in_body = !crate::owners::in_parameter_list(&file.ast, site.span);
-    let named_again = file
-        .ast
-        .functions_owning(site.span)
-        .any(|function| reentered_by_name(file, function));
     let class = match site.caller {
         Some(DispatchCaller::FreshStack) => {
-            (in_body && !named_again).then_some(FlushSafe::FreshStack)
+            callback_runs_it(lookup, file, site.span).then_some(FlushSafe::FreshStack)
         }
         Some(DispatchCaller::AwaitContinuation) => in_body.then_some(FlushSafe::AwaitContinuation),
         Some(DispatchCaller::ModuleInitialization) => Some(FlushSafe::ModuleInitialization),
         Some(DispatchCaller::TestRunner) => {
-            (in_body && !named_again).then_some(FlushSafe::TestRunner)
+            callback_runs_it(lookup, file, site.span).then_some(FlushSafe::TestRunner)
         }
         // No reason, so the site gets its uncertifiable row: `DetachedOwner` keeps the stack's action depth, `TestHelper` may be called from a step
         // inside a test, an event handler's delivery may be dispatched from a step, `EffectApply` is the apply itself, and no census class (`None`)
@@ -192,6 +186,36 @@ fn reasons(
         reasons.push(FlushSafe::NeverRuns);
     }
     reasons
+}
+
+/// Whether a flush written in a scheduler's or a runner's callback runs on the stack that callback was given: everything between the flush and the call that hands the
+/// callback over (the callback and each inline carrier written in it) runs when the callback runs. The call is the one the census class names (`fresh_stack_callback_call`);
+/// no call is no proof. Written inside it, a function or a region that runs its code elsewhere or later refuses the claim:
+///
+/// - a parameter list holds the flush (a default value runs wherever its function is called: the review of #213, B2);
+/// - a function is a named function expression its own code uses (`setTimeout(function tick() { flush(); … tick(true) })` runs `tick` again on the stack of whatever calls the
+///   name, an action's step or an effect's apply: B1), or a generator (`[1].map(function* () { flush() })` only creates the generator object, `.next()` runs the body on
+///   whatever stack calls it: the re-review's N2);
+/// - a class field's initializer holds it (an instance's construction runs it: N1), or a JSX element or a compiler tracked region (a prop written in JSX is a getter that runs
+///   where the component reads it, a tracked region is a render effect: N3, as `continuation_function` asks of the code after an await).
+///
+/// A function written around the call is not asked: what it holds runs once per run of the call, and the callback still runs from the scheduler or the runner.
+fn callback_runs_it(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> bool {
+    let Some((call, _)) = crate::execution_role::fresh_stack_callback_call(file, span, lookup)
+    else {
+        return false;
+    };
+    let mut written_in_the_call = file
+        .ast
+        .functions_owning(span)
+        .filter(|function| call.span.contains(function.span));
+    !written_in_the_call.any(|function| {
+        !function.body.contains(span) || function.generator || reentered_by_name(file, function)
+    }) && crate::execution_role::runs_with_its_function(file, span, call.span)
 }
 
 /// A named function expression whose name is used: `setTimeout(function tick() { … tick(true) })`. The name is bound inside the function only, so the code that

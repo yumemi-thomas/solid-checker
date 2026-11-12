@@ -8,6 +8,10 @@
 //             pdefault        `late = (x = <site>) => x;` written in a timer's callback, `late()` called by the host: a default value runs wherever its function is called. The class of the
 //                             code around the nested function (the timer's callback) said nothing of that call.
 //             pdefault-await  the same, the assignment written after an `await` of an async function (the class of the code after an await said "a microtask" of the code after it).
+//             field           `late = class { x = <site>; }` written in a timer's callback, `new late()` in the host: a class field's initializer runs at construction, not where the class is written.
+//             gencarrier      `late = [1].map(function* () { <site> })` written in a timer's callback, `late[0].next()` in the host: the carrier only creates the generator object, its body runs
+//                             at `.next()` (the re-review of #213, N1 and N2).
+//             jsxprop         `<Child v={<site>} />` created in a timer's callback, `props.v` read in the host: a prop written in JSX is a getter, it runs where the component reads it (N3).
 //   hosts   effect-apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), action (an action's step: FLUSH_IN_ACTION), tracked (a leaf owner's callback: FLUSH_IN_TRACKED_QUEUE_CALLBACK)
 //
 // Chrome (rc.21, the real oracle) confirmed the false clean on #213's head e70b560f2 (a typed reason `FlushSafe::FreshStack` ended the site): `named` in an action's step and in an effect's apply,
@@ -16,7 +20,7 @@
 // holds the shapes in plain programs; fixtures/reactive-ir/flush-universe-class holds the runner's).
 import { contain } from "./model.mjs";
 
-export const FC_FORMS = ["named", "pdefault", "pdefault-await"];
+export const FC_FORMS = ["named", "pdefault", "pdefault-await", "field", "gencarrier", "jsxprop"];
 export const FC_HOSTS = ["effect-apply", "action", "tracked"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const FC_CODES = {
@@ -85,6 +89,45 @@ const FRAMES = {
       close: `) => x;\n  ${trigger}\n});`,
       mode: "expr",
       imports,
+    };
+  },
+  field: (n, host, never) => {
+    const klass = n("Late");
+    const { lines, trigger, imports } = hostLines(host, n, never ? `void ${klass};` : `if (${klass}) new ${klass}();`, false);
+    return {
+      head: `let ${klass}: undefined | (new () => object);\n${lines.join("\n")}\nsetTimeout(() => {\n  ${klass} = class {\n    x = `,
+      close: `;\n  };\n  ${trigger}\n});`,
+      mode: "expr",
+      imports,
+    };
+  },
+  gencarrier: (n, host, never) => {
+    const late = n("late");
+    const { lines, trigger, imports } = hostLines(host, n, never ? `void ${late};` : `${late}?.[0]?.next();`, false);
+    return {
+      head: `let ${late}: undefined | Generator<void, void, unknown>[];\n${lines.join("\n")}\nsetTimeout(() => {\n  ${late} = [1].map(function* () `,
+      close: `);\n  ${trigger}\n});`,
+      nest: 1,
+      imports,
+    };
+  },
+  jsxprop: (n, host, never) => {
+    const child = n("Child");
+    const read = n("read");
+    const sig = n("fs");
+    const run = n("fr");
+    const use = never ? `void ${read};` : `${read}();`;
+    // The component reads the prop in the host's callback; the host is created inside the component, which a root owns.
+    const inside = {
+      "effect-apply": { pre: [`const [${sig}] = createSignal(0);`], body: [`createEffect(`, `  () => ${sig}(),`, `  () => {`, `    ${use}`, `  },`, `);`], imports: ["createEffect"] },
+      tracked: { pre: [`const [${sig}] = createSignal(0);`], body: [`createTrackedEffect(() => {`, `  ${sig}();`, `  ${use}`, `});`], imports: ["createTrackedEffect"] },
+      action: { pre: [], body: [`const ${run} = action(function* () {`, `  ${use}`, `});`, `setTimeout(() => void ${run}());`], imports: ["action"] },
+    }[host];
+    return {
+      head: `${inside.pre.join("\n")}${inside.pre.length ? "\n" : ""}function ${child}(props: { v: void }) {\n  const ${read} = () => props.v;\n${inside.body.map((line) => `  ${line}`).join("\n")}\n  return <p>c</p>;\n}\nsetTimeout(() => {\n  document.body.append((<${child} v={`,
+      close: `} />) as unknown as Node);\n});`,
+      mode: "expr",
+      imports: inside.imports,
     };
   },
   "pdefault-await": (n, host, never) => {

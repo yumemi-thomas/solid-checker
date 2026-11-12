@@ -38,4 +38,19 @@ describe("flush", () => {
     late = (x = flush()) => x;
   });
   void late;
+
+  // The re-review (N1, N2): the code of a test callback runs when the callback runs, except a class field's initializer (an instance's construction runs it) and a
+  // generator's body (`.next()` runs it): three rows each.
+  it("a field", () => {
+    class Late {
+      x = flush();
+    }
+    void Late;
+  });
+
+  it("a generator", () => {
+    void [1].map(function* () {
+      flush();
+    });
+  });
 });

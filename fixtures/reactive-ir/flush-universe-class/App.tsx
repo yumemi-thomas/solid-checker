@@ -67,6 +67,48 @@ export async function Awaited(ready: Promise<void>) {
   later = (x = flush()) => x;
 }
 
+// N1 (the re-review of #213). A class field's initializer runs when an instance is constructed, not where the class is written: here in an effect's apply (three rows).
+let Late: undefined | (new () => object);
+export function Field() {
+  setTimeout(() => {
+    Late = class {
+      x = flush();
+    };
+  });
+  createEffect(() => n(), () => {
+    if (Late) new Late();
+  });
+  return <p>x</p>;
+}
+
+// N2. A generator handed to an inline carrier: `map` only creates the generator object, its body runs at `.next()`, on whatever stack calls it (three rows).
+let gens: undefined | Generator<void, void, unknown>[];
+export function Carrier() {
+  setTimeout(() => {
+    gens = [1].map(function* () {
+      flush();
+    });
+  });
+  createEffect(() => n(), () => {
+    gens?.[0]?.next();
+  });
+  return <p>x</p>;
+}
+
+// N3. A prop written in JSX is a getter: it runs where the component reads `props.v`, here in an effect's apply (three rows).
+function Child(props: { v: void }) {
+  createEffect(() => n(), () => {
+    props.v;
+  });
+  return <p>c</p>;
+}
+export function Prop() {
+  setTimeout(() => {
+    document.body.append((<Child v={flush()} />) as unknown as Node);
+  });
+  return <p>x</p>;
+}
+
 // Silent, each on a typed reason. A named function expression whose name nothing uses can only run as often as the scheduler runs it (`FreshStack`); the flush directly
 // in the timer's callback (`FreshStack`); and past the await (`AwaitContinuation`).
 export function Once() {
@@ -86,4 +128,15 @@ export function Direct() {
 export async function After(ready: Promise<void>) {
   await ready;
   flush();
+}
+
+// A static initializer runs when the class is evaluated, which is when the timer's callback runs (`FreshStack`).
+export function Static() {
+  setTimeout(() => {
+    class Once {
+      static x = flush();
+    }
+    void Once;
+  });
+  return <p>x</p>;
 }

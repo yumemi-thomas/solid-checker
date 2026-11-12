@@ -21,10 +21,10 @@ const textOf = (code, context) => {
 };
 
 describe("the fc contexts (a flush in a function the host enters again, or calls for its default)", () => {
-  it("are three forms on three hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(FC_FORMS).toEqual(["named", "pdefault", "pdefault-await"]);
+  it("are six forms on three hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(FC_FORMS).toEqual(["named", "pdefault", "pdefault-await", "field", "gencarrier", "jsxprop"]);
     expect(FC_HOSTS).toEqual(["effect-apply", "action", "tracked"]);
-    expect(FC_CONTEXT_NAMES).toHaveLength(18);
+    expect(FC_CONTEXT_NAMES).toHaveLength(36);
     for (const name of FC_CONTEXT_NAMES) {
       const parts = fcParts(name);
       expect(parts, name).not.toBeNull();
@@ -55,6 +55,26 @@ describe("the fc contexts (a flush in a function the host enters again, or calls
     const awaited = textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "fc-pdefault-await-tracked");
     expect(awaited.indexOf("await Promise.resolve();")).toBeLessThan(awaited.indexOf("late1 = (x = flush()) => x;"));
     expect(textOf("FLUSH_IN_ACTION", "fc-pdefault-action")).toContain("void fr1();");
+  });
+  it("print the field, generator and prop forms: the site is a field's initializer, a generator carrier's body or a JSX prop's value, and the host runs it or, in the twin, runs nothing", () => {
+    const field = textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-field-effect-apply");
+    expect(field).toContain("Late1 = class {");
+    expect(field).toContain("x = flush();");
+    expect(field).toContain("if (Late1) new Late1();");
+    const fieldTwin = textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-field-effect-apply-never");
+    expect(fieldTwin).toContain("x = flush();");
+    expect(fieldTwin).not.toContain("if (Late1) new Late1();");
+    const generator = textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-gencarrier-effect-apply");
+    expect(generator).toContain("late1 = [1].map(function* () {");
+    expect(generator).toContain("late1?.[0]?.next();");
+    expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-gencarrier-effect-apply-never")).not.toContain("late1?.[0]?.next();");
+    const prop = textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-jsxprop-effect-apply");
+    expect(prop).toContain("document.body.append((<Child1 v={flush()} />) as unknown as Node);");
+    expect(prop).toContain("const read1 = () => props.v;");
+    expect(prop).toContain("read1();");
+    expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "fc-jsxprop-effect-apply-never")).not.toContain("read1();");
+    expect(textOf("FLUSH_IN_ACTION", "fc-jsxprop-action").some((line) => line.startsWith("setTimeout(() => void fr1());"))).toBe(true);
+    expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "fc-field-tracked").some((line) => line.startsWith("createTrackedEffect("))).toBe(true);
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(fcShape("fc-named-action", { binding: "alias", layer: "none" })).toBe(false);
