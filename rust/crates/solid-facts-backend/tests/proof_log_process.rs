@@ -69,6 +69,8 @@ fn the_proof_log_changes_no_answer() {
         "rc21-server-arms",
         "absent-guard-prop",
         "pending-read-accounted",
+        // Batch 11, slice 6: the owner-call universe's silences and declines.
+        "owner-call-leaf-universe",
     ] {
         let log = directory.join(format!("{name}.jsonl"));
         assert_eq!(
@@ -115,6 +117,54 @@ fn the_log_names_each_file_once_and_every_line_by_it() {
     ] {
         assert!(kinds.contains(kind), "no {kind} line: {kinds:?}");
     }
+    fs::remove_dir_all(directory).ok();
+}
+
+// Batch 11, slice 6 (coordinator-approved, owner delegated): a decline is no ending. `stored` is kept in an array, so it is entered by a reference that is no direct call and no
+// silence applies: the log names why (a `declined` line listing the code), the site keeps SC3001's uncertifiable `leaf-operation-unaccounted`, and no silence lists the code at the
+// span. Nothing reads a decline back.
+#[test]
+fn an_owner_call_decline_ends_nothing() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-declined");
+    let log = directory.join("owner-call.jsonl");
+    let report = check(&typefacts, "owner-call-leaf-universe", Some(&log));
+    let source =
+        fs::read_to_string(fixture("owner-call-leaf-universe").join("App.tsx")).unwrap();
+    let start = source.find("createMemo(() => 4)").unwrap() as u64;
+    let end = start + "createMemo".len() as u64;
+    let code = "PRIMITIVE_IN_FORBIDDEN_SCOPE";
+    // The report: the code's own uncertifiable row stands at the callee.
+    let rows = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| {
+            finding["id"] == "SC3001"
+                && finding["primaryLocation"]["startByte"] == start
+                && finding["primaryLocation"]["endByte"] == end
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "SC3001's row at the creation: {rows:?}");
+    assert_eq!(rows[0]["kind"], "uncertifiable");
+    assert_eq!(rows[0]["analysisContext"], "leaf-operation-unaccounted");
+    // The log: a decline lists the code at the span, and no named end does.
+    let lines = lines(&log);
+    let lists = |line: &serde_json::Value| {
+        line["s"] == start
+            && line["e"] == end
+            && line["codes"]
+                .as_array()
+                .is_some_and(|codes| codes.iter().any(|listed| listed == code))
+    };
+    assert!(
+        lines.iter().any(|line| line["k"] == "declined" && lists(line)),
+        "no decline lists {code} at the callee"
+    );
+    assert!(
+        !lines.iter().any(|line| line["k"] == "silent" && lists(line)),
+        "a silence lists {code} at a site only a decline stands at"
+    );
     fs::remove_dir_all(directory).ok();
 }
 

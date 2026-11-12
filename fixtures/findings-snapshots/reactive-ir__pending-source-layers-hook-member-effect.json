@@ -10,17 +10,6 @@
       "start": 367,
       "end": 378,
       "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/pending-source-layers/variants/hook-member-effect/hooks.ts",
-      "start": 83,
-      "end": 93,
-      "fixes": 0
     }
   ]
 }

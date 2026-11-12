@@ -1445,3 +1445,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-no-leaf-opener/variants/package-unread/node_modules/**
 !fixtures/reactive-ir/owner-call-effect-creation/variants/sync-dispatch/node_modules/
 !fixtures/reactive-ir/owner-call-effect-creation/variants/sync-dispatch/node_modules/**
+!fixtures/reactive-ir/owner-call-effect-creation-unresolved-package/node_modules/
+!fixtures/reactive-ir/owner-call-effect-creation-unresolved-package/node_modules/**

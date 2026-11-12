@@ -1045,37 +1045,8 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
             }
         }
     }
-    on_flush_sites(ctx, &mut found);
-    owner_call_sites(ctx, &mut found);
+    primitive_call_sites(ctx, &mut found);
     found
-}
-
-/// SC3002's sites: each call whose resolved primitive is `onFlush`, outside
-/// dependency source, whatever its callee is spelled (found from the calls
-/// like ADR 0886's owner sites).
-fn on_flush_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
-    let lookup = ctx.semantic_lookup;
-    for file in crate::base::reads::file_slots(ctx.facts) {
-        if lookup.in_dependency_source(file.path.as_str()) {
-            continue;
-        }
-        for call in &file.ast.calls {
-            if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::OnFlush)
-            {
-                found.push((
-                    file,
-                    Site {
-                        table: "on-flush",
-                        source: "primitive",
-                        via: "call",
-                        at: call.callee,
-                        alternates: vec![call.span],
-                        codes: ON_FLUSH_CODES,
-                    },
-                ));
-            }
-        }
-    }
 }
 
 /// The codes of the owner-call universe a call may raise, the empty list when the call is no site (batch 11, slice 6): `onCleanup` raises
@@ -1090,7 +1061,10 @@ pub(crate) fn owner_call_codes(
     primitive: solid_dialect::Primitive,
     client_build: bool,
 ) -> &'static [SiteCode] {
-    let leaf = if primitive == solid_dialect::Primitive::OnCleanup {
+    // `onCleanup` is the dialect's cleanup role: asked of the dialect, not of the primitive's name.
+    let leaf = if dialect.owner_requirement_role(primitive)
+        == Some(solid_dialect::OwnerRequirementRole::Cleanup)
+    {
         crate::cleanup::leaf_forbids(dialect, file, call, primitive)
             .then_some(SiteCode::CleanupForbidden)
     } else {
@@ -1111,10 +1085,10 @@ pub(crate) fn owner_call_codes(
     }
 }
 
-/// The owner-call universe (batch 11, slice 6): each call whose resolved primitive the dialect refuses under a leaf owner or on an effect apply's stack,
-/// outside dependency source, whatever its callee is spelled (found from the calls, like [`on_flush_sites`] and ADR 0886's owner sites), with the codes
-/// [`owner_call_codes`] gives it.
-fn owner_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
+/// The sites found from the calls' resolved primitives, whatever the callee is spelled and outside dependency source (like ADR 0886's owner sites), in one pass over the files:
+/// SC3002's, each call whose primitive is `onFlush`; and the owner-call universe's (batch 11, slice 6), each call whose primitive the dialect refuses under a leaf owner or on an
+/// effect apply's stack, with the codes [`owner_call_codes`] gives it.
+fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
     let lookup = ctx.semantic_lookup;
     let dialect = ctx.dialect;
     let client_build = crate::static_api::client_build(ctx);
@@ -1126,6 +1100,20 @@ fn owner_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFact
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;
             };
+            if primitive == solid_dialect::Primitive::OnFlush {
+                found.push((
+                    file,
+                    Site {
+                        table: "on-flush",
+                        source: "primitive",
+                        via: "call",
+                        at: call.callee,
+                        alternates: vec![call.span],
+                        codes: ON_FLUSH_CODES,
+                    },
+                ));
+                continue;
+            }
             let codes = owner_call_codes(dialect, file, call, primitive, client_build);
             if codes.is_empty() {
                 continue;

@@ -1107,6 +1107,25 @@ pub(crate) fn silent_codes(
     );
 }
 
+/// A reason an owner-call site (batch 11, slice 6, `owners/leaf_universe.rs`) has no silence for the codes it lists: a typed fact the producer found, never a proof and never an
+/// ending. The site keeps its uncertifiable row of each of those codes; the gate (`scripts/lib/proof-log.mjs`) accepts an owner-call site that ends in nothing only where the row
+/// stands and a `declined` line at the span lists the code, so "uncertifiable by policy" is a recorded fact (and a census of what a future proof must discharge). Nothing reads it back.
+pub(crate) fn declined(rule: &str, location: &Location, reason: &str, codes: &[&str]) {
+    if !enabled() {
+        return;
+    }
+    emit(
+        location.path.as_ref(),
+        Some(location_pair(location)),
+        object(json!({
+            "k": "declined",
+            "rule": rule,
+            "proof": reason,
+            "codes": codes,
+        })),
+    );
+}
+
 /// The span a location names, when it fits.
 pub(crate) fn span_of(location: &Location) -> Option<Span> {
     let start = u32::try_from(location.start_byte).ok()?;

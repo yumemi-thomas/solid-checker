@@ -26,14 +26,74 @@
 //!   under a leaf owner, or on an effect's apply, through an entry no edge shows. The census silence rests on this too: a package may open the leaf scope the
 //!   project's own primitives do not.
 //!
-//! Nothing here ever files a row; a silence names the fact it rests on ([`PremiseKind`], each with the span of the code it is about).
+//! Nothing here ever files a row; a silence names the fact it rests on ([`PremiseKind`], each with the span of the code it is about). Where no silence applies for a group of
+//! codes the pass writes a typed [`Decline`] to the proof log: the first fact of its order of questions that stops it (a package may run the function, a layer is entered by
+//! reference, a leaf bit, an unowned entry, ...). A decline is no proof and ends nothing: it is never read by an ending or a silence, so the site keeps the uncertifiable row of
+//! each code, and the gate accepts such a site only if that row stands and a decline at its span lists the code (coordinator-approved, owner delegated).
 
 use super::*;
 use crate::proof_log::PremiseKind;
 use crate::site_accounting::{SiteEnds, SiteSilence};
 
-/// Records the silences of every owner-call site of the project's files in `ends`. `client_build` is the build SC6002's creation sites are asked on
-/// ([`crate::static_api::client_build`]).
+/// Why an owner-call site has no silence from this pass for a group of its codes: one typed fact, the first the producer's order of questions meets. A decline is
+/// no proof and ends nothing (never read by an ending or a silence: the site keeps the uncertifiable row of each code); it goes to the proof log only, where the gate
+/// accepts an owner-call site that ends in nothing if and only if the row stands and a decline at its span lists the code. The set is closed: a reason this pass finds is
+/// named here or the site is a gate hit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Decline {
+    /// A package the build does not read may run the function that holds the site (B3, ADR 0967): it may open a leaf scope around it or call it on an effect's apply.
+    UnreadPackageMayRun,
+    /// The site is in an instance field's initializer, which runs at each construction, which may be anywhere (no function owns it, and it is no module scope).
+    InstanceFieldInitializer,
+    /// The site is in a parameter list: it runs when a call omits its argument, which no entry places.
+    ParameterList,
+    /// The site is in a generator: its body runs where an iterator is stepped, which no owner edge follows.
+    GeneratorBody,
+    /// The site follows a suspension of its async function: it runs from a later task, which no owner edge follows.
+    AfterSuspension,
+    /// The owner graph holds no node for the function that holds the site.
+    NoOwnerNode,
+    /// No owner edge reaches the function (context zero): its entries are not known.
+    NoEdgeIntoFunction,
+    /// The function is an export whose only entry is the unseen caller of an open world (the bare unowned seed): who calls it, and under what owner, is not known.
+    OpenWorldExport,
+    /// The context has a leaf bit: some entry runs the site under a leaf owner (a leaf operation's row is what ends the site, and none stands here).
+    LeafBitPresent,
+    /// The context has an entry that gives no owner (or an owner that is only conventional): the creation may meet `context === null`.
+    UnownedEntry,
+    /// A layer around the site is entered by a route the graph has no edge for: a function stored, assigned, handed on or a method (ADR 0868).
+    EntryByReference,
+}
+
+impl Decline {
+    /// The reason's id in the proof log. One arm per reason, no wildcard: a new reason names its id or the build fails.
+    #[deny(clippy::wildcard_enum_match_arm)]
+    const fn id(self) -> &'static str {
+        match self {
+            Self::UnreadPackageMayRun => "unread-package-may-run",
+            Self::InstanceFieldInitializer => "instance-field-initializer",
+            Self::ParameterList => "parameter-list",
+            Self::GeneratorBody => "generator-body",
+            Self::AfterSuspension => "after-suspension",
+            Self::NoOwnerNode => "no-owner-node",
+            Self::NoEdgeIntoFunction => "no-edge-into-function",
+            Self::OpenWorldExport => "open-world-export",
+            Self::LeafBitPresent => "leaf-bit-present",
+            Self::UnownedEntry => "unowned-entry",
+            Self::EntryByReference => "entry-by-reference",
+        }
+    }
+}
+
+/// The group of codes of a site a silence of this pass answers: SC3001's two (a leaf owner forbids the call) or SC6002's one (an effect's apply refuses the creation).
+#[derive(Clone, Copy)]
+enum Group {
+    Leaf,
+    Effect,
+}
+
+/// Records the silences of every owner-call site of the project's files in `ends`, and the declines (proof log only) of the groups of codes none answers. `client_build` is
+/// the build SC6002's creation sites are asked on ([`crate::static_api::client_build`]).
 pub(super) fn silences(
     files: &[&solid_facts::FileFacts],
     order: &[PathId],
@@ -56,6 +116,7 @@ pub(super) fn silences(
     let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
         super::owner_emission::caller_holds_no_context(graph, &reach, lookup, caller_file, at)
     };
+    let logging = crate::proof_log::enabled();
     for (listed, pid) in files.iter().zip(order) {
         if lookup.in_dependency_source(listed.path.as_str()) {
             continue;
@@ -80,6 +141,26 @@ pub(super) fn silences(
             });
             let effect = codes.contains(&SiteCode::EffectCreation);
             let site = call.callee;
+            // What a group of codes is declined for: written to the proof log only.
+            let decline = |group: Group, reason: Decline| {
+                if !logging {
+                    return;
+                }
+                let names = codes
+                    .iter()
+                    .filter(|code| match group {
+                        Group::Leaf => !matches!(code, SiteCode::EffectCreation),
+                        Group::Effect => matches!(code, SiteCode::EffectCreation),
+                    })
+                    .map(|code| code.name())
+                    .collect::<Vec<_>>();
+                crate::proof_log::declined(
+                    "owner-call",
+                    &site.location(file.path.shared()),
+                    reason.id(),
+                    &names,
+                );
+            };
             // No execution runs the site: no code of it can be raised.
             if matches!(
                 reach.site(file, call.span),
@@ -96,7 +177,13 @@ pub(super) fn silences(
             }
             // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere).
             let Some(function) = ast.innermost_function_owning(call.span) else {
-                if !crate::local_access::in_instance_field_initializer(file, call.span) {
+                if crate::local_access::in_instance_field_initializer(file, call.span) {
+                    for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
+                        if open {
+                            decline(group, Decline::InstanceFieldInitializer);
+                        }
+                    }
+                } else {
                     ends.end_at(
                         file,
                         site,
@@ -109,8 +196,15 @@ pub(super) fn silences(
             };
             // A package the build does not read may run the function (B3): no census and no entry the graph holds answers for it.
             if unread.may_run(file, call.span) {
+                for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
+                    if open {
+                        decline(group, Decline::UnreadPackageMayRun);
+                    }
+                }
                 continue;
             }
+            // The groups of codes still open: the census answers SC3001's pair for a program with no leaf opener.
+            let mut open_leaf = leaf;
             if leaf && no_leaf_opener {
                 ends.end_at(
                     file,
@@ -119,53 +213,96 @@ pub(super) fn silences(
                     PremiseKind::ProgramCensus,
                     || Some(site),
                 );
+                open_leaf = false;
+            }
+            let open_effect = effect;
+            if !open_leaf && !open_effect {
                 continue;
             }
-            // The graph's context answers for the site only where the site is plain and no entry into a layer around it is one the graph has no edge for.
-            if crate::owners::in_parameter_list(ast, call.span)
-                || function.generator
-                || crate::execution_role::may_follow_suspension(file, call.span)
-            {
-                continue;
-            }
-            let Some((node, context)) = graph.node_context(*pid, function.span) else {
-                continue;
+            // The graph's context answers for the site only where the site is plain.
+            let plain = if crate::owners::in_parameter_list(ast, call.span) {
+                Err(Decline::ParameterList)
+            } else if function.generator {
+                Err(Decline::GeneratorBody)
+            } else if crate::execution_role::may_follow_suspension(file, call.span) {
+                Err(Decline::AfterSuspension)
+            } else {
+                Ok(())
             };
-            let leaf_free = context != 0
-                && context & (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED) == 0
-                && !open_world_unowned_only(context, node);
-            let owner_current = context != 0
-                && context & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED)
-                    == 0;
-            if !((leaf && leaf_free) || (effect && owner_current)) {
-                continue;
-            }
-            if super::owner_emission::named_layer_entry_open(
-                file,
-                call.span,
-                None,
-                lookup,
-                &caller_unplaced,
-            ) {
-                continue;
-            }
-            if leaf && leaf_free {
-                ends.end_at(
+            let context = match (plain, graph.node_context(*pid, function.span)) {
+                (Err(reason), _) => Err(reason),
+                (Ok(()), None) => Err(Decline::NoOwnerNode),
+                (Ok(()), Some(held)) => Ok(held),
+            };
+            let (node, context) = match context {
+                Ok(held) => held,
+                Err(reason) => {
+                    for (open, group) in [(open_leaf, Group::Leaf), (open_effect, Group::Effect)] {
+                        if open {
+                            decline(group, reason);
+                        }
+                    }
+                    continue;
+                }
+            };
+            // Each group asks the context its own question.
+            let leaf_answer = if !open_leaf {
+                None
+            } else if context == 0 {
+                Some(Err(Decline::NoEdgeIntoFunction))
+            } else if context & (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED) != 0 {
+                Some(Err(Decline::LeafBitPresent))
+            } else if open_world_unowned_only(context, node) {
+                Some(Err(Decline::OpenWorldExport))
+            } else {
+                Some(Ok(()))
+            };
+            let effect_answer = if !open_effect {
+                None
+            } else if context == 0 {
+                Some(Err(Decline::NoEdgeIntoFunction))
+            } else if context
+                & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED)
+                != 0
+            {
+                Some(Err(Decline::UnownedEntry))
+            } else {
+                Some(Ok(()))
+            };
+            // The context says no entry is the forbidden one; it is every entry only where no layer around the site is entered by a route the graph has no edge for.
+            let entry_open = (matches!(leaf_answer, Some(Ok(())))
+                || matches!(effect_answer, Some(Ok(()))))
+                && super::owner_emission::named_layer_entry_open(
                     file,
-                    site,
-                    SiteSilence::LeafOwnerAbsent,
-                    PremiseKind::OwnerContextNoLeaf,
-                    || Some(function.span),
+                    call.span,
+                    None,
+                    lookup,
+                    &caller_unplaced,
                 );
-            }
-            if effect && owner_current {
-                ends.end_at(
-                    file,
-                    site,
-                    SiteSilence::OwnerCurrent,
-                    PremiseKind::OwnerContextCurrent,
-                    || Some(function.span),
-                );
+            for (answer, group) in [(leaf_answer, Group::Leaf), (effect_answer, Group::Effect)] {
+                let Some(answer) = answer else {
+                    continue;
+                };
+                match answer {
+                    Err(reason) => decline(group, reason),
+                    Ok(()) if entry_open => decline(group, Decline::EntryByReference),
+                    Ok(()) => match group {
+                        Group::Leaf => ends.end_at(
+                            file,
+                            site,
+                            SiteSilence::LeafOwnerAbsent,
+                            PremiseKind::OwnerContextNoLeaf,
+                            || Some(function.span),
+                        ),
+                        Group::Effect => ends.end_at(
+                            file,
+                            site,
+                            SiteSilence::OwnerCurrent,
+                            PremiseKind::OwnerContextCurrent,
+                            || Some(function.span),
+                        ),
+                    },
+                }
             }
         }
     }

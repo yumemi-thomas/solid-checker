@@ -111,6 +111,10 @@ A call the call graph withheld (ADR 0339: a `const` arrow is not hoisted, and a 
 may run before the binding's declarator) is followed as a run the walk does not prove: the origin it reaches is `mixed`, an
 uncertifiable row, where the helper was certified clean for want of a call edge.
 
+## Endings of the creation sites (ADR 0969)
+
+Every creation the dialect says throws on an effect's apply (`createMemo`, `createEffect`, `createRenderEffect`, `createRoot`, `render`, `createProjection`, `Loading`, `Errored`, `resolve`, `until`, a function-form `createSignal` or `createStore`) is a site on a client build. It ends in a row of this rule, an SC9012, the compiler's discard, or a silence that names the fact the throw needs and the code lacks (`inEffectCallback && context === null`); with none it gets an uncertifiable `SC6002` row, `effect-creation-unaccounted`, never a violation. The silences: the site never runs; it is at module scope; the role engine places it off every apply (rendering, a deferred callback, a directive apply, module code, discarded code, an event handler where the program dispatches no event synchronously); an exact primitive whose callback creates an owner wraps it (`createRoot`, a computation's compute: not `runWithOwner`, whose owner may be a value that is null); or the owner graph gives the owning function an owner on every entry (no unowned bit), the site is plain and no layer around it is entered by a reference that is no direct call. The graph's answer is given only for a function no package the build does not read may run (ADR 0967). A creation in a helper a timer and a component body both call, a handler in a program that dispatches an event synchronously, and a function kept in a collection keep the row.
+
 ## How to fix
 
 Create the computation in the effect's compute function or in the component
