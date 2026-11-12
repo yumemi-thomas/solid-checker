@@ -19915,5 +19915,80 @@
   "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable second re-review of #213 (2026-11-12, rereview2-slice5, N4, probes s4-inline-suite and s5-inline-suite-*), confirmed in Node with the real `node:test` on the previous head's release build `rel-s5r` (certified, 0 rows)",
   "fixed": "ADR 0966 amended a third time (the second re-review of #213): a flush in a function body that has the class `ModuleInitialization` (a suite body a runner runs inside its registration) ends the codes only when the questions of `callback_runs_it` hold of everything written inside the outermost registration of the chain (`suite_body_runs_it`, `runs_when_the_call_runs`: no parameter list, generator, named function expression its own code uses, class field initializer, JSX element or compiler tracked region); otherwise no reason, so the site's uncertifiable row",
   "outside": "the shape needs a reviewed runner's inline suite body (`describe` of `node:test`, `@types/node/test.d.ts`), and the generator's runtime is Chrome, which cannot load `node:test`: no generator context writes it. The fixture `fixtures/reactive-ir/flush-universe-inline-suite` holds the four shapes and their silent twins (15 uncertifiable rows on the fix, 6 on `rel-s5r`), and the Node run of the field shape is recorded in the PR"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that names no Solid package: `runStep(cb)` is `action(function* () { cb(); })()`), was certified with no row where the package runs it as an effect's apply: the flush accounting's program censuses read the primitives the build's own table names, and the program names none. Thirteen routes: written as an argument, by reference, through a const copy, as a member of an object literal or a method of one, through a holder, as an element of an array literal, as a JSX prop or a child expression of a component of the package, through a project function's parameter, through a helper the handed callback calls, as a function a project function returns, and through a reflective call (`runStep.call(null, cb)`). Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): B3 of the Fable review of #213 (2026-11-12, review-slice5-u, probe p21-dependency-step), owner ruling option b (fail closed, no premise) and its condition (every route a function reaches the package), confirmed in Chrome with the real oracle on the previous head's release build `rel-n45` (patterns pkghand/*: ten false cleans)",
+  "fixed": "ADR 0967 (the B3 PR after #213): a flush in a function a package the build does not read as source may run gets no program-wide census reason (NoSteppedAction, NoDeferringPrimitive, NoLeafScope), so its uncertifiable row of each code: a function written as an argument or inside one, referenced through any copy, assignment or import, a JSX prop, spread or child of a component the program does not read, a project function's parameter that goes on to one of these, and a helper the handed callback calls (`package_hand_off.rs`); a callee is known only by its resolved declaration",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-literal-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-ref-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-alias-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-member-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-method-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-holder-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-array-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-jsx-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-children-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-wrap-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-caller-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-return-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-call-apply-x-direct-none"
+  ],
+  "rediscovered": "`rel-n45` (release, the previous head 879c33e05's N4/N5 fix as built by runn45.sh; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-literal-apply, ph-ref-apply, ph-alias-apply, ph-member-apply, ph-method-apply, ph-holder-apply, ph-array-apply, ph-jsx-apply, ph-children-apply, ph-wrap-apply, ph-caller-apply, ph-return-apply, ph-call-apply); the code's 13 ph programs: false-clean 13. `rel-b3a` (release, the fix of this PR, the code the first commit holds): recall-gap 13"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that names no Solid package: `runStep(cb)` is `action(function* () { cb(); })()`), was certified with no row where the package runs it as an action's step: the flush accounting's program censuses read the primitives the build's own table names, and the program names none. Thirteen routes: written as an argument, by reference, through a const copy, as a member of an object literal or a method of one, through a holder, as an element of an array literal, as a JSX prop or a child expression of a component of the package, through a project function's parameter, through a helper the handed callback calls, as a function a project function returns, and through a reflective call (`runStep.call(null, cb)`). Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): B3 of the Fable review of #213 (2026-11-12, review-slice5-u, probe p21-dependency-step), owner ruling option b (fail closed, no premise) and its condition (every route a function reaches the package), confirmed in Chrome with the real oracle on the previous head's release build `rel-n45` (patterns pkghand/*: ten false cleans)",
+  "fixed": "ADR 0967 (the B3 PR after #213): a flush in a function a package the build does not read as source may run gets no program-wide census reason (NoSteppedAction, NoDeferringPrimitive, NoLeafScope), so its uncertifiable row of each code: a function written as an argument or inside one, referenced through any copy, assignment or import, a JSX prop, spread or child of a component the program does not read, a project function's parameter that goes on to one of these, and a helper the handed callback calls (`package_hand_off.rs`); a callee is known only by its resolved declaration",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-literal-step-x-direct-none",
+   "mx-flush-in-action-ph-ref-step-x-direct-none",
+   "mx-flush-in-action-ph-alias-step-x-direct-none",
+   "mx-flush-in-action-ph-member-step-x-direct-none",
+   "mx-flush-in-action-ph-method-step-x-direct-none",
+   "mx-flush-in-action-ph-holder-step-x-direct-none",
+   "mx-flush-in-action-ph-array-step-x-direct-none",
+   "mx-flush-in-action-ph-jsx-step-x-direct-none",
+   "mx-flush-in-action-ph-children-step-x-direct-none",
+   "mx-flush-in-action-ph-wrap-step-x-direct-none",
+   "mx-flush-in-action-ph-caller-step-x-direct-none",
+   "mx-flush-in-action-ph-return-step-x-direct-none",
+   "mx-flush-in-action-ph-call-step-x-direct-none"
+  ],
+  "rediscovered": "`rel-n45` (release, the previous head 879c33e05's N4/N5 fix as built by runn45.sh; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-literal-step, ph-ref-step, ph-alias-step, ph-member-step, ph-method-step, ph-holder-step, ph-array-step, ph-jsx-step, ph-children-step, ph-wrap-step, ph-caller-step, ph-return-step, ph-call-step); the code's 13 ph programs: false-clean 13. `rel-b3a` (release, the fix of this PR, the code the first commit holds): recall-gap 13"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that names no Solid package: `runStep(cb)` is `action(function* () { cb(); })()`), was certified with no row where the package runs it as a leaf owner's callback (`createTrackedEffect`): the flush accounting's program censuses read the primitives the build's own table names, and the program names none. Thirteen routes: written as an argument, by reference, through a const copy, as a member of an object literal or a method of one, through a holder, as an element of an array literal, as a JSX prop or a child expression of a component of the package, through a project function's parameter, through a helper the handed callback calls, as a function a project function returns, and through a reflective call (`runStep.call(null, cb)`). Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): B3 of the Fable review of #213 (2026-11-12, review-slice5-u, probe p21-dependency-step), owner ruling option b (fail closed, no premise) and its condition (every route a function reaches the package), confirmed in Chrome with the real oracle on the previous head's release build `rel-n45` (patterns pkghand/*: ten false cleans)",
+  "fixed": "ADR 0967 (the B3 PR after #213): a flush in a function a package the build does not read as source may run gets no program-wide census reason (NoSteppedAction, NoDeferringPrimitive, NoLeafScope), so its uncertifiable row of each code: a function written as an argument or inside one, referenced through any copy, assignment or import, a JSX prop, spread or child of a component the program does not read, a project function's parameter that goes on to one of these, and a helper the handed callback calls (`package_hand_off.rs`); a callee is known only by its resolved declaration",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-literal-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-ref-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-alias-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-member-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-method-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-holder-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-array-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-jsx-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-children-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-wrap-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-caller-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-return-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-call-leaf-x-direct-none"
+  ],
+  "rediscovered": "`rel-n45` (release, the previous head 879c33e05's N4/N5 fix as built by runn45.sh; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-literal-leaf, ph-ref-leaf, ph-alias-leaf, ph-member-leaf, ph-method-leaf, ph-holder-leaf, ph-array-leaf, ph-jsx-leaf, ph-children-leaf, ph-wrap-leaf, ph-caller-leaf, ph-return-leaf, ph-call-leaf); the code's 13 ph programs: false-clean 13. `rel-b3a` (release, the fix of this PR, the code the first commit holds): recall-gap 13"
+ },
+ {
+  "finding": "A flush written in a callback a reviewed scheduler runs (`setTimeout`, `queueMicrotask`, `Promise.prototype.then`) was certified on `FlushSafe::FreshStack` in a program that installs fake timers (`vi.useFakeTimers()`, `jest.useFakeTimers()`), where a test advances the clock inside an action's step and the callback runs on the step's stack: FLUSH_IN_ACTION (SC2006), with the effect's apply and a leaf callback the same way (SC2008, SC3001)",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): F1 of the Fable review of #213, owner ruling; confirmed in a vitest 4.1.7 run on solid-js 2.0.0-rc.21 (development build, jsdom): a real `setTimeout` callback flushes on an empty stack (no error), the same callback run by `vi.advanceTimersByTime(10)` inside an `action(function* () { … })` step throws `[FLUSH_IN_ACTION]`",
+  "fixed": "ADR 0967 (F1): a program that installs fake timers (a member or destructured key that resolves to the installer's declaration in vitest, @types/jest, @jest/environment, @jest/globals or bun-types, called or read as a value) gets no `FreshStack` reason, so every flush a scheduler's callback holds keeps its uncertifiable row of each code",
+  "outside": "the grids' programs run in the page of the Chrome oracle, where vitest and jest cannot load (they need their own Node runner and the generator names no test library), so no program the fuzzer generates installs the reviewed libraries' fake clock; fixture flush-universe-fake-timers holds it (the vitest program: nine rows, its `real` twin: none, the `jest`, `bun` and `destructured` variants: three each) and the `FakeTimers` census reads the declaration, which a unit test (`a_fake_timer_installer_is_a_reviewed_library_declaration`) pins"
  }
 ]

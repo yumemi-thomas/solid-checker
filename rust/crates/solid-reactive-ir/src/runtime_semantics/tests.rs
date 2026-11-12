@@ -752,6 +752,50 @@ fn a_test_runner_registration_is_a_reviewed_package_declaration() {
     assert!(test_runner_suite_modifier("describe") && !test_runner_suite_modifier("serial"));
 }
 
+/// F1 of the review of #213: a fake-timer installer is the declaration named
+/// `useFakeTimers` in a reviewed test library's installed files, by the
+/// declaration's own name and path, never a project path or another name.
+#[test]
+fn a_fake_timer_installer_is_a_reviewed_library_declaration() {
+    for path in [
+        "/app/node_modules/vitest/dist/index.d.ts",
+        "/app/node_modules/.pnpm/vitest@4.1.6_x/node_modules/vitest/dist/index.d.ts",
+        "/app/node_modules/@types/jest/index.d.ts",
+        "/app/node_modules/@jest/environment/build/index.d.ts",
+        "/app/node_modules/@jest/globals/build/index.d.ts",
+        "/app/node_modules/bun-types/test.d.ts",
+    ] {
+        assert!(
+            fake_timer_installer_declaration(path, "useFakeTimers"),
+            "{path}"
+        );
+        for name in ["useRealTimers", "advanceTimersByTime", "fn", "useFakeTimer"] {
+            assert!(
+                !fake_timer_installer_declaration(path, name),
+                "{path} {name}"
+            );
+        }
+    }
+    for path in [
+        "/app/src/timers.ts",
+        "/app/vitest/index.d.ts",
+        "/app/node_modules/other/vitest.d.ts",
+        "/app/node_modules/sinon/index.d.ts",
+        "/app/node_modules/bun-types/other.d.ts",
+    ] {
+        assert!(
+            !fake_timer_installer_declaration(path, "useFakeTimers"),
+            "{path}"
+        );
+    }
+    assert!(fake_timer_installer_property("useFakeTimers"));
+    assert!(!fake_timer_installer_property("useRealTimers") && !fake_timer_installer_property(""));
+    assert!(fake_timer_library_declaration(
+        "/app/node_modules/vitest/dist/index.d.ts"
+    ));
+    assert!(!fake_timer_library_declaration("/app/src/vitest/index.ts"));
+}
+
 /// ADR 0438: each runner's suite-body answer is its own, read on its bytes:
 /// vitest collects the body after the file loads, jest-circus, mocha,
 /// `node:test` and playwright call it inside the registration, and `bun:test`
