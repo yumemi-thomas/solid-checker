@@ -5115,6 +5115,11 @@
     "expect": [
      {
       "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC1002",
       "context": "unresolved-invocation"
      },
@@ -5323,6 +5328,16 @@
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
     "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
@@ -15817,6 +15832,11 @@
     "expect": [
      {
       "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
      },
@@ -16700,7 +16720,24 @@
     "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11"
    },
    "weight": 6,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0969",
+    "restoredBy": "A JSX closing tag is no hand-off (ADR 0967, ADR 0969)",
+    "why": "certified clean before ADR 0969, uncertifiable until B3's hand-off census stops reading a JSX closing tag as a hand-off: `</Card>`, written beside `<Card>` for a component with children, is taken for a reference that hands the component to a package nothing here reads (`package_hand_off.rs`, `position`), so the leaf universe's SC3001 home row stands at each creation the component writes, though the mounted root renders it (the same file with a self-closing element is silent); the closing-tag proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     }
+    ]
+   }
   },
   {
    "id": "clean-dynamic-as",
@@ -16780,7 +16817,19 @@
     "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86"
    },
    "weight": 35,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0969",
+    "restoredBy": "A JSX closing tag is no hand-off (ADR 0967, ADR 0969)",
+    "why": "certified clean before ADR 0969, uncertifiable until B3's hand-off census stops reading a JSX closing tag as a hand-off: `</Card>`, written beside `<Card>` for a component with children, is taken for a reference that hands the component to a package nothing here reads (`package_hand_off.rs`, `position`), so the leaf universe's SC3001 home row stands at each creation the component writes, though the mounted root renders it (the same file with a self-closing element is silent); the closing-tag proof restores the expectation above",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     }
+    ]
+   }
   },
   {
    "id": "clean-portal-show",

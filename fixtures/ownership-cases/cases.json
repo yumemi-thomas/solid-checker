@@ -1285,6 +1285,40 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "createMemo",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "resolve",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -1302,7 +1336,42 @@
    "presets": [],
    "enableRules": [],
    "expect": {
-    "findings": [],
+    "findings": [
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "createMemo",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "resolve",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
     "absent": [
      {
       "rule": "no-await-primitive-in-tracked-scope"
@@ -1720,6 +1789,23 @@
       "code": "SC6001",
       "kind": "violation",
       "severity": "warning",
+      "span": {
+       "marker": "createMemo",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
       "span": {
        "marker": "createMemo",
        "occurrence": 2
@@ -3138,6 +3224,23 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "createEffect",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -3252,6 +3355,23 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "mapArray",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
@@ -3270,11 +3390,32 @@
    "presets": [],
    "enableRules": [],
    "expect": {
-    "findings": [],
-    "absent": [],
-    "silent": true
+    "findings": [
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "mapArray",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": [
+     {
+      "rule": "strict-read-untracked"
+     }
+    ]
    },
-   "note": "The control for `mapper/001`: JSX the map function returns is compiled to its own tracked expressions, so the read in `{tag()}` subscribes the row's render effect and updates."
+   "note": "The control for `mapper/001`: JSX the map function returns is compiled to its own tracked expressions, so the read in `{tag()}` subscribes the row's render effect and updates. ADR 0969: the exported `Rows` keeps the leaf universe's uncertifiable SC3001 row at `mapArray` (an unread package may run the export under a leaf owner: B3), so the control claims the rule's absence, not a silent program."
   },
   {
    "id": "strict-read-untracked/context-provider-value/001",
@@ -3322,11 +3463,32 @@
    "presets": [],
    "enableRules": [],
    "expect": {
-    "findings": [],
-    "absent": [],
-    "silent": true
+    "findings": [
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "createEffect",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": [
+     {
+      "rule": "strict-read-untracked"
+     }
+    ]
    },
-   "note": "Kept divergence: eslint-plugin-solid 0.18.1's `badUnnamedDerivedSignal` flags an anonymous function that reads a signal and is not handed to a tracked scope. On rc.17 an effect compute that returns such an arrow is legal: the compute reads nothing itself (the arrow is returned, not called), the effect has no dependency to lose, and calling the received function later reads whatever its caller reads (probe 3a: no diagnostic, one run, `observers(count)` empty because nothing reads). The shape that is a defect, calling the received function inside the apply, is not built (docs/open-work.md)."
+   "note": "Kept divergence: eslint-plugin-solid 0.18.1's `badUnnamedDerivedSignal` flags an anonymous function that reads a signal and is not handed to a tracked scope. On rc.17 an effect compute that returns such an arrow is legal: the compute reads nothing itself (the arrow is returned, not called), the effect has no dependency to lose, and calling the received function later reads whatever its caller reads (probe 3a: no diagnostic, one run, `observers(count)` empty because nothing reads). The shape that is a defect, calling the received function inside the apply, is not built (docs/open-work.md). ADR 0969: the exported component keeps the leaf universe's uncertifiable SC3001 row at its creation (an unread package may run the export under a leaf owner: B3), so the case claims the rule's absence, not a silent program."
   },
   {
    "id": "strict-read-untracked/unnamed-derived/memo-returns-function/002",
@@ -3364,6 +3526,23 @@
       "severity": "warning",
       "span": {
        "marker": "getter()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "span": {
+       "marker": "createMemo",
+       "occurrence": 2
       },
       "fix": {
        "behavior": "none"
