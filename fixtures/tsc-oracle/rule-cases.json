@@ -1094,8 +1094,8 @@
       "expect": "silent",
       "checker": "reports",
       "sourceExtension": "ts",
-      "why": "`EffectFunction` is `(v, p?) => (() => void) | void` and `createMemo` takes any compute, so creating a memo in a createEffect apply type-checks; the claim is the runtime's: the apply runs with no owner, so rc.17's dev build throws PRIMITIVE_IN_EFFECT_CALLBACK (`assertNotInEffectCallback`), which no type expresses.",
-      "code": "import { createEffect, createMemo, createRoot, createSignal } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, (v) => {\n    createMemo(() => v * 2);\n  });\n  return dispose;\n});\n"
+      "why": "`EffectFunction` is `(v, p?) => (() => void) | void` and `createMemo` takes any compute, so creating a memo in a createEffect apply type-checks; the claim is the runtime's: the apply runs with no owner, so rc.17's dev build throws PRIMITIVE_IN_EFFECT_CALLBACK (`assertNotInEffectCallback`), which no type expresses. ADR 0969: the root is written without `export`: B3's census takes a function written inside an export statement for an exported one (`export const x = createRoot(() => \u2026)` hands the root's callback to a package the build does not read), so the `createEffect` creation inside it would keep an uncertifiable SC6002 row beside the violation this case isolates; the proof batch refines the census.",
+      "code": "import { createEffect, createMemo, createRoot, createSignal } from \"solid-js\";\nconst dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, (v) => {\n    createMemo(() => v * 2);\n  });\n  return dispose;\n});\n"
     },
     {
       "rule": "flush-in-effect-callback",
