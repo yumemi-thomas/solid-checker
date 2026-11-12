@@ -223,7 +223,7 @@
   "SC9012 parameter-member-path-unresolved": 21,
   "SC9012 parameter-member-target-unresolved": 148,
   "SC9012 parameter-member-targets-diverge": 11,
-  "SC9012 parameter-use-unmodeled": 121,
+  "SC9012 parameter-use-unmodeled": 126,
   "SC9012 primitive-alias-call": 17,
   "SC9012 primitive-handed": 12,
   "SC9012 primitive-result-method": 9,

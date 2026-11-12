@@ -414,6 +414,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/closed-export-member-dispatch/node_modules/**
 !fixtures/reactive-ir/closed-export-member-dispatch-open/node_modules/
 !fixtures/reactive-ir/closed-export-member-dispatch-open/node_modules/**
+!fixtures/reactive-ir/closed-export-argument-primitive/node_modules/
+!fixtures/reactive-ir/closed-export-argument-primitive/node_modules/**
+!fixtures/reactive-ir/closed-export-argument-primitive-object/node_modules/
+!fixtures/reactive-ir/closed-export-argument-primitive-object/node_modules/**
+!fixtures/reactive-ir/closed-export-argument-primitive-open/node_modules/
+!fixtures/reactive-ir/closed-export-argument-primitive-open/node_modules/**
 !fixtures/reactive-ir/parameter-pass-through-dispatch/node_modules/
 !fixtures/reactive-ir/parameter-pass-through-dispatch/node_modules/**
 !fixtures/reactive-ir/prop-pass-through-dispatch/node_modules/
