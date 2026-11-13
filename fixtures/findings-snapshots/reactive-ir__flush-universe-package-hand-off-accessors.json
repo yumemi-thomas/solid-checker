@@ -90,6 +90,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-accessors/App.tsx",
+      "start": 1357,
+      "end": 1377,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-accessors/App.tsx",
+      "start": 1357,
+      "end": 1377,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
