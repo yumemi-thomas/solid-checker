@@ -20,7 +20,11 @@
 //! - a receiver reaches members through no reference of their object (the check of #227, G1): a value placed directly in an object literal that writes `this` or `super` (a
 //!   property's value, a spread's argument, a `__proto__:` value) is handed, as is a prototype installed by a write of `prototype` or `__proto__` (a `const` literal that writes
 //!   no receiver takes the write as a `__proto__:` key, and the value goes on in the reads of the object), and a call of a member the project declares hands its holder when the
-//!   callee names `this` or `super` or nothing resolves it to exactly one function that never does (a method written outside the literal, a parameter, a call's result);
+//!   callee names `this` or `super` or nothing resolves it to exactly one function that never does (a method written outside the literal, a parameter, a call's result). The
+//!   object a member reaches a receiver through is no reference either (the review of #229, B2: a member assigned after the literal, written by a project function, on a
+//!   derived literal, an `Object.create` result or a class's instance), so the key is followed instead: a function stored under a key (a property of an object literal, an
+//!   assignment's target) is handed when a use of a receiver, in code a package may run, reads the key (`this.k`, `super.k`, `const { k } = this`) or any key (`this[key]`, the
+//!   receiver kept in a local, reflected, spread or taken whole by a rest: followed as an object of accessors; a key the program does not name is any key); none of it withholds a hand-off;
 //! - an argument of a call: the receiver decides ([`Receiver`]): a dialect primitive and the standard library's inline callbacks run it before they return, on the stack
 //!   of the function the call is written in; a reviewed fresh-stack scheduler, a DOM listener registration and a reviewed test runner's registration run it elsewhere and
 //!   keep nothing; a project function the call graph resolves exactly goes on in its parameter (a component's props are its first parameter, a reflective call's forwarded
@@ -58,7 +62,7 @@
 //! reaches a package through a global (`globalThis.x = f` with a hand-off the program does not spell).
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use solid_facts::FileFacts;
@@ -95,6 +99,37 @@ type ReceiverSpans = Option<Arc<Vec<Span>>>;
 
 /// The spans of the object literals of one file that write a receiver, shared; `None` when the file's receivers cannot be read.
 type ReceiverLiterals = Option<Arc<Vec<Span>>>;
+
+/// One use of a receiver (`this`, `super`) in a file of the program: what it reads, and where.
+#[derive(Clone, Copy)]
+struct ReceiverRead<'a> {
+    file: &'a FileFacts,
+    at: Span,
+    kind: ReadKind,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReadKind {
+    /// `this.k`, `super.k`, `this["k"]`, `this[key]`: the member expression, read (or called) there.
+    Member,
+    /// The member is the target of a write (`this.k = v`, `super.k = v`): a setter of the key may run there, and nothing is read out.
+    MemberWrite,
+    /// `const { k } = this`: the local the pattern binds to the member.
+    Local,
+    /// The receiver is used as a value (`const self = this`, `f(this)`, `{ ...this }`, `return this`, a pattern with a rest): any member may be read from it, anywhere it goes.
+    Escape,
+    /// The file's receivers cannot be read: any member may be read.
+    Unreadable,
+}
+
+/// Every use of a receiver in the files of the program, by the key it reads (the review of #229, B2): the members `this` and `super` read are reached through no reference of
+/// the object that holds them, so a value stored under a key (by an assignment, a literal's property) is read by a receiver that names the key, wherever the object came from.
+#[derive(Default)]
+struct ReceiverReads<'a> {
+    named: BTreeMap<String, Vec<ReceiverRead<'a>>>,
+    /// A read of a key the program does not name (`this[key]`), and every use of the receiver as a value: they read any key.
+    any: Vec<ReceiverRead<'a>>,
+}
 
 /// What one question has visited, so that a cycle of copies or calls ends.
 #[derive(Default)]
@@ -159,8 +194,13 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     receiver_spans: RefCell<HashMap<Arc<str>, ReceiverSpans>>,
     /// The object literals of a file that write `this` or `super` anywhere in their text (`None`: the file's receivers cannot be read, so every literal may).
     receiver_literals: RefCell<HashMap<Arc<str>, ReceiverLiterals>>,
-    /// Whether a file of the project spells the `__proto__` key anywhere: what makes a write through a key the program does not name a possible prototype install.
+    /// Whether a file of the program (a dependency source file too: a key it exports names the property as well) spells the `__proto__` key anywhere: what makes a write
+    /// through a key the program does not name a possible prototype install.
     proto_key_spelled: std::cell::OnceCell<bool>,
+    /// The uses of receivers in the files of the program, read once (`receiver_reads`).
+    receiver_reads: std::cell::OnceCell<ReceiverReads<'a>>,
+    /// Whether an object literal, asked as a holder, is provably confined (`literal_confined`), kept: the answer is the syntax's and the call graph's, not a walk's.
+    confined: RefCell<HashMap<Key, bool>>,
 }
 
 impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
@@ -175,6 +215,8 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             receiver_spans: RefCell::new(HashMap::new()),
             receiver_literals: RefCell::new(HashMap::new()),
             proto_key_spelled: std::cell::OnceCell::new(),
+            receiver_reads: std::cell::OnceCell::new(),
+            confined: RefCell::new(HashMap::new()),
         }
     }
 
@@ -357,6 +399,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         if self.placed_in_receiver_literal(file, at) {
             return true;
         }
+        // A value stored under a key a receiver reads, in a function a package may run, is reached by that read wherever the object it is stored in came from (an
+        // object assigned after the literal, a prototype, an instance of a class, a parameter: the review of #229, B2).
+        if self.placed_under_read_key(file, at, walk) {
+            return true;
+        }
         // The value is called, not handed: `f()`, `new C()`, `(() => …)()`, a tag. It runs on the stack of the function the call is written in; an instance a constructor
         // builds is a value of its own.
         if let Some(call) = ast.calls_with_peeled_callee(at).next() {
@@ -452,6 +499,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             // A write of `__proto__` or `prototype` installs the value as the prototype of objects nothing here follows: their members are read through receivers, not
             // through the value's references (the review of #227's check, G1).
             if self.installs_prototype(file, assignment.target)
+                || self.assigned_under_read_key(file, assignment.target, walk)
                 || self.assignment_hands(file, assignment.target, walk)
             {
                 return true;
@@ -685,11 +733,14 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             Some("__proto__") => !self.receiverless_literal_binding(file, member.object),
             Some("prototype") => true,
             Some(_) => false,
+            // Every file of the program spells the key as well as the project's: a name a dependency source file exports (`o[KEY] = base`) is the key too (the review of
+            // #229, S2). A key no file spells is a write nothing here reads as an install: the stores under a key a receiver reads are the question of
+            // [`Self::placed_under_read_key`] and [`Self::assigned_under_read_key`].
             None => {
                 *self.proto_key_spelled.get_or_init(|| {
-                    self.files.iter().any(|(path, file)| {
-                        !self.lookup.in_dependency_source(path) && file.source.contains("__proto__")
-                    })
+                    self.files
+                        .values()
+                        .any(|file| file.source.contains("__proto__"))
                 }) && ast.computed_members.binary_search(&member.span).is_ok()
             }
         }
@@ -722,6 +773,773 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         };
         self.receiver_literals(file)
             .is_some_and(|literals| !literals.contains(&literal))
+    }
+
+    /// Every use of a receiver in the files of the program (a dependency source file too), read once and kept: [`ReceiverReads`].
+    fn receiver_reads(&self) -> &ReceiverReads<'a> {
+        self.receiver_reads.get_or_init(|| {
+            let mut files: Vec<(&str, &'a FileFacts)> = self
+                .files
+                .iter()
+                .map(|(path, file)| (*path, *file))
+                .collect();
+            files.sort_unstable_by_key(|(path, _)| *path);
+            let mut reads = ReceiverReads::default();
+            for (_, file) in files {
+                self.collect_receiver_reads(file, &mut reads);
+            }
+            reads
+        })
+    }
+
+    /// The uses of `this` and `super` in one file, by what each reads: a member (`this.k`, `super.k`, `this["k"]`; a computed key the program does not name reads any
+    /// key), a key a pattern destructures (`const { k } = this`), or the receiver as a value (`const self = this`, `f(this)`, `return this`, `{ ...this }`, a pattern with a
+    /// rest, an iteration), which reads any key anywhere it goes. A call of `super(…)`, a private member (`this.#k`: only the class's own code names it) and an operand nothing
+    /// takes (`typeof this`) read no key.
+    fn collect_receiver_reads(&self, file: &'a FileFacts, reads: &mut ReceiverReads<'a>) {
+        if !file.source.contains("this") && !file.source.contains("super") {
+            return;
+        }
+        // A file of another language (a JSON or CSS module the program reads) holds no receiver; a script that does not parse may hold any.
+        let script = std::path::Path::new(file.path.as_str())
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                matches!(
+                    extension,
+                    "ts" | "tsx" | "mts" | "cts" | "js" | "jsx" | "mjs" | "cjs"
+                )
+            });
+        if !script {
+            return;
+        }
+        let Some(spans) = self.receiver_spans(file) else {
+            reads.any.push(ReceiverRead {
+                file,
+                at: Span::new(0, 0),
+                kind: ReadKind::Unreadable,
+            });
+            return;
+        };
+        let mut seen: HashSet<(Arc<str>, Span)> = HashSet::new();
+        for &receiver in spans.iter() {
+            // `super(…)` runs the parent's constructor against the object: no member is read through it.
+            if file.ast.calls_with_peeled_callee(receiver).next().is_some() {
+                continue;
+            }
+            self.follow_receiver(file, receiver, 0, &mut seen, reads);
+        }
+    }
+
+    /// The uses of `value`, the receiver or a name for it (a local it is kept in, a parameter it is passed to): a member read through it is a read of the key, a pattern that
+    /// destructures it reads the keys it names, a local that keeps it and a call of a function the build reads whose parameter receives it are followed to their uses, and any
+    /// other use hands it where nothing here follows (`return this`, `{ ...this }`, an argument of a callee nothing resolves exactly, an iteration): it reads any key there.
+    fn follow_receiver(
+        &self,
+        file: &'a FileFacts,
+        value: Span,
+        depth: usize,
+        seen: &mut HashSet<(Arc<str>, Span)>,
+        reads: &mut ReceiverReads<'a>,
+    ) {
+        const DEPTH: usize = 6;
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(value);
+        if !seen.insert((file.path.shared(), value)) {
+            return;
+        }
+        let mut member_read = false;
+        for member in ast.members_with_peeled_object(value) {
+            member_read = true;
+            let write = ast
+                .write_targets
+                .iter()
+                .any(|target| ast.peel_ts_sugar_span(*target) == member.span);
+            let read = ReceiverRead {
+                file,
+                at: member.span,
+                kind: if write {
+                    ReadKind::MemberWrite
+                } else {
+                    ReadKind::Member
+                },
+            };
+            // `this.constructor` and `this.__proto__` are other objects of the receiver (its class, its prototype), whose members are read from the result: any key.
+            match self
+                .member_key(file, member)
+                .filter(|key| !matches!(key.as_str(), "constructor" | "__proto__"))
+            {
+                Some(key) => reads.named.entry(key).or_default().push(read),
+                None => reads.any.push(read),
+            }
+        }
+        if member_read || private_member_of(file, value) {
+            return;
+        }
+        if ast
+            .inert_operands
+            .iter()
+            .any(|operand| ast.peel_ts_sugar_span(*operand) == value)
+        {
+            return;
+        }
+        if let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == value)
+        }) {
+            // `const { k } = this`: the pattern reads each key it names, and binds the local to it.
+            if binding.shape == solid_facts::ast::BindingShape::Object
+                && !binding.object_slots.is_empty()
+                && binding.object_slots.len() == binding.names.len()
+                && binding
+                    .object_slots
+                    .iter()
+                    .all(|slot| slot.plain_identifier_key)
+            {
+                for slot in &binding.object_slots {
+                    reads
+                        .named
+                        .entry(slot.property.to_string())
+                        .or_default()
+                        .push(ReceiverRead {
+                            file,
+                            at: slot.local.span,
+                            kind: ReadKind::Local,
+                        });
+                }
+                return;
+            }
+            // `const self = this`: the receiver under another name, read where the name is.
+            if binding.shape == solid_facts::ast::BindingShape::Identifier
+                && depth < DEPTH
+                && binding.names.iter().all(|name| {
+                    !crate::indexes::binding_exported(file, name.span)
+                        && self.foreign_references(file, name.span).is_empty()
+                })
+            {
+                for name in &binding.names {
+                    for reference in ast.references_to(name.span) {
+                        if !ast
+                            .write_targets
+                            .iter()
+                            .any(|target| ast.peel_ts_sugar_span(*target) == *reference)
+                        {
+                            self.follow_receiver(file, *reference, depth + 1, seen, reads);
+                        }
+                    }
+                }
+                return;
+            }
+        }
+        let argument = ast.arguments_containing(value).find(|(call, index)| {
+            !call.arguments[*index].spread
+                && ast.peel_ts_sugar_span(call.arguments[*index].span) == value
+        });
+        // `held.has(router)`, `requests.set(router, …)` on a weak collection: the object is a key whose identity is compared, and no key of one can be got back.
+        if let Some((call, index)) = argument
+            && self.unread_argument(file, call, index, false)
+        {
+            return;
+        }
+        // `f(this)`: the parameter of a function the build reads, which receives it.
+        if depth < DEPTH
+            && let Some((call, index)) = argument
+            && let Receiver::Parameter(callee_file, callee, parameter) =
+                self.call_receiver(file, call, index)
+            && !names_arguments(callee_file, callee)
+        {
+            let names: Option<Vec<Span>> = match callee.parameters.get(parameter) {
+                Some(declared) => Some(declared.names.iter().map(|name| name.span).collect()),
+                None if callee.rest_parameter => Some(
+                    callee
+                        .rest_parameter_names
+                        .iter()
+                        .map(|name| name.span)
+                        .collect(),
+                ),
+                // An index past the list is no name; a function other than an arrow has an `arguments` object to read it through (`Self::parameter` hands it).
+                None => (callee.kind == FunctionKind::Arrow).then(Vec::new),
+            };
+            if let Some(names) = names {
+                for name in names {
+                    for reference in callee_file.ast.references_to(name) {
+                        self.follow_receiver(callee_file, *reference, depth + 1, seen, reads);
+                    }
+                }
+                return;
+            }
+        }
+        reads.any.push(ReceiverRead {
+            file,
+            at: value,
+            kind: ReadKind::Escape,
+        });
+    }
+
+    /// Whether a use of a receiver in code a package may run reads `key` (`None`: a key the program does not name, which any read may be), or the receiver as a value.
+    fn read_through_receiver(&self, key: Option<&str>, walk: &mut Walk) -> bool {
+        let reads = self.receiver_reads();
+        let by_name: Box<dyn Iterator<Item = &ReceiverRead<'a>> + '_> = match key {
+            Some(key) => Box::new(reads.named.get(key).into_iter().flatten()),
+            None => Box::new(reads.named.values().flatten()),
+        };
+        by_name
+            .chain(reads.any.iter())
+            .any(|read| self.receiver_read_runs(*read, walk))
+    }
+
+    /// Whether the use of a receiver runs on a package's stack, or hands what it reads to one. The member that is read (a getter runs where the read is written; a function
+    /// read is called there or goes on from there), the local a pattern binds, and the receiver used as a value, whose reads go wherever the value goes (followed as an object
+    /// of accessors, which reads whatever member it holds).
+    fn receiver_read_runs(&self, read: ReceiverRead<'a>, walk: &mut Walk) -> bool {
+        let saved = (walk.accessor, walk.accessor_owner.take());
+        walk.accessor = false;
+        let answer = match read.kind {
+            ReadKind::Unreadable => true,
+            ReadKind::MemberWrite => self.runs_on_package_stack(read.file, read.at, walk),
+            // A member that is called runs the function where the call is written; one that is only read goes on from there (the value the read gives is another's).
+            ReadKind::Member => {
+                self.runs_on_package_stack(read.file, read.at, walk)
+                    || (!self.called_as_method(read.file, read.at)
+                        && self.position(read.file, read.at, walk))
+            }
+            ReadKind::Local => {
+                self.runs_on_package_stack(read.file, read.at, walk)
+                    || self.binding(read.file, read.at, walk)
+            }
+            ReadKind::Escape => {
+                self.as_accessors(walk, None, |walk| self.position(read.file, read.at, walk))
+            }
+        };
+        walk.accessor = saved.0;
+        walk.accessor_owner = saved.1;
+        answer
+    }
+
+    /// Whether the code at `at` runs on a package's stack: the innermost function that owns it may be run by one (an arrow a package is handed, a getter or a method of an
+    /// object that writes a receiver, a function written in a class), or the element whose prop or child expression holds it evaluates it there. Not the functions around that
+    /// function: a closure that runs on a timer's stack in a getter a package may run does not run on the package's, and one run inline is the enclosing function's question
+    /// (`function_in` asks it of the closure's own positions).
+    fn runs_on_package_stack(&self, file: &'a FileFacts, at: Span, walk: &mut Walk) -> bool {
+        let ast = &file.ast;
+        let by_function = match ast.innermost_function_owning(at) {
+            Some(function) => self.function_in(file, function, walk),
+            // A field initializer or a static block runs where an instance is made or the class is defined: a class's code is handed whole.
+            None => ast.classes.iter().any(|class| class.span.contains(at)),
+        };
+        by_function || self.evaluated_by_element(file, at, walk)
+    }
+
+    /// Whether the value written (or named) at `at` is stored under a key a receiver reads: a property of an object literal that carries it (a nested literal's value
+    /// carries it up to the literal it is in, a spread's argument stores it under the keys of the object spread), or the target of an assignment that does. The object that
+    /// holds it is no reference the read follows (a prototype, an instance of a class, a parameter, an object the program builds elsewhere): the key is.
+    fn placed_under_read_key(&self, file: &'a FileFacts, at: Span, walk: &mut Walk) -> bool {
+        let reads = self.receiver_reads();
+        if reads.named.is_empty() && reads.any.is_empty() {
+            return false;
+        }
+        let ast = &file.ast;
+        let mut keys: Vec<Option<String>> = Vec::new();
+        for shape in &ast.object_get_shapes {
+            let literal = shape.span;
+            if literal == at
+                || !literal.contains(at)
+                || crosses(ast, literal, at)
+                || !self.carries(file, literal, at)
+            {
+                continue;
+            }
+            // A literal that provably cannot be the receiver of a function that reads members through `this` stores nothing a receiver reads.
+            if self.literal_confined(file, literal) {
+                continue;
+            }
+            let direct = |inner: Span| {
+                literal.contains(inner)
+                    && inner != literal
+                    && !ast.object_properties.iter().any(|property| {
+                        property.span != inner
+                            && property.span.contains(inner)
+                            && literal.contains(property.span)
+                    })
+            };
+            for property in &ast.object_properties {
+                if direct(property.span) && self.carries(file, property.value, at) {
+                    keys.push(self.property_key(file, property));
+                }
+            }
+            for spread in &ast.spreads {
+                if direct(spread.span) && self.carries(file, spread.argument, at) {
+                    keys.push(None);
+                }
+            }
+        }
+        keys.iter()
+            .any(|key| self.read_through_receiver(key.as_deref(), walk))
+    }
+
+    /// Whether an assignment to `target` (`holder.m = f`, `holder[key] = f`) stores under a key a receiver reads: [`Self::placed_under_read_key`]'s question of an
+    /// assignment's target. A target that is no member (`kept = f`) stores under no key.
+    fn assigned_under_read_key(&self, file: &'a FileFacts, target: Span, walk: &mut Walk) -> bool {
+        let reads = self.receiver_reads();
+        if reads.named.is_empty() && reads.any.is_empty() {
+            return false;
+        }
+        let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(target)) else {
+            return false;
+        };
+        // A holder that provably cannot be the receiver of a function that reads members through `this` stores nothing a receiver reads.
+        if self.holder_confined(file, member.object) {
+            return false;
+        }
+        let key = self.member_key(file, member);
+        self.read_through_receiver(key.as_deref(), walk)
+    }
+
+    /// Whether the object the expression at `holder` names provably cannot be the receiver of a function that reads members through `this` or `super`, nor inherit from
+    /// one: a plain object literal (no `this` or `super` anywhere in it, no `__proto__` or computed key) bound by a `const` name, whose every use is one that makes it neither
+    /// (a member read, a member call whose callee names no receiver, a write of a member under a key the program names that is not `__proto__`, a destructuring, a copy, a
+    /// call of a function the build reads whose parameter is confined in turn). An escape is no proof: a value passed to, returned to or stored where code nothing here
+    /// follows can reach it (a package, a callee nothing resolves exactly, `return o`, `[o]`, `x.p = o`, an export) may be given a prototype, have a member called with it
+    /// as `this`, or be made the receiver of a function with `.call`, and what is not proved is handed.
+    fn holder_confined(&self, file: &'a FileFacts, holder: Span) -> bool {
+        let ast = &file.ast;
+        let holder = ast.peel_ts_sugar_span(holder);
+        if ast
+            .object_get_shapes
+            .iter()
+            .any(|shape| shape.span == holder)
+        {
+            return self.literal_confined(file, holder);
+        }
+        let Some(declaration) = ast.reference_declaration(holder) else {
+            return false;
+        };
+        let key = (file.path.shared(), declaration);
+        if let Some(known) = self.confined.borrow().get(&key) {
+            return *known;
+        }
+        let answer = self.named_object_confined(file, declaration, &mut HashSet::new());
+        self.confined.borrow_mut().insert(key, answer);
+        answer
+    }
+
+    /// [`Self::holder_confined`] of an object literal: where it is written decides (the binding that names it, the parameter that receives it, the literal that holds it).
+    fn literal_confined(&self, file: &'a FileFacts, literal: Span) -> bool {
+        let key = (file.path.shared(), literal);
+        if let Some(known) = self.confined.borrow().get(&key) {
+            return *known;
+        }
+        let answer = self.literal_context_confined(file, literal, &mut HashSet::new());
+        self.confined.borrow_mut().insert(key, answer);
+        answer
+    }
+
+    fn literal_context_confined(
+        &self,
+        file: &'a FileFacts,
+        literal: Span,
+        seen: &mut HashSet<(Arc<str>, Span)>,
+    ) -> bool {
+        let ast = &file.ast;
+        if !self.literal_plain(file, literal) {
+            return false;
+        }
+        // Named by a `const`: its uses.
+        if let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == literal)
+        }) {
+            return binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .names
+                    .iter()
+                    .all(|name| self.named_object_confined(file, name.span, seen));
+        }
+        // An argument of a call of a function the build reads: that parameter's uses.
+        if let Some((call, index)) = ast.arguments_containing(literal).find(|(call, index)| {
+            !call.arguments[*index].spread
+                && ast.peel_ts_sugar_span(call.arguments[*index].span) == literal
+        }) {
+            return match self.call_receiver(file, call, index) {
+                Receiver::Parameter(callee_file, callee, parameter) => {
+                    self.parameter_confined(callee_file, callee, parameter, seen)
+                }
+                _ => false,
+            };
+        }
+        // A property's value of a literal that holds it: confined as that literal is.
+        let outer = ast
+            .object_get_shapes
+            .iter()
+            .filter(|shape| shape.span != literal && shape.span.contains(literal))
+            .min_by_key(|shape| shape.span.end - shape.span.start)
+            .map(|shape| shape.span);
+        match outer {
+            Some(outer)
+                if direct_properties(ast, outer)
+                    .any(|property| ast.peel_ts_sugar_span(property.value) == literal) =>
+            {
+                self.literal_context_confined(file, outer, seen)
+            }
+            _ => false,
+        }
+    }
+
+    /// An object literal that writes no receiver and sets no prototype: no `this` or `super` anywhere in it, and no property under `__proto__` or under a key the program
+    /// does not name (which may be `__proto__`).
+    fn literal_plain(&self, file: &FileFacts, literal: Span) -> bool {
+        let Some(receivers) = self.receiver_literals(file) else {
+            return false;
+        };
+        !receivers.contains(&literal)
+            && direct_properties(&file.ast, literal).all(|property| {
+                self.property_key(file, property)
+                    .is_some_and(|key| key != "__proto__")
+            })
+    }
+
+    /// A `const` whose initializer is a plain literal (or another name for one), with every use confined.
+    fn named_object_confined(
+        &self,
+        file: &'a FileFacts,
+        declaration: Span,
+        seen: &mut HashSet<(Arc<str>, Span)>,
+    ) -> bool {
+        if !seen.insert((file.path.shared(), declaration)) {
+            return true;
+        }
+        let ast = &file.ast;
+        let Some(binding) = ast.identifier_binding(declaration) else {
+            return false;
+        };
+        let Some(initializer) = binding
+            .initializer
+            .map(|initializer| ast.peel_ts_sugar_span(initializer))
+        else {
+            return false;
+        };
+        if !binding.immutable {
+            return false;
+        }
+        if ast
+            .object_get_shapes
+            .iter()
+            .any(|shape| shape.span == initializer)
+        {
+            if !self.literal_plain(file, initializer) {
+                return false;
+            }
+        } else if let Some(alias) = ast.reference_declaration(initializer) {
+            // `const p = o`: the same object; `o`'s uses include this one, which walks `p`'s.
+            if !self.named_object_confined(file, alias, seen) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        self.references_confined(file, declaration, seen)
+    }
+
+    /// Every use of the name declared at `declaration` (in the file, and in the files that import it) is one that makes the object neither a receiver nor reachable by code
+    /// nothing here follows. An exported name is reached by the program's importers, which a program whose boundary is open does not enumerate.
+    fn references_confined(
+        &self,
+        file: &'a FileFacts,
+        declaration: Span,
+        seen: &mut HashSet<(Arc<str>, Span)>,
+    ) -> bool {
+        let ast = &file.ast;
+        if !self.lookup.program_closed && crate::indexes::binding_exported(file, declaration) {
+            return false;
+        }
+        ast.references_to(declaration)
+            .iter()
+            .filter(|reference| {
+                !ast.write_targets
+                    .iter()
+                    .any(|target| ast.peel_ts_sugar_span(*target) == **reference)
+            })
+            .all(|reference| self.use_confined(file, *reference, seen))
+            && self
+                .foreign_references(file, declaration)
+                .into_iter()
+                .all(|(holder, at, import)| {
+                    if import {
+                        self.references_confined(holder, at, seen)
+                    } else {
+                        self.use_confined(holder, at, seen)
+                    }
+                })
+    }
+
+    /// Whether one use of an object (a reference of the name that holds it) leaves it confined: see [`Self::holder_confined`].
+    fn use_confined(
+        &self,
+        file: &'a FileFacts,
+        reference: Span,
+        seen: &mut HashSet<(Arc<str>, Span)>,
+    ) -> bool {
+        let ast = &file.ast;
+        let reference = ast.peel_ts_sugar_span(reference);
+        if let Some(member) = ast.members_with_peeled_object(reference).next() {
+            let key = crate::installed_members::member_name(file, member);
+            if ast
+                .write_targets
+                .iter()
+                .any(|target| ast.peel_ts_sugar_span(*target) == member.span)
+            {
+                // A write sets a member, or the prototype when the key is `__proto__` (which a key the program does not name may be).
+                return key.is_some_and(|key| key != "__proto__");
+            }
+            // A call binds `this` to the object: a callee that may name it reads members through it.
+            return !self.method_call_may_read_receiver(file, member.span);
+        }
+        if ast
+            .inert_operands
+            .iter()
+            .any(|operand| ast.peel_ts_sugar_span(*operand) == reference)
+        {
+            return true;
+        }
+        if ast
+            .spreads
+            .iter()
+            .any(|spread| ast.peel_ts_sugar_span(spread.argument) == reference)
+        {
+            return true;
+        }
+        if let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == reference)
+        }) {
+            return match binding.shape {
+                solid_facts::ast::BindingShape::Identifier => binding.names.iter().all(|name| {
+                    !seen.insert((file.path.shared(), name.span))
+                        || self.references_confined(file, name.span, seen)
+                }),
+                // A pattern reads the members it names (a rest copies them).
+                _ => true,
+            };
+        }
+        if let Some((call, index)) = ast.arguments_containing(reference).find(|(call, index)| {
+            !call.arguments[*index].spread
+                && ast.peel_ts_sugar_span(call.arguments[*index].span) == reference
+        }) {
+            if self.unread_argument(file, call, index, true) {
+                return true;
+            }
+            if let Receiver::Parameter(callee_file, callee, parameter) =
+                self.call_receiver(file, call, index)
+            {
+                return self.parameter_confined(callee_file, callee, parameter, seen);
+            }
+        }
+        false
+    }
+
+    /// Whether the identifier at `identifier` is the library's global `name` (`WeakMap`, `Object`): the compiler resolves it, and every declaration it resolves to is the
+    /// standard library's (a script of a package has no resolved call of its own: `requests.set` and `Object.defineProperty` there name no standard declaration, but the
+    /// global they are read from does).
+    fn is_library_global(&self, file: &FileFacts, identifier: Span, name: &str) -> bool {
+        file.source_text(identifier) == Some(name)
+            && self
+                .lookup
+                .entities()
+                .value_symbol(file, identifier)
+                .and_then(|symbol| self.lookup.symbol_declarations(symbol.as_str()))
+                .is_some_and(|declarations| {
+                    !declarations.is_empty()
+                        && declarations
+                            .iter()
+                            .all(|declaration| declaration.location.path.starts_with("bundled:"))
+                })
+    }
+
+    /// Whether the callee is a method of a weak collection the file makes itself (`held.delete`, `requests.set` where `held` is a `const` bound to `new WeakSet(…)` and
+    /// `requests` to `new WeakMap(…)`, the constructors the library's, resolved by the compiler), for the script of a package whose calls resolve to no declaration.
+    fn weak_collection_method(&self, file: &FileFacts, callee: Span) -> bool {
+        let ast = &file.ast;
+        let Some(member) = ast.member_at(ast.peel_ts_sugar_span(callee)) else {
+            return false;
+        };
+        let Some(method) = crate::installed_members::member_name(file, member) else {
+            return false;
+        };
+        let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+        else {
+            return false;
+        };
+        let Some(binding) = ast.identifier_binding(declaration) else {
+            return false;
+        };
+        let Some(constructed) = binding
+            .initializer
+            .filter(|_| binding.immutable)
+            .and_then(|initializer| ast.call_at(ast.peel_ts_sugar_span(initializer)))
+            .filter(|call| call.construct)
+        else {
+            return false;
+        };
+        let constructor = ast.peel_ts_sugar_span(constructed.callee);
+        if self.is_library_global(file, constructor, "WeakMap") {
+            matches!(method, "get" | "has" | "delete" | "set")
+        } else if self.is_library_global(file, constructor, "WeakSet") {
+            matches!(method, "has" | "delete" | "add")
+        } else {
+            false
+        }
+    }
+
+    /// The method a callee names on the library's global `Object` (resolved by the compiler), for the script of a package whose calls resolve to no declaration.
+    fn global_object_method<'f>(&self, file: &'f FileFacts, callee: Span) -> Option<&'f str> {
+        let ast = &file.ast;
+        let member = ast.member_at(ast.peel_ts_sugar_span(callee))?;
+        self.is_library_global(file, ast.peel_ts_sugar_span(member.object), "Object")
+            .then(|| crate::installed_members::member_name(file, member))
+            .flatten()
+    }
+
+    /// Whether the argument at `index` of `call` is an object the call reads no member of, and gives no other name to: a key of a collection that compares its identity and never
+    /// gives it back (the first argument of a call of `WeakMap`'s `get`, `has`, `delete` and `set`, of `WeakSet`'s `has`, `delete` and `add`, and of `Map`'s and `Set`'s `get`,
+    /// `has` and `delete`: a `Map.set` and a `Set.add` keep it where an iteration gets it back), or the object `Object.isFrozen`, `isSealed`, `isExtensible`, `keys` and
+    /// `getOwnPropertyNames` ask of (names and booleans, no member read). `Object.defineProperty`, `defineProperties`, `assign`, `freeze`, `seal` and `preventExtensions` read none
+    /// either, but they return the object they are given, so the call is one only when its value is dropped (a statement); a prototype set (`Object.setPrototypeOf`) is the same, and it
+    /// makes the object the derived one, which `confining` asks (a holder is no longer provably no receiver, nor is one a descriptor may give a getter of its own). The declaration is
+    /// the standard library's, resolved by the compiler, or, in a script of a package whose calls resolve to no declaration, the library's global `Object` or a weak collection the file
+    /// makes (the compiler resolves the global).
+    fn unread_argument(
+        &self,
+        file: &'a FileFacts,
+        call: &CallFact,
+        index: usize,
+        confining: bool,
+    ) -> bool {
+        if index != 0 {
+            return false;
+        }
+        let ast = &file.ast;
+        let dropped = !confining
+            && ast
+                .inert_operands
+                .iter()
+                .any(|operand| ast.peel_ts_sugar_span(*operand) == call.span);
+        let resolved = self
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(crate::runtime_semantics::standard_call_name);
+        if let Some(name) = resolved {
+            return match name {
+                "WeakMap.get" | "WeakMap.has" | "WeakMap.delete" | "WeakMap.set"
+                | "WeakSet.has" | "WeakSet.delete" | "WeakSet.add" | "Map.get" | "Map.has"
+                | "Map.delete" | "Set.has" | "Set.delete" => true,
+                "ObjectConstructor.isFrozen"
+                | "ObjectConstructor.isSealed"
+                | "ObjectConstructor.isExtensible"
+                | "ObjectConstructor.getOwnPropertyNames"
+                | "ObjectConstructor.keys" => true,
+                "ObjectConstructor.defineProperty"
+                | "ObjectConstructor.defineProperties"
+                | "ObjectConstructor.freeze"
+                | "ObjectConstructor.seal"
+                | "ObjectConstructor.preventExtensions"
+                | "ObjectConstructor.assign"
+                | "ObjectConstructor.setPrototypeOf" => dropped,
+                _ => false,
+            };
+        }
+        self.weak_collection_method(file, call.callee)
+            || self
+                .global_object_method(file, call.callee)
+                .is_some_and(|method| match method {
+                    "isFrozen" | "isSealed" | "isExtensible" | "getOwnPropertyNames" | "keys" => {
+                        true
+                    }
+                    "defineProperty" | "defineProperties" | "freeze" | "seal"
+                    | "preventExtensions" | "assign" | "setPrototypeOf" => dropped,
+                    _ => false,
+                })
+    }
+
+    /// [`Self::holder_confined`] of an object passed as the argument at `index` of a function the build reads: the uses of the parameter.
+    fn parameter_confined(
+        &self,
+        file: &'a FileFacts,
+        function: &'a FunctionFact,
+        index: usize,
+        seen: &mut HashSet<(Arc<str>, Span)>,
+    ) -> bool {
+        if names_arguments(file, function) {
+            return false;
+        }
+        let names: Vec<Span> = match function.parameters.get(index) {
+            Some(parameter) => parameter.names.iter().map(|name| name.span).collect(),
+            None if function.rest_parameter => function
+                .rest_parameter_names
+                .iter()
+                .map(|name| name.span)
+                .collect(),
+            None => return function.kind == FunctionKind::Arrow,
+        };
+        names.into_iter().all(|name| {
+            !seen.insert((file.path.shared(), name)) || self.references_confined(file, name, seen)
+        })
+    }
+
+    /// The key a property of an object literal stores its value under: its name, a quoted name's text, a unique symbol (`symbol_key`), or `None` for a key the program does not
+    /// name (a computed key that is no plain string literal).
+    fn property_key(
+        &self,
+        file: &FileFacts,
+        property: &solid_facts::ast::ObjectPropertyFact,
+    ) -> Option<String> {
+        key_of_text(file.source_text(property.key)?, property.computed).or_else(|| {
+            property
+                .computed
+                .then(|| self.symbol_key(file, property.key))
+                .flatten()
+        })
+    }
+
+    /// The key a member reads or stores under: its name, a computed member's literal key, or a unique symbol the file makes (`[_m$]` where `var _m$ = Symbol()`).
+    fn member_key(
+        &self,
+        file: &FileFacts,
+        member: &solid_facts::ast::MemberFact,
+    ) -> Option<String> {
+        crate::installed_members::member_name(file, member)
+            .map(str::to_owned)
+            .or_else(|| {
+                file.ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_ok()
+                    .then(|| self.symbol_key(file, member.property))
+                    .flatten()
+            })
+    }
+
+    /// The key of a computed expression that names a unique symbol: a reference to a name the file binds once, to a call of the library's global `Symbol` (the compiler resolves
+    /// it). No other key is that symbol (a string name is not, and two calls of `Symbol` are two symbols), so it is read and stored under that name alone; an imported symbol, and
+    /// a symbol any other way got, name nothing.
+    fn symbol_key(&self, file: &FileFacts, expression: Span) -> Option<String> {
+        let ast = &file.ast;
+        let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(expression))?;
+        let binding = ast.identifier_binding(declaration)?;
+        // Bound once and never written again (a compiled script declares it with `var`).
+        if ast.references_to(declaration).iter().any(|reference| {
+            ast.write_targets
+                .iter()
+                .any(|target| ast.peel_ts_sugar_span(*target) == *reference)
+        }) {
+            return None;
+        }
+        let call = ast.call_at(ast.peel_ts_sugar_span(binding.initializer?))?;
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        (!call.construct && self.is_library_global(file, callee, "Symbol"))
+            .then(|| format!("\0symbol {} {}", file.path.as_str(), declaration.start))
     }
 
     /// Whether the member at `member` is called as a method (`o.m(…)`, `o.m\`…\``, `o.m?.()`; not `new o.m()`): the call binds `this` to the object.
@@ -1720,6 +2538,49 @@ fn crosses(ast: &AstFacts, outer: Span, at: Span) -> bool {
         })
 }
 
+/// The properties written directly in the object literal at `literal` (not those of a literal nested in one of its values).
+fn direct_properties(
+    ast: &AstFacts,
+    literal: Span,
+) -> impl Iterator<Item = &solid_facts::ast::ObjectPropertyFact> {
+    ast.object_properties.iter().filter(move |property| {
+        literal.contains(property.span)
+            && property.span != literal
+            && !ast.object_properties.iter().any(|outer| {
+                outer.span != property.span
+                    && outer.span.contains(property.span)
+                    && literal.contains(outer.span)
+            })
+    })
+}
+
+/// The key a property's key text names: `m`, `"m"` and `["m"]` name `m`, `[m]` and `[\`m\`]` name nothing the program fixes, and a quoted text with an escape is no plain name.
+fn key_of_text(text: &str, computed: bool) -> Option<String> {
+    let quoted = ["\"", "'"].into_iter().find_map(|quote| {
+        text.strip_prefix(quote)
+            .and_then(|rest| rest.strip_suffix(quote))
+            .filter(|inner| !inner.contains(['\\', '"', '\'']))
+    });
+    match (computed, quoted) {
+        (_, Some(inner)) => Some(inner.to_owned()),
+        (false, None) if !text.starts_with(['"', '\'']) => Some(text.to_owned()),
+        _ => None,
+    }
+}
+
+/// Whether the receiver at `receiver` is the object of a private member (`this.#k`, `this?.#k`): a slot only the class's own code names, which no store from outside reaches.
+fn private_member_of(file: &FileFacts, receiver: Span) -> bool {
+    file.source
+        .get(receiver.end as usize..)
+        .is_some_and(private_member_follows)
+}
+
+/// Whether the text after a receiver reads a private member (`.#k`, `?.#k`).
+fn private_member_follows(rest: &str) -> bool {
+    let rest = rest.trim_start();
+    rest.starts_with(".#") || rest.starts_with("?.#")
+}
+
 /// The identifier a write target is rooted at: `kept` in `kept = f`, `holder` in `holder.slot.inner = f`. `None` when the root is no identifier (`this`, a call's result) or
 /// no binding the scope tree resolves (a global).
 fn root_identifier(ast: &AstFacts, target: Span) -> Option<Span> {
@@ -1731,4 +2592,49 @@ fn root_identifier(ast: &AstFacts, target: Span) -> Option<Span> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{key_of_text, private_member_follows};
+
+    #[test]
+    fn a_property_key_is_a_name_or_a_plain_string() {
+        for (text, computed, key) in [
+            ("m", false, Some("m")),
+            ("\"m\"", false, Some("m")),
+            ("'m'", false, Some("m")),
+            ("0", false, Some("0")),
+            ("\"m\"", true, Some("m")),
+            ("'a b'", true, Some("a b")),
+            ("m", true, None),
+            ("k + \"x\"", true, None),
+            ("`m`", true, None),
+            ("\"a\\\"b\"", false, None),
+            ("\"a'b\"", false, None),
+            ("\"\\u006d\"", true, None),
+        ] {
+            assert_eq!(
+                key_of_text(text, computed).as_deref(),
+                key,
+                "{text} (computed: {computed})"
+            );
+        }
+    }
+
+    #[test]
+    fn a_private_member_is_told_from_a_public_one() {
+        for (rest, private) in [
+            (".#k", true),
+            (" .#k", true),
+            ("?.#k", true),
+            (".k", false),
+            ("?.k", false),
+            ("[\"#k\"]", false),
+            (" as any).#k", false),
+            ("", false),
+        ] {
+            assert_eq!(private_member_follows(rest), private, "{rest:?}");
+        }
+    }
 }

@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are eighty-seven routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"]);
+  it("are ninety-eight routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(470);
+    expect(PH_CONTEXT_NAMES).toHaveLength(536);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -256,5 +256,41 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     const array = textOf("FLUSH_IN_ACTION", "ph-foreignarray-step");
     expect(array.some((line) => /^g: fns\d+\[0\],$/.test(line))).toBe(true);
     expect(textOf("FLUSH_IN_ACTION", "ph-foreigncall-step-never")).toContain("skipRun(() => {");
+  });
+  it("print the review of #229's routes: a member reaches the receiver by a store the object's references do not follow", () => {
+    const late = textOf("FLUSH_IN_ACTION", "ph-lateassign-step");
+    expect(late).toContain("(this as any).m1();");
+    expect(late.some((line) => /^o\d+\.m1 = function \(\) \{$/.test(line))).toBe(true);
+    expect(late.some((line) => /^void o\d+\.h;$/.test(line))).toBe(true);
+    const setter = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-latesetter-apply");
+    expect(setter).toContain("set h(value: number) {");
+    expect(setter.some((line) => /^o\d+\.h = 1;$/.test(line))).toBe(true);
+    const nested = textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-latenested-leaf");
+    expect(nested).toContain("(this as any).m1.m();");
+    expect(nested.some((line) => /^o\d+\.m1 = \{$/.test(line))).toBe(true);
+    const put = textOf("FLUSH_IN_ACTION", "ph-lateput-step");
+    expect(put.some((line) => /^function put\d+\(target: any\) \{$/.test(line))).toBe(true);
+    expect(put.some((line) => /^put\d+\(o\d+\);$/.test(line))).toBe(true);
+    const derived = textOf("FLUSH_IN_ACTION", "ph-protoreceiver-step");
+    expect(derived.some((line) => /^__proto__: base\d+,$/.test(line))).toBe(true);
+    expect(derived.some((line) => /^m1\(\): void \{$/.test(line))).toBe(true);
+    const created = textOf("FLUSH_IN_ACTION", "ph-protocreate-step");
+    expect(created.some((line) => /^const o\d+: any = Object\.create\(base\d+\);$/.test(line))).toBe(true);
+    const klass = textOf("FLUSH_IN_ACTION", "ph-protoclass-step");
+    expect(klass.some((line) => /^class K\d+ \{$/.test(line))).toBe(true);
+    expect(klass).toContain("this.m1();");
+    expect(klass.some((line) => /^const o\d+ = new K\d+\(\);$/.test(line))).toBe(true);
+    const key = textOf("FLUSH_IN_ACTION", "ph-protokey-step");
+    expect(key.some((line) => /^const k\d+ = "__pro" \+ "to__";$/.test(line))).toBe(true);
+    expect(key.some((line) => /^o\d+\[k\d+\] = base\d+;$/.test(line))).toBe(true);
+    expect(key.some((line) => line.includes("__proto__"))).toBe(false);
+    const self = textOf("FLUSH_IN_ACTION", "ph-lateself-step");
+    expect(self.some((line) => /^const self\d+ = this;$/.test(line))).toBe(true);
+    expect(self.some((line) => /^self\d+\.m1\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-latedestr-step")).toContain("const { m1 } = this as any;");
+    const computed = textOf("FLUSH_IN_ACTION", "ph-latecomputed-step");
+    expect(computed.some((line) => /^const k\d+ = "m1";$/.test(line))).toBe(true);
+    expect(computed.some((line) => /^\(this as any\)\[k\d+\]\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-lateassign-step-never")).toContain("skipRun(() => {");
   });
 });

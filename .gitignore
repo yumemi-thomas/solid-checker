@@ -1491,6 +1491,16 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-package-hand-off-accessors/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receivers/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-receivers/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads-twins/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads-twins/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key-source/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key-source/node_modules/**
 !fixtures/reactive-ir/dependency-source-integrity-r2-super-write/node_modules/
 !fixtures/reactive-ir/dependency-source-integrity-r2-super-write/node_modules/**
 !fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/node_modules/

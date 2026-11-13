@@ -110,6 +110,18 @@
 //             foreigncall `g: make1()`, `function make1() { return function (this: any) { … }; }`: through a call's result
 //             foreignalias `const { a: h1 } = src1; const o1 = { m() { cb1(); }, h1 }`, `o1.h1()`: an alias a destructuring makes
 //             foreignarray `const fns1 = [function (this: any) { … }]`, `g: fns1[0]`: an array's element
+//           and the review of #229 (B2: a member reaches the receiver by no placement in the literal: the object that holds it is no reference a read of it follows; S2):
+//             lateassign  `const o1 = { get h() { runStep(() => { (this as any).m1(); }); return 1; }, m1: undefined as any }`, `o1.m1 = function () { cb1(); }` after the literal
+//             latesetter  the same through a setter: `set h(value) { … }`, `o1.h = 1` in a timer
+//             latenested  `o1.sub1 = { m() { cb1(); } }`, the getter runs `this.sub1.m()`
+//             lateput     the member written by a project function: `function put1(target: any) { target.m1 = function () { cb1(); }; }`, `put1(o1)`
+//             protoreceiver the receiver on the prototype, the flushing member on the derived literal: `const o1 = { __proto__: base1, m1() { cb1(); } }`
+//             protocreate `const o1: any = Object.create(base1)`, `o1.m1 = function () { cb1(); }`
+//             protoclass  `class K1 { m1: any; get h() { runStep(() => { this.m1(); }); return 1; } }`, `const o1 = new K1()`, `o1.m1 = function () { cb1(); }`
+//             protokey    a prototype written through a computed key the program does not spell: `const k1 = "__pro" + "to__"`, `o1[k1] = base1`
+//             lateself    the receiver kept in a local (`const self1 = this`) and read in the step: `self1.m1()`
+//             latedestr   `const { m1 } = this as any` in the step
+//             latecomputed `(this as any)[key1]()`, a key the program does not name
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -122,7 +134,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -567,10 +579,83 @@ const ROUTE_FRAMES = {
     const object = n("o");
     return { head: `const ${cb} = () => `, close: `;\nconst ${fns} = [\n  function (this: any) {\n    ${f}(() => {\n      this.m();\n    });\n  },\n];\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  g: ${fns}[0],\n};\nsetTimeout(() => {\n  ${object}.g();\n});` };
   },
+  lateassign: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  latesetter: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  set h(value: number) {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  ${object}.h = 1;\n});` };
+  },
+  latenested: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}.m();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = {\n  m(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  lateput: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const put = n("put");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\nfunction ${put}(target: any) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\n${put}(${object});\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protoreceiver: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const base = n("base");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  ${key}(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  protocreate: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const base = n("base");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n};\nconst ${object}: any = Object.create(${base});\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protoclass: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const klass = n("K");
+    return { head: `const ${cb} = () => `, close: `;\nclass ${klass} {\n  ${key}: any;\n  get h(): number {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  }\n}\nconst ${object} = new ${klass}();\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protokey: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const base = n("base");
+    const name = n("k");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n};\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      void this.g;\n    });\n    return 1;\n  },\n};\nconst ${name} = \"__pro\" + \"to__\";\n${object}[${name}] = ${base};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  lateself: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const self = n("self");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    const ${self} = this;\n    ${f}(() => {\n      ${self}.${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  latedestr: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      const { ${key} } = this as any;\n      ${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  latecomputed: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const name = n("k");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${name} = \"${key}\";\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any)[${name}]();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
 };
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };

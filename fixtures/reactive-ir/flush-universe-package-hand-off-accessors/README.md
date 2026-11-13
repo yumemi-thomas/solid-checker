@@ -6,7 +6,7 @@
 
 **R2.** An object literal's getter runs where a member of the object is read: `getterObject.g` read through `readsInStep`'s parameter in a step keeps three rows. Before this, the getter was followed as a function value, which a member read does not move.
 
-**Twins, silent.** `twinBodyChild`: `BodyReader` reads its children in its own body, which runs where its element is created (a timer's callback). `twinTimerChild`: `TimerReader` reads them in a timer's callback. `twinGetterObject`: the getter is read through a parameter in a timer's callback.
+**Twins, silent.** `twinBodyChild`: `BodyReader` reads its children in its own body, which runs where its element is created (a timer's callback). `twinTimerChild`: `TimerReader` reads them in a timer's callback. `twinGetterObject`: the getter is read through a parameter in a timer's callback. `renamedPick`: `twinPick`'s shape with the getter under a key no receiver reads (`twinPick` itself keeps its rows, the name net's known cost: see the end of `App.tsx`).
 
 Published bytes: `node_modules/steplib` is synthetic, as in the causes fixture; `@solidjs/web/types/index.d.ts` is the same excerpt. `.solid-checker/runtime.json` closes the program boundary.
 

@@ -384,3 +384,21 @@ const superSibling = {
 setTimeout(() => {
   void superSibling.quiet();
 });
+
+// ---- the name net's known cost (the review of #229, B2): `twinPick` above is silent no more. Its getter is stored under `g`, which `superBase`'s getter reads through a receiver, and the
+// object reaches an array's element through a callback's return, which no proof follows to a use that makes it no receiver: a function stored under a key that a receiver reads, in code
+// a package may run, is handed whichever object the receiver is of. The same twin with the getter under a key no receiver reads stays silent.
+function renamedPickHelper(): number {
+  flush();
+  return 1;
+}
+const renamedPickGetter = {
+  get renamedPickG(): number {
+    return renamedPickHelper();
+  },
+};
+const renamedPick = (): any => (pickFlag ? renamedPickHelper : renamedPickGetter);
+const renamedPicked = [0].map(renamedPick);
+setTimeout(() => {
+  void renamedPicked[0].renamedPickG;
+});
