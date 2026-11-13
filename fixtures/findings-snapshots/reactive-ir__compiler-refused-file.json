@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-file/App.tsx",
+      "start": 246,
+      "end": 250,
+      "fixes": 0
+    },
+    {
       "rule": "compiler-refused-source",
       "code": "SC9015",
       "kind": "uncertifiable",
@@ -31,6 +42,17 @@
       "path": "fixtures/reactive-ir/compiler-refused-file/AttrTitle.tsx",
       "start": 275,
       "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-file/AttrTitle.tsx",
+      "start": 312,
+      "end": 316,
       "fixes": 0
     },
     {
@@ -56,6 +78,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-file/ClassList.tsx",
+      "start": 365,
+      "end": 369,
+      "fixes": 0
+    },
+    {
       "rule": "compiler-refused-source",
       "code": "SC9015",
       "kind": "uncertifiable",
@@ -78,6 +111,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-file/Malformed.tsx",
+      "start": 221,
+      "end": 225,
+      "fixes": 0
+    },
+    {
       "rule": "compiler-refused-source",
       "code": "SC9015",
       "kind": "violation",
@@ -96,6 +140,17 @@
       "path": "fixtures/reactive-ir/compiler-refused-file/Refused.tsx",
       "start": 301,
       "end": 308,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-file/Refused.tsx",
+      "start": 342,
+      "end": 346,
       "fixes": 0
     }
   ]

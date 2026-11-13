@@ -57,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1216,
+      "end": 1228,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -94,6 +105,17 @@
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
+      "start": 1270,
+      "end": 1282,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/bounds-budget-limit/App.tsx",
       "start": 1270,
@@ -164,6 +186,17 @@
       "path": "fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx",
       "start": 22134,
       "end": 22150,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-budget-limit/optimistic.tsx",
+      "start": 22214,
+      "end": 22217,
       "fixes": 0
     },
     {

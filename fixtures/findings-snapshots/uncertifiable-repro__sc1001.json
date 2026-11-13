@@ -616,6 +616,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/props-condition-not-in-component.tsx",
+      "start": 399,
+      "end": 407,
+      "fixes": 0
+    },
+    {
       "rule": "components-return-once",
       "code": "SC1004",
       "kind": "uncertifiable",
@@ -624,6 +635,17 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/props-condition-not-in-component.tsx",
       "start": 457,
       "end": 485,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/props-condition-not-in-component.tsx",
+      "start": 501,
+      "end": 520,
       "fixes": 0
     },
     {
@@ -657,6 +679,17 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/props-condition-render-prop.tsx",
       "start": 740,
       "end": 762,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/props-condition-render-prop.tsx",
+      "start": 786,
+      "end": 799,
       "fixes": 0
     },
     {
@@ -770,6 +803,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-assign.tsx",
+      "start": 333,
+      "end": 340,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -778,6 +822,17 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-member.tsx",
       "start": 273,
       "end": 284,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-member.tsx",
+      "start": 331,
+      "end": 338,
       "fixes": 0
     },
     {

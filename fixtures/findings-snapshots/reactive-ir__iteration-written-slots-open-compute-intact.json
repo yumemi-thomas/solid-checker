@@ -22,6 +22,17 @@
       "start": 136,
       "end": 146,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/open-compute-intact/body-write.tsx",
+      "start": 180,
+      "end": 189,
+      "fixes": 0
     }
   ]
 }

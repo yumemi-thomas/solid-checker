@@ -33,6 +33,28 @@
       "start": 1177,
       "end": 1192,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
+      "start": 1662,
+      "end": 1671,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
+      "start": 1673,
+      "end": 1680,
+      "fixes": 0
     }
   ]
 }

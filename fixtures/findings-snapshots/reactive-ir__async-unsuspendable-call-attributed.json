@@ -110,6 +110,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 929,
+      "end": 948,
+      "fixes": 0
+    },
+    {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
@@ -226,6 +237,17 @@
       "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
       "start": 1594,
       "end": 1600,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 1615,
+      "end": 1644,
       "fixes": 0
     },
     {
@@ -511,6 +533,17 @@
       "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
       "start": 2540,
       "end": 2546,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-unsuspendable-call-attributed/App.tsx",
+      "start": 2584,
+      "end": 2591,
       "fixes": 0
     },
     {

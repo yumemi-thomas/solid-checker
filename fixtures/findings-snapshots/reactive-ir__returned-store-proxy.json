@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 661,
+      "end": 669,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -21,6 +32,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 791,
       "end": 803,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 822,
+      "end": 830,
       "fixes": 0
     },
     {
@@ -35,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 969,
+      "end": 977,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -43,6 +76,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 1083,
       "end": 1095,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 1114,
+      "end": 1122,
       "fixes": 0
     },
     {
@@ -57,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 1342,
+      "end": 1350,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -65,6 +120,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 1452,
       "end": 1464,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 1483,
+      "end": 1491,
       "fixes": 0
     },
     {
@@ -79,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 1632,
+      "end": 1640,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -87,6 +164,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 1748,
       "end": 1760,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 1779,
+      "end": 1787,
       "fixes": 0
     },
     {
@@ -101,6 +189,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 1932,
+      "end": 1940,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -109,6 +208,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 2052,
       "end": 2064,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 2083,
+      "end": 2091,
       "fixes": 0
     },
     {
@@ -123,6 +233,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 2232,
+      "end": 2240,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 2381,
+      "end": 2389,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -131,6 +263,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 2501,
       "end": 2511,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 2530,
+      "end": 2538,
       "fixes": 0
     },
     {
@@ -145,6 +288,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 2683,
+      "end": 2691,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -153,6 +307,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 2801,
       "end": 2813,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 2832,
+      "end": 2840,
       "fixes": 0
     },
     {
@@ -167,6 +332,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 2981,
+      "end": 2989,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -178,6 +354,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 3142,
+      "end": 3150,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -186,6 +373,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
       "start": 3270,
       "end": 3282,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-proxy/App.tsx",
+      "start": 3301,
+      "end": 3309,
       "fixes": 0
     },
     {

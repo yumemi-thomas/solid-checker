@@ -58,6 +58,8 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
   const description = note ?? `differential fuzzer, generator ${GENERATOR_VERSION}, seed ${program.seed}`;
   // ADR 0501: the exported components, which the entry renders by name (the oracle's `mount`).
   const mount = [...text.matchAll(/^export function ([A-Z][A-Za-z0-9_]*)\b/gm)].map((match) => match[1]);
+  // R2 of the re-review of #221 (em-shapes.mjs `nso`): a component that asks for an OPEN program (the oracle's `programBoundary`, which the checker's project reads from a manifest).
+  const boundary = program.components?.find((component) => component.boundary)?.boundary;
   // `program` is not enumerable: the judge reads it for registering positions, nothing serialises it.
   return Object.defineProperty({
     id, text, runText, sites, glue, ledger, lineTable, plan, neutral, packages,
@@ -67,8 +69,8 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
       ...moduleFiles(program),
       "App.tsx": text,
       "App.run.txt": runText,
-      "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), ...(mount.length ? { mount } : {}), haltMarker: true, steps }, null, 2)}\n`,
-      "oracle.run.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), ...(mount.length ? { mount } : {}), haltMarker: true, steps: runSteps }, null, 2)}\n`,
+      "oracle.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), ...(mount.length ? { mount } : {}), ...(boundary ? { programBoundary: boundary } : {}), haltMarker: true, steps }, null, 2)}\n`,
+      "oracle.run.json": `${JSON.stringify({ note: description, ...(packageNames.length ? { packages: packageNames } : {}), ...(mount.length ? { mount } : {}), ...(boundary ? { programBoundary: boundary } : {}), haltMarker: true, steps: runSteps }, null, 2)}\n`,
       "program.json": `${JSON.stringify(program)}\n`,
       "sites.json": `${JSON.stringify({ id, generator: GENERATOR_VERSION, seed: program.seed, plan, sites, glue, ledger }, null, 2)}\n`,
     },

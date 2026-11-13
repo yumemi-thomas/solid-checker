@@ -24,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 319,
+      "end": 324,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
       "start": 594,
       "end": 601,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 616,
+      "end": 621,
       "fixes": 0
     },
     {
@@ -46,6 +68,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 831,
+      "end": 836,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -54,6 +87,17 @@
       "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
       "start": 1182,
       "end": 1189,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 1204,
+      "end": 1209,
       "fixes": 0
     },
     {
@@ -68,6 +112,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 1276,
+      "end": 1281,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -76,6 +131,17 @@
       "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
       "start": 1332,
       "end": 1339,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 1354,
+      "end": 1359,
       "fixes": 0
     },
     {
@@ -90,6 +156,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 1906,
+      "end": 1911,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -98,6 +175,17 @@
       "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
       "start": 1956,
       "end": 1963,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 1978,
+      "end": 1983,
       "fixes": 0
     },
     {
@@ -112,6 +200,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 2428,
+      "end": 2433,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -120,6 +219,17 @@
       "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
       "start": 2765,
       "end": 2772,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Escapes.tsx",
+      "start": 2787,
+      "end": 2792,
       "fixes": 0
     },
     {
@@ -166,6 +276,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/More.tsx",
+      "start": 379,
+      "end": 384,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -173,6 +294,17 @@
       "path": "fixtures/reactive-ir/route-config/More.tsx",
       "start": 582,
       "end": 589,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/More.tsx",
+      "start": 610,
+      "end": 615,
       "fixes": 0
     },
     {
@@ -186,6 +318,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Routes.tsx",
+      "start": 410,
+      "end": 415,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -193,6 +336,28 @@
       "path": "fixtures/reactive-ir/route-config/Routes.tsx",
       "start": 490,
       "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Routes.tsx",
+      "start": 514,
+      "end": 519,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Routes.tsx",
+      "start": 521,
+      "end": 535,
       "fixes": 0
     },
     {
@@ -206,6 +371,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/Routes.tsx",
+      "start": 605,
+      "end": 610,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -213,6 +389,17 @@
       "path": "fixtures/reactive-ir/route-config/table.tsx",
       "start": 228,
       "end": 235,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/table.tsx",
+      "start": 250,
+      "end": 255,
       "fixes": 0
     }
   ]

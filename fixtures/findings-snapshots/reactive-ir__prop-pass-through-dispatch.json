@@ -66,6 +66,17 @@
       "start": 917,
       "end": 928,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-pass-through-dispatch/App.tsx",
+      "start": 946,
+      "end": 959,
+      "fixes": 0
     }
   ]
 }

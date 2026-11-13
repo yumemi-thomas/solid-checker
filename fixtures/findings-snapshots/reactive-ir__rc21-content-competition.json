@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 104,
+      "end": 114,
+      "fixes": 0
+    },
+    {
       "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "violation",
@@ -19,6 +30,17 @@
       "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
       "start": 134,
       "end": 162,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 150,
+      "end": 160,
       "fixes": 0
     },
     {
@@ -64,6 +86,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 648,
+      "end": 658,
+      "fixes": 0
+    },
+    {
       "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "uncertifiable",
@@ -72,6 +105,39 @@
       "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
       "start": 685,
       "end": 711,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 712,
+      "end": 723,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 897,
+      "end": 908,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 932,
+      "end": 951,
       "fixes": 0
     },
     {
@@ -86,6 +152,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 975,
+      "end": 987,
+      "fixes": 0
+    },
+    {
       "rule": "jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "uncertifiable",
@@ -94,6 +171,17 @@
       "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
       "start": 1006,
       "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1011,
+      "end": 1025,
       "fixes": 0
     },
     {
@@ -122,11 +210,44 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1049,
+      "end": 1063,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
       "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
       "start": 1053,
       "end": 1062,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1078,
+      "end": 1090,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-content-competition/App.tsx",
+      "start": 1091,
+      "end": 1102,
       "fixes": 0
     }
   ]

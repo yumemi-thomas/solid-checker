@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
+      "start": 274,
+      "end": 281,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -101,6 +112,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
+      "start": 525,
+      "end": 532,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -142,6 +164,17 @@
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 730,
       "end": 739,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
+      "start": 767,
+      "end": 774,
       "fixes": 0
     },
     {
@@ -211,6 +244,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
+      "start": 1034,
+      "end": 1041,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -263,6 +307,17 @@
       "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
       "start": 1270,
       "end": 1275,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-wrapper/App.tsx",
+      "start": 1295,
+      "end": 1302,
       "fixes": 0
     }
   ]

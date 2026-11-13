@@ -35,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-raw-store-root/App.tsx",
+      "start": 514,
+      "end": 531,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -42,6 +53,17 @@
       "path": "fixtures/reactive-ir/rc21-raw-store-root/App.tsx",
       "start": 679,
       "end": 686,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-raw-store-root/App.tsx",
+      "start": 701,
+      "end": 704,
       "fixes": 0
     }
   ]

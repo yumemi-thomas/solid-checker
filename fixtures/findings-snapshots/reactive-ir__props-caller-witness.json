@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/props-caller-witness/App.tsx",
+      "start": 1138,
+      "end": 1143,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -20,6 +31,17 @@
       "path": "fixtures/reactive-ir/props-caller-witness/App.tsx",
       "start": 1451,
       "end": 1462,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/props-caller-witness/App.tsx",
+      "start": 1478,
+      "end": 1483,
       "fixes": 0
     },
     {
@@ -41,6 +63,28 @@
       "path": "fixtures/reactive-ir/props-caller-witness/App.tsx",
       "start": 2169,
       "end": 2181,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/props-caller-witness/App.tsx",
+      "start": 2197,
+      "end": 2202,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/props-caller-witness/App.tsx",
+      "start": 2204,
+      "end": 2210,
       "fixes": 0
     }
   ]

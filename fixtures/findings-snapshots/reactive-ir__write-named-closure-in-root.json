@@ -78,6 +78,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 602,
+      "end": 606,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -173,6 +184,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 966,
       "end": 976,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 1015,
+      "end": 1019,
       "fixes": 0
     },
     {
@@ -274,6 +296,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 1401,
+      "end": 1405,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -372,6 +405,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 1846,
+      "end": 1850,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -467,6 +511,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 2214,
       "end": 2224,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 2269,
+      "end": 2273,
       "fixes": 0
     },
     {
@@ -601,6 +656,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 2743,
+      "end": 2747,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -721,6 +787,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 3218,
+      "end": 3222,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -751,6 +828,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 3431,
       "end": 3436,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 3462,
+      "end": 3466,
       "fixes": 0
     },
     {
@@ -884,6 +972,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 3965,
+      "end": 3969,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -980,6 +1079,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 4346,
       "end": 4351,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 4401,
+      "end": 4405,
       "fixes": 0
     },
     {
@@ -1082,6 +1192,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 4822,
+      "end": 4826,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1170,6 +1291,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 5230,
+      "end": 5234,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1200,6 +1332,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 5450,
       "end": 5455,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 5481,
+      "end": 5485,
       "fixes": 0
     },
     {
@@ -1266,6 +1409,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 5785,
       "end": 5794,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 5951,
+      "end": 5955,
       "fixes": 0
     },
     {
@@ -1368,6 +1522,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 6399,
+      "end": 6403,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1464,6 +1629,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 6858,
       "end": 6862,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 6914,
+      "end": 6918,
       "fixes": 0
     },
     {
@@ -1566,6 +1742,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 7346,
+      "end": 7350,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1661,6 +1848,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 7886,
       "end": 7890,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 7941,
+      "end": 7945,
       "fixes": 0
     },
     {

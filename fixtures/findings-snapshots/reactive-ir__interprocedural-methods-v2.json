@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 220,
+      "end": 225,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -20,6 +31,17 @@
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
       "start": 292,
       "end": 304,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 333,
+      "end": 338,
       "fixes": 0
     },
     {
@@ -34,6 +56,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 499,
+      "end": 504,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -42,6 +75,17 @@
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
       "start": 590,
       "end": 643,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 683,
+      "end": 688,
       "fixes": 0
     },
     {
@@ -56,6 +100,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 809,
+      "end": 814,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -63,6 +118,17 @@
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
       "start": 882,
       "end": 912,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 929,
+      "end": 934,
       "fixes": 0
     },
     {
@@ -74,6 +140,39 @@
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
       "start": 993,
       "end": 1010,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 1037,
+      "end": 1042,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 1126,
+      "end": 1132,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 1231,
+      "end": 1258,
       "fixes": 0
     },
     {

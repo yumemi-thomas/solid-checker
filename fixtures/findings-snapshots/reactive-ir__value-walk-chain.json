@@ -90,6 +90,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-five.tsx",
+      "start": 355,
+      "end": 358,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -186,6 +197,17 @@
       "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
       "start": 339,
       "end": 343,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
+      "start": 406,
+      "end": 409,
       "fixes": 0
     },
     {
@@ -9671,6 +9693,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
+      "start": 8718,
+      "end": 8721,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -12869,6 +12902,17 @@
       "path": "fixtures/reactive-ir/value-walk-chain/settled-past-budget.tsx",
       "start": 8644,
       "end": 8650,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/settled-past-budget.tsx",
+      "start": 8713,
+      "end": 8716,
       "fixes": 0
     }
   ]

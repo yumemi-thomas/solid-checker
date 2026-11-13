@@ -34,6 +34,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
+      "start": 928,
+      "end": 947,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -47,6 +58,17 @@
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
+      "start": 1475,
+      "end": 1484,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
       "start": 1475,
@@ -78,6 +100,17 @@
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
+      "start": 1870,
+      "end": 1889,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
       "start": 1870,
@@ -118,6 +151,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
+      "start": 2630,
+      "end": 2638,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -137,6 +181,17 @@
       "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
       "start": 2798,
       "end": 2808,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
+      "start": 2856,
+      "end": 2862,
       "fixes": 0
     },
     {
@@ -166,6 +221,17 @@
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
+      "start": 3307,
+      "end": 3326,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-by-value-callback/App.tsx",
       "start": 3307,

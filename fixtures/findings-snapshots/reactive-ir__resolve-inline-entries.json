@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 188,
+      "end": 247,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -132,6 +143,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 384,
+      "end": 387,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
@@ -161,6 +183,17 @@
       "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
       "start": 592,
       "end": 599,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 636,
+      "end": 639,
       "fixes": 0
     },
     {
@@ -219,6 +252,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 764,
+      "end": 801,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -274,6 +318,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 969,
+      "end": 1019,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -315,6 +370,17 @@
       "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
       "start": 1164,
       "end": 1171,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 1274,
+      "end": 1348,
       "fixes": 0
     },
     {
@@ -395,6 +461,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 1753,
+      "end": 1760,
+      "fixes": 0
+    },
+    {
       "rule": "no-await-primitive-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
@@ -427,6 +504,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 1934,
+      "end": 1945,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -446,6 +534,17 @@
       "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
       "start": 2064,
       "end": 2071,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 2099,
+      "end": 2110,
       "fixes": 0
     },
     {
@@ -479,6 +578,17 @@
       "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
       "start": 2233,
       "end": 2240,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-inline-entries/App.tsx",
+      "start": 2276,
+      "end": 2289,
       "fixes": 0
     },
     {

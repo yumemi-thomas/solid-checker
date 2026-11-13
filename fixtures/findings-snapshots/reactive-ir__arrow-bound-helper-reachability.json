@@ -62,6 +62,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/App.tsx",
+      "start": 1622,
+      "end": 1630,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -179,6 +190,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/ModuleSwitch.tsx",
+      "start": 661,
+      "end": 668,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
@@ -222,6 +244,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
+      "start": 693,
+      "end": 700,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -241,6 +274,17 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
       "start": 873,
       "end": 884,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
+      "start": 1010,
+      "end": 1017,
       "fixes": 0
     },
     {
@@ -390,6 +434,17 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
       "start": 3846,
       "end": 3857,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 3996,
+      "end": 4003,
       "fixes": 0
     },
     {

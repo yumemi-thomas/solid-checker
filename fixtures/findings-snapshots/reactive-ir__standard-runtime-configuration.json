@@ -10,6 +10,28 @@
       "start": 120,
       "end": 127,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/standard-runtime-configuration/App.tsx",
+      "start": 187,
+      "end": 195,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/standard-runtime-configuration/App.tsx",
+      "start": 197,
+      "end": 204,
+      "fixes": 0
     }
   ]
 }

@@ -133,6 +133,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1284,
+      "end": 1300,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -141,6 +152,17 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
       "start": 1291,
       "end": 1299,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1302,
+      "end": 1318,
       "fixes": 0
     },
     {
@@ -155,6 +177,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1320,
+      "end": 1336,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -166,6 +199,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1338,
+      "end": 1353,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -174,6 +218,17 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
       "start": 1345,
       "end": 1352,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1355,
+      "end": 1372,
       "fixes": 0
     },
     {
@@ -600,6 +655,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 756,
+      "end": 767,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 769,
+      "end": 780,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -608,6 +685,28 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
       "start": 776,
       "end": 779,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 782,
+      "end": 793,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 795,
+      "end": 806,
       "fixes": 0
     },
     {
@@ -698,6 +797,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 1051,
+      "end": 1063,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -907,6 +1017,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 2081,
+      "end": 2084,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -1071,6 +1192,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 820,
+      "end": 823,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1079,6 +1211,17 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
       "start": 820,
       "end": 823,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 825,
+      "end": 828,
       "fixes": 0
     },
     {
@@ -1093,6 +1236,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 830,
+      "end": 833,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1101,6 +1255,17 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
       "start": 830,
       "end": 833,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 835,
+      "end": 838,
       "fixes": 0
     },
     {
@@ -1115,6 +1280,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 840,
+      "end": 843,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1123,6 +1299,17 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
       "start": 840,
       "end": 843,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 845,
+      "end": 848,
       "fixes": 0
     },
     {
@@ -1159,6 +1346,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
+      "start": 374,
+      "end": 379,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
+      "start": 381,
+      "end": 398,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -1191,10 +1400,32 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
+      "start": 722,
+      "end": 725,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
+      "start": 885,
+      "end": 897,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
       "start": 885,
@@ -1210,6 +1441,17 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
       "start": 885,
       "end": 897,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
+      "start": 980,
+      "end": 983,
       "fixes": 0
     },
     {

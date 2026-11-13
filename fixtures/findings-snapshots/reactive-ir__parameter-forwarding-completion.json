@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 351,
+      "end": 356,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -19,6 +30,17 @@
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
       "start": 446,
       "end": 462,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 477,
+      "end": 482,
       "fixes": 0
     },
     {
@@ -33,6 +55,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 609,
+      "end": 614,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -41,6 +74,17 @@
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
       "start": 717,
       "end": 721,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 737,
+      "end": 744,
       "fixes": 0
     },
     {
@@ -66,6 +110,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 867,
+      "end": 872,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -74,6 +129,28 @@
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
       "start": 969,
       "end": 973,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 989,
+      "end": 994,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 1117,
+      "end": 1122,
       "fixes": 0
     },
     {
@@ -88,6 +165,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 1269,
+      "end": 1274,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -96,6 +184,17 @@
       "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
       "start": 1383,
       "end": 1387,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 1403,
+      "end": 1408,
       "fixes": 0
     },
     {

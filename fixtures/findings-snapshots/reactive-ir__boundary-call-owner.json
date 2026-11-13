@@ -237,6 +237,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 1713,
+      "end": 1720,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -245,6 +256,17 @@
       "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
       "start": 1713,
       "end": 1720,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/boundary-call-owner/App.tsx",
+      "start": 1765,
+      "end": 1769,
       "fixes": 0
     }
   ]
