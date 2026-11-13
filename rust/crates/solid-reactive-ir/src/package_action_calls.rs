@@ -704,14 +704,17 @@ fn lazy_origin(
             None => Some(DeclarationAt {
                 path: format!("{COMPUTED_LOAD_PREFIX}import()"),
             }),
+            // The project's own module, unless JavaScript the program does not analyze stands behind it (a shim); a rooted specifier names a path only the bundler resolves.
+            Some(module) if module.starts_with('.') => unanalyzed_project_js(ctx, file, module),
+            Some(module) if module.starts_with('/') => Some(DeclarationAt {
+                path: format!("{COMPUTED_LOAD_PREFIX}{module}"),
+            }),
             Some(module) => {
                 let binding = ImportBinding {
                     module,
                     declaration: load.span,
                     namespace: false,
-                    decided_elsewhere: module.starts_with('.')
-                        || module.starts_with('/')
-                        || is_runtime_module(ctx, module)
+                    decided_elsewhere: is_runtime_module(ctx, module)
                         || module.starts_with("node:"),
                 };
                 import_declaration(ctx, analyzed, file, &binding)
@@ -900,6 +903,21 @@ fn namespace_member_origin(
         })
 }
 
+/// The JavaScript a relative specifier names that the program does not analyze (a declaration file or an ambient wildcard module stands for it): the bundler loads it, so
+/// its code runs where the importing module's value does.
+fn unanalyzed_project_js(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    module: &str,
+) -> Option<DeclarationAt> {
+    let index = ctx.package_reach?;
+    let base = solid_facts::package_reach::join_relative(file.path.as_str(), module);
+    solid_facts::package_reach::script_candidates(&base)
+        .into_iter()
+        .find(|candidate| index.is_project_js(candidate))
+        .map(|path| DeclarationAt { path })
+}
+
 /// Where the value an import binding names came from. `symbol_at` is where the binding's own symbol is asked (a shorthand property's span holds the property's).
 fn import_origin(
     ctx: &AnalysisContext<'_>,
@@ -918,14 +936,8 @@ fn import_origin(
             .map_or(Origin::Unknown, Origin::Package);
     }
     // JavaScript the import names that the program does not analyze (a declaration file or an ambient `declare module` stands for it).
-    if let Some(index) = ctx.package_reach {
-        let base = solid_facts::package_reach::join_relative(file.path.as_str(), import.module);
-        if let Some(path) = solid_facts::package_reach::script_candidates(&base)
-            .into_iter()
-            .find(|candidate| index.is_project_js(candidate))
-        {
-            return Origin::Package(DeclarationAt { path });
-        }
+    if let Some(declaration) = unanalyzed_project_js(ctx, file, import.module) {
+        return Origin::Package(declaration);
     }
     // The project's own module: what it exports of one plain name bound to one initializer is what that makes; a re-export of a package's function is the
     // declaration the compiler's resolution ends on.

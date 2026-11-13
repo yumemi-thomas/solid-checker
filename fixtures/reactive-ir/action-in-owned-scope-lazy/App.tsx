@@ -6,6 +6,7 @@ const LazyAction = lazy(() => import("fz-lazy"));
 const LazyNamed = lazy(() => import("fz-lazy-named").then((m) => ({ default: m.View })));
 const LazyClear = lazy(() => import("fz-lazy-clear"));
 const LazyLocal = lazy(() => import("./Local"));
+const LazyVendor = lazy(() => import("./view.vendor.js"));
 const LazyComputed = lazy(() => import(moduleName));
 
 // B5: a component a package holds, loaded when the loader's promise settles, renders under an owner like any other.
@@ -20,6 +21,14 @@ export function Named() {
   return (
     <Loading fallback={null}>
       <LazyNamed />
+    </Loading>
+  );
+}
+// A relative module the program does not analyze (a shim stands for its JavaScript) is code nobody reads, as an unread package is.
+export function Vendor() {
+  return (
+    <Loading fallback={null}>
+      <LazyVendor />
     </Loading>
   );
 }

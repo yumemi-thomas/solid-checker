@@ -386,8 +386,8 @@ fn project_js(
 }
 
 /// The runtime files a relative import of the project reaches that the program does not analyze, where the compiler resolved the import to no analyzed
-/// source (an ambient `declare module "*.vendor.js"`, a declaration file): the bundler loads the file the specifier names, and nobody reads it. Each file is
-/// named by its path as the import joins it and by its canonical path.
+/// source (an ambient `declare module "*.vendor.js"`, a declaration file): the bundler loads the file the specifier names, and nobody reads it. A dynamic
+/// `import("./view.vendor.js")` is one too (ADR 0973: `lazy(() => import(…))`). Each file is named by its path as the import joins it and by its canonical path.
 fn imports_of_unread_js(
     facts: &solid_facts::ProjectFacts,
     analyzed: &BTreeSet<&str>,
@@ -398,16 +398,27 @@ fn imports_of_unread_js(
         if importer.contains("/node_modules/") || facts.dependency_source_root(importer).is_some() {
             continue;
         }
-        for import in &file.ast.imports {
-            let text = import.module.as_str();
-            if import.type_only || !(text.starts_with("./") || text.starts_with("../")) {
+        let imports = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| (import.span, import.module.as_str()));
+        let loads = file.ast.module_loads.iter().filter_map(|load| {
+            (load.kind == solid_facts::ast::ModuleLoadKind::DynamicImport)
+                .then(|| load.specifier.as_deref())
+                .flatten()
+                .map(|text| (load.specifier_span.unwrap_or(load.span), text))
+        });
+        for (at, text) in imports.chain(loads) {
+            if !(text.starts_with("./") || text.starts_with("../")) {
                 continue;
             }
             // The compiler resolved it to a file the program analyzes: that source is read.
             let resolved = facts
                 .resolved_imports
                 .as_ref()
-                .map(|attested| attested.specifier(importer, import.span, text));
+                .map(|attested| attested.specifier(importer, at, text));
             if let Some(solid_facts::SpecifierAttestation::Attested(row)) = resolved
                 && analyzed.contains(&*row.resolved_path)
             {
