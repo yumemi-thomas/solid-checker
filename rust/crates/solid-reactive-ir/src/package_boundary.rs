@@ -327,10 +327,11 @@ impl PackageBoundary {
         }
         self.legacy_markers.extend(other.legacy_markers);
         if let Some(index) = other.package_reach {
-            self.package_reach
-                .get_or_insert_with(Default::default)
-                .by_root
-                .extend(index.by_root);
+            let folded = self.package_reach.get_or_insert_with(Default::default);
+            folded.by_root.extend(index.by_root);
+            folded.names.extend(index.names);
+            folded.linked.extend(index.linked);
+            folded.project_js.extend(index.project_js);
         }
     }
 
@@ -397,6 +398,10 @@ impl PackageBoundary {
             for (real, link) in &index.linked {
                 text(hash, real);
                 text(hash, link);
+            }
+            hash.update((index.project_js.len() as u64).to_be_bytes());
+            for path in &index.project_js {
+                text(hash, path);
             }
         }
     }

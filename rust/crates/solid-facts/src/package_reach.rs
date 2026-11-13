@@ -26,6 +26,8 @@ pub enum ReachBlocker {
     ClosureLimit,
     /// The adapter reads no filesystem (the WASM `analyze` entry): nothing is decided.
     NoFilesystem,
+    /// A declaration file of the project with runtime JavaScript beside it that the program does not analyze (`allowJs` is off): nobody reads that code.
+    UnanalyzedProjectJs,
 }
 
 impl ReachBlocker {
@@ -43,6 +45,7 @@ impl ReachBlocker {
             Self::ManifestUnread => "manifest-unread",
             Self::ClosureLimit => "closure-limit",
             Self::NoFilesystem => "no-filesystem",
+            Self::UnanalyzedProjectJs => "unanalyzed-project-js",
         }
     }
 }
@@ -101,6 +104,9 @@ pub struct PackageReachIndex {
     /// link's own package root. The compiler gives a linked package's declarations their real paths, so they read as no installed code until the link names
     /// them ([`Self::linked_spelling`]).
     pub linked: BTreeMap<String, String>,
+    /// The project's own declaration files (`vendor/step.d.ts`) with runtime JavaScript beside them that the program does not analyze: a declaration there
+    /// describes code nobody reads, so it is undecided ([`ReachBlocker::UnanalyzedProjectJs`]).
+    pub project_js: std::collections::BTreeSet<String>,
 }
 
 impl PackageReachIndex {
@@ -124,9 +130,23 @@ impl PackageReachIndex {
             .map(|(_, spelled)| spelled)
     }
 
+    /// Whether `path` is a project declaration file whose runtime JavaScript the program does not analyze.
+    #[must_use]
+    pub fn is_project_js(&self, path: &str) -> bool {
+        self.project_js.contains(path)
+    }
+
     /// The verdict for the code a declaration at `path` describes. A path the backend did not decide is undecided, never clear.
     #[must_use]
     pub fn for_declaration(&self, path: &str) -> PackageReach {
+        if self.project_js.contains(path) {
+            return PackageReach::Undecided {
+                blocker: ReachBlocker::UnanalyzedProjectJs,
+                detail: format!(
+                    "{path} has runtime code beside it that the program does not analyze"
+                ),
+            };
+        }
         let key = package_root_of(path).unwrap_or(path);
         self.by_root
             .get(key)
@@ -260,6 +280,17 @@ mod tests {
         );
         assert_eq!(index.linked_spelling("/ws/packages/kernel"), None);
         assert_eq!(index.linked_spelling("/ws/apps/web/ambient.d.ts"), None);
+    }
+
+    #[test]
+    fn a_project_declaration_with_unread_javascript_is_undecided() {
+        let mut index = PackageReachIndex::default();
+        index.project_js.insert("/p/vendor/step.d.ts".to_owned());
+        assert!(index.is_project_js("/p/vendor/step.d.ts"));
+        assert!(!index.is_project_js("/p/vendor/other.d.ts"));
+        let reach = index.for_declaration("/p/vendor/step.d.ts");
+        assert_eq!(reach.word(), "unanalyzed-project-js");
+        assert!(!reach.is_clear());
     }
 
     #[test]

@@ -166,10 +166,6 @@ fn file_sites(
         let Some(declaration) = declaration else {
             return;
         };
-        // A site two routes find (an identifier and the member it is the object of) stands once.
-        if !seen.insert((at, entry)) {
-            return;
-        }
         let reach = match ctx.package_reach {
             Some(index) => index.for_declaration(&declaration.path),
             None => PackageReach::Undecided {
@@ -178,6 +174,11 @@ fn file_sites(
             },
         };
         if reach.is_clear() {
+            return;
+        }
+        // A site two routes find (an identifier and the member it is the object of) stands once; a clear package's value handed to the same call never hides
+        // another's.
+        if !seen.insert((at, entry)) {
             return;
         }
         let package = package_root_of(&declaration.path)
@@ -237,49 +238,70 @@ fn file_sites(
         };
         push(opening, element.name.span, Entry::Render, declaration);
     }
-    // A reference to an import binding handed on as a value: `createMemo(pkgFn)`, `const run = pkgFn`, `[1].map(Pkg.fn)`, `{ pkgFn }`, `take(Pkg)`.
-    // A binding that only names it (`const run = pkgFn`) is no new site: its initializer is one, and everything the binding reaches began there.
+    // A reference to a package's function handed on as a value: `createMemo(pkgFn)`, `const run = pkgFn`, `[1].map(Pkg.fn)`, `{ pkgFn }`, `take(Pkg)`,
+    // `[cb].forEach(kernel.run)`. The reference names an import (a package's, or the project's own module, whose re-export of a package function the compiler's
+    // resolution follows) or a project binding that holds what an import makes ([`origin_of`]). A binding that only names it (`const run = pkgFn`) has its
+    // initializer as a site too, which is not where `run` is handed on. The row stands at the call that receives the value, where a throw has its project frame.
     for identifier in &file.ast.identifiers {
         if identifier.role != solid_facts::ast::IdentifierRole::Reference {
             continue;
         }
-        let Some(import) = file
-            .ast
-            .reference_declaration(identifier.span)
-            .and_then(|declaration| bound.get(&declaration))
-            .filter(|import| !import.decided_elsewhere)
+        if !followable_root(ctx, file, &bound, identifier.span) {
+            continue;
+        }
+        let Origin::Package(origin) =
+            origin_of(ctx, analyzed, file, &bound, identifier.span, ORIGIN_DEPTH)
         else {
             continue;
         };
-        if (import.namespace || may_be_function(ctx, file, identifier.span, identifier.span))
-            && handed_as_value(ctx, file, identifier.span)
-        {
+        let namespace = file
+            .ast
+            .reference_declaration(identifier.span)
+            .and_then(|declaration| bound.get(&declaration))
+            .is_some_and(|import| import.namespace);
+        // An import may be a function the facts say nothing of; a binding that only holds what an import makes is one only where the compiler says it is callable.
+        let import = file
+            .ast
+            .reference_declaration(identifier.span)
+            .is_some_and(|declaration| bound.contains_key(&declaration));
+        let function = if import {
+            namespace || may_be_function(ctx, file, identifier.span, identifier.span)
+        } else {
+            callable_fact(ctx, file, identifier.span) == Some(true)
+        };
+        if function && handed_as_value(ctx, file, identifier.span) {
             push(
-                identifier.span,
+                handed_at(file, identifier.span),
                 identifier.span,
                 Entry::Value,
-                import_declaration(ctx, analyzed, file, import),
+                Some(origin),
             );
         }
     }
     for member in &file.ast.members {
-        let object = file.ast.peel_ts_sugar_span(member.object);
-        let Some(import) = file
-            .ast
-            .reference_declaration(object)
-            .and_then(|declaration| bound.get(&declaration))
-            .filter(|import| import.namespace && !import.decided_elsewhere)
+        // `[1].forEach(kernel.run)`: the object is an import of any kind, a binding that holds what an import makes, or a longer chain (`pkg.helpers.run`).
+        if !followable_root(ctx, file, &bound, member.span) {
+            continue;
+        }
+        let Origin::Package(origin) =
+            origin_of(ctx, analyzed, file, &bound, member.span, ORIGIN_DEPTH)
         else {
             continue;
         };
-        if may_be_function(ctx, file, member.span, member.span)
-            && handed_as_value(ctx, file, member.span)
-        {
+        // A member of a namespace import is a function the facts may say nothing of; a member of any other object is one where the compiler says it is callable
+        // (a call's argument is typed: `[..].forEach(kernel.run)`), never by the kind of a property signature, which a function and a number share.
+        let function =
+            if root_import(file, &bound, member.span).is_some_and(|import| import.namespace) {
+                may_be_function(ctx, file, member.span, member.span)
+            } else {
+                callable_fact(ctx, file, member.span) == Some(true)
+            };
+        if function && handed_as_value(ctx, file, member.span) {
             push(
-                member.span,
+                handed_at(file, member.span),
                 member.span,
                 Entry::Value,
-                import_declaration(ctx, analyzed, file, import),
+                Some(origin),
             );
         }
     }
@@ -288,51 +310,54 @@ fn file_sites(
         let Some(binding) = property.shorthand_binding else {
             continue;
         };
-        let Some(import) = bound
-            .get(&binding)
-            .filter(|import| !import.decided_elsewhere)
+        let Some(import) = bound.get(&binding) else {
+            continue;
+        };
+        let Origin::Package(origin) =
+            import_origin(ctx, analyzed, file, import, binding, ORIGIN_DEPTH)
         else {
             continue;
         };
         if import.namespace || may_be_function(ctx, file, property.value, binding) {
-            push(
-                property.value,
-                property.value,
-                Entry::Value,
-                import_declaration(ctx, analyzed, file, import),
-            );
+            push(property.value, property.value, Entry::Value, Some(origin));
         }
     }
     sites.sort_by_key(|site| (site.at.start, site.at.end));
     sites
 }
 
-/// Whether the value of the reference at `span` may be a function: the compiler types it callable or constructable, or says nothing (the demand
-/// plan asks for callability at a few spans only) and the declaration it names is no type-level one (an interface, a type alias, an enum or a
-/// namespace holds no function value of its own). Known to be neither callable nor constructable, it is not.
+/// What the compiler says of the value at `span`: `Some(true)` when it is callable or constructable, `Some(false)` when it is neither, `None` when the facts say
+/// nothing (the demand plan asks for callability at a few spans only: a call's argument is one).
+fn callable_fact(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> Option<bool> {
+    use typefacts::{Callability, Constructability};
+    let entity = ctx.semantic_lookup.entity_at(file.path.as_str(), span)?;
+    if matches!(
+        entity.constructability,
+        Some(Constructability::Constructable)
+    ) {
+        return Some(true);
+    }
+    entity
+        .callability
+        .map(|callability| callability != Callability::NonCallable)
+}
+
+/// Whether the value of the reference at `span` may be a function: the compiler types it callable or constructable, or says nothing and the declaration it names
+/// is no type-level one (an interface, a type alias, an enum or a namespace holds no function value of its own). Known to be neither callable nor
+/// constructable, it is not.
 fn may_be_function(
     ctx: &AnalysisContext<'_>,
     file: &FileFacts,
     span: Span,
     symbol_at: Span,
 ) -> bool {
-    use typefacts::{Callability, Constructability};
-    let lookup = ctx.semantic_lookup;
-    if let Some(entity) = lookup.entity_at(file.path.as_str(), span) {
-        if matches!(
-            entity.constructability,
-            Some(Constructability::Constructable)
-        ) {
-            return true;
-        }
-        if let Some(callability) = entity.callability {
-            return callability != Callability::NonCallable;
-        }
+    if let Some(known) = callable_fact(ctx, file, span) {
+        return known;
     }
     // No callability fact: the kind of the declaration the symbol names, through its import alias. The producer's kinds are `variable`, `function`,
     // `class` and `declaration` (everything else): only the last is no function value. `symbol_at` is where the import's own symbol is asked (a
     // shorthand property's span holds the property's).
-    lookup
+    ctx.semantic_lookup
         .alias_root_declarations(file, symbol_at)
         .is_none_or(|declarations| {
             declarations.is_empty()
@@ -423,6 +448,183 @@ struct DeclarationAt {
     path: String,
 }
 
+/// How many hops the origin of a value is followed (a call's callee, a member's object, a binding's initializer).
+const ORIGIN_DEPTH: usize = 6;
+
+/// Where the value an expression names came from.
+enum Origin {
+    /// Code of a package the build does not read: the declaration path that names its package.
+    Package(DeclarationAt),
+    /// No package's code: a global of the standard library, the dialect's runtime, a `node:` builtin, or code the program reads.
+    NoPackage,
+    /// The chain ends where this pass does not follow it (a parameter, a property, the result of a project function, an import it does not resolve): the
+    /// callee's declaration decides.
+    Unknown,
+}
+
+/// The installed path that names the package whose code a declaration at `path` describes: a file under `node_modules`, the link's `node_modules` spelling of a
+/// file in a linked workspace package, or a project declaration file with runtime code beside it that the program does not read. `None` for the standard
+/// library, a file the program analyzes itself (a package read as source, a JavaScript file `allowJs` brings in) and a declaration no installed package holds (a
+/// global a script provides, a `declare module` shim: the import's file stands for the shim's package).
+fn installed_path(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    path: &str,
+) -> Option<String> {
+    if path.starts_with("bundled:")
+        || ctx.semantic_lookup.in_dependency_source(path)
+        || !(is_declaration_file(path) || !analyzed.contains(path))
+    {
+        return None;
+    }
+    if path.contains("/node_modules/") {
+        return Some(path.to_owned());
+    }
+    let index = ctx.package_reach?;
+    index
+        .linked_spelling(path)
+        .or_else(|| index.is_project_js(path).then(|| path.to_owned()))
+}
+
+/// Where the value `span` names came from: what a call or `new` makes comes from its callee's code, a member is read off its object, an import names its
+/// package, and a project binding of one plain name to one initializer holds what that makes. A global the standard library declares is the host's, whatever
+/// a package adds to its type.
+fn origin_of(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    bound: &HashMap<Span, ImportBinding<'_>>,
+    span: Span,
+    depth: usize,
+) -> Origin {
+    if depth == 0 {
+        return Origin::Unknown;
+    }
+    let lookup = ctx.semantic_lookup;
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    if let Some(call) = ast.call_at(span) {
+        return origin_of(ctx, analyzed, file, bound, call.callee, depth - 1);
+    }
+    if let Some(member) = ast.member_at(span) {
+        return origin_of(ctx, analyzed, file, bound, member.object, depth - 1);
+    }
+    let Some(declaration) = ast.reference_declaration(span) else {
+        let host = lookup
+            .alias_root_declarations(file, span)
+            .is_some_and(|declarations| {
+                declarations
+                    .iter()
+                    .any(|declaration| declaration.location.path.starts_with("bundled:"))
+            });
+        return if host {
+            Origin::NoPackage
+        } else {
+            Origin::Unknown
+        };
+    };
+    if let Some(import) = bound.get(&declaration) {
+        return import_origin(ctx, analyzed, file, import, span, depth);
+    }
+    let Some((next, initializer)) = value_initializer(lookup, file, span) else {
+        return Origin::Unknown;
+    };
+    if std::ptr::eq(next, file) {
+        origin_of(ctx, analyzed, file, bound, initializer, depth - 1)
+    } else {
+        let next_bound = import_bindings(ctx, next);
+        origin_of(ctx, analyzed, next, &next_bound, initializer, depth - 1)
+    }
+}
+
+/// Where the value an import binding names came from. `symbol_at` is where the binding's own symbol is asked (a shorthand property's span holds the property's).
+fn import_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    import: &ImportBinding<'_>,
+    symbol_at: Span,
+    depth: usize,
+) -> Origin {
+    let lookup = ctx.semantic_lookup;
+    if import.module.starts_with("node:") || is_runtime_module(ctx, import.module) {
+        return Origin::NoPackage;
+    }
+    if !import.decided_elsewhere {
+        return import_declaration(ctx, analyzed, file, import)
+            .map_or(Origin::Unknown, Origin::Package);
+    }
+    // The project's own module: what it exports of one plain name bound to one initializer is what that makes; a re-export of a package's function is the
+    // declaration the compiler's resolution ends on.
+    if depth > 1
+        && let Some((next, initializer)) = value_initializer(lookup, file, symbol_at)
+    {
+        let next_bound = import_bindings(ctx, next);
+        return origin_of(ctx, analyzed, next, &next_bound, initializer, depth - 1);
+    }
+    lookup
+        .alias_root_declarations(file, symbol_at)
+        .and_then(|declarations| {
+            declarations
+                .iter()
+                .find_map(|declaration| installed_path(ctx, analyzed, &declaration.location.path))
+        })
+        .map_or(Origin::Unknown, |path| {
+            Origin::Package(DeclarationAt { path })
+        })
+}
+
+/// Whether the expression at `span` roots in something [`origin_of`] can follow (an import, a project binding of one initializer, a call), so that the
+/// value loops ask it only there: a member chain is walked to its root.
+fn followable_root(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    bound: &HashMap<Span, ImportBinding<'_>>,
+    span: Span,
+) -> bool {
+    let ast = &file.ast;
+    let mut at = ast.peel_ts_sugar_span(span);
+    for _ in 0..ORIGIN_DEPTH {
+        if let Some(member) = ast.member_at(at) {
+            at = ast.peel_ts_sugar_span(member.object);
+            continue;
+        }
+        if ast.call_at(at).is_some() {
+            return true;
+        }
+        return ast.reference_declaration(at).is_some_and(|declaration| {
+            bound.contains_key(&declaration)
+                || value_initializer(ctx.semantic_lookup, file, at).is_some()
+        });
+    }
+    false
+}
+
+/// Where a value handed on is reported: the call it is a direct argument of (a throw while that call runs has its project frame there), else the reference.
+fn handed_at(file: &FileFacts, span: Span) -> Span {
+    let ast = &file.ast;
+    ast.arguments_containing(span)
+        .find(|(call, index)| ast.peel_ts_sugar_span(call.arguments[*index].span) == span)
+        .map_or(span, |(call, _)| call.span)
+}
+
+/// The initializer the value at `span` comes from: the single initializer of a project binding of one plain name ([`SemanticLookup::exact_initializer_at_reference`]),
+/// or the initializer of a destructured `const` (`const { run } = kernel`): each name of the pattern is read off what the initializer makes.
+fn value_initializer<'a>(
+    lookup: &crate::indexes::SemanticLookup<'a>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<(&'a FileFacts, Span)> {
+    if let Some(found) = lookup.exact_initializer_at_reference(file, span) {
+        return Some(found);
+    }
+    let (binding_file, binding, _) = lookup.binding_at_reference(file.path.as_str(), span)?;
+    binding
+        .initializer
+        .filter(|_| binding.immutable)
+        .map(|initializer| (binding_file, initializer))
+}
+
 /// The prefix of the path of an import the compiler's attestation does not cover: no file, so the reach index has no verdict for it.
 const UNATTESTED: &str = "unattested:";
 
@@ -444,6 +646,13 @@ fn package_declaration(
         && lookup.primitive_at_call(file, inner.span).is_some()
     {
         return None;
+    }
+    // The code a callee runs comes from where its value came from, not from where its signature type is declared: the import its root names, through the
+    // bindings that only hold a value a call made (`const handle = makeHandle()`). A global of the standard library is the host's, whatever a package augments.
+    match origin_of(ctx, analyzed, file, bound, callee, ORIGIN_DEPTH) {
+        Origin::Package(declaration) => return Some(declaration),
+        Origin::NoPackage => return None,
+        Origin::Unknown => {}
     }
     let mut paths = Vec::<String>::new();
     if resolve == Resolve::Call
@@ -510,24 +719,11 @@ fn package_declaration(
         };
         hop = (next_file, next_file.ast.peel_ts_sugar_span(initializer));
     }
-    // Installed code only: a declaration under `node_modules`, or in the real directory of a linked workspace package the backend found the link of
-    // (the compiler gives its declarations that real path; the index spells it by the link), not a file the program analyzes itself (a package read as
-    // source, or a JavaScript file `allowJs` brings into the program). A declaration in a project declaration file stands for code no installed package
-    // holds (a global a script provides, a `declare module` shim: the import's file stands for the shim's package), so it is no site.
-    let installed = paths.into_iter().find_map(|path| {
-        // The standard library's files are the producer's `bundled:` ones.
-        if path.starts_with("bundled:")
-            || lookup.in_dependency_source(&path)
-            || !(is_declaration_file(&path) || !analyzed.contains(path.as_str()))
-        {
-            return None;
-        }
-        if path.contains("/node_modules/") {
-            return Some(path);
-        }
-        ctx.package_reach
-            .and_then(|index| index.linked_spelling(&path))
-    });
+    // Installed code only (`installed_path`): not a file the program analyzes itself, and no declaration a script provides (a global, a `declare module`
+    // shim: the import's file stands for the shim's package).
+    let installed = paths
+        .into_iter()
+        .find_map(|path| installed_path(ctx, analyzed, &path));
     let path = match installed {
         Some(path) => path,
         // An import the compiler's attestation does not cover (its answer is unknown, not "unresolved"): undecided, so a site.
@@ -597,11 +793,7 @@ fn import_declaration(
     if path.starts_with(UNATTESTED) {
         return Some(DeclarationAt { path });
     }
-    (!path.starts_with("bundled:")
-        && path.contains("/node_modules/")
-        && !lookup.in_dependency_source(&path)
-        && (is_declaration_file(&path) || !analyzed.contains(path.as_str())))
-    .then_some(DeclarationAt { path })
+    installed_path(ctx, analyzed, &path).map(|path| DeclarationAt { path })
 }
 
 /// What the package at `root` is called: the `name` its manifest gives (the backend read it), else the directory's own name.

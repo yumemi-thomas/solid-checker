@@ -140,7 +140,8 @@ pub fn package_reach_index(
         subpaths: BTreeSet<String>,
     }
     let mut roots = BTreeMap::<String, Named>::new();
-    for path in declaration_paths(facts) {
+    let (installed, project_declarations) = declaration_paths(facts);
+    for path in installed {
         let Some(root) = package_root_of(&path) else {
             continue;
         };
@@ -207,6 +208,7 @@ pub fn package_reach_index(
         index.by_root.insert(root, reach);
     }
     index.linked = linked_roots(facts);
+    index.project_js = project_js(facts, &project_declarations);
     index
 }
 
@@ -283,13 +285,20 @@ fn runtime_siblings(path: &str) -> Vec<PathBuf> {
     found
 }
 
-/// The installed files (under `node_modules`) the project's own files name a declaration in: each call's resolved declaration (outside the
-/// standard library), each referenced symbol's declarations, through its alias, and each attested import's file.
-fn declaration_paths(facts: &solid_facts::ProjectFacts) -> BTreeSet<String> {
-    let mut paths = BTreeSet::new();
+/// The files the project's own files name a declaration in: each call's resolved declaration (outside the standard library), each referenced symbol's
+/// declarations, through its alias, and each attested import's file. The installed ones (under `node_modules`) and, apart, the project's own declaration
+/// files (outside every `node_modules`, not a package read as source): runtime code may sit beside those ([`project_js`]).
+fn declaration_paths(facts: &solid_facts::ProjectFacts) -> (BTreeSet<String>, BTreeSet<String>) {
+    let mut installed = BTreeSet::new();
+    let mut project = BTreeSet::new();
     let mut keep = |path: &str| {
-        if !path.starts_with("bundled:") && path.contains("/node_modules/") {
-            paths.insert(path.to_owned());
+        if path.starts_with("bundled:") {
+            return;
+        }
+        if path.contains("/node_modules/") {
+            installed.insert(path.to_owned());
+        } else if is_declaration_file(path) && facts.dependency_source_root(path).is_none() {
+            project.insert(path.to_owned());
         }
     };
     // The files the compiler resolved the project's imports to: a tag or a member no entity names is decided through its import. A linked
@@ -340,7 +349,41 @@ fn declaration_paths(facts: &solid_facts::ProjectFacts) -> BTreeSet<String> {
             }
         }
     }
-    paths
+    (installed, project)
+}
+
+/// The project declaration files of `declarations` with runtime JavaScript beside them that the program does not analyze (`vendor/step.d.ts` beside
+/// `vendor/step.js`, `allowJs` off): the compiler resolves an import there to the declaration, and the code that runs is a file nobody reads. A sibling
+/// the program analyzes (`analyzed`) is read, so the declaration is not one of these.
+fn project_js(
+    facts: &solid_facts::ProjectFacts,
+    declarations: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let analyzed = facts
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<BTreeSet<_>>();
+    declarations_with_unread_js(declarations, &analyzed)
+}
+
+fn declarations_with_unread_js(
+    declarations: &BTreeSet<String>,
+    analyzed: &BTreeSet<&str>,
+) -> BTreeSet<String> {
+    declarations
+        .iter()
+        .filter(|path| {
+            let siblings = runtime_siblings(path);
+            !siblings.is_empty()
+                && !siblings.iter().any(|sibling| {
+                    sibling
+                        .to_str()
+                        .is_some_and(|sibling| analyzed.contains(sibling))
+                })
+        })
+        .cloned()
+        .collect()
 }
 
 /// The package whose code a declaration package describes: itself, or for `@types/<name>` the `<name>` Node finds from where the types are
@@ -1153,6 +1196,37 @@ mod tests {
             demand,
             &BTreeSet::new(),
         )
+    }
+
+    #[test]
+    fn a_project_declaration_with_unread_javascript_beside_it_is_undecided() {
+        let directory = project();
+        let base = directory.path().canonicalize().unwrap();
+        write(
+            &base,
+            "vendor/step.d.ts",
+            "export declare const step: () => void;",
+        );
+        write(&base, "vendor/step.js", "export const step = () => {};");
+        write(&base, "types/only.d.ts", "export type T = number;");
+        write(
+            &base,
+            "read/read.d.ts",
+            "export declare const read: number;",
+        );
+        write(&base, "read/read.js", "export const read = 1;");
+        let path = |relative: &str| base.join(relative).to_str().unwrap().to_owned();
+        let declarations = ["vendor/step.d.ts", "types/only.d.ts", "read/read.d.ts"]
+            .iter()
+            .map(|relative| path(relative))
+            .collect::<BTreeSet<_>>();
+        let analyzed_js = path("read/read.js");
+        let analyzed = BTreeSet::from([analyzed_js.as_str()]);
+        // The declaration with a sibling nobody reads is one; a declaration with no runtime file, and one whose sibling the program analyzes, are not.
+        assert_eq!(
+            declarations_with_unread_js(&declarations, &analyzed),
+            BTreeSet::from([path("vendor/step.d.ts")])
+        );
     }
 
     #[cfg(unix)]
