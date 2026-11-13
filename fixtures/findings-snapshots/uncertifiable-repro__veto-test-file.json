@@ -2,17 +2,6 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/veto-test-file/src/carousel.tsx",
-      "start": 658,
-      "end": 668,
-      "fixes": 0
-    },
-    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",

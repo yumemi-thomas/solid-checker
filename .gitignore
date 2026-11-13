@@ -1479,3 +1479,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-package-prop-arrow/node_modules/**
 !fixtures/runtime-oracle/owner-call-flush-package-prop-arrow/node_modules/
 !fixtures/runtime-oracle/owner-call-flush-package-prop-arrow/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-causes/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-causes/node_modules/**
