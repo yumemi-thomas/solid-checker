@@ -800,8 +800,6 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
                 let span = argument.value_span.unwrap_or(argument.span);
                 add_symbol(span, false);
                 primitive_value_domain_spans.insert(span);
-                // The type the compiler prints says whether the primitive domain is a type parameter's constraint.
-                type_descriptor_spans.insert(span);
             }
         }
         for argument in &call.arguments {

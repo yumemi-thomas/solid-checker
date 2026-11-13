@@ -9,8 +9,8 @@
 //! only where the premise holds for that file's package ([`solid_facts::package_reach::PackageReachIndex::premise_holds`]). A call, a value or a chain the reading does
 //! not name stays a site. A value handed to the API is judged by what the matcher does with it:
 //!
-//! - **a primitive** (the compiler's primitive value domain at the expression has no object bit and is not unknown, and the type it prints is primitive keywords and
-//!   literals alone, so a type parameter's value is none; a literal of one): a generic traversal of it reads no member that can be an accessor;
+//! - **a primitive** (the compiler's primitive value domain at the expression has no object bit and is not unknown; a literal of one): a generic traversal of it reads
+//!   no member that can be an accessor;
 //! - **a flat object literal of primitives**, written where it is used (`toEqual`, `toStrictEqual`): its own members are all data, and nothing else holds it;
 //! - **a spy** `vi.fn` or `vi.spyOn` made (a binding of one initializer), for the matchers that read the spy's own call count.
 //!
@@ -281,10 +281,10 @@ fn matcher_allows_literal(ctx: &AnalysisContext<'_>, file: &FileFacts, property:
     })
 }
 
-/// Whether the argument is a primitive by the compiler's facts: a literal one, or an expression whose primitive value domain has no object bit and is not unknown
-/// **and** whose type the compiler prints as primitive keywords and literals alone. The domain of a type parameter is its constraint's, so a value typed `T extends
-/// string` has the domain of a string; the printed type is `T`, which is no primitive, so it is not one here (an `any` and an `unknown` have the unknown domain).
-/// A type written through an alias, an enum, an absent fact: no proof.
+/// Whether the argument is a primitive by the compiler's facts: a literal one, or an expression whose primitive value domain has no object bit and is not unknown.
+/// The domain of a type parameter is its constraint's (the producer closes it, and an unconstrained one is unknown), so a value typed `T extends string` is one; the
+/// printed type may not be read for a decision (ADR 0367), so the fact cannot say it was a type parameter. An `any` and an `unknown` have the unknown domain; an absent
+/// fact is no proof.
 fn primitive_value(ctx: &AnalysisContext<'_>, file: &FileFacts, argument: &ArgumentFact) -> bool {
     if argument.spread {
         return false;
@@ -296,71 +296,10 @@ fn primitive_value(ctx: &AnalysisContext<'_>, file: &FileFacts, argument: &Argum
         return true;
     }
     let span = argument.value_span.unwrap_or(argument.span);
-    let Some(entity) = ctx.semantic_lookup.entity_at(file.path.as_str(), span) else {
-        return false;
-    };
-    entity
-        .primitive_value_domain
-        .present()
+    ctx.semantic_lookup
+        .entity_at(file.path.as_str(), span)
+        .and_then(|entity| entity.primitive_value_domain.present())
         .is_some_and(|domain| !domain.unknown() && !domain.may_be_object())
-        && entity
-            .type_descriptor
-            .as_ref()
-            .is_some_and(|descriptor| prints_as_primitive(&descriptor.text))
-}
-
-/// Whether a type the compiler prints is a union of primitive keywords and literals only: `string`, `number | undefined`, `"a" | "b"`, `3`, `true`.
-fn prints_as_primitive(text: &str) -> bool {
-    let mut members = 0;
-    let mut quote = None::<char>;
-    let mut start = 0;
-    let mut pieces = Vec::new();
-    for (at, character) in text.char_indices() {
-        if let Some(open) = quote {
-            if character == open {
-                quote = None;
-            }
-        } else if character == '"' || character == '\'' {
-            quote = Some(character);
-        } else if character == '|' {
-            pieces.push(&text[start..at]);
-            start = at + 1;
-        }
-    }
-    pieces.push(&text[start..]);
-    for piece in pieces {
-        let piece = piece.trim();
-        let keyword = matches!(
-            piece,
-            "string"
-                | "number"
-                | "boolean"
-                | "bigint"
-                | "symbol"
-                | "null"
-                | "undefined"
-                | "void"
-                | "true"
-                | "false"
-        );
-        let string_literal = piece.len() >= 2
-            && ((piece.starts_with('"') && piece.ends_with('"'))
-                || (piece.starts_with('\'') && piece.ends_with('\'')));
-        let number_literal = !piece.is_empty()
-            && piece
-                .trim_start_matches('-')
-                .trim_end_matches('n')
-                .chars()
-                .all(|character| {
-                    character.is_ascii_digit()
-                        || matches!(character, '.' | 'e' | 'E' | '+' | '-' | '_')
-                });
-        if !(keyword || string_literal || number_literal) {
-            return false;
-        }
-        members += 1;
-    }
-    members > 0
 }
 
 /// An object literal written as the argument whose members are all data with static keys (no spread, accessor or computed key: `exact_object_literal`) and each of
@@ -416,44 +355,4 @@ fn made_by_spy_maker(ctx: &AnalysisContext<'_>, file: &FileFacts, argument: &Arg
         .is_some_and(|call| {
             !call.construct && vi_member(ctx, initializer_file, call.callee, SPY_MAKERS).is_some()
         })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::prints_as_primitive;
-
-    /// A type the compiler prints is a primitive only when it is keywords and literals alone: a type parameter prints as its name, whatever its constraint.
-    #[test]
-    fn a_printed_type_is_primitive_only_as_keywords_and_literals() {
-        for text in [
-            "string",
-            "number | undefined",
-            "\"a\" | \"b\"",
-            "3",
-            "-1",
-            "true",
-            "1n",
-            "'x'",
-            "string | null",
-            "\"a|b\" | number",
-        ] {
-            assert!(prints_as_primitive(text), "{text}");
-        }
-        for text in [
-            "T",
-            "Id",
-            "Color",
-            "string | Foo",
-            "{ a: 1 }",
-            "string[]",
-            "",
-            "unknown",
-            "any",
-            "object",
-            "() => void",
-            "\"a|b\" | X",
-        ] {
-            assert!(!prints_as_primitive(text), "{text}");
-        }
-    }
 }

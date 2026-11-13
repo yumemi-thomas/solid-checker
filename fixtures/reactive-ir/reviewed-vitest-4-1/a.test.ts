@@ -25,6 +25,11 @@ export function Primitives(other: number) {
   expect(maybe).toBeUndefined();
   expect(text).toMatch("b");
   expect(Boolean(text)).toBeTruthy();
+  expect(Color.Red).toBe(0);
+}
+// A type parameter's value has its constraint's primitive domain, and the printed type may not be read for a decision (ADR 0367): one constrained to a primitive clears.
+export function Constrained<T extends string>(value: T) {
+  expect(value).toBe("a" as T);
 }
 export function Literals() {
   expect({ a: 1, b: "s" }).toEqual({ a: 1, b: "s" });
@@ -45,7 +50,7 @@ export function Registrations() {
   return [mock, mocked, anonymous];
 }
 
-// Everything else keeps its site: an object, an array, a type parameter's value, an enum, a union with an object, an `any` or an `unknown`, a literal that holds another
+// Everything else keeps its site: an object, an array, an unconstrained type parameter's value, a union with an object, an `any` or an `unknown`, a literal that holds another
 // object, an expected value that is an object, a matcher the reading does not name, a `.not` chain, a spy handed to a matcher that reads its calls' arguments.
 export function Objects() {
   expect(box).toEqual({ a: 1, run() {} });
@@ -54,9 +59,8 @@ export function Objects() {
   expect({ a: 1, run() {} }).toEqual(box);
   expect(mixed).toBe("x");
 }
-export function Unknowns<T extends string>(value: T) {
-  expect(value).toBe("a" as T);
-  expect(Color.Red).toBe(0);
+export function Unknowns<T>(value: T) {
+  expect(value).toBe(value);
   expect(anything).toBe(1);
   expect(unknownValue).toBe(1);
 }
