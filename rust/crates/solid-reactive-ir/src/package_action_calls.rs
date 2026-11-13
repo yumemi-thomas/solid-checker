@@ -4,7 +4,7 @@
 //! `action` itself (`export const runStep = (cb) => action(function* () { cb(); })()`), and the program shows no action at the project's
 //! call: Chrome throws at `runStep(() => {})` in a component body, a memo's compute or a `createRoot` body while the checker was silent.
 //!
-//! Owner ruling (option B): each such call is a site of SC2002 ([`sites`]). Its callee is decided by the compiler's resolution (a call's
+//! Owner ruling (option B): each such call is a site of SC2002 ([`sites`]). Its callee comes from the compiler's resolution (a call's
 //! resolved declaration, a tag's symbol through its alias): a declaration in an installed package or in a declaration file, outside the
 //! standard library, outside the packages the build reads as source (their code is analyzed, ADR 0949 reports it at the project's site),
 //! and outside the dialect's own runtime (its catalog answers for its exports: Solid's runtime calls no `action` of its own, checked on the
@@ -223,7 +223,7 @@ fn file_sites(
         } else {
             element.name.span
         };
-        // `<Ns.Comp>`: a member of an import is decided by the import's package; any other member tag (`<props.Comp>`) names no declaration this
+        // `<Ns.Comp>`: a member of an import takes the verdict of the import's package; any other member tag (`<props.Comp>`) names no declaration this
         // pass reads. `<Comp>`: the symbol, else the import, through the bindings that only alias it.
         let declaration = match element.member_object {
             Some(object) => file
