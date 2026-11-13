@@ -22,7 +22,7 @@ export const PACKAGE_SITE_EXEMPT_SOURCES = {
 /** Contexts with no package variant, each with its reason (filled from what building them showed). */
 export const PACKAGE_SITE_EXEMPT_CONTEXTS = Object.fromEntries(PA_CONTEXT_NAMES.map((context) => [context, paParts(context).kind === "inline"
   ? "ADR 0972: the cell's site is the program's own inline action (`action(function* () {})()`), written where it is created; the generic twin moves a site into `fz-site`, which is not this question (the pattern lane's `pkgaction/src-inline-body` holds the same form inside a package)"
-  : "ADR 0972: the cell's site is already a call into a package the program names (`fz-act`, `fz-calm`, `fz-load`: pa-shapes.mjs `paUse`); the generic twin would move it into `fz-site` a second time, and the package-site grids already cross every entry"]));
+  : "ADR 0972: the cell's site is already a call into a package the program names (`fz-act`, `fz-calm`, `fz-load`, `fz-winself`, `fz-docview`: pa-shapes.mjs `paUse`) or, for the getter kind, the read of a member of its object; the generic twin would move it into `fz-site` a second time, and the package-site grids already cross every entry"]));
 
 const plain = { binding: "direct", layer: "none" };
 const programOf = (plan) => generateProgram(7, { profile: "misuse", misusePlan: { ...plain, pkg: "call", ...plan } });

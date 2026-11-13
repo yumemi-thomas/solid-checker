@@ -1,0 +1,12 @@
+# action-in-owned-scope-getters
+
+**Claim (ADR 0973, the review of #231, S2).** A getter a package declares runs the package's code where the project reads the member: `void clock.now` in a component body calls an action when `get now()` does. A declaration file does not tell a getter from a data property, so the closure's source decides: a member read of an object a package made is a site only where the package's whole closure may define an accessor under a name of the chain. Chrome-confirmed in the pattern lane for each form of accessor (`patterns/pkgaction/getter-body`, `getter-computed`, `getter-proxy`, `getter-define`, `getter-class`): `ACTION_CALLED_IN_OWNED_SCOPE` at the read in a component body; `getter-twin` throws nothing.
+
+- **Where the closure was read whole** (it loads solid-js and nothing else the syntax cannot see through): the name decides. `GetterBody` and `GetterInMemo` read `now`, which `fz-get` defines a getter under. `OtherName` reads `other`, a data property of the same object, and is silent. `Twin` reads `now` off `fz-get-twin`, whose only accessor is `later`: silent. `ticker.tick` (`Object.defineProperty` with a literal name) and `counter.value` (a class getter, on a value `new Counter()` made) are uncertifiable, `ticker.plain` and `counter.plain` are silent.
+- **A name the syntax does not fix matches every name.** A computed key (`get [key]()`), a `Proxy` and `Object.defineProperty` with a computed name: `AccessorForms` reads `anything`.
+- **A closure not read whole matches every name.** `fz-get-open` reads `process` (a global the libraries do not declare), so `NotClosed` reads `b`, a data property, and is uncertifiable.
+- **Silent**: `ClearPackage` (the closure names no Solid package: it cannot call an action), `Handler` (an event handler is a legal action site), and the module-scope read `first` (no owner).
+
+The row stands at the member read (`void clock.now` starts at `clock`), with the role of the read: a getter runs where the read is evaluated.
+
+`node_modules/fz-*` are **not** published bytes: each is written for this fixture. `node_modules/solid-js` and `@solidjs/*` are the manifests of `action-in-owned-scope-unread-packages`; `.solid-checker/runtime.json` closes the program boundary.

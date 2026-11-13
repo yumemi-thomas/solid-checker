@@ -20,27 +20,35 @@ const built = (context) => {
 };
 
 describe("the pa contexts (a package the build does not read may call an action)", () => {
-  it("are four package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
-    expect(PA_CONTEXT_NAMES).toHaveLength(20);
+  it("are seven package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
+    expect(PA_CONTEXT_NAMES).toHaveLength(35);
     for (const name of PA_CONTEXT_NAMES) {
       const parts = paParts(name);
       expect(parts, name).not.toBeNull();
-      const throws = ["reach", "inline"].includes(parts.kind) && ["body", "memo", "root"].includes(parts.host);
+      const throws = ["reach", "inline", "winself", "docview", "getter"].includes(parts.kind) && ["body", "memo", "root"].includes(parts.host);
       expect(PA_CONTEXTS[name], name).toBe(throws ? "misuse" : "legal");
     }
     expect(paParts("pa-reach")).toBeNull();
     expect(paParts("ph-literal-step")).toBeNull();
   });
   it("ship packages that name no Solid package, so the build does not read their source", () => {
-    for (const kind of Object.keys(PA_PACKAGES)) {
-      const manifest = JSON.parse(paPackageFiles(kind)["package.json"]);
-      expect(manifest.name).toBe(PA_PACKAGES[kind]);
-      expect(manifest.dependencies ?? {}).toEqual({});
-      expect(manifest.peerDependencies ?? {}).toEqual({});
+    for (const [kind, names] of Object.entries(PA_PACKAGES)) {
+      for (const name of names) {
+        const manifest = JSON.parse(paPackageFiles(kind, name)["package.json"]);
+        expect(manifest.name).toBe(name);
+        expect(manifest.dependencies ?? {}).toEqual({});
+        expect(manifest.peerDependencies ?? {}).toEqual({});
+      }
     }
     expect(paPackageFiles("reach")["index.js"]).toContain('from "solid-js"');
     expect(paPackageFiles("pure")["index.js"]).not.toContain("import");
     expect(paPackageFiles("dyn")["index.js"]).toContain("import(name)");
+    // ADR 0973: the publisher reaches Solid and writes the global; the packages that read it through the global object's own member name no Solid package.
+    expect(paPackageFiles("winself", "fz-pub")["index.js"]).toContain("window.__paAct = ");
+    expect(paPackageFiles("winself")["index.js"]).toContain("window.self.__paAct()");
+    expect(paPackageFiles("docview")["index.js"]).toContain("document.defaultView.__paAct()");
+    expect(paPackageFiles("winself")["index.js"]).not.toContain("import");
+    expect(paPackageFiles("getter")["index.js"]).toContain("get now()");
   });
   it("are recall contexts of ACTION_CALLED_IN_OWNED_SCOPE only, base shape only", () => {
     expect(SPEC[PA_CODE].recallContexts.filter((context) => context.startsWith("pa-")).sort()).toEqual(PA_CONTEXT_NAMES.filter((name) => PA_CONTEXTS[name] === "misuse").sort());
@@ -55,5 +63,12 @@ describe("the pa contexts (a package the build does not read may call an action)
     expect(text("pa-pure-timer")).toContain('import { paEnter } from "fz-calm";');
     expect(text("pa-dyn-root")).toContain("createRoot(");
     expect(Object.keys(built("pa-reach-root").files)).toContain("node_modules/fz-act/index.js");
+    // ADR 0973: the publisher is imported for its effect before the entry's package; a getter's site is the read, not a call.
+    expect(text("pa-winself-body")).toContain('import "fz-pub";');
+    expect(text("pa-winself-body")).toContain('import { paEnter } from "fz-winself";');
+    expect(text("pa-docview-memo")).toContain('import { paEnter } from "fz-docview";');
+    expect(text("pa-getter-body")).toContain('import { clock } from "fz-getter";');
+    expect(text("pa-getter-body")).toMatch(/\n {2}(__h\(\d+\); )?void clock\.now;/);
+    expect(Object.keys(built("pa-winself-root").files)).toEqual(expect.arrayContaining(["node_modules/fz-pub/index.js", "node_modules/fz-winself/index.js"]));
   });
 });

@@ -1425,6 +1425,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/action-in-owned-scope-linked-package/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-origins/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-origins/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-globals/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-globals/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-lazy/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-lazy/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-getters/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-getters/node_modules/**
 !fixtures/reactive-ir/flush-universe-fake-timers/node_modules/
 !fixtures/reactive-ir/flush-universe-fake-timers/node_modules/**
 !fixtures/reactive-ir/flush-universe-fake-timers/variants/jest/node_modules/
