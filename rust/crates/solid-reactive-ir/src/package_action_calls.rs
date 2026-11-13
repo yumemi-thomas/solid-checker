@@ -29,7 +29,7 @@ use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use solid_facts::package_reach::{
     AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, LIMIT_PREFIX, PackageReach, ReachBlocker,
-    WRITE_PREFIX, is_declaration_file, package_label, package_root_of,
+    WRITE_ANY_PREFIX, WRITE_PREFIX, is_declaration_file, package_label, package_root_of,
 };
 
 use crate::execution_role::RootBodyGuard;
@@ -94,6 +94,8 @@ pub(crate) enum Provider {
     Limit,
     /// A global the standard library declares that an installed package writes at run time ([`WRITE_PREFIX`]): the call runs the writer's code.
     Written,
+    /// A global the standard library declares that an installed package may write at run time, under a key the scan does not decide ([`WRITE_ANY_PREFIX`]).
+    WrittenAny,
 }
 
 /// How a site's callee is resolved to the code it enters.
@@ -212,7 +214,11 @@ fn file_sites(
         if !seen.insert((at, entry)) {
             return;
         }
-        let package = match declaration.path.strip_prefix(WRITE_PREFIX) {
+        let package = match declaration
+            .path
+            .strip_prefix(WRITE_PREFIX)
+            .or_else(|| declaration.path.strip_prefix(WRITE_ANY_PREFIX))
+        {
             // `global-write:<name>:<writer root>`: the global the call is of; the closure the row names is the writer's.
             Some(written) => written
                 .split_once(':')
@@ -242,6 +248,8 @@ fn file_sites(
                 Provider::Limit
             } else if declaration.path.starts_with(WRITE_PREFIX) {
                 Provider::Written
+            } else if declaration.path.starts_with(WRITE_ANY_PREFIX) {
+                Provider::WrittenAny
             } else {
                 Provider::Package
             },
@@ -726,6 +734,7 @@ fn is_pseudo(path: &str) -> bool {
         || path.starts_with(LIMIT_PREFIX)
         || path.starts_with(COMPUTED_LOAD_PREFIX)
         || path.starts_with(WRITE_PREFIX)
+        || path.starts_with(WRITE_ANY_PREFIX)
 }
 
 /// Where the value an expression names came from.
@@ -1008,11 +1017,17 @@ fn global_origin(
 
 /// The origin of a global the standard library declares that some installed package the program loads writes at run time and may reach a Solid action there
 /// (`globalThis.setTimeout = …`, `Object.defineProperty(window, "fetch", …)`, found by the scan of each package's closure): the writer's code is what a call of it runs,
-/// whatever type the library declares the global with. The premise is that types are sound for declarations and runtime writes come from the scan.
+/// whatever type the library declares the global with. The premise is that types are sound for declarations and runtime writes come from the scan. A writer under a key
+/// nothing in its file decides may have written any global, so it answers for a name the others do not write ([`WRITE_ANY_PREFIX`]); one that writes the name answers first.
 fn written_global(ctx: &AnalysisContext<'_>, name: &str) -> Option<Origin> {
-    let root = ctx.package_reach?.global_writer(name)?;
+    let (root, named) = ctx.package_reach?.global_writers_of(name).next()?;
+    let prefix = if named {
+        WRITE_PREFIX
+    } else {
+        WRITE_ANY_PREFIX
+    };
     Some(Origin::Package(DeclarationAt {
-        path: format!("{WRITE_PREFIX}{name}:{root}"),
+        path: format!("{prefix}{name}:{root}"),
     }))
 }
 
@@ -2271,6 +2286,7 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
                 Provider::Ambient => "a declaration file whose global the host, a script or a package this build does not read as source may provide",
                 Provider::Limit => "a value whose origin this build's walk could not follow to its end",
                 Provider::Written => "a global the standard library declares, which an installed package this build does not read as source writes at run time",
+                Provider::WrittenAny => "a global the standard library declares, which an installed package this build does not read as source may write at run time (it writes globals under a key the scan does not decide)",
                 Provider::Package => "a package this build does not read as source",
             },
             site.reach.describe()

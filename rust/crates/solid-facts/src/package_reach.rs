@@ -62,6 +62,10 @@ pub const AMBIENT_PREFIX: &str = "ambient:";
 /// of it runs the writer's code, whatever type the library declares the global with. Its verdict is the writer's (ADR 0973).
 pub const WRITE_PREFIX: &str = "global-write:";
 
+/// [`WRITE_PREFIX`] for a global the writer may write under a key the scan does not decide (`global-write-any:<name>:<writer root>`): the writer's code is what the call may
+/// run, and the row says the package may write it, not that it does.
+pub const WRITE_ANY_PREFIX: &str = "global-write-any:";
+
 /// The prefix of a site's pseudo-path for a value whose origin the walk could not follow to its end: it stopped at a limit (`origin-limit:array of more than 256 elements`),
 /// so what runs for the value is not decided (ADR 0973).
 pub const LIMIT_PREFIX: &str = "origin-limit:";
@@ -169,8 +173,8 @@ pub struct PackageReachIndex {
     /// The packages whose closure writes the global of each name (`globalThis.x = …`, `Object.defineProperty(window, "x", …)`), by root (ADR 0973): the installed code the
     /// program loads that may be what a call of that global runs.
     pub global_writers: BTreeMap<String, std::collections::BTreeSet<String>>,
-    /// The packages whose closure writes a global under a name the syntax does not fix (`window[key] = v`, `Object.assign(globalThis, source)`): recorded, and not
-    /// followed (see [`PackageReachIndex::global_writer`]).
+    /// The packages whose closure writes a global under a key nothing in the file decides (`window[key] = v` with a key from a call or a parameter,
+    /// `Object.assign(globalThis, source)` of a source the file does not hold): any global may be one of theirs (see [`PackageReachIndex::global_writers_of`]).
     pub global_writers_any: std::collections::BTreeSet<String>,
 }
 
@@ -209,21 +213,29 @@ impl PackageReachIndex {
             .is_some_and(|ids| ids.contains(id))
     }
 
-    /// The root of an installed package whose closure writes the global `name` and may reach a Solid action: the first such writer, by root. `None` when no installed
-    /// package the program loads writes it by that name, or each that does is clear. A writer under a name the syntax does not fix (`global_writers_any`) is not one for
-    /// every name: measured, a storybook package that writes so made a row of every `Math.max`, `JSON.parse` and `new Map` of a twelve-file project (318 rows).
-    #[must_use]
-    pub fn global_writer(&self, name: &str) -> Option<&str> {
-        self.global_writers
-            .get(name)
+    /// The roots of the installed packages whose closure writes the global `name` and may reach a Solid action, with whether each writes it by that name (the names its
+    /// constants decide included) or may write it under a key nothing decides: the first, by name then by root, answers for a call of the global. Empty when no installed
+    /// package the program loads writes it, or each that does is clear (a clear package is silent: its closure names no Solid package and has no hazard).
+    pub fn global_writers_of<'a>(
+        &'a self,
+        name: &str,
+    ) -> impl Iterator<Item = (&'a str, bool)> + 'a {
+        let by_name = self.global_writers.get(name);
+        let any = self
+            .global_writers_any
+            .iter()
+            .filter(move |root| !by_name.is_some_and(|roots| roots.contains(*root)));
+        by_name
             .into_iter()
             .flatten()
-            .find(|root| {
+            .map(|root| (root, true))
+            .chain(any.map(|root| (root, false)))
+            .filter(|(root, _)| {
                 self.by_root
                     .get(root.as_str())
                     .is_none_or(|reach| !reach.is_clear())
             })
-            .map(String::as_str)
+            .map(|(root, named)| (root.as_str(), named))
     }
 
     /// Where the closure of the package a declaration at `path` describes may define an accessor. A path the backend did not decide, and a pseudo-path of a site
@@ -234,6 +246,7 @@ impl PackageReachIndex {
             || path.starts_with(COMPUTED_LOAD_PREFIX)
             || path.starts_with(LIMIT_PREFIX)
             || path.starts_with(WRITE_PREFIX)
+            || path.starts_with(WRITE_ANY_PREFIX)
             || self.project_js.contains(path)
         {
             return AccessorFacts::open();
@@ -253,7 +266,10 @@ impl PackageReachIndex {
                 ),
             };
         }
-        if let Some(written) = path.strip_prefix(WRITE_PREFIX) {
+        if let Some(written) = path
+            .strip_prefix(WRITE_PREFIX)
+            .or_else(|| path.strip_prefix(WRITE_ANY_PREFIX))
+        {
             // `global-write:<name>:<writer root>`: the writer's closure decides.
             let (name, root) = written.split_once(':').unwrap_or((written, ""));
             return match self.by_root.get(root) {
@@ -503,21 +519,37 @@ mod tests {
                 "/p/node_modules/w".to_owned(),
             ]);
         assert_eq!(
-            written.global_writer("setTimeout"),
-            Some("/p/node_modules/w")
+            written.global_writers_of("setTimeout").collect::<Vec<_>>(),
+            [("/p/node_modules/w", true)]
         );
-        assert_eq!(written.global_writer("fetch"), None);
+        assert_eq!(written.global_writers_of("fetch").count(), 0);
         assert_eq!(
             written
                 .for_declaration("global-write:setTimeout:/p/node_modules/w")
                 .word(),
             "reaches-solid"
         );
-        // A writer under no fixed name is no global's in particular: it is not followed.
+        // A writer under a key nothing decides may write any global: it answers for every name it does not write by name, unless it is clear.
         written
             .global_writers_any
             .insert("/p/node_modules/w".to_owned());
-        assert_eq!(written.global_writer("fetch"), None);
+        written
+            .global_writers_any
+            .insert("/p/node_modules/c".to_owned());
+        assert_eq!(
+            written.global_writers_of("fetch").collect::<Vec<_>>(),
+            [("/p/node_modules/w", false)]
+        );
+        assert_eq!(
+            written.global_writers_of("setTimeout").collect::<Vec<_>>(),
+            [("/p/node_modules/w", true)]
+        );
+        assert_eq!(
+            written
+                .for_declaration("global-write-any:fetch:/p/node_modules/w")
+                .word(),
+            "reaches-solid"
+        );
         let limit = index.for_declaration("origin-limit:an array of more than 256 elements");
         assert_eq!(limit.word(), "origin-limit");
         assert!(!limit.is_clear());

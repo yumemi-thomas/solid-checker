@@ -29,11 +29,12 @@ use std::sync::OnceLock;
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
-    Argument, Expression, ImportOrExportKind, MethodDefinitionKind, ObjectPropertyKind,
-    PropertyKey, PropertyKind, Statement, TSModuleReference, UnaryOperator,
+    Argument, BindingPattern, Expression, ForStatementLeft, ImportOrExportKind,
+    MethodDefinitionKind, ObjectPropertyKind, PropertyKey, PropertyKind, Statement,
+    TSModuleReference, UnaryOperator, VariableDeclarationKind,
 };
 use oxc_parser::Parser;
-use oxc_semantic::{AstNodes, NodeId, SemanticBuilder};
+use oxc_semantic::{AstNodes, NodeId, Scoping, SemanticBuilder, SymbolId};
 use oxc_span::{GetSpan, SourceType};
 
 /// The global value names the pinned TypeScript's `lib.es*.d.ts` and `lib.dom*.d.ts` declare at top level, one per line, sorted. Generated
@@ -114,6 +115,8 @@ pub struct GlobalWrites {
     /// The names written, sorted and distinct.
     pub names: Vec<String>,
     /// A global is written under a name the syntax does not fix (`window[key] = v`, `Object.assign(globalThis, source)`, `Object.defineProperty(window, key, d)`): any may be.
+    /// A key the file's own constants decide is a name (`const KEY = "x"`, `for (const k of ["a", "b"])`, `Object.assign(globalThis, table)` over a `const` object literal),
+    /// and a key that is a symbol writes no name.
     pub any_name: bool,
 }
 
@@ -126,6 +129,355 @@ impl GlobalWrites {
 
     fn name(&mut self, name: &str) {
         self.names.push(name.to_owned());
+    }
+
+    /// The writes a key decides: its names, nothing for a symbol, any for a key that is not known.
+    fn keys(&mut self, keys: Keys) {
+        match keys {
+            Keys::Names(names) => {
+                for name in names {
+                    self.name(&name);
+                }
+            }
+            Keys::Symbol => {}
+            Keys::Unknown => self.any_name = true,
+        }
+    }
+}
+
+/// What the key of a write is, where its syntax and the file's own constants say.
+#[derive(Debug)]
+enum Keys {
+    /// The names it may be.
+    Names(Vec<String>),
+    /// A symbol (`Symbol("x")`, `Symbol.for("x")`): no global has a symbol for a name.
+    Symbol,
+    /// Not known.
+    Unknown,
+}
+
+impl Keys {
+    fn unite(self, other: Keys) -> Keys {
+        match (self, other) {
+            (Keys::Unknown, _) | (_, Keys::Unknown) => Keys::Unknown,
+            (Keys::Names(mut names), Keys::Names(more)) => {
+                names.extend(more);
+                Keys::Names(names)
+            }
+            (Keys::Names(names), Keys::Symbol) | (Keys::Symbol, Keys::Names(names)) => {
+                Keys::Names(names)
+            }
+            (Keys::Symbol, Keys::Symbol) => Keys::Symbol,
+        }
+    }
+}
+
+/// How far a key is followed through the constants of the file.
+const KEY_DEPTH: u8 = 6;
+
+/// The key `expression` is: a literal, a call of `Symbol`, a `const` (or a `let` nothing reassigns) of one, a loop variable over a known array or object, or either arm of
+/// a conditional or logical expression.
+fn key_of(scoping: &Scoping, nodes: &AstNodes<'_>, expression: &Expression<'_>, depth: u8) -> Keys {
+    if depth == 0 {
+        return Keys::Unknown;
+    }
+    match expression.get_inner_expression() {
+        Expression::StringLiteral(literal) => Keys::Names(vec![literal.value.to_string()]),
+        Expression::NumericLiteral(literal) => Keys::Names(vec![literal.value.to_string()]),
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
+            .quasis
+            .first()
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .map_or(Keys::Unknown, |value| Keys::Names(vec![value.to_string()])),
+        Expression::CallExpression(call) if is_symbol_call(scoping, call) => Keys::Symbol,
+        Expression::ConditionalExpression(conditional) => key_of(
+            scoping,
+            nodes,
+            &conditional.consequent,
+            depth - 1,
+        )
+        .unite(key_of(scoping, nodes, &conditional.alternate, depth - 1)),
+        Expression::LogicalExpression(logical) => key_of(scoping, nodes, &logical.left, depth - 1)
+            .unite(key_of(scoping, nodes, &logical.right, depth - 1)),
+        Expression::Identifier(identifier) => {
+            let Some((declarator, _)) = constant_declarator(scoping, nodes, identifier) else {
+                return Keys::Unknown;
+            };
+            if let Some(keys) = loop_keys(scoping, nodes, declarator, depth - 1) {
+                return keys;
+            }
+            match &declarator_of(nodes, declarator).and_then(|declarator| declarator.init.as_ref())
+            {
+                Some(init) => key_of(scoping, nodes, init, depth - 1),
+                None => Keys::Unknown,
+            }
+        }
+        _ => Keys::Unknown,
+    }
+}
+
+/// Whether `call` is `Symbol(…)` or `Symbol.for(…)`, a call of the global `Symbol` (a name the file binds is its own).
+fn is_symbol_call(scoping: &Scoping, call: &oxc_ast::ast::CallExpression<'_>) -> bool {
+    let unbound = |identifier: &oxc_ast::ast::IdentifierReference<'_>| {
+        identifier.name == "Symbol"
+            && identifier
+                .reference_id
+                .get()
+                .is_some_and(|id| scoping.get_reference(id).symbol_id().is_none())
+    };
+    match call.callee.get_inner_expression() {
+        Expression::Identifier(callee) => unbound(callee),
+        Expression::StaticMemberExpression(callee) => {
+            callee.property.name == "for"
+                && matches!(callee.object.get_inner_expression(), Expression::Identifier(object) if unbound(object))
+        }
+        _ => false,
+    }
+}
+
+/// The declarator of the binding `identifier` names, with its symbol, when it is a plain `const`, `let` or `var` that nothing reassigns and nothing declares again. A `var` read
+/// before its initializer ran holds `undefined` (a key that names no global a call can run), so it is no less known than a `const`; bundled code declares its constants so.
+fn constant_declarator(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    identifier: &oxc_ast::ast::IdentifierReference<'_>,
+) -> Option<(NodeId, SymbolId)> {
+    let symbol = scoping
+        .get_reference(identifier.reference_id.get()?)
+        .symbol_id()?;
+    if scoping.symbol_is_mutated(symbol) {
+        return None;
+    }
+    let declaration = scoping.symbol_declaration(symbol);
+    // A binding of a destructuring pattern (`const { length } = "abc"`) is not its declarator's initializer.
+    let plain = matches!(nodes.kind(declaration), AstKind::VariableDeclarator(declarator)
+        if matches!(declarator.id, BindingPattern::BindingIdentifier(_)));
+    let declared_once = scoping.symbol_redeclarations(symbol).is_empty();
+    let kind_known = matches!(nodes.parent_kind(declaration), AstKind::VariableDeclaration(held)
+        if matches!(held.kind, VariableDeclarationKind::Const | VariableDeclarationKind::Let | VariableDeclarationKind::Var));
+    (plain && declared_once && kind_known).then_some((declaration, symbol))
+}
+
+/// Whether the array or object a binding holds is only read after its initializer: every reference iterates it, spreads it, hands it to `Object.keys`, `Object.entries`,
+/// `Object.values` or `Object.freeze`, gives it as a source to `Object.assign`, or reads a member of it. A call of a member (`table.push(k)`), an assignment to or
+/// deletion of one, and any other use (an argument, a return, an alias) may change the keys it holds.
+fn table_is_unmodified(scoping: &Scoping, nodes: &AstNodes<'_>, symbol: SymbolId) -> bool {
+    scoping.get_resolved_references(symbol).all(|reference| {
+        if reference.is_write() {
+            return false;
+        }
+        let (child, parent) = parent_past_wrappers(nodes, reference.node_id());
+        let span = nodes.get_node(child).kind().span();
+        match nodes.get_node(parent).kind() {
+            AstKind::ForOfStatement(each) => each.right.span() == span,
+            AstKind::ForInStatement(each) => each.right.span() == span,
+            AstKind::SpreadElement(_) => true,
+            AstKind::StaticMemberExpression(member) => {
+                member.object.span() == span && !is_changing_use(nodes, parent)
+            }
+            AstKind::ComputedMemberExpression(member) => {
+                member.object.span() == span && !is_changing_use(nodes, parent)
+            }
+            AstKind::CallExpression(call) => {
+                let Expression::StaticMemberExpression(callee) = call.callee.get_inner_expression()
+                else {
+                    return false;
+                };
+                let Expression::Identifier(object) = callee.object.get_inner_expression() else {
+                    return false;
+                };
+                let first = call
+                    .arguments
+                    .first()
+                    .is_some_and(|argument| argument.span() == span);
+                object.name == "Object"
+                    && match callee.property.name.as_str() {
+                        "keys" | "entries" | "values" | "freeze" => true,
+                        "assign" => !first,
+                        _ => false,
+                    }
+            }
+            _ => false,
+        }
+    })
+}
+
+/// Whether the node at `node` (past parentheses and type sugar) is used in a way that changes it or what it holds: assigned, updated, deleted, a destructuring target, the head of
+/// a loop, or the callee of a call or a tag (a method may change its receiver).
+fn is_changing_use(nodes: &AstNodes<'_>, node: NodeId) -> bool {
+    let (child, parent) = parent_past_wrappers(nodes, node);
+    let span = nodes.get_node(child).kind().span();
+    match nodes.get_node(parent).kind() {
+        AstKind::AssignmentExpression(assignment) => assignment.left.span() == span,
+        AstKind::UpdateExpression(_)
+        | AstKind::ArrayAssignmentTarget(_)
+        | AstKind::ObjectAssignmentTarget(_)
+        | AstKind::AssignmentTargetWithDefault(_)
+        | AstKind::AssignmentTargetPropertyProperty(_)
+        | AstKind::AssignmentTargetRest(_) => true,
+        AstKind::UnaryExpression(unary) => unary.operator == UnaryOperator::Delete,
+        AstKind::CallExpression(call) => call.callee.span() == span,
+        AstKind::NewExpression(call) => call.callee.span() == span,
+        AstKind::TaggedTemplateExpression(tag) => tag.tag.span() == span,
+        AstKind::ForInStatement(each) => each.left.span() == span,
+        AstKind::ForOfStatement(each) => each.left.span() == span,
+        _ => false,
+    }
+}
+
+fn declarator_of<'a>(
+    nodes: &'a AstNodes<'_>,
+    node: NodeId,
+) -> Option<&'a oxc_ast::ast::VariableDeclarator<'a>> {
+    match nodes.kind(node) {
+        AstKind::VariableDeclarator(declarator) => Some(declarator),
+        _ => None,
+    }
+}
+
+/// The keys a loop variable takes (`for (const key of ["a", "b"])`, `for (const key in table)`, `for (const key of Object.keys(table))`) where the collection is known.
+fn loop_keys(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    declarator: NodeId,
+    depth: u8,
+) -> Option<Keys> {
+    let declaration = nodes.parent_id(declarator);
+    let statement = nodes.parent_id(declaration);
+    let declaration_span = nodes.get_node(declaration).kind().span();
+    match nodes.kind(statement) {
+        AstKind::ForInStatement(each) if matches!(&each.left, ForStatementLeft::VariableDeclaration(left) if left.span == declaration_span) => {
+            Some(match literal_names(scoping, nodes, &each.right, depth) {
+                Some(keys) => Keys::Names(keys),
+                None => Keys::Unknown,
+            })
+        }
+        AstKind::ForOfStatement(each) if matches!(&each.left, ForStatementLeft::VariableDeclaration(left) if left.span == declaration_span) => {
+            Some(collection_keys(scoping, nodes, &each.right, depth))
+        }
+        _ => None,
+    }
+}
+
+/// The keys an iterated collection yields: the elements of an array literal (or of a `const` bound to one) that are keys, or `Object.keys(object)` of a known object.
+fn collection_keys(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    expression: &Expression<'_>,
+    depth: u8,
+) -> Keys {
+    if depth == 0 {
+        return Keys::Unknown;
+    }
+    match expression.get_inner_expression() {
+        Expression::ArrayExpression(array) => {
+            let mut keys = Keys::Names(Vec::new());
+            for element in &array.elements {
+                let Some(element) = element.as_expression() else {
+                    return Keys::Unknown;
+                };
+                keys = keys.unite(key_of(scoping, nodes, element, depth - 1));
+            }
+            keys
+        }
+        Expression::CallExpression(call) => {
+            let Expression::StaticMemberExpression(callee) = call.callee.get_inner_expression()
+            else {
+                return Keys::Unknown;
+            };
+            if callee.property.name != "keys"
+                || !matches!(callee.object.get_inner_expression(), Expression::Identifier(object) if object.name == "Object")
+            {
+                return Keys::Unknown;
+            }
+            match call.arguments.first().and_then(Argument::as_expression) {
+                Some(object) => match literal_names(scoping, nodes, object, depth - 1) {
+                    Some(keys) => Keys::Names(keys),
+                    None => Keys::Unknown,
+                },
+                None => Keys::Unknown,
+            }
+        }
+        Expression::Identifier(identifier) => {
+            let Some((declarator, symbol)) = constant_declarator(scoping, nodes, identifier) else {
+                return Keys::Unknown;
+            };
+            match declarator_of(nodes, declarator).and_then(|declarator| declarator.init.as_ref()) {
+                Some(init) if table_is_unmodified(scoping, nodes, symbol) => {
+                    collection_keys(scoping, nodes, init, depth - 1)
+                }
+                _ => Keys::Unknown,
+            }
+        }
+        _ => Keys::Unknown,
+    }
+}
+
+/// The names a `const` object literal holds (its own keys, a spread of another known object's): `None` where any key or spread is not known.
+fn literal_names(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    expression: &Expression<'_>,
+    depth: u8,
+) -> Option<Vec<String>> {
+    if depth == 0 {
+        return None;
+    }
+    match expression.get_inner_expression() {
+        Expression::ObjectExpression(object) => {
+            let mut names = Vec::new();
+            for property in &object.properties {
+                match property {
+                    ObjectPropertyKind::ObjectProperty(property) => {
+                        let key = match key_name(&property.key) {
+                            Some(Some(name)) => Keys::Names(vec![name]),
+                            Some(None) => Keys::Symbol,
+                            None => property
+                                .key
+                                .as_expression()
+                                .map_or(Keys::Unknown, |expression| {
+                                    key_of(scoping, nodes, expression, depth - 1)
+                                }),
+                        };
+                        match key {
+                            Keys::Names(more) => names.extend(more),
+                            Keys::Symbol => {}
+                            Keys::Unknown => return None,
+                        }
+                    }
+                    ObjectPropertyKind::SpreadProperty(spread) => {
+                        names.extend(literal_names(scoping, nodes, &spread.argument, depth - 1)?);
+                    }
+                }
+            }
+            Some(names)
+        }
+        Expression::Identifier(identifier) => {
+            let (declarator, symbol) = constant_declarator(scoping, nodes, identifier)?;
+            let init = declarator_of(nodes, declarator)?.init.as_ref()?;
+            table_is_unmodified(scoping, nodes, symbol)
+                .then(|| literal_names(scoping, nodes, init, depth - 1))
+                .flatten()
+        }
+        Expression::CallExpression(call) => {
+            // `Object.freeze(table)` is the table.
+            let Expression::StaticMemberExpression(callee) = call.callee.get_inner_expression()
+            else {
+                return None;
+            };
+            if callee.property.name != "freeze"
+                || !matches!(callee.object.get_inner_expression(), Expression::Identifier(object) if object.name == "Object")
+            {
+                return None;
+            }
+            literal_names(
+                scoping,
+                nodes,
+                call.arguments.first()?.as_expression()?,
+                depth - 1,
+            )
+        }
+        _ => None,
     }
 }
 
@@ -338,44 +690,41 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     }
                 }
                 // `document.defaultView` is the global object, so `document` is followed too; any other use of `document` holds no global object.
-                "document" => match global_use(nodes, id, name, Holder::Document) {
+                "document" => match global_use(scoping, nodes, id, name, Holder::Document) {
                     GlobalUse::Member { name: member, path } if !is_known_global(&member) => {
                         hazard(ModuleHazardKind::UnknownGlobal, &path);
                     }
                     GlobalUse::Escape { path, at } => {
                         hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                        call_writes(nodes, at, &mut writes);
+                        call_writes(scoping, nodes, at, &mut writes);
                     }
                     // `document.defaultView.x = …` writes the global `x`.
-                    GlobalUse::Written {
-                        name: Some(written),
-                        ..
-                    } => writes.name(&written),
-                    GlobalUse::Written { name: None, path } => {
-                        writes.any_name = true;
-                        hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                    GlobalUse::Written { keys, path } => {
+                        if matches!(keys, Keys::Unknown) {
+                            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                        }
+                        writes.keys(keys);
                     }
                     GlobalUse::Reassigned | GlobalUse::Member { .. } | GlobalUse::Inert => {}
                 },
                 _ if GLOBAL_OBJECTS.contains(&name) => {
-                    match global_use(nodes, id, name, Holder::Global) {
+                    match global_use(scoping, nodes, id, name, Holder::Global) {
                         GlobalUse::Member { name: member, .. } if is_known_global(&member) => {}
                         GlobalUse::Member { path, .. } => {
                             hazard(ModuleHazardKind::UnknownGlobal, &path);
                         }
-                        // A write reads nothing, but it installs a global: the name, or any where the key is not fixed (which also hands the object on).
-                        GlobalUse::Written {
-                            name: Some(written),
-                            ..
-                        } => writes.name(&written),
-                        GlobalUse::Written { name: None, path } => {
-                            writes.any_name = true;
-                            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                        // A write reads nothing, but it installs a global: the name, the names the key's constants decide, none for a symbol, or any where the key is
+                        // not known (which also hands the object on).
+                        GlobalUse::Written { keys, path } => {
+                            if matches!(keys, Keys::Unknown) {
+                                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                            }
+                            writes.keys(keys);
                         }
                         GlobalUse::Reassigned | GlobalUse::Inert => {}
                         GlobalUse::Escape { path, at } => {
                             hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                            call_writes(nodes, at, &mut writes);
+                            call_writes(scoping, nodes, at, &mut writes);
                         }
                     }
                 }
@@ -679,9 +1028,9 @@ enum Holder {
 enum GlobalUse {
     /// A member of the global object read by a static name or a string literal key: its name, and the chain as it was spelled (`window.self.solid`).
     Member { name: String, path: String },
-    /// A member of the global object assigned (`window.x = …`, `window["x"] = …`): nothing is read, and the global `x` is installed; `name` is `None` for a key the syntax does
-    /// not fix (`window[k] = …`), where any global may be. The chain as it was spelled.
-    Written { name: Option<String>, path: String },
+    /// A member of the global object assigned (`window.x = …`, `window["x"] = …`): nothing is read, and the global `x` is installed; `keys` is what the key is where it is not a
+    /// name the syntax fixes (`window[k] = …`: the names the file's constants say, a symbol, or nothing known, where any global may be). The chain as it was spelled.
+    Written { keys: Keys, path: String },
     /// The global object's own name assigned (sloppy code): nothing is read.
     Reassigned,
     /// Anything else done with the global object: a computed key read, an alias, an argument. The chain as it was spelled, and the node whose value is used.
@@ -693,13 +1042,31 @@ enum GlobalUse {
 /// How the global-object name (or `document`) at `id` is used, following the global object through every member that returns it: the names it goes by
 /// ([`GLOBAL_OBJECTS`], so `window.self.x` and `window.window.x` are `window.x`) and `document.defaultView`. A member read off the chain's end that no
 /// library declares is a lookup of a global however many members led to it.
-fn global_use(nodes: &AstNodes<'_>, id: NodeId, root: &str, start: Holder) -> GlobalUse {
-    // `window.x = …` writes the member and reads nothing of it.
+fn global_use(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    id: NodeId,
+    root: &str,
+    start: Holder,
+) -> GlobalUse {
+    // `window.x = …` writes the member and reads nothing of it; so does a destructuring target (`[window.x] = list`, `({ k: self.y } = o)`, `[globalThis.z = 1] = []`) and a
+    // loop head (`for (window.k of keys)`).
     let assigned = |member: NodeId| {
         let (member_child, member_parent) = parent_past_wrappers(nodes, member);
-        matches!(nodes.get_node(member_parent).kind(), AstKind::AssignmentExpression(assignment)
-            if assignment.operator == oxc_syntax::operator::AssignmentOperator::Assign
-                && assignment.left.span() == nodes.get_node(member_child).kind().span())
+        let span = nodes.get_node(member_child).kind().span();
+        match nodes.get_node(member_parent).kind() {
+            AstKind::AssignmentExpression(assignment) => {
+                assignment.operator == oxc_syntax::operator::AssignmentOperator::Assign
+                    && assignment.left.span() == span
+            }
+            AstKind::ArrayAssignmentTarget(_)
+            | AstKind::AssignmentTargetWithDefault(_)
+            | AstKind::AssignmentTargetPropertyProperty(_)
+            | AstKind::AssignmentTargetRest(_) => true,
+            AstKind::ForInStatement(each) => each.left.span() == span,
+            AstKind::ForOfStatement(each) => each.left.span() == span,
+            _ => false,
+        }
     };
     let mut at = id;
     let mut holder = start;
@@ -723,11 +1090,17 @@ fn global_use(nodes: &AstNodes<'_>, id: NodeId, root: &str, start: Holder) -> Gl
             _ => None,
         };
         // The value itself is used, or read by a key the syntax does not fix: the global object escapes, `document` holds no global object. A key the syntax does not
-        // fix that is assigned writes any global.
+        // fix that is assigned writes what the key is: the names the file's constants decide, a symbol, or any global.
         let Some(Some(name)) = member else {
             if computed && assigned(parent) && holder == Holder::Global {
+                let keys = match nodes.get_node(parent).kind() {
+                    AstKind::ComputedMemberExpression(member) => {
+                        key_of(scoping, nodes, &member.expression, KEY_DEPTH)
+                    }
+                    _ => Keys::Unknown,
+                };
                 return GlobalUse::Written {
-                    name: None,
+                    keys,
                     path: format!("{path}[…]"),
                 };
             }
@@ -742,7 +1115,7 @@ fn global_use(nodes: &AstNodes<'_>, id: NodeId, root: &str, start: Holder) -> Gl
                 return GlobalUse::Inert;
             }
             return GlobalUse::Written {
-                name: Some(name.clone()),
+                keys: Keys::Names(vec![name.clone()]),
                 path: format!("{path}.{name}"),
             };
         }
@@ -760,7 +1133,7 @@ fn global_use(nodes: &AstNodes<'_>, id: NodeId, root: &str, start: Holder) -> Gl
 
 /// The globals a call writes when the global object (the value of the node `at`) is its target: `Object.defineProperty(globalThis, "x", d)`, `Reflect.set(window, "x", v)`,
 /// `Object.defineProperties(window, { x: d })`, `Object.assign(globalThis, { x })`, `Object.setPrototypeOf(window, p)`. A key or a source the syntax does not fix writes any.
-fn call_writes(nodes: &AstNodes<'_>, at: NodeId, writes: &mut GlobalWrites) {
+fn call_writes(scoping: &Scoping, nodes: &AstNodes<'_>, at: NodeId, writes: &mut GlobalWrites) {
     let (child, parent) = parent_past_wrappers(nodes, at);
     let AstKind::CallExpression(call) = nodes.get_node(parent).kind() else {
         return;
@@ -784,14 +1157,12 @@ fn call_writes(nodes: &AstNodes<'_>, at: NodeId, writes: &mut GlobalWrites) {
     }
     let argument = |index: usize| call.arguments.get(index).and_then(Argument::as_expression);
     match callee.property.name.as_str() {
-        "defineProperty" | "set" => match argument(1).and_then(literal_specifier) {
-            Some(name) => writes.name(&name),
-            None => writes.any_name = true,
-        },
-        "defineProperties" => object_keys(argument(1), writes),
+        "defineProperty" | "set" => writes
+            .keys(argument(1).map_or(Keys::Unknown, |key| key_of(scoping, nodes, key, KEY_DEPTH))),
+        "defineProperties" => source_writes(scoping, nodes, argument(1), writes),
         "assign" => {
             for source in call.arguments.iter().skip(1) {
-                object_keys(source.as_expression(), writes);
+                source_writes(scoping, nodes, source.as_expression(), writes);
             }
         }
         "setPrototypeOf" => writes.any_name = true,
@@ -799,23 +1170,21 @@ fn call_writes(nodes: &AstNodes<'_>, at: NodeId, writes: &mut GlobalWrites) {
     }
 }
 
-/// The static keys of the object literal `expression` as written globals; anything else (a variable, a spread, a computed key) writes any.
-fn object_keys(expression: Option<&Expression<'_>>, writes: &mut GlobalWrites) {
-    let Some(Expression::ObjectExpression(object)) =
-        expression.map(Expression::get_inner_expression)
-    else {
-        writes.any_name = true;
-        return;
-    };
-    for property in &object.properties {
-        match property {
-            ObjectPropertyKind::ObjectProperty(property) => match key_name(&property.key) {
-                Some(Some(name)) => writes.name(&name),
-                Some(None) => {}
-                None => writes.any_name = true,
-            },
-            ObjectPropertyKind::SpreadProperty(_) => writes.any_name = true,
+/// The globals a source object writes (`Object.assign(globalThis, source)`, `Object.defineProperties(window, descriptors)`): the keys of an object literal, of a `const` bound to
+/// one, of a spread of either; anything else (a variable the file's constants do not decide, a call, an import) writes any.
+fn source_writes(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    expression: Option<&Expression<'_>>,
+    writes: &mut GlobalWrites,
+) {
+    match expression.and_then(|source| literal_names(scoping, nodes, source, KEY_DEPTH)) {
+        Some(names) => {
+            for name in names {
+                writes.name(&name);
+            }
         }
+        None => writes.any_name = true,
     }
 }
 
@@ -1251,6 +1620,16 @@ mod tests {
         );
         assert_eq!(named("Object.assign(globalThis, { c: 1, d });"), ["c", "d"]);
         assert_eq!(named("structuredClone = f;"), ["structuredClone"]);
+        // A destructuring target and a loop head write the member as an assignment does.
+        assert_eq!(named("[window.x] = [1]; ({ k: self.y } = o);"), ["x", "y"]);
+        assert_eq!(
+            named("[globalThis.z = 1] = []; [...window.rest] = list;"),
+            ["rest", "z"]
+        );
+        assert_eq!(
+            named("for (window.k of keys) {} for (self.j in obj) {}"),
+            ["j", "k"]
+        );
         // A key the syntax does not fix writes any global.
         for source in [
             "window[key] = value;",
@@ -1271,6 +1650,98 @@ mod tests {
             "const o = {}; o.x = 1; Object.assign(o, { y: 1 }); Object.defineProperty(o, 'z', { value: 1 });",
         ] {
             assert!(writes(source).is_empty(), "{source}: {:?}", writes(source));
+        }
+    }
+
+    /// ADR 0973: a key the file's own constants decide is a name, a symbol writes none, and only a key nothing in the file decides writes any global.
+    #[test]
+    fn a_key_the_files_constants_decide_is_a_name() {
+        let writes = |source: &str| scan(source).global_writes;
+        let named = |source: &str| {
+            let found = writes(source);
+            assert!(!found.any_name, "{source}: {found:?}");
+            found.names
+        };
+        assert_eq!(named("const KEY = 'solid'; window[KEY] = 1;"), ["solid"]);
+        // Bundled code declares its constants with `var`, a comma list and a pure annotation.
+        assert_eq!(
+            named(
+                "var A = 1, KEY = '__ADDONS__'; function f() { return globalThis[KEY] || (globalThis[KEY] = {}); }"
+            ),
+            ["__ADDONS__"]
+        );
+        assert!(
+            writes("var M = /* @__PURE__ */ Symbol.for('matchers'); Object.defineProperty(globalThis, M, { get: () => 1 });").is_empty()
+        );
+        assert_eq!(
+            named("const a = 'p'; const b = a; globalThis[b] = 1;"),
+            ["p"]
+        );
+        assert_eq!(
+            named("const k = flag ? 'x' : 'y'; globalThis[k] = 1;"),
+            ["x", "y"]
+        );
+        assert_eq!(
+            named("for (const api of ['it', 'test']) globalThis[api] = f;"),
+            ["it", "test"]
+        );
+        assert_eq!(
+            named("const apis = ['x', 'y']; for (const k of apis) window[k] = f;"),
+            ["x", "y"]
+        );
+        assert_eq!(
+            named("const table = { a: 1, b: 2 }; for (const k in table) globalThis[k] = table[k];"),
+            ["a", "b"]
+        );
+        assert_eq!(
+            named("const table = { a: 1 }; for (const k of Object.keys(table)) window[k] = 1;"),
+            ["a"]
+        );
+        assert_eq!(
+            named("const table = { a: 1, b() {} }; Object.assign(globalThis, table);"),
+            ["a", "b"]
+        );
+        assert_eq!(
+            named("const base = { a: 1 }; Object.assign(window, { ...base, c: 2 });"),
+            ["a", "c"]
+        );
+        assert_eq!(
+            named("const K = 'q'; Object.defineProperty(globalThis, K, { value: 1 });"),
+            ["q"]
+        );
+        assert_eq!(
+            named("Object.assign(window, { ['computed']: 1, [`tpl`]: 2 });"),
+            ["computed", "tpl"]
+        );
+        // A symbol is no global's name.
+        for source in [
+            "const sym = Symbol('s'); globalThis[sym] = 1;",
+            "Object.defineProperty(window, Symbol.for('t'), { value: 1 });",
+            "const kA = Symbol(); Object.assign(globalThis, { [kA]: 1 });",
+        ] {
+            assert!(writes(source).is_empty(), "{source}: {:?}", writes(source));
+        }
+        // A key nothing in the file decides writes any global: a call, a parameter, a variable that changes, a table that changes, a destructured binding, a `var`, a shadowed
+        // `Symbol`, a source the file does not hold.
+        for source in [
+            "const k = f(); window[k] = 1;",
+            "for (const k in config) globalThis[k] = 1;",
+            "let k = 'a'; k = 'b'; window[k] = 1;",
+            "function g(k) { window[k] = 1; } g('a');",
+            "const [k] = ['a']; window[k] = 1;",
+            "const { length } = 'abc'; window[length] = 1;",
+            "var k = 'a'; var k = 'b'; window[k] = 1;",
+            "const Symbol = f; globalThis[Symbol('x')] = 1;",
+            "Object.assign(globalThis, { [k]: 1 });",
+            "import * as patches from './patches'; Object.assign(globalThis, patches);",
+            "const apis = ['x']; apis.push(more); for (const k of apis) window[k] = 1;",
+            "const table = { a: 1 }; table.b = 2; for (const k in table) globalThis[k] = 1;",
+            "const table = { a: 1 }; extend(table); Object.assign(window, table);",
+            "const table = { a: 1 }; Object.assign(table, more); Object.assign(window, table);",
+            "const apis = ['x', other]; for (const k of apis) window[k] = 1;",
+            "const table = { a: 1, ...rest }; Object.assign(window, table);",
+        ] {
+            assert!(writes(source).any_name, "{source}");
         }
     }
 
