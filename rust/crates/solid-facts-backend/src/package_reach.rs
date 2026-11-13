@@ -13,8 +13,9 @@
 //!   [`MAX_CLOSURE_FILES`] files: undecided.
 //!
 //! A package whose whole closure is walked with none of these is clear: no code it can run names a Solid package, so it cannot call an
-//! action. A declaration in `@types/<name>` describes the code of `<name>`, looked up from where the types are installed; a declaration in
-//! a declaration file of the project itself (`declare module`, `declare function`) describes code no package holds, and is undecided.
+//! action. A declaration in `@types/<name>` describes the code of `<name>`, looked up from where the types are installed; one in a package of
+//! global declarations only (no module) names no code, and is undecided (who provides a global is not said); a declaration in a declaration
+//! file of the project itself (`declare module`, `declare function`) describes code no package holds, and is undecided.
 //!
 //! File scans are kept for the life of the process, keyed by path and checked against the file's length and modification time, so a daemon
 //! scans a package once.
@@ -27,7 +28,8 @@ use std::time::SystemTime;
 
 use solid_facts::module_reach::{ModuleHazardKind, ModuleScan, scan_module};
 use solid_facts::package_reach::{
-    PackageReach, PackageReachIndex, ReachBlocker, is_declaration_file, package_root_of,
+    AccessorFacts, PackageReach, PackageReachIndex, ReachBlocker, is_declaration_file,
+    package_root_of,
 };
 
 use crate::host_constants::{find_package_root, split_bare_specifier};
@@ -186,19 +188,23 @@ pub fn package_reach_index(
     let verdicts = by_runtime
         .into_iter()
         .map(|(runtime, (demand, siblings))| {
-            let reach = package_reach(&runtime, solid, &demand, &siblings);
-            (runtime, reach)
+            let closure = package_reach(&runtime, solid, &demand, &siblings);
+            (runtime, closure)
         })
         .collect::<HashMap<_, _>>();
     let mut index = PackageReachIndex::default();
     for (root, named) in roots {
-        let reach = match named.runtime {
-            Ok(runtime) => verdicts
-                .get(&runtime)
-                .cloned()
-                .unwrap_or_else(|| missing(format!("no verdict for {}", short(&runtime)))),
-            Err(reach) => reach,
+        let (reach, accessors) = match named.runtime {
+            Ok(runtime) => match verdicts.get(&runtime) {
+                Some(closure) => (closure.reach.clone(), closure.accessors.clone()),
+                None => (
+                    missing(format!("no verdict for {}", short(&runtime))),
+                    AccessorFacts::open(),
+                ),
+            },
+            Err(reach) => (reach, AccessorFacts::open()),
         };
+        index.accessors.insert(root.clone(), accessors);
         if let Some(name) = manifest(Path::new(&root))
             .ok()
             .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
@@ -410,8 +416,16 @@ fn runtime_root(root: &Path) -> Result<PathBuf, PackageReach> {
         .and_then(|root| root.canonicalize().ok())
     {
         Some(runtime) => Ok(runtime),
-        // Types for the host (`@types/webxr`, the browser's APIs): declarations with no module in them, so no installed package holds their code.
-        None if declares_only_globals(root) => Err(PackageReach::Clear),
+        // Types for globals (`@types/webxr`, `@types/google.maps`): declarations with no module in them and no package of that name. The declaration does not
+        // say who provides a global at runtime: the host, a script, or a package that writes it (`window.__act = …`, which the review of #231 ran in Chrome:
+        // a global-only declaration package was clear and the global called an action). Nothing here proves no installed package provides it, so a call of
+        // one of its globals is undecided like any global the pinned libraries do not declare.
+        None if declares_only_globals(root) => Err(PackageReach::Undecided {
+            blocker: ReachBlocker::UnknownGlobal,
+            detail: format!(
+                "{name} declares globals and no module: the host, a script or an installed package may provide them"
+            ),
+        }),
         None => Err(PackageReach::Undecided {
             blocker: ReachBlocker::MissingSource,
             detail: format!("{name} describes {described}, which is not installed"),
@@ -420,7 +434,7 @@ fn runtime_root(root: &Path) -> Result<PathBuf, PackageReach> {
 }
 
 /// Whether the declaration package at `root` is a script of global declarations: its entry declaration file (`types`, `typings`, `index.d.ts`) has no
-/// top-level `import` or `export`, so it describes what the host provides (`@types/webxr`), not a module an installed package implements.
+/// top-level `import` or `export`, so it declares globals (`@types/webxr`), not a module an installed package implements. Who provides them is not said.
 fn declares_only_globals(root: &Path) -> bool {
     let Ok(manifest) = manifest(root) else {
         return false;
@@ -496,31 +510,69 @@ impl Demand {
     }
 }
 
-/// The closure walk of one package.
+/// What the walk of one package's closure found.
+struct Closure {
+    /// The verdict: the first thing that makes the closure reach Solid or not decided, in walk order, else clear.
+    reach: PackageReach,
+    /// Everything that makes it so, each once, in walk order (the verdict first).
+    #[cfg_attr(not(test), allow(dead_code))]
+    problems: Vec<PackageReach>,
+    /// Where the closure may define an accessor.
+    accessors: AccessorFacts,
+}
+
+/// The closure walk of one package. It reads the whole closure: a hazard, an unreadable file or a load of Solid ends nothing but that branch (a Solid package is
+/// the dialect's runtime and is not walked), so what a later file holds is known whatever an earlier one did (the review of #231, S6: the first hazard hid a later
+/// load of Solid, and the accessors a later file defines).
 fn package_reach(
     root: &Path,
     solid: &SolidPackages<'_>,
     demand: &Demand,
     extra_entries: &BTreeSet<PathBuf>,
-) -> PackageReach {
+) -> Closure {
     let name = manifest(root)
         .ok()
         .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
         .unwrap_or_default();
     if solid.contains(&name) {
-        return PackageReach::ReachesSolid { via: name };
+        return Closure {
+            reach: PackageReach::ReachesSolid { via: name.clone() },
+            problems: vec![PackageReach::ReachesSolid { via: name }],
+            accessors: AccessorFacts::open(),
+        };
     }
     let mut walk = Walk {
         solid,
         files: BTreeSet::new(),
         queue: VecDeque::new(),
         entered: BTreeSet::new(),
+        problems: Vec::new(),
+        accessor_names: BTreeSet::new(),
+        accessors_any_name: false,
     };
-    match walk.run(root, demand, extra_entries) {
-        Ok(()) => PackageReach::Clear,
-        Err(reach) => reach,
+    walk.run(root, demand, extra_entries);
+    // Only a load of Solid's runtime is a known value from outside the closure: any other problem leaves code, or a value, the walk did not read.
+    let closed = walk
+        .problems
+        .iter()
+        .all(|problem| matches!(problem, PackageReach::ReachesSolid { .. }));
+    Closure {
+        reach: walk
+            .problems
+            .first()
+            .cloned()
+            .unwrap_or(PackageReach::Clear),
+        problems: walk.problems,
+        accessors: AccessorFacts {
+            closed,
+            names: walk.accessor_names,
+            any_name: walk.accessors_any_name,
+        },
     }
 }
+
+/// The most distinct problems one walk keeps: the first is the verdict, the rest only say what else the closure holds.
+const MAX_PROBLEMS: usize = 256;
 
 struct Walk<'s, 'd> {
     solid: &'s SolidPackages<'d>,
@@ -528,29 +580,37 @@ struct Walk<'s, 'd> {
     queue: VecDeque<PathBuf>,
     /// The (package, subpath) pairs whose entries were pushed; `*` is every entry.
     entered: BTreeSet<(PathBuf, String)>,
+    /// Everything that makes the closure reach Solid or not decided, each once, in walk order.
+    problems: Vec<PackageReach>,
+    /// The names accessors are defined under in the files read, and whether any is defined under a name the syntax does not fix.
+    accessor_names: BTreeSet<String>,
+    accessors_any_name: bool,
 }
 
 impl Walk<'_, '_> {
-    fn run(
-        &mut self,
-        root: &Path,
-        demand: &Demand,
-        extra_entries: &BTreeSet<PathBuf>,
-    ) -> Result<(), PackageReach> {
-        self.enter(root, demand)?;
+    fn run(&mut self, root: &Path, demand: &Demand, extra_entries: &BTreeSet<PathBuf>) {
+        self.enter(root, demand);
         for entry in extra_entries {
             self.push(entry.clone());
         }
         while let Some(file) = self.queue.pop_front() {
             if self.files.len() > MAX_CLOSURE_FILES {
-                return Err(PackageReach::Undecided {
+                self.note(PackageReach::Undecided {
                     blocker: ReachBlocker::ClosureLimit,
                     detail: format!("more than {MAX_CLOSURE_FILES} files"),
                 });
+                return;
             }
-            self.visit(&file)?;
+            if let Err(problem) = self.visit(&file) {
+                self.note(problem);
+            }
         }
-        Ok(())
+    }
+
+    fn note(&mut self, problem: PackageReach) {
+        if self.problems.len() < MAX_PROBLEMS && !self.problems.contains(&problem) {
+            self.problems.push(problem);
+        }
     }
 
     fn push(&mut self, file: PathBuf) {
@@ -559,8 +619,14 @@ impl Walk<'_, '_> {
         }
     }
 
-    /// The entries `demand` asks of the package at `root`, each pair once.
-    fn enter(&mut self, root: &Path, demand: &Demand) -> Result<(), PackageReach> {
+    /// The entries `demand` asks of the package at `root`, each pair once; what cannot be read is a problem, and the rest of the walk goes on.
+    fn enter(&mut self, root: &Path, demand: &Demand) {
+        if let Err(problem) = self.try_enter(root, demand) {
+            self.note(problem);
+        }
+    }
+
+    fn try_enter(&mut self, root: &Path, demand: &Demand) -> Result<(), PackageReach> {
         let root = root
             .canonicalize()
             .map_err(|error| missing(format!("{}: {error}", short(root))))?;
@@ -579,6 +645,7 @@ impl Walk<'_, '_> {
         Ok(())
     }
 
+    /// One file: its hazards are noted and its loads followed; `Err` when the file cannot be read as code.
     fn visit(&mut self, file: &Path) -> Result<(), PackageReach> {
         let name = file.to_string_lossy();
         if NATIVE_EXTENSIONS
@@ -609,19 +676,25 @@ impl Walk<'_, '_> {
             });
         }
         let scan = scanned(file)?;
-        if let Some(hazard) = scan.hazards.first() {
-            return Err(PackageReach::Undecided {
+        for hazard in &scan.hazards {
+            self.note(PackageReach::Undecided {
                 blocker: blocker_of(hazard.kind),
                 detail: format!("{}: {}", short(file), hazard.detail),
             });
         }
+        self.accessor_names
+            .extend(scan.accessors.names.iter().cloned());
+        self.accessors_any_name |= scan.accessors.any_name;
         let directory = file.parent().unwrap_or(Path::new("/"));
         for specifier in &scan.loads {
-            self.load(file, directory, specifier)?;
+            if let Err(problem) = self.load(file, directory, specifier) {
+                self.note(problem);
+            }
         }
         Ok(())
     }
 
+    /// One load of `file`: the files it names are queued; `Err` when it names a Solid package (not walked: the dialect's runtime) or code nothing installed holds.
     fn load(&mut self, file: &Path, directory: &Path, specifier: &str) -> Result<(), PackageReach> {
         if specifier.starts_with("node:") {
             return Ok(());
@@ -660,7 +733,11 @@ impl Walk<'_, '_> {
             for target in package_imports(file, specifier)? {
                 match target {
                     Target::File(path) => self.push(path),
-                    Target::Bare(bare) => self.load(file, directory, &bare)?,
+                    Target::Bare(bare) => {
+                        if let Err(problem) = self.load(file, directory, &bare) {
+                            self.note(problem);
+                        }
+                    }
                 }
             }
             return Ok(());
@@ -697,7 +774,7 @@ impl Walk<'_, '_> {
             });
         }
         // Only what the load names: the subpath's targets of an `exports` map, or the file a deep path names.
-        self.enter(&root, &Demand::subpath(&subpath))
+        self.try_enter(&root, &Demand::subpath(&subpath))
     }
 }
 
@@ -1174,6 +1251,10 @@ mod tests {
     }
 
     fn reach(root: &Path, name: &str) -> PackageReach {
+        reach_of(root, name, &everything())
+    }
+
+    fn closure(root: &Path, name: &str) -> Closure {
         package_reach(
             &root.join("node_modules").join(name).canonicalize().unwrap(),
             &SOLID,
@@ -1196,6 +1277,7 @@ mod tests {
             demand,
             &BTreeSet::new(),
         )
+        .reach
     }
 
     #[test]
@@ -1529,13 +1611,10 @@ mod tests {
             .collect::<BTreeSet<_>>();
         assert_eq!(siblings.len(), 1);
         let package = root.join("node_modules/deep").canonicalize().unwrap();
+        let found = package_reach(&package, &SOLID, &everything(), &siblings).reach;
         assert!(
-            matches!(
-                package_reach(&package, &SOLID, &everything(), &siblings),
-                PackageReach::ReachesSolid { .. }
-            ),
-            "{:?}",
-            package_reach(&package, &SOLID, &everything(), &siblings)
+            matches!(found, PackageReach::ReachesSolid { .. }),
+            "{found:?}"
         );
     }
 
@@ -1584,6 +1663,157 @@ mod tests {
         ));
     }
 
+    /// The walk reads the whole closure (the review of #231, S6): the first problem is the verdict, and a later file's load of Solid is known whatever an earlier one
+    /// held.
+    #[test]
+    fn the_whole_closure_is_read_past_a_hazard() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/late/package.json",
+            r#"{"name":"late","main":"a.js"}"#,
+        );
+        write(
+            root,
+            "node_modules/late/a.js",
+            "import './b.js'; export const e = process.env.X;",
+        );
+        write(
+            root,
+            "node_modules/late/b.js",
+            "import { action } from 'solid-js'; export const b = action;",
+        );
+        let found = closure(root, "late");
+        assert!(
+            matches!(
+                found.reach,
+                PackageReach::Undecided {
+                    blocker: ReachBlocker::UnknownGlobal,
+                    ..
+                }
+            ),
+            "{:?}",
+            found.reach
+        );
+        assert_eq!(found.problems.len(), 2, "{:?}", found.problems);
+        assert!(matches!(
+            found.problems[1],
+            PackageReach::ReachesSolid { .. }
+        ));
+        // The same files with the Solid load first: Solid is the verdict.
+        write(
+            root,
+            "node_modules/early/package.json",
+            r#"{"name":"early","main":"a.js"}"#,
+        );
+        write(
+            root,
+            "node_modules/early/a.js",
+            "import { action } from 'solid-js'; import './b.js'; export const a = action;",
+        );
+        write(
+            root,
+            "node_modules/early/b.js",
+            "export const e = process.env.X;",
+        );
+        assert!(matches!(
+            closure(root, "early").reach,
+            PackageReach::ReachesSolid { .. }
+        ));
+        assert_eq!(closure(root, "early").problems.len(), 2);
+    }
+
+    /// ADR 0973: where a package's closure may define an accessor, read from the whole closure; a closure not read whole answers for every name.
+    #[test]
+    fn a_getter_a_package_declares_is_known_by_its_name_where_the_whole_closure_is_read() {
+        let directory = project();
+        let root = directory.path();
+        let getter = "import { action } from 'solid-js'; export const clock = { get now() { void action(function* () {})(); return 1; }, later: 2 };";
+        write(
+            root,
+            "node_modules/fz-get/package.json",
+            r#"{"name":"fz-get","main":"index.js"}"#,
+        );
+        write(root, "node_modules/fz-get/index.js", getter);
+        let found = closure(root, "fz-get");
+        assert!(matches!(found.reach, PackageReach::ReachesSolid { .. }));
+        assert!(found.accessors.closed);
+        assert!(found.accessors.may_run(&[Some("now")]));
+        // An accessor under another name stays silent: the twin.
+        assert!(!found.accessors.may_run(&[Some("later")]));
+        // A computed key, a Proxy and `Object.defineProperty` with a computed name match every name.
+        for (name, source) in [
+            (
+                "computed",
+                "export const o = { get [key]() { return 1; } }; const key = 'x';",
+            ),
+            (
+                "proxy",
+                "export const o = new Proxy({}, { get() { return 1; } });",
+            ),
+            (
+                "define",
+                "const key = 'x'; Object.defineProperty(exports, key, { get() { return 1; } });",
+            ),
+        ] {
+            write(
+                root,
+                &format!("node_modules/fz-{name}/package.json"),
+                &format!(r#"{{"name":"fz-{name}","main":"index.js"}}"#),
+            );
+            write(
+                root,
+                &format!("node_modules/fz-{name}/index.js"),
+                &format!("import {{ action }} from 'solid-js'; export const a = action; {source}"),
+            );
+            let found = closure(root, &format!("fz-{name}"));
+            assert!(found.accessors.closed, "{name}");
+            assert!(found.accessors.may_run(&[Some("later")]), "{name}");
+        }
+        // A value from outside the closure, code nobody read, a computed load, generated code: not closed, every name.
+        for (name, source) in [
+            ("global", "export const e = process.env.X;"),
+            ("missing", "import './gone.js';"),
+            ("dynamic", "export const l = (n) => import(n);"),
+            ("eval", "export const v = (c) => eval(c);"),
+        ] {
+            write(
+                root,
+                &format!("node_modules/fz-{name}/package.json"),
+                &format!(r#"{{"name":"fz-{name}","main":"index.js"}}"#),
+            );
+            write(
+                root,
+                &format!("node_modules/fz-{name}/index.js"),
+                &format!("import {{ action }} from 'solid-js'; export const a = action; {source}"),
+            );
+            let found = closure(root, &format!("fz-{name}"));
+            assert!(!found.accessors.closed, "{name}");
+            assert!(found.accessors.may_run(&[Some("later")]), "{name}");
+        }
+        // Another file of the closure defines it: the whole closure counts.
+        write(
+            root,
+            "node_modules/fz-deep/package.json",
+            r#"{"name":"fz-deep","main":"index.js"}"#,
+        );
+        write(
+            root,
+            "node_modules/fz-deep/index.js",
+            "import { action } from 'solid-js'; import './sub.js'; export const a = action;",
+        );
+        write(
+            root,
+            "node_modules/fz-deep/sub.js",
+            "export class K { static get shared() { return 1; } }",
+        );
+        let deep = closure(root, "fz-deep");
+        assert!(deep.accessors.closed);
+        assert!(deep.accessors.may_run(&[Some("shared")]));
+        assert!(!deep.accessors.may_run(&[Some("other")]));
+    }
+
     /// A `.js` specifier names a `.ts` source, and a `./*` pattern matches scripts only (a licence is data).
     #[test]
     fn typescript_sources_and_data_files_are_read_as_a_bundler_reads_them() {
@@ -1624,10 +1854,11 @@ mod tests {
         assert_eq!(reach(root, "data"), PackageReach::Clear);
     }
 
-    /// `@types/webxr` declares host globals with no module in them and no runtime package: nothing to read, no Solid in it. A types package that is a module
-    /// (`export …`) for a package that is not installed stays undecided.
+    /// `@types/webxr` declares globals with no module in them and no runtime package: nothing to read, and nothing says who provides them (the host, a script or a
+    /// package that writes the global), so it is undecided as an unknown global (ADR 0973; ADR 0972 judged it clear). A types package that is a module
+    /// (`export …`) for a package that is not installed stays undecided as missing source.
     #[test]
-    fn types_of_the_host_are_clear_and_types_of_a_missing_package_are_not() {
+    fn types_of_globals_are_undecided_and_types_of_a_missing_package_are_too() {
         let directory = project();
         let root = directory.path();
         write(
@@ -1658,7 +1889,13 @@ mod tests {
             .join("node_modules/@types/gone2")
             .canonicalize()
             .unwrap();
-        assert_eq!(runtime_root(&host).unwrap_err(), PackageReach::Clear);
+        assert!(matches!(
+            runtime_root(&host),
+            Err(PackageReach::Undecided {
+                blocker: ReachBlocker::UnknownGlobal,
+                ..
+            })
+        ));
         assert!(matches!(
             runtime_root(&gone),
             Err(PackageReach::Undecided {

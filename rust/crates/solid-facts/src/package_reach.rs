@@ -1,7 +1,7 @@
 //! ADR 0972: whether code a declaration describes may reach a Solid action, decided per installed package from its source by the backend
 //! (`solid-facts-backend/src/package_reach.rs`) and read by the analysis. The analysis never reads the filesystem; this is its view.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Why a package's closure is not decided.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -50,6 +50,13 @@ impl ReachBlocker {
     }
 }
 
+/// The prefix of a site's pseudo-path for a callee that is a global declared by no installed package and no standard-library file (a project declaration
+/// file: `declare function gtag(…)`), whose provider the declaration does not say: the host, a script or a package may write it (ADR 0973).
+pub const AMBIENT_PREFIX: &str = "ambient:";
+
+/// The prefix of a site's pseudo-path for a module loaded by a name the syntax does not fix (`lazy(() => import(name))`): any module may be the component.
+pub const COMPUTED_LOAD_PREFIX: &str = "computed-load:";
+
 /// What a package's closure was found to reach.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PackageReach {
@@ -93,6 +100,41 @@ impl PackageReach {
     }
 }
 
+/// Where the closure of a package may define an accessor (a `get` or `set`, a `Proxy`): the code a member read or assignment of an object the package hands out may run
+/// (ADR 0973). Read from the whole closure, so it answers only where the whole closure was read.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AccessorFacts {
+    /// Whether the whole closure was read and holds nothing the syntax cannot see through: no unread file, load by a computed name, generated code or value from
+    /// outside the closure (a global the libraries do not declare). A load of Solid's runtime is known and keeps it closed. Open, any member of an object the package
+    /// hands out may be an accessor of code nobody read.
+    pub closed: bool,
+    /// The names accessors are defined under in the closure.
+    pub names: BTreeSet<String>,
+    /// An accessor, or a construct that may define one (a `Proxy`, a computed key), is defined under a name the syntax does not fix: it matches every name.
+    pub any_name: bool,
+}
+
+impl AccessorFacts {
+    /// Nothing is known: every member may be an accessor.
+    #[must_use]
+    pub fn open() -> Self {
+        Self::default()
+    }
+
+    /// Whether reading or assigning a member by one of `chain` (the names read off the package's object, `None` for a computed key) may run package code: the
+    /// closure was not read whole, defines an accessor under an unfixed name, or defines one under a name of the chain (a computed key matches any accessor).
+    #[must_use]
+    pub fn may_run(&self, chain: &[Option<&str>]) -> bool {
+        if !self.closed || self.any_name {
+            return true;
+        }
+        chain.iter().any(|name| match name {
+            Some(name) => self.names.contains(*name),
+            None => !self.names.is_empty(),
+        })
+    }
+}
+
 /// The verdicts the backend decided, by installed package root (the directory under the last `node_modules` component of a declaration's path, see
 /// [`package_root_of`]).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -107,6 +149,8 @@ pub struct PackageReachIndex {
     /// The project's own declaration files (`vendor/step.d.ts`) with runtime JavaScript beside them that the program does not analyze: a declaration there
     /// describes code nobody reads, so it is undecided ([`ReachBlocker::UnanalyzedProjectJs`]).
     pub project_js: std::collections::BTreeSet<String>,
+    /// Where each decided package's closure may define an accessor, by the same root.
+    pub accessors: BTreeMap<String, AccessorFacts>,
 }
 
 impl PackageReachIndex {
@@ -136,9 +180,37 @@ impl PackageReachIndex {
         self.project_js.contains(path)
     }
 
+    /// Where the closure of the package a declaration at `path` describes may define an accessor. A path the backend did not decide, and a pseudo-path of a site
+    /// ([`AMBIENT_PREFIX`], [`COMPUTED_LOAD_PREFIX`]), is open: any member may be one.
+    #[must_use]
+    pub fn accessors_for_declaration(&self, path: &str) -> AccessorFacts {
+        if path.starts_with(AMBIENT_PREFIX)
+            || path.starts_with(COMPUTED_LOAD_PREFIX)
+            || self.project_js.contains(path)
+        {
+            return AccessorFacts::open();
+        }
+        let key = package_root_of(path).unwrap_or(path);
+        self.accessors.get(key).cloned().unwrap_or_default()
+    }
+
     /// The verdict for the code a declaration at `path` describes. A path the backend did not decide is undecided, never clear.
     #[must_use]
     pub fn for_declaration(&self, path: &str) -> PackageReach {
+        if let Some(declared) = path.strip_prefix(AMBIENT_PREFIX) {
+            return PackageReach::Undecided {
+                blocker: ReachBlocker::UnknownGlobal,
+                detail: format!(
+                    "{declared} declares a global, and the host, a script or an installed package may provide it"
+                ),
+            };
+        }
+        if let Some(specifier) = path.strip_prefix(COMPUTED_LOAD_PREFIX) {
+            return PackageReach::Undecided {
+                blocker: ReachBlocker::DynamicLoad,
+                detail: format!("{specifier}: a module loaded by a name the syntax does not fix"),
+            };
+        }
         if self.project_js.contains(path) {
             return PackageReach::Undecided {
                 blocker: ReachBlocker::UnanalyzedProjectJs,
@@ -291,6 +363,44 @@ mod tests {
         let reach = index.for_declaration("/p/vendor/step.d.ts");
         assert_eq!(reach.word(), "unanalyzed-project-js");
         assert!(!reach.is_clear());
+    }
+
+    #[test]
+    fn a_global_or_a_computed_load_is_undecided_by_its_pseudo_path() {
+        let index = PackageReachIndex::default();
+        let ambient = index.for_declaration("ambient:/p/globals.d.ts");
+        assert_eq!(ambient.word(), "unknown-global");
+        assert!(!ambient.is_clear());
+        let computed = index.for_declaration("computed-load:import()");
+        assert_eq!(computed.word(), "dynamic-load");
+        assert!(!computed.is_clear());
+    }
+
+    #[test]
+    fn a_member_may_run_code_unless_the_whole_closure_names_no_accessor_for_it() {
+        let mut facts = AccessorFacts {
+            closed: true,
+            ..AccessorFacts::default()
+        };
+        // Closed, no accessor: nothing runs.
+        assert!(!facts.may_run(&[Some("now"), Some("later")]));
+        assert!(!facts.may_run(&[None]));
+        // An accessor under one name: that name, and a computed key, may run it; another name may not.
+        facts.names.insert("now".to_owned());
+        assert!(facts.may_run(&[Some("now")]));
+        assert!(facts.may_run(&[Some("other"), Some("now")]));
+        assert!(facts.may_run(&[None]));
+        assert!(!facts.may_run(&[Some("later")]));
+        // An accessor under an unfixed name matches every name.
+        facts.any_name = true;
+        assert!(facts.may_run(&[Some("later")]));
+        // Open (a closure not read whole, a path nobody decided): every name.
+        assert!(AccessorFacts::open().may_run(&[Some("later")]));
+        assert!(
+            PackageReachIndex::default()
+                .accessors_for_declaration("/p/node_modules/x/i.d.ts")
+                .may_run(&[Some("later")])
+        );
     }
 
     #[test]

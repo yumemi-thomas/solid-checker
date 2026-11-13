@@ -28,7 +28,8 @@ use crate::{HashMap, HashSet};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use solid_facts::package_reach::{
-    PackageReach, ReachBlocker, is_declaration_file, package_label, package_root_of,
+    AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, PackageReach, ReachBlocker,
+    is_declaration_file, package_label, package_root_of,
 };
 
 use crate::execution_role::RootBodyGuard;
@@ -51,6 +52,9 @@ pub(crate) enum Entry {
     /// A reference to the package's function handed on as a value (`createMemo(pkgFn)`, `[1].forEach(pkgFn)`): where it runs is not
     /// followed, so it has no legal role.
     Value,
+    /// A member of an object the package made, evaluated for its value (`void clock.now`) where the package's closure may define an accessor under that name
+    /// (ADR 0973): the getter runs where the read stands, with that role.
+    Read,
 }
 
 impl Entry {
@@ -60,6 +64,7 @@ impl Entry {
             Self::Tag => "tag",
             Self::Render => "render",
             Self::Value => "value",
+            Self::Read => "read",
         }
     }
 }
@@ -303,6 +308,15 @@ fn file_sites(
                 Entry::Value,
                 Some(origin),
             );
+            continue;
+        }
+        // The member is evaluated for its value where it stands (`void clock.now`): a getter or a setter the package's closure defines under a name of the chain
+        // (or under a name nothing fixes, or in code nobody read) runs there. A global the project declares is not followed: its provider is not a package's closure.
+        if !origin.path.starts_with(AMBIENT_PREFIX)
+            && evaluated_member(file, member.span)
+            && accessor_facts(ctx, &origin.path).may_run(&chain_names(file, member.span))
+        {
+            push(member.span, member.span, Entry::Read, Some(origin));
         }
     }
     for property in &file.ast.object_properties {
@@ -324,6 +338,69 @@ fn file_sites(
     }
     sites.sort_by_key(|site| (site.at.start, site.at.end));
     sites
+}
+
+/// Where the closure of the package a declaration at `path` describes may define an accessor: open (any member may be one) where the adapter reads no filesystem.
+fn accessor_facts(ctx: &AnalysisContext<'_>, path: &str) -> AccessorFacts {
+    ctx.package_reach.map_or_else(AccessorFacts::open, |index| {
+        index.accessors_for_declaration(path)
+    })
+}
+
+/// Whether the member expression at `span` is evaluated for its value: not a callee, a tag, the object of a longer chain (the chain's last member is the read), an
+/// import, export or type position, or an element's name. A getter runs where the member is evaluated, so a value handed to a scheduler, or an intrinsic element's event
+/// attribute, is still a read: [`handed_as_value`]'s exemptions are for where a handed *function* runs.
+fn evaluated_member(file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    if ast.calls_with_peeled_callee(span).next().is_some()
+        || ast
+            .tagged_templates
+            .iter()
+            .any(|template| ast.peel_ts_sugar_span(template.tag) == span)
+        || ast.members_with_peeled_object(span).next().is_some()
+        || ast.imports.iter().any(|import| import.span.contains(span))
+        || ast.exports.iter().any(|export| {
+            (export.module.is_some() && export.span.contains(span))
+                || export
+                    .specifiers
+                    .iter()
+                    .any(|specifier| specifier.local.span.contains(span))
+        })
+        || ast.type_names.iter().any(|name| name.contains(span))
+        || ast.type_queries.iter().any(|query| query.contains(span))
+        || ast
+            .type_imports
+            .iter()
+            .any(|import| import.span.contains(span))
+    {
+        return false;
+    }
+    !ast.jsx_elements.iter().any(|element| {
+        element.name.span.contains(span)
+            || element
+                .closing_name
+                .is_some_and(|closing| closing.contains(span))
+    })
+}
+
+/// The names read off a package's object by the member chain ending at `span` (`pkg.a.b[k]` is `a`, `b` and a computed key), from the member nearest the root.
+fn chain_names(file: &FileFacts, span: Span) -> Vec<Option<&str>> {
+    let ast = &file.ast;
+    let mut names = Vec::new();
+    let mut at = ast.peel_ts_sugar_span(span);
+    while let Some(member) = ast.member_at(at) {
+        if names.len() >= 32 {
+            names.push(None);
+            break;
+        }
+        names.push(if ast.computed_members.binary_search(&at).is_ok() {
+            None
+        } else {
+            file.source_text(member.property)
+        });
+        at = ast.peel_ts_sugar_span(member.object);
+    }
+    names
 }
 
 /// What the compiler says of the value at `span`: `Some(true)` when it is callable or constructable, `Some(false)` when it is neither, `None` when the facts say
@@ -455,8 +532,10 @@ const ORIGIN_DEPTH: usize = 6;
 enum Origin {
     /// Code of a package the build does not read: the declaration path that names its package.
     Package(DeclarationAt),
-    /// No package's code: a global of the standard library, the dialect's runtime, a `node:` builtin, or code the program reads.
+    /// No package's code: the dialect's runtime, a `node:` builtin, or code the program reads.
     NoPackage,
+    /// A global the standard library declares: the host's own, unless a member read off it is one the library does not declare ([`host_member_origin`]).
+    Host,
     /// The chain ends where this pass does not follow it (a parameter, a property, the result of a project function, an import it does not resolve): the
     /// callee's declaration decides.
     Unknown,
@@ -504,24 +583,23 @@ fn origin_of(
     let ast = &file.ast;
     let span = ast.peel_ts_sugar_span(span);
     if let Some(call) = ast.call_at(span) {
+        // `lazy(() => import("pkg"))` makes a component of the module its loader imports, not of the dialect's `lazy`.
+        if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Lazy) {
+            return lazy_origin(ctx, analyzed, file, call);
+        }
         return origin_of(ctx, analyzed, file, bound, call.callee, depth - 1);
     }
     if let Some(member) = ast.member_at(span) {
-        return origin_of(ctx, analyzed, file, bound, member.object, depth - 1);
+        let object = origin_of(ctx, analyzed, file, bound, member.object, depth - 1);
+        // A member of a global the standard library declares is the host's where the library declares the member too, and code something else provides
+        // where only an augmentation does (`window.__act`).
+        return match object {
+            Origin::Host => host_member_origin(ctx, analyzed, file, member.property),
+            other => other,
+        };
     }
     let Some(declaration) = ast.reference_declaration(span) else {
-        let host = lookup
-            .alias_root_declarations(file, span)
-            .is_some_and(|declarations| {
-                declarations
-                    .iter()
-                    .any(|declaration| declaration.location.path.starts_with("bundled:"))
-            });
-        return if host {
-            Origin::NoPackage
-        } else {
-            Origin::Unknown
-        };
+        return global_origin(ctx, analyzed, file, span);
     };
     if let Some(import) = bound.get(&declaration) {
         return import_origin(ctx, analyzed, file, import, span, depth);
@@ -535,6 +613,128 @@ fn origin_of(
         let next_bound = import_bindings(ctx, next);
         origin_of(ctx, analyzed, next, &next_bound, initializer, depth - 1)
     }
+}
+
+/// Where the component a `lazy(loader)` call makes comes from (ADR 0973): the modules its loader function literal imports dynamically (`() => import("pkg")`,
+/// `() => import("pkg").then((m) => ({ default: m.View }))`), the loader's own code being the project's. A relative or runtime module is the project's or the
+/// dialect's; a package's is code of that package, which the first of them whose closure is not clear stands for; a module named by anything but a literal
+/// may be any package's. A loader that is no function literal, or imports nothing, ends where this pass does not follow (the dialect's `lazy`).
+fn lazy_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Origin {
+    let Some(loader) = call.arguments.first() else {
+        return Origin::NoPackage;
+    };
+    let loader = file.ast.peel_ts_sugar_span(loader.span);
+    let mut chosen = None::<DeclarationAt>;
+    for load in &file.ast.module_loads {
+        if load.kind != solid_facts::ast::ModuleLoadKind::DynamicImport
+            || !loader.contains(load.span)
+        {
+            continue;
+        }
+        let declaration = match load.specifier.as_deref() {
+            None => Some(DeclarationAt {
+                path: format!("{COMPUTED_LOAD_PREFIX}import()"),
+            }),
+            Some(module) => {
+                let binding = ImportBinding {
+                    module,
+                    declaration: load.span,
+                    namespace: false,
+                    decided_elsewhere: module.starts_with('.')
+                        || module.starts_with('/')
+                        || is_runtime_module(ctx, module)
+                        || module.starts_with("node:"),
+                };
+                import_declaration(ctx, analyzed, file, &binding)
+            }
+        };
+        let Some(declaration) = declaration else {
+            continue;
+        };
+        let clear = ctx
+            .package_reach
+            .is_some_and(|index| index.for_declaration(&declaration.path).is_clear());
+        match &chosen {
+            None => chosen = Some(declaration),
+            Some(held)
+                if !clear
+                    && ctx
+                        .package_reach
+                        .is_some_and(|index| index.for_declaration(&held.path).is_clear()) =>
+            {
+                chosen = Some(declaration);
+            }
+            Some(_) => {}
+        }
+    }
+    chosen.map_or(Origin::NoPackage, Origin::Package)
+}
+
+/// Where a global (a name no binding of the file declares) came from, by where the compiler says it is declared: the standard library is the host's; an installed
+/// package's declaration is decided by that package; a project declaration file that no module of the program implements (`declare function gtag(…)`) declares
+/// a global the host, a script or an installed package may provide (ADR 0973: a package that writes the global is code the program loads, and Chrome ran it).
+fn global_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    span: Span,
+) -> Origin {
+    let Some(declarations) = ctx.semantic_lookup.alias_root_declarations(file, span) else {
+        return Origin::Unknown;
+    };
+    declarations_origin(ctx, analyzed, declarations).unwrap_or(Origin::Unknown)
+}
+
+/// Where a member read off a global the standard library declares came from, by where the compiler says the member itself is declared (the symbol of its property
+/// name: the member expression starts where its object does, and names the object's symbol). A member the library
+/// declares is the host's; one only an installed package's declaration adds is that package's; one only a project declaration file adds is ambient (`window.__act`
+/// under `interface Window { __act(cb: () => void): void }`). A member the facts say nothing of (an `any`, an index signature) stays the host's: named in ADR 0973.
+fn host_member_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    member: Span,
+) -> Origin {
+    let Some(declarations) = ctx.semantic_lookup.alias_root_declarations(file, member) else {
+        return Origin::Host;
+    };
+    declarations_origin(ctx, analyzed, declarations).unwrap_or(Origin::Host)
+}
+
+/// The origin the declarations of a global (or of a member of one) give it, or `None` when they name none (no declaration at all, or only project source).
+fn declarations_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    declarations: &[typefacts::Declaration],
+) -> Option<Origin> {
+    if declarations
+        .iter()
+        .any(|declaration| declaration.location.path.starts_with("bundled:"))
+    {
+        return Some(Origin::Host);
+    }
+    if let Some(path) = declarations
+        .iter()
+        .find_map(|declaration| installed_path(ctx, analyzed, &declaration.location.path))
+    {
+        return Some(Origin::Package(DeclarationAt { path }));
+    }
+    declarations
+        .iter()
+        .find(|declaration| {
+            let path = declaration.location.path.as_ref();
+            is_declaration_file(path) && !ctx.semantic_lookup.in_dependency_source(path)
+        })
+        .map(|declaration| {
+            Origin::Package(DeclarationAt {
+                path: format!("{AMBIENT_PREFIX}{}", declaration.location.path),
+            })
+        })
 }
 
 /// Where the value an import binding names came from. `symbol_at` is where the binding's own symbol is asked (a shorthand property's span holds the property's).
@@ -574,7 +774,7 @@ fn import_origin(
         })
 }
 
-/// Whether the expression at `span` roots in something [`origin_of`] can follow (an import, a project binding of one initializer, a call), so that the
+/// Whether the expression at `span` roots in something [`origin_of`] can follow (an import, a project binding of one initializer, a call, a global), so that the
 /// value loops ask it only there: a member chain is walked to its root.
 fn followable_root(
     ctx: &AnalysisContext<'_>,
@@ -592,10 +792,17 @@ fn followable_root(
         if ast.call_at(at).is_some() {
             return true;
         }
-        return ast.reference_declaration(at).is_some_and(|declaration| {
-            bound.contains_key(&declaration)
-                || value_initializer(ctx.semantic_lookup, file, at).is_some()
-        });
+        return match ast.reference_declaration(at) {
+            Some(declaration) => {
+                bound.contains_key(&declaration)
+                    || value_initializer(ctx.semantic_lookup, file, at).is_some()
+            }
+            // A global (a name no binding of the file declares): [`global_origin`] says whose it is.
+            None => ast
+                .identifiers
+                .binary_search_by_key(&at, |identifier| identifier.span)
+                .is_ok(),
+        };
     }
     false
 }
@@ -651,7 +858,7 @@ fn package_declaration(
     // bindings that only hold a value a call made (`const handle = makeHandle()`). A global of the standard library is the host's, whatever a package augments.
     match origin_of(ctx, analyzed, file, bound, callee, ORIGIN_DEPTH) {
         Origin::Package(declaration) => return Some(declaration),
-        Origin::NoPackage => return None,
+        Origin::NoPackage | Origin::Host => return None,
         Origin::Unknown => {}
     }
     let mut paths = Vec::<String>::new();
@@ -829,10 +1036,16 @@ pub(crate) fn package_action_calls(
         }
         let allowed = crate::execution_role::allowed_callback_spans(file, lookup);
         for site in file_sites {
-            if matches!(site.entry, Entry::Call | Entry::Tag) {
-                let reached = ctx
-                    .reachable_calls
-                    .contains_key(&crate::location(file.path.shared(), site.callee));
+            if matches!(site.entry, Entry::Call | Entry::Tag | Entry::Read) {
+                // A call edge reaches a call; a member read is no call, so it is placed wherever the function that holds it may run.
+                let reached = match site.entry {
+                    Entry::Read => {
+                        crate::local_access::unreached_write_may_run(file, site.at, lookup)
+                    }
+                    _ => ctx
+                        .reachable_calls
+                        .contains_key(&crate::location(file.path.shared(), site.callee)),
+                };
                 if !reached && !crate::local_access::unreached_write_may_run(file, site.at, lookup)
                 {
                     ends.end_with(file, site.at, SiteSilence::PackageCallCannotRun, || {
@@ -885,6 +1098,7 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         Entry::Tag => "this tagged template runs code of",
         Entry::Render => "this element renders a component of",
         Entry::Value => "this hands on a function of",
+        Entry::Read => "this reads a member of an object of",
     };
     crate::StaticViolation {
         id: "SC2002".into(),

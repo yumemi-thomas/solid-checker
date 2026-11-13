@@ -8,6 +8,13 @@
 //!   `.constructor` member), a lookup of a global the pinned TypeScript's `lib.es*` and `lib.dom*` files do not declare, and a computed or
 //!   escaping use of the global object (`globalThis[k]`, `window[k]`, `const g = window`). A file Oxc does not parse is a hazard too.
 //!
+//! - **accessors** (ADR 0973): the names a file defines a `get` or `set` under (class and object literal accessors, `defineProperty`, `defineProperties`,
+//!   `Object.create` with descriptors, `__defineGetter__`, `accessor` fields), and whether it defines one under a name the syntax does not fix (a computed key, a
+//!   `Proxy`, `defineProperty` read as a value): a member read of a package's object runs the package's code only where one matches.
+//!
+//! The global object goes by several names, and a member of one that gives it back is the same global (`window.self.x`, `globalThis.globalThis.x`,
+//! `window.document.defaultView.x`): a member read off any of them that no library declares is a lookup of an unknown global (ADR 0973).
+//!
 //! The backend walks the loads (`solid-facts-backend/src/package_reach.rs`); this module never reads the filesystem and never matches text.
 //!
 //! What a name is: an identifier reference the semantic analysis binds to nothing in the module (Oxc's root unresolved references). The
@@ -22,7 +29,8 @@ use std::sync::OnceLock;
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
-    Argument, Expression, ImportOrExportKind, Statement, TSModuleReference, UnaryOperator,
+    Argument, Expression, ImportOrExportKind, MethodDefinitionKind, ObjectPropertyKind,
+    PropertyKey, PropertyKind, Statement, TSModuleReference, UnaryOperator,
 };
 use oxc_parser::Parser;
 use oxc_semantic::{AstNodes, NodeId, SemanticBuilder};
@@ -80,6 +88,24 @@ pub struct ModuleHazard {
     pub detail: String,
 }
 
+/// The ways a file defines an accessor (a `get` or `set` that runs code when a member is read or assigned), by the name it defines them under (ADR 0973).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AccessorScan {
+    /// The names a getter or setter is defined under (class `get x()`, object literal `set x(v)`, `Object.defineProperty(o, "x", { get })`), sorted and distinct.
+    pub names: Vec<String>,
+    /// An accessor is defined under a name the syntax does not fix, or a construct that may define one is not read closely enough to say (a computed key, a `Proxy`,
+    /// `Object.defineProperty` handed on as a value, a descriptor that is not a literal): it matches every name.
+    pub any_name: bool,
+}
+
+impl AccessorScan {
+    /// Whether the file defines no accessor at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.names.is_empty() && !self.any_name
+    }
+}
+
 /// What one runtime file loads, and what it does that its loads do not show.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ModuleScan {
@@ -87,6 +113,8 @@ pub struct ModuleScan {
     pub loads: Vec<String>,
     /// Its hazards, sorted and distinct. Empty when the loads are all it can reach.
     pub hazards: Vec<ModuleHazard>,
+    /// The accessors it defines.
+    pub accessors: AccessorScan,
 }
 
 /// Whether `name` is a global value the pinned TypeScript's `lib.es*`/`lib.dom*` files declare.
@@ -258,14 +286,28 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                         hazard(ModuleHazardKind::DynamicLoad, "module");
                     }
                 }
-                _ if GLOBAL_OBJECTS.contains(&name) => match global_member(nodes, id) {
-                    GlobalUse::Member(member) if is_known_global(&member) => {}
-                    GlobalUse::Member(member) => {
-                        hazard(ModuleHazardKind::UnknownGlobal, &format!("{name}.{member}"));
+                // `document.defaultView` is the global object, so `document` is followed too; any other use of `document` holds no global object.
+                "document" => match global_use(nodes, id, name, Holder::Document) {
+                    GlobalUse::Member { name: member, path } if !is_known_global(&member) => {
+                        hazard(ModuleHazardKind::UnknownGlobal, &path);
                     }
-                    GlobalUse::Written => {}
-                    GlobalUse::Other => hazard(ModuleHazardKind::GlobalObjectEscape, name),
+                    GlobalUse::Escape { path } => {
+                        hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                    }
+                    GlobalUse::Member { .. } | GlobalUse::Written | GlobalUse::Inert => {}
                 },
+                _ if GLOBAL_OBJECTS.contains(&name) => {
+                    match global_use(nodes, id, name, Holder::Global) {
+                        GlobalUse::Member { name: member, .. } if is_known_global(&member) => {}
+                        GlobalUse::Member { path, .. } => {
+                            hazard(ModuleHazardKind::UnknownGlobal, &path);
+                        }
+                        GlobalUse::Written | GlobalUse::Inert => {}
+                        GlobalUse::Escape { path } => {
+                            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                        }
+                    }
+                }
                 _ if is_known_global(name) => {}
                 _ if !read => {}
                 _ => hazard(ModuleHazardKind::UnknownGlobal, name),
@@ -292,7 +334,196 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     hazards.dedup();
     scan.loads = loads;
     scan.hazards = hazards;
+    scan.accessors = scan_accessors(nodes);
     scan
+}
+
+/// The static name a property key fixes: `Some(Some(name))`, `Some(None)` for a private name (no code outside the class reads it), `None` for a key the syntax does not
+/// fix (a computed expression).
+fn key_name(key: &PropertyKey<'_>) -> Option<Option<String>> {
+    match key {
+        PropertyKey::StaticIdentifier(name) => Some(Some(name.name.to_string())),
+        PropertyKey::PrivateIdentifier(_) => Some(None),
+        PropertyKey::StringLiteral(literal) => Some(Some(literal.value.to_string())),
+        PropertyKey::NumericLiteral(literal) => Some(Some(literal.value.to_string())),
+        PropertyKey::TemplateLiteral(template) if template.expressions.is_empty() => template
+            .quasis
+            .first()
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .map(|value| Some(value.to_string())),
+        _ => None,
+    }
+}
+
+/// How a property descriptor reads: `Some(true)` when it names a `get` or a `set`, `Some(false)` when it is an object literal that names neither (a data property),
+/// `None` when it is not a literal the syntax reads (a variable, a call, a spread, a computed key).
+fn descriptor_defines_accessor(expression: &Expression<'_>) -> Option<bool> {
+    let Expression::ObjectExpression(object) = expression.get_inner_expression() else {
+        return None;
+    };
+    let mut accessor = false;
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        match key_name(&property.key) {
+            Some(Some(name)) if name == "get" || name == "set" => accessor = true,
+            Some(_) => {}
+            None => return None,
+        }
+    }
+    Some(accessor)
+}
+
+/// Every way the file defines an accessor: class and object literal `get`/`set`, an `accessor` field, `Object.defineProperty` and `Reflect.defineProperty` (a literal
+/// name and a descriptor that names a `get` or `set`), `Object.defineProperties` and `Object.create(proto, descriptors)` (a literal map), `__defineGetter__` and
+/// `__defineSetter__`, and a `Proxy`. A form the syntax does not read closely enough to say which name it defines under (a computed key, a descriptor that is a variable,
+/// `Object.defineProperty` read as a value) matches every name.
+fn scan_accessors(nodes: &AstNodes<'_>) -> AccessorScan {
+    let mut sink = AccessorSink::default();
+    // The calls whose callee member is read for what it defines, so the member itself is not also read as a value.
+    let mut read_callees = HashSet::<oxc_span::Span>::new();
+    for node in nodes.iter() {
+        let AstKind::CallExpression(call) = node.kind() else {
+            continue;
+        };
+        let Expression::StaticMemberExpression(callee) = call.callee.get_inner_expression() else {
+            continue;
+        };
+        let method = callee.property.name.as_str();
+        let argument = |index: usize| call.arguments.get(index).and_then(Argument::as_expression);
+        match method {
+            "defineProperty" => {
+                read_callees.insert(callee.span);
+                match (argument(1), argument(2)) {
+                    (Some(key), Some(descriptor)) => {
+                        // A name this call defines only when its descriptor may be an accessor; a data descriptor defines none.
+                        if descriptor_defines_accessor(descriptor) != Some(false) {
+                            sink.define(literal_specifier(key).map(Some));
+                        }
+                    }
+                    _ => sink.define(None),
+                }
+            }
+            "defineProperties" | "create" => {
+                // `Object.create(proto)` defines nothing; a second argument is the descriptors, as `defineProperties`' is.
+                let is_create = method == "create";
+                if is_create
+                    && !matches!(callee.object.get_inner_expression(), Expression::Identifier(object) if object.name == "Object")
+                {
+                    continue;
+                }
+                if is_create && call.arguments.len() < 2 {
+                    read_callees.insert(callee.span);
+                    continue;
+                }
+                read_callees.insert(callee.span);
+                match argument(1).map(Expression::get_inner_expression) {
+                    Some(Expression::ObjectExpression(map)) => {
+                        for property in &map.properties {
+                            match property {
+                                ObjectPropertyKind::ObjectProperty(property) => {
+                                    if descriptor_defines_accessor(&property.value) != Some(false) {
+                                        sink.define(key_name(&property.key));
+                                    }
+                                }
+                                ObjectPropertyKind::SpreadProperty(_) => sink.any_name = true,
+                            }
+                        }
+                    }
+                    _ => sink.define(None),
+                }
+            }
+            "__defineGetter__" | "__defineSetter__" => {
+                read_callees.insert(callee.span);
+                sink.define(argument(0).and_then(literal_specifier).map(Some));
+            }
+            _ => {}
+        }
+    }
+    for node in nodes.iter() {
+        match node.kind() {
+            AstKind::ObjectProperty(property)
+                if matches!(property.kind, PropertyKind::Get | PropertyKind::Set) =>
+            {
+                sink.define(key_name(&property.key));
+            }
+            AstKind::MethodDefinition(method)
+                if matches!(
+                    method.kind,
+                    MethodDefinitionKind::Get | MethodDefinitionKind::Set
+                ) =>
+            {
+                sink.define(key_name(&method.key));
+            }
+            AstKind::AccessorProperty(accessor) => sink.define(key_name(&accessor.key)),
+            // The accessor-defining members read as a value (`const def = Object.defineProperty`, `const { defineProperty } = Object`) or by a computed
+            // key: where they are called from is not followed.
+            AstKind::StaticMemberExpression(member)
+                if matches!(
+                    member.property.name.as_str(),
+                    "defineProperty" | "defineProperties" | "__defineGetter__" | "__defineSetter__"
+                ) && !read_callees.contains(&member.span) =>
+            {
+                sink.any_name = true;
+            }
+            AstKind::ComputedMemberExpression(member)
+                if literal_specifier(&member.expression).is_some_and(|key| {
+                    matches!(
+                        key.as_str(),
+                        "defineProperty"
+                            | "defineProperties"
+                            | "__defineGetter__"
+                            | "__defineSetter__"
+                    )
+                }) =>
+            {
+                sink.any_name = true;
+            }
+            AstKind::BindingProperty(property)
+                if key_name(&property.key).is_some_and(|key| {
+                    matches!(
+                        key.as_deref(),
+                        Some(
+                            "defineProperty"
+                                | "defineProperties"
+                                | "__defineGetter__"
+                                | "__defineSetter__"
+                        )
+                    )
+                }) =>
+            {
+                sink.any_name = true;
+            }
+            AstKind::IdentifierReference(reference) if reference.name == "Proxy" => {
+                sink.any_name = true;
+            }
+            _ => {}
+        }
+    }
+    AccessorScan {
+        names: sink.names.into_iter().collect(),
+        any_name: sink.any_name,
+    }
+}
+
+#[derive(Default)]
+struct AccessorSink {
+    names: std::collections::BTreeSet<String>,
+    any_name: bool,
+}
+
+impl AccessorSink {
+    /// A key defines an accessor under its name; one the syntax does not fix defines under every name.
+    fn define(&mut self, key: Option<Option<String>>) {
+        match key {
+            Some(Some(name)) => {
+                self.names.insert(name);
+            }
+            Some(None) => {}
+            None => self.any_name = true,
+        }
+    }
 }
 
 /// Whether the reference at `id` is the callee of a call whose first argument is a string literal or a template: the timer evaluates it.
@@ -362,19 +593,30 @@ fn static_member_name<'a>(nodes: &'a AstNodes<'_>, id: NodeId) -> Option<&'a str
     }
 }
 
-enum GlobalUse {
-    /// A member read by a static name or a string literal key.
-    Member(String),
-    /// The name itself assigned (`window = …`, sloppy code): nothing is read.
-    Written,
-    /// Anything else: a computed key, an alias, an argument.
-    Other,
+/// What a value is that a chain of members started from a global-object name (or from `document`) holds.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Holder {
+    /// The global object: `window`, and the members that give it back (`window.self`, `globalThis.globalThis`, `document.defaultView`).
+    Global,
+    /// The `document` object: only its `defaultView` is the global object, whatever else it holds is no global.
+    Document,
 }
 
-/// How the global-object name at `id` is used.
-fn global_member(nodes: &AstNodes<'_>, id: NodeId) -> GlobalUse {
-    let (child, parent) = parent_past_wrappers(nodes, id);
-    let child_span = nodes.get_node(child).kind().span();
+enum GlobalUse {
+    /// A member of the global object read by a static name or a string literal key: its name, and the chain as it was spelled (`window.self.solid`).
+    Member { name: String, path: String },
+    /// A member (or the name itself, sloppy code) assigned: nothing is read.
+    Written,
+    /// Anything else done with the global object: a computed key, an alias, an argument. The chain as it was spelled.
+    Escape { path: String },
+    /// `document` used for anything but `document.defaultView`.
+    Inert,
+}
+
+/// How the global-object name (or `document`) at `id` is used, following the global object through every member that returns it: the names it goes by
+/// ([`GLOBAL_OBJECTS`], so `window.self.x` and `window.window.x` are `window.x`) and `document.defaultView`. A member read off the chain's end that no
+/// library declares is a lookup of a global however many members led to it.
+fn global_use(nodes: &AstNodes<'_>, id: NodeId, root: &str, start: Holder) -> GlobalUse {
     // `window.x = …` writes the member and reads nothing of it.
     let assigned = |member: NodeId| {
         let (member_child, member_parent) = parent_past_wrappers(nodes, member);
@@ -382,23 +624,46 @@ fn global_member(nodes: &AstNodes<'_>, id: NodeId) -> GlobalUse {
             if assignment.operator == oxc_syntax::operator::AssignmentOperator::Assign
                 && assignment.left.span() == nodes.get_node(member_child).kind().span())
     };
-    match nodes.get_node(parent).kind() {
-        AstKind::StaticMemberExpression(member) if member.object.span() == child_span => {
-            if assigned(parent) {
+    let mut at = id;
+    let mut holder = start;
+    let mut path = root.to_owned();
+    loop {
+        let (child, parent) = parent_past_wrappers(nodes, at);
+        let child_span = nodes.get_node(child).kind().span();
+        // `Some(key)` for a member read off the chain (`key` is `None` for a computed key the syntax does not fix), `None` when the value itself is used.
+        let mut computed = false;
+        let member = match nodes.get_node(parent).kind() {
+            AstKind::StaticMemberExpression(member) if member.object.span() == child_span => {
+                Some(Some(member.property.name.to_string()))
+            }
+            AstKind::ComputedMemberExpression(member) if member.object.span() == child_span => {
+                computed = true;
+                Some(literal_specifier(&member.expression))
+            }
+            AstKind::AssignmentExpression(assignment) if assignment.left.span() == child_span => {
                 return GlobalUse::Written;
             }
-            GlobalUse::Member(member.property.name.to_string())
+            _ => None,
+        };
+        // The value itself is used, or read by a key the syntax does not fix: the global object escapes, `document` holds no global object.
+        let Some(Some(name)) = member else {
+            return match holder {
+                Holder::Global => GlobalUse::Escape { path },
+                Holder::Document => GlobalUse::Inert,
+            };
+        };
+        if !computed && assigned(parent) {
+            return GlobalUse::Written;
         }
-        AstKind::ComputedMemberExpression(member) if member.object.span() == child_span => {
-            match literal_specifier(&member.expression) {
-                Some(key) => GlobalUse::Member(key),
-                None => GlobalUse::Other,
-            }
+        path = format!("{path}.{name}");
+        match holder {
+            Holder::Document if name == "defaultView" => holder = Holder::Global,
+            Holder::Document => return GlobalUse::Inert,
+            Holder::Global if GLOBAL_OBJECTS.contains(&name.as_str()) => {}
+            Holder::Global if name == "document" => holder = Holder::Document,
+            Holder::Global => return GlobalUse::Member { name, path },
         }
-        AstKind::AssignmentExpression(assignment) if assignment.left.span() == child_span => {
-            GlobalUse::Written
-        }
-        _ => GlobalUse::Other,
+        at = parent;
     }
 }
 
@@ -639,6 +904,166 @@ mod tests {
                 .hazards
                 .is_empty()
         );
+    }
+
+    /// ADR 0973: the global object goes by more than one name, and a member read off any of them is a lookup of a global (the review of #231: `window.self.x` was
+    /// judged clear where `window.x` was an unknown global).
+    #[test]
+    fn the_global_object_is_followed_through_the_members_that_return_it() {
+        for (source, detail) in [
+            (
+                "export const f = (cb) => window.self.__act(cb);",
+                "window.self.__act",
+            ),
+            (
+                "globalThis.globalThis.__act();",
+                "globalThis.globalThis.__act",
+            ),
+            (
+                "window.window.window.__act();",
+                "window.window.window.__act",
+            ),
+            ("self.self.__act();", "self.self.__act"),
+            ("window.top.parent.__act();", "window.top.parent.__act"),
+            ("window.frames.__act();", "window.frames.__act"),
+            ("window['self'].__act();", "window.self.__act"),
+            ("window.self['__act']();", "window.self.__act"),
+            ("(window as any).self.__act();", "window.self.__act"),
+            (
+                "document.defaultView.__act();",
+                "document.defaultView.__act",
+            ),
+            (
+                "window.document.defaultView.__act();",
+                "window.document.defaultView.__act",
+            ),
+            (
+                "document.defaultView.self.__act();",
+                "document.defaultView.self.__act",
+            ),
+        ] {
+            let scan = scan_module(Path::new("/p/node_modules/x/index.ts"), source);
+            assert_eq!(
+                kinds(&scan),
+                [(ModuleHazardKind::UnknownGlobal, detail)],
+                "{source}"
+            );
+        }
+        // What the libraries declare is no lookup of an unknown global, however the global object was reached; the rest of `document` holds no global object.
+        for source in [
+            "window.self.setTimeout(() => {});",
+            "window.self.window.document.body;",
+            "document.defaultView.addEventListener('x', () => {});",
+            "document.defaultView.document.title;",
+            "export const t = document.title; document.body.__x; document.__x;",
+            "const d = document; d.createElement('div');",
+            "const run = (x) => x; run(document);",
+            // A write reads nothing, however the global object was reached.
+            "window.self.__x = 1; document.defaultView.__y = 2; globalThis.globalThis.__z = 3;",
+        ] {
+            let scan = scan_module(Path::new("/p/node_modules/x/index.ts"), source);
+            assert!(scan.hazards.is_empty(), "{source}: {:?}", scan.hazards);
+        }
+        // The global object itself handed on, or read by a computed key, at any step of the chain.
+        for (source, detail) in [
+            ("const w = window.self;", "window.self"),
+            ("const run = (x) => x; run(window.top);", "window.top"),
+            ("export const f = (k) => window.self[k];", "window.self"),
+            (
+                "export const g = (k) => document.defaultView[k]();",
+                "document.defaultView",
+            ),
+            (
+                "export const w = document.defaultView;",
+                "document.defaultView",
+            ),
+            (
+                "export const h = (k) => window.document.defaultView.self[k];",
+                "window.document.defaultView.self",
+            ),
+        ] {
+            assert_eq!(
+                kinds(&scan(source)),
+                [(ModuleHazardKind::GlobalObjectEscape, detail)],
+                "{source}"
+            );
+        }
+    }
+
+    /// ADR 0973: every way a file defines an accessor, under the name it defines it under (a getter a package declares runs its code where the project reads a
+    /// member: `void clock.now`).
+    #[test]
+    fn accessors_are_found_by_every_way_to_define_one() {
+        let accessors = |source: &str| scan(source).accessors;
+        // Class and object literal accessors, instance, static and string-keyed.
+        assert_eq!(
+            accessors(
+                "export class C { get a() { return 1; } set b(v) {} static get c() { return 1; } }"
+            )
+            .names,
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            accessors("export const o = { get now() { return 1; }, set 'lit'(v) {}, get 7() { return 1; } };")
+                .names,
+            ["7", "lit", "now"]
+        );
+        // The defineProperty family, with a literal name and a descriptor that names a get or a set.
+        assert_eq!(
+            accessors("Object.defineProperty(o, 'x', { get() { return 1; } });").names,
+            ["x"]
+        );
+        assert_eq!(
+            accessors("Reflect.defineProperty(o, 'y', { enumerable: true, set: (v) => {} });")
+                .names,
+            ["y"]
+        );
+        assert_eq!(
+            accessors("Object.defineProperties(o, { a: { get() {} }, b: { value: 1 } });").names,
+            ["a"]
+        );
+        assert_eq!(
+            accessors("export const o = Object.create(p, { z: { get() {} } });").names,
+            ["z"]
+        );
+        assert_eq!(
+            accessors("o.__defineGetter__('g', f); o.__defineSetter__('s', f);").names,
+            ["g", "s"]
+        );
+        // A descriptor the syntax does not read may be an accessor under the literal name.
+        let unread = accessors("Object.defineProperty(o, 'x', descriptor);");
+        assert_eq!(unread.names, ["x"]);
+        assert!(!unread.any_name);
+        // Under a name the syntax does not fix, or by a construct read as a value: every name.
+        for source in [
+            "Object.defineProperty(o, k, { get() {} });",
+            "Object.defineProperty(o, k, descriptor);",
+            "const o = { get [k]() { return 1; } };",
+            "class C { static get [k]() { return 1; } }",
+            "const view = new Proxy(target, handler);",
+            "const def = Object.defineProperty;",
+            "const { defineProperty } = Object;",
+            "Object['defineProperties'](o, props);",
+            "Object.defineProperties(o, { ...more });",
+            "Object.defineProperties(o, props);",
+            "Object.create(p, descriptors);",
+        ] {
+            assert!(accessors(source).any_name, "{source}");
+        }
+        // None: a data descriptor, an object with no descriptors, a private accessor no code outside the class reads, a plain file.
+        for source in [
+            "Object.defineProperty(exports, '__esModule', { value: true });",
+            "Object.defineProperty(o, 'x', { value: 1, enumerable: false });",
+            "export const o = Object.create(proto);",
+            "class C { get #p() { return 1; } static m() {} }",
+            "export const f = (x) => x.get(1) + x.set(2); export const o = { get: 1, set: 2 };",
+        ] {
+            assert!(
+                accessors(source).is_empty(),
+                "{source}: {:?}",
+                accessors(source)
+            );
+        }
     }
 
     #[test]

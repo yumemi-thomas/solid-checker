@@ -332,6 +332,7 @@ impl PackageBoundary {
             folded.names.extend(index.names);
             folded.linked.extend(index.linked);
             folded.project_js.extend(index.project_js);
+            folded.accessors.extend(index.accessors);
         }
     }
 
@@ -386,7 +387,7 @@ impl PackageBoundary {
         }
         // ADR 0972: an absent index adds nothing, so the digest of a boundary without one is unchanged.
         if let Some(index) = &self.package_reach {
-            hash.update(b"package-reach-v1");
+            hash.update(b"package-reach-v2");
             hash.update((index.by_root.len() as u64).to_be_bytes());
             for (root, reach) in &index.by_root {
                 text(hash, root);
@@ -402,6 +403,16 @@ impl PackageBoundary {
             hash.update((index.project_js.len() as u64).to_be_bytes());
             for path in &index.project_js {
                 text(hash, path);
+            }
+            // ADR 0973: where each closure may define an accessor.
+            hash.update((index.accessors.len() as u64).to_be_bytes());
+            for (root, facts) in &index.accessors {
+                text(hash, root);
+                hash.update([u8::from(facts.closed), u8::from(facts.any_name)]);
+                hash.update((facts.names.len() as u64).to_be_bytes());
+                for name in &facts.names {
+                    text(hash, name);
+                }
             }
         }
     }
