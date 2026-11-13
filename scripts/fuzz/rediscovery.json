@@ -20072,6 +20072,86 @@
    "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs`): a function exported from an open program (or a binding it exports) gets no program-wide census reason, so it keeps its uncertifiable row of each code; a closed program (the owner's declared boundary, ADR 0193) keeps the reason, an export nothing in it enters never runs",
    "outside": "an export's caller lies outside the program, and the oracle's page renders the program itself (its entry is the page's own main), so Chrome cannot enter an export from outside; fixture flush-universe-package-hand-off-flip/variants/open holds it (three rows) with the closed parent's `Unreferenced` silent"
   },
+  {
+    "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation (`createMemo`) written directly in a `createEffect` apply, was certified with no row where the callee's declarations sit under no installed package directory (a project's own ambient `declare module \"solid-js\"`, or declarations that disagree on the package): the effect-phase walk asks the package the callee is declared in (`callee_package_root`) and files nothing without one, and nothing else accounted for the creation. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation",
+    "found": "batch 11 (mac-b10-4, 2026-11-12): slice 6 (the owner-call universe), the first fixtures' ambient stubs; the coordinator asked for the confirmation and a fixture",
+    "fixed": "ADR 0969 (slice 6): the creation is a site of the owner-call universe, and no silence names a fact the throw needs and the code lacks, so it gets `effect-creation-unaccounted` (SC6002, uncertifiable). Fixture owner-call-effect-creation-unresolved-package",
+    "outside": "the generator writes every program against the pinned real install, where the callee's declarations are under `@solidjs/signals` (a package root); a program whose declarations are the project's own ambient module needs a declaration file the grids do not write. The build before the universe certifies the fixture and the new one files the row (fixture snapshot)"
+  },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation in a function that returns JSX and that no tag renders (`const pk = h`, called by an effect's apply as `pk!()`), was certified with no row: the owner graph gave the function an owned context, and the emission's test of what enters it stopped at a function the census proves a component before it looked at its references (the component-render premise the ruling excludes), so `OwnerCurrent` (and `LeafOwnerAbsent` for the leaf codes) ended the site. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation (and the leaf codes at a creation and an `onCleanup` a leaf owner's callback reaches the same way)",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #220 (slice 6, ADR 0969), BLOCKED: finding F1, Chrome-confirmed (oracle case owner-call-component-by-reference); the programs certify on main too",
+  "fixed": "ADR 0969, the review fixes of #220 (F1): the owner-call universe's silences ask the layer-entry test without the component-render premise (`layer_entry_open_by_reference`): a function that returns JSX is entered by renders alone only where every reference of its binding is a JSX tag. Fixtures owner-call-component-by-reference; the cells er-view-*",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-view-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-view-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-view-apply-effect-direct-none"
+  ],
+  "rediscovered": "the head of #220 (280f766c1, release build): 3 false-clean programs; the fix: none (3 recall-gap programs, an uncertifiable row stands). The leaf codes' er-view-tracked and er-view-settled cells are covered on both builds by the SC9012 at the call that reaches the function (an application frame), so they are cells, not ids"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation in a handler or a timer callback that is also saved to a variable (`saved = h`) and called from an effect's apply, was certified with no row: `EffectCreationRunsOffApply` asked only the lexical role, which places a handler or a timer callback off every apply from where the function is registered and follows no other reference, and it carried none of the conditions the owner graph's silences have (a plain site, no layer entered by a reference, no package the build does not read that may run the function). Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation (a generator body `untrack` hands back and an apply steps is the same hole: a generator's body is no plain site)",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #220 (slice 6, ADR 0969), BLOCKED: finding F2, Chrome-confirmed (oracle case owner-call-saved-callback); the programs certify on main too",
+  "fixed": "ADR 0969, the review fixes of #220 (F2): the silence moved to the owner stage (`owners/leaf_universe.rs`) and rests on the role AND on the same three facts every silence of the universe asks (a plain site, `layer_entry_open_by_reference`, B3). Fixtures owner-call-saved-callback; the cells er-saved-*, er-timer-*",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-saved-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-saved-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-saved-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-er-timer-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-timer-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-timer-apply-effect-direct-none"
+  ],
+  "rediscovered": "the head of #220 (280f766c1, release build): 6 false-clean programs; the fix: none (6 recall-gap programs). The array form (er-array-apply: the SC9012 at `all[0]!()` covers it) and the generator form (er-generator-apply: the SC9012 at `it.next` covers it) are covered on both builds, so they are cells, not ids"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation in the callback of `createRoot` that is a GENERATOR an effect's apply steps (`createMemo(() => createRoot(function* () { createMemo(...); yield 1; }))`, `createEffect(() => m(), (it) => { it.next(); })`), was certified with no row: `EffectCreationOwnerSetAround` ended a creation written in the callback of an exact primitive that creates an owner without asking whether the callback runs in the primitive's synchronous run, and a generator's body runs where the iterator is stepped, after the root's owner is gone. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #220 (slice 6, ADR 0969), BLOCKED: finding F3, Chrome-confirmed (oracle case owner-call-root-generator); the program certifies on main too",
+  "fixed": "ADR 0969, the review fixes of #220 (F3): `owner_created_around_call` refuses a layer that is a generator, a parameter list or after a suspension of an async function (every layer the climb crosses must run in the primitive's synchronous run). Fixture owner-call-root-generator; the cells er-root-*",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-root-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-root-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-root-apply-effect-direct-none"
+  ],
+  "rediscovered": "the head of #220 (280f766c1, release build): 3 false-clean programs; the fix: none (3 recall-gap programs, an uncertifiable row stands)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation written in a layer INSIDE a generator (an arrow the generator's body calls, an IIFE, or an `untrack` callback it runs in place) that an effect's apply steps with a `for...of` or a spread, was certified with no row: the role silence and the graph's two asked whether the INNERMOST function is a generator, so a plain arrow inside one was a plain site, and the role engine, which places a generator's body by the call that makes the iterator, put the site where the iterator is made (module scope, or rendering). Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation",
+  "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable re-review of #220 (slice 6, ADR 0969), item B1 (probes2/r6q-forof-certified, r6r-spread-untrack-certified); the programs certify on the head of #220 and on main",
+  "fixed": "ADR 0969, B1: the plain test of the owner-call universe asks every function layer around the site, up to the layer whose callback runs under an owner its primitive creates (`generator_layer_around`, `owners/leaf_universe.rs`). Fixture owner-call-generator-layer; the cells er-genlayer-apply and er-genuntrack-apply (generator and iterator at module scope: the harness's entry hands every export to `render`, a hand-off B3 answers with a row for everything inside an exported component on every build)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-genuntrack-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-genuntrack-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-genuntrack-apply-effect-direct-none"
+  ],
+  "rediscovered": "the head of #220 (36bc78c73-equivalent release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable row stands; the legal twins of the cell become uncertifiable, the named cost). The `genlayer` route is covered on both builds by the ADR 0710 row at the creation, so it is a cell, not an id. WHY THE GRID CANNOT WRITE THE REVIEW'S SHAPE: the probes r6q and r6r write the generator INSIDE the component (`function* gen()` and `const it = gen()` in its body) of a closed program; every grid program is checked beside the harness's own entry (`main.tsx`, scripts/fuzz/checker.mjs), which routes every export of App.tsx through `render` of the real `@solidjs/web` (`Object.entries(mod)`: an export handed to a package nothing here reads), so B3 (ADR 0967) keeps an uncertifiable row at every site written inside an exported component, on every build, and an in-component generator cell is recall-gap on the head and on the fix alike (checked: the same program certifies under `--program-boundary closed` without `main.tsx`). The cells therefore put the generator and its iterator at module scope, where no function surrounds the call that makes the iterator and B3 asks nothing; the in-component shape's evidence is the fixture's closed run (fixtures/reactive-ir/owner-call-generator-layer: the head certifies three creations, the fix files a row at each) and the probes r6q and r6r"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation in the callback of `createRoot` that is a NAMED function expression handing itself on (`createRoot(function f() { if (!saved) { saved = f; return; } createMemo(...) })`, then `saved()` from an effect's apply), was certified with no row: the entry walk stopped at an owner-creating layer before it read the function's references (and `owner_created_around_call` and `generator_layer_around` had the same stop), so the layer was taken for entered by the root alone, though the apply runs the saved function on its own stack with no owner. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable check of B1 on #220 (slice 6, ADR 0969), item N2 (probes3/b5-root-named-fnexpr-selfref); the program certifies on the head of #220 and on main",
+  "fixed": "ADR 0969, N2: the stop at an owner-creating layer (and at a control-flow child) holds only where nothing references the function (`referenced_only_by_entry`, `owners/owner_emission.rs`: a callback with no binding cannot be referenced, a named function expression is asked for the references of its own name), in the entry walk of the universe (`Premises::Universe`), in `generator_layer_around` and in `owner_created_around_call`. Fixture owner-call-layer-stops; the oracle case of the same name; the cells er-rootself-apply (the root at module scope, the harness's entry cannot reach it: B3 asks nothing of a function no exported function surrounds)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-rootself-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-rootself-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-rootself-apply-effect-direct-none"
+  ],
+  "rediscovered": "the head of #220 (fcc77ad01-equivalent release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable row stands; the legal twins become uncertifiable, the named cost). The Chrome oracle case owner-call-layer-stops is `unproven-clean` at the self-saving root on the head and covered on the fix"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation in a function written OUTSIDE a generator and called from its body (a helper, an arrow beside it, a plain function `yield*` delegates to) that an effect's apply steps with a `for...of` or a spread, was certified with no row: B1's test asked the functions written around the site, and the caller walk of the entry test followed the call out of the helper to the generator and took its body for a placed run (a generator's body runs where an iterator is stepped). Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable check of B1 on #220 (slice 6, ADR 0969), item N1 (probes3/a4b-helper-called-from-gen, a4c-outer-arrow-called-from-gen, a4e-helper-via-yieldstar-nongen); the programs certify on the head of #220 and on main",
+  "fixed": "ADR 0969, N1: a layer that is a generator is an open entry of the universe's walk (`Premises::Universe`, `owners/owner_emission.rs`), whether it is written around the site or is the caller at the end of a call. Fixture owner-call-layer-stops (the head certifies the three components, the fix files a row at each); the cell er-genhelper-apply, which is a recall-gap program on both builds",
+  "outside": "the shape needs a helper that a RENDERING role and an owned context place, inside a component: below an exported component the harness's entry (`main.tsx`, scripts/fuzz/checker.mjs) hands every export to `render` of the real `@solidjs/web`, so B3 (ADR 0967) keeps an uncertifiable row at every site on every build; written at module scope (the helper and the generator beside a module-level `createRoot` that makes the iterator, or the generator at module scope) the helper has no rendering role, the graph gives it `unowned-entry` and the ADR 0710 row `function-run-unplaced` stands, again on every build. Checked: the same programs certify in a closed program whose components are rendered by tags (probes3/a4b, a4c, a4e and the fixture's closed run). The Chrome oracle case owner-call-layer-stops records the throw at the three module-scope forms, covered on both builds"
+ },
  {
   "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as an action's step), was certified with no row by routes the flip (ADR 0967) still answered \"not handed\": a context that only CONTAINED the function, not carried it (`[cb].map(…)` as a binding's initializer, an assignment's value, a call's argument or a tagged template's substitution, an array literal read through a destructuring, a parameter, `.flat()` or a logical `&&`, `[cb].map(…)` under `yield`, `for…of` or `await`, and the step calling `[cb].map((f) => f())` or `{ run: cb }.run()`); a project function that names `arguments` (`runStep(arguments[0])`, `takesRest.apply(null, arguments)`); a callback that returns the function to the call it is an argument of (`Promise.resolve().then(() => cb).then((f) => runStep(f))`); and an intrinsic element's `ref={cb}` (or `<Dynamic component=\"div\" ref={cb} />`), which the element's creation applies on the stack of the step. Chrome reports FLUSH_IN_ACTION at the flush",
   "found": "batch 11 (w-b10-3, 2026-11-12): the Fable review of #217 (the flip, ADR 0967), causes A to D (A fourteen programs, B two, C one; D the intrinsic `ref`, confirmed against rc.21's `@solidjs/web`): all certified clean on main 1d0c25ec2; confirmed in Chrome with the real oracle on main's release build (`rel-b3o`: the seventeen new `ph-*` routes) and in the pattern lane (`pkghand`, eighteen programs)",

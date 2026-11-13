@@ -1,6 +1,7 @@
 // Clean. Mirrors skyjtx-website apps/skyjt-website/src/components/Card/Card.tsx:18-24 (and spookysoftware-www
 // root.tsx:15): children() resolves slot props once; the resolved accessor is read in Show conditions.
 import { children, Show } from "solid-js";
+import { render } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 
 function Card(props: { media?: JSX.Element; actions?: JSX.Element; children?: JSX.Element }) {
@@ -19,6 +20,9 @@ function Card(props: { media?: JSX.Element; actions?: JSX.Element; children?: JS
   );
 }
 
-export function App() {
+function App() {
   return <Card media={<img alt="m" />} actions={<button type="button">go</button>}>body</Card>;
 }
+
+// The mounted root, as in the apps this mirrors: every component is rendered from it, so none runs under a leaf owner (ADR 0969).
+render(() => <App />, document.body);

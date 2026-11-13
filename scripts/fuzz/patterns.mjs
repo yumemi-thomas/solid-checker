@@ -11,11 +11,12 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { AssumedReportError, refuseAssumed } from "../lib/assumed.mjs";
 import { NO_RUNTIME_WARNING } from "./checker.mjs";
-import { besideCode, codeOfLogged, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack } from "./codes.mjs";
+import { besideCode, codeOfLogged, codeRules, codesForRule, coversCodeAt, ignoredRules, isPlacelessCode, ruleHasRuntimeCounterpart, withheldAtStack, withStarts } from "./codes.mjs";
+import { mapPositions } from "./chrome-host.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
 import { patternClaim, stackedProblems } from "./stacked.mjs";
 import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
@@ -61,39 +62,44 @@ await new Promise((r) => setTimeout(r, 100));
 
 /**
  * The stacks of a record's diagnostics and thrown errors, per code: `{ CODE: [[{ file, line, column, mount? }], …] }`, each innermost first, in
- * source positions through the transform Vite served each case module with (chrome-host.mjs `mapPositions`, the oracle's lookup:
- * `originalPositionFor` at the frame's column). A frame with no original position, or one past the end of its source line, is
- * dropped, never passed through; `mount` marks a frame at a mount of the program or a component (call-starts.mjs).
+ * source positions through the transform Vite served each case module with. The positions are the grids' (chrome-host.mjs `mapPositions`, the
+ * oracle's lookup): a frame at a compiled `insert`/`effect`/`memo` call also records the source start of the expression it was handed, a frame
+ * at a compiled `spread` call (no mapping of its own) stands for the spread its `loc` names (ADRs 0921, 0930), an App.tsx frame with no
+ * original position is dropped, and another module's frame with none keeps its file and no position (it places nothing and still counts for
+ * depth, R20). `starts` are `codes.mjs withStarts`'s over call-starts.mjs `frameStarts`; `mount` marks a frame at a mount of the program or a
+ * component (call-starts.mjs). The lane used to drop every unmapped frame and record no compiled start, so a diagnostic Solid raised in a
+ * compiled `insert` or `spread` of an element placed nothing at it (the review of #222's NO_OWNER_EFFECT follow-up).
  */
-async function mapStacks(server, lookup, caseDir, rec) {
-  const maps = new Map();
-  const mapOf = async (url) => {
-    if (!maps.has(url)) {
-      const module = await server.moduleGraph.getModuleByUrl(url);
-      const raw = module?.transformResult?.map ?? (await server.transformRequest(url).catch(() => null))?.map;
-      const file = url.split("/").slice(3).join("/");
-      let source = null;
-      try { source = readFileSync(join(caseDir, file), "utf8").split("\n"); } catch {}
-      maps.set(url, raw?.mappings && source ? { map: new lookup.TraceMap(raw), file, source } : null);
-    }
-    return maps.get(url);
+export async function mapStacks(server, lookup, caseDir, rec) {
+  const id = basename(caseDir);
+  const texts = new Map();
+  const textOf = (file) => {
+    if (!texts.has(file)) { let text; try { text = readFileSync(join(caseDir, file), "utf8"); } catch {} texts.set(file, text); }
+    return texts.get(file);
+  };
+  const startsOf = (frame, depth) => {
+    const text = textOf(frame.file);
+    if (text === undefined) return null;
+    const starts = frameStarts(text, frame.file)(frame, depth);
+    return starts.length > 1 ? starts : null;
   };
   const stacks = {};
   for (const row of rec.sites ?? []) {
     const code = row.code ?? codeOfLogged(row.message) ?? /^\[([A-Z][A-Z_]+)\]/.exec(String(row.message))?.[1];
     if (!code) continue;
-    const stack = [];
-    for (const frame of row.frames ?? []) {
-      const mapped = await mapOf(frame.url);
-      if (!mapped) continue;
-      const at = lookup.originalPositionFor(mapped.map, { line: frame.line, column: Math.max(0, frame.column - 1) });
-      if (!at.line || at.line > mapped.source.length || at.column >= mapped.source[at.line - 1].length) continue;
-      // `starts` (call-starts.mjs): a frame in a call's callee also stands for the call's start and its callee object's (review 4c).
-      const text = mapped.source.join("\n");
-      const place = { line: at.line, column: at.column + 1 };
-      const starts = frameStarts(text, mapped.file)(place, stack.length);
-      stack.push({ file: mapped.file, ...place, ...(starts.length > 1 ? { starts } : {}), ...(callStarts(text, mapped.file).mount(place.line, place.column) ? { mount: true } : {}) });
-    }
+    // The served positions as the host records them: an App.tsx frame carries no file, another module's its own.
+    const positions = (row.frames ?? []).map((frame) => {
+      const file = frame.url.split("/").slice(3).join("/");
+      return file === "App.tsx" ? { line: frame.line, column: frame.column } : { file, line: frame.line, column: frame.column };
+    });
+    const record = { diagnostics: [{ positions }] };
+    const mapped = await mapPositions(server, lookup, id, record, textOf("App.tsx"), (position) => position, textOf);
+    // A served App.tsx with no map comes back as it went in: its served positions are no source positions, so the stack places nothing.
+    const frames = mapped === record ? [] : (mapped.diagnostics?.[0]?.positions ?? []).map((position) => ({ ...position, file: position.file ?? "App.tsx" }));
+    const stack = withStarts(frames, startsOf).map((frame) => {
+      const text = textOf(frame.file);
+      return Number.isInteger(frame.column) && text !== undefined && callStarts(text, frame.file).mount(frame.line, frame.column) ? { ...frame, mount: true } : frame;
+    });
     const key = JSON.stringify(stack);
     if (!(stacks[code] ??= []).some((known) => JSON.stringify(known) === key)) stacks[code].push(stack);
   }
@@ -116,7 +122,7 @@ import("/cases/" + id + "/entry.tsx").catch((e) => { window.__rec = { errors: ["
   const req = createRequire(join(INSTALL, "package.json"));
   const vite = await import(pathToFileURL(req.resolve("vite")).href);
   const mapping = await import(pathToFileURL(req.resolve("@jridgewell/trace-mapping")).href);
-  const lookup = { TraceMap: mapping.TraceMap ?? mapping.default?.TraceMap, originalPositionFor: mapping.originalPositionFor ?? mapping.default?.originalPositionFor };
+  const lookup = { TraceMap: mapping.TraceMap ?? mapping.default?.TraceMap, originalPositionFor: mapping.originalPositionFor ?? mapping.default?.originalPositionFor, traceSegment: mapping.traceSegment ?? mapping.default?.traceSegment };
   const pluginModule = await import(pathToFileURL(req.resolve("@solidjs/vite-plugin")).href);
   const solid = pluginModule.default?.default ?? pluginModule.default ?? pluginModule.solid;
   const server = await vite.createServer({ root: realpathSync(root), configFile: false, logLevel: "error", server: { port: 0, strictPort: false, host: "127.0.0.1", fs: { strict: false } }, resolve: { preserveSymlinks: false }, optimizeDeps: { noDiscovery: true }, plugins: [solid({ hot: false, performanceTracks: false, diagnostics: false })] });
@@ -201,7 +207,9 @@ const inFile = (path, file) => file === undefined || path === file || path.endsW
  */
 export const atRecordedSite = (finding, stacks = [], code = null) => {
   const place = { ...placeOf(finding), rule: finding.rule };
-  return stacks.some((stack) => withheldAtStack(place, stack.map((frame) => (inFile(place.path, frame.file) ? frame : { ...frame, line: -1 })), (frame) => frame.mount === true, code));
+  // A frame of another file is blanked as the grids' `appStack` does (codes.mjs): it keeps its depth and places nothing, its starts included
+  // (a compiled or call start in App.tsx at the same line and column is not this finding's place; the review of #224, N1).
+  return stacks.some((stack) => withheldAtStack(place, stack.map((frame) => (inFile(place.path, frame.file) ? frame : { file: frame.file, line: -1 })), (frame) => frame.mount === true, code));
 };
 
 /**

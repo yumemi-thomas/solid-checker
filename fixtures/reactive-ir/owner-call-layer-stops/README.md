@@ -1,0 +1,19 @@
+# owner-call-layer-stops
+
+**Claim (batch 11, slice 6; ADR 0969; the check of B1, N1 and N2).** The owner-call universe's silences (`EffectCreationRunsOffApply`, `OwnerCurrent`, `LeafOwnerAbsent`, `EffectCreationOwnerSetAround`) speak for a site only where every layer around it is entered the way its role or its owner context says. Two stops of the entry walk (`layer_entry_open`, `owners/owner_emission.rs`) let a layer through that something else enters:
+
+- **N1, the caller walk takes a generator's body for a placed run.** The walk follows a closed layer's calls out to their callers, and asks each caller's layers the same question. A generator's body runs where an iterator is stepped, which no edge shows, so a function written *outside* the generator and called from its body (a helper, an arrow beside it, a plain function `yield*` delegates to) is entered by a route the graph does not hold: with the apply stepping the iterator (`for...of`, a spread) it runs on the apply's stack with no owner (Chrome rc.21: PRIMITIVE_IN_EFFECT_CALLBACK). The walk now declares such a layer open for the universe (`Premises::Universe`): a layer that is a generator, whether it is written around the site or is the caller at the end of a call, is an open entry. B1's lexical test (`generator_layer_around`) was the first half.
+- **N2, the stop at an owner-creating layer returned before the function's references.** `createRoot(function f() { if (!saved) { saved = f; return; } createMemo(...) })`: the root runs the callback at once and it saves itself, a later `saved()` from an apply runs it on its own stack under no owner. A callback an owner-creating primitive runs (or a control-flow child) is now entered by that position alone only where nothing references it: a callback with no binding (an arrow, an anonymous function) cannot be referenced, a named function expression is asked for its references (`referenced_only_by_entry`). The same test guards the lexical climb (`generator_layer_around`) and the climb of `EffectCreationOwnerSetAround` (`owner_created_around_call`).
+
+The emission (SC4001) keeps the walk's premises as ADR 0868 gave them (`Premises::Emission`); a change to its proofs is a slice of its own with grid diffs.
+
+| site | outcome | why |
+|---|---|---|
+| `createMemo` in `StepHelper`'s `helper`, called from the generator `gen` the apply steps with `for...of` | SC6002 `effect-creation-unaccounted` | N1: the caller walk reaches a generator's body. **The false clean this fixes** |
+| `createMemo` in `StepOuterArrow`'s `run` (an arrow beside the generator) | the same | N1, spread-stepped |
+| `createMemo` in `StepYieldStar`'s `helper`, which `gen` delegates to with `yield*` | the same | N1 |
+| `createMemo` in `SelfSaving`'s root callback `f`, which saves itself | the same | N2: `saved()` in the apply runs it with no owner. **The false clean this fixes** |
+| `createMemo` in `NamedUnreferenced`'s root callback `f`, a name nothing references | silent | the stop holds: only the root enters it |
+| `createMemo` in `PlainCaller`'s `helper`, called from a plain function the body calls | silent | no generator and no reference but the call: rendering enters it |
+
+The Chrome oracle case (`fixtures/runtime-oracle/owner-call-layer-stops`) writes each shape at **module scope**: the oracle's entry hands every export to `render` of the real `@solidjs/web`, so B3 (ADR 0967) keeps a row at every site written inside an exported component on every build, and only a helper, a generator, an iterator or a root at module scope (no function around it) lets the walks above be the only answer: there Chrome throws at each creation and the head before the fix is `unproven-clean`, the fix `covered-uncertifiable`. The fuzz cells `er-genhelper-apply` and `er-rootself-apply` (`scripts/fuzz/er-shapes.mjs`) are the same two shapes at module scope with a twin that never steps or calls.

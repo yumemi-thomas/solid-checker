@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
+      "start": 183,
+      "end": 193,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -24,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
+      "start": 298,
+      "end": 308,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -43,6 +65,17 @@
       "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
       "start": 341,
       "end": 347,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-dynamic-mount/App.tsx",
+      "start": 434,
+      "end": 444,
       "fixes": 0
     },
     {

@@ -180,6 +180,16 @@
       "dialect": "v2",
       "expect": "removed-because-redundant",
       "checker": "silent",
+      "distinctFindings": [
+        {
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The leaf universe's uncertifiable row (ADR 0969) says the creation may run under a leaf owner, because an unread package may run the exported function (B3): a claim about which owner runs the call, not about the number of arguments TypeScript rejects."
+        },
+        {
+          "rule": "primitive-in-effect-callback",
+          "why": "The leaf universe's uncertifiable row (ADR 0969) says the creation may run on an effect's apply stack with no owner set, because an unread package may run the exported function (B3): a claim about where the call runs, not about the number of arguments TypeScript rejects."
+        }
+      ],
       "sourceExtension": "ts",
       "why": "The compiler proves this required-only tuple has exactly one element, so after expansion the Solid 2 apply slot is absent. On the audited rc.9 the call is TS2554 (\"Expected 2-3 arguments, but got 1.\"): @solidjs/signals removed the deprecated one-argument `createEffect(compute): never` overload in rc.6 (declared through rc.5, absent from rc.6-rc.9 `dist/types/signals.d.ts`), so the absent apply slot the finding asserted is TypeScript's, and SC7001 is silent on it because the call resolves to no published signature. Pinned so that a release which restores the overload -- making `tsc` silent again -- fails here and the arm's claim is reconsidered.",
       "code": "import { createEffect } from \"solid-js\";\nconst operands: [() => number] = [() => 1];\nexport function inOwner() {\n  createEffect(...operands);\n}\n",
@@ -486,8 +496,9 @@
       "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
-      "why": "`onCleanup` takes a `Disposable` and receives one; the claim is that a leaf owner has no scope to register disposal on, so the call throws.",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "`onCleanup` takes a `Disposable` and receives one; the claim is that a leaf owner has no scope to register disposal on, so the call throws. ADR 0969: the call sits in the callback of an `onSettled` written at module scope; the owner graph proves no leaf owner there but the universe credits no such proof (the leaf walk's own out-of-band answer ends nothing), so the `onCleanup` keeps the uncertifiable `leaf-operation-unaccounted` row: never a violation, never a silent clean.",
       "code": "import { onSettled, onCleanup } from \"solid-js\";\nonSettled(() => {\n  onCleanup(() => {});\n});\n"
     },
     {
@@ -502,8 +513,9 @@
       "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
-      "why": "Creating a memo is well typed anywhere; the claim is that a leaf owner cannot own the computation, so it leaks or throws.",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "Creating a memo is well typed anywhere; the claim is that a leaf owner cannot own the computation, so it leaks or throws. ADR 0969: the same call sits in the callback of an `onSettled` written at module scope; the universe credits no ending for it (the leaf walk's own out-of-band answer ends nothing), so the creation keeps the uncertifiable `leaf-operation-unaccounted` row: never a violation, never a silent clean.",
       "code": "import { onSettled, createMemo } from \"solid-js\";\nonSettled(() => {\n  createMemo(() => 1);\n});\n"
     },
     {
@@ -720,6 +732,16 @@
       "dialect": "v2",
       "expect": "removed-because-redundant",
       "checker": "silent",
+      "distinctFindings": [
+        {
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The leaf universe's uncertifiable row (ADR 0969) says the creation may run under a leaf owner, because an unread package may run the exported function (B3): a claim about which owner runs the call, not about the number of arguments TypeScript rejects."
+        },
+        {
+          "rule": "primitive-in-effect-callback",
+          "why": "The leaf universe's uncertifiable row (ADR 0969) says the creation may run on an effect's apply stack with no owner set, because an unread package may run the exported function (B3): a claim about where the call runs, not about the number of arguments TypeScript rejects."
+        }
+      ],
       "why": "A function-level use-server directive is only a framework convention, so through rc.5 the one-argument call was an uncertifiable SC7001 obligation (a client defect, inert on the server). On the audited rc.9 the call is TS2554 (\"Expected 2-3 arguments, but got 1.\"): @solidjs/signals removed the deprecated one-argument `createEffect(compute): never` overload in rc.6 (declared through rc.5, absent from rc.6-rc.9 `dist/types/signals.d.ts`), so the absent apply slot the finding asserted is TypeScript's, and SC7001 is silent on it because the call resolves to no published signature. Pinned so that a release which restores the overload -- making `tsc` silent again -- fails here and the arm's claim is reconsidered. The two-argument call beside it stays silent for SC7001; its missing-owner obligation is pinned by the sibling missing-owner case.",
       "code": "import { createEffect } from \"solid-js\";\nexport function serverOnly() {\n  \"use server\";\n  createEffect(() => 1);\n  createEffect(() => 1, () => {});\n}\n",
       "allow": [
@@ -1072,8 +1094,8 @@
       "expect": "silent",
       "checker": "reports",
       "sourceExtension": "ts",
-      "why": "`EffectFunction` is `(v, p?) => (() => void) | void` and `createMemo` takes any compute, so creating a memo in a createEffect apply type-checks; the claim is the runtime's: the apply runs with no owner, so rc.17's dev build throws PRIMITIVE_IN_EFFECT_CALLBACK (`assertNotInEffectCallback`), which no type expresses.",
-      "code": "import { createEffect, createMemo, createRoot, createSignal } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, (v) => {\n    createMemo(() => v * 2);\n  });\n  return dispose;\n});\n"
+      "why": "`EffectFunction` is `(v, p?) => (() => void) | void` and `createMemo` takes any compute, so creating a memo in a createEffect apply type-checks; the claim is the runtime's: the apply runs with no owner, so rc.17's dev build throws PRIMITIVE_IN_EFFECT_CALLBACK (`assertNotInEffectCallback`), which no type expresses. ADR 0969: the root is written without `export`: B3's census takes a function written inside an export statement for an exported one (`export const x = createRoot(() => \u2026)` hands the root's callback to a package the build does not read), so the `createEffect` creation inside it would keep an uncertifiable SC6002 row beside the violation this case isolates; the proof batch refines the census.",
+      "code": "import { createEffect, createMemo, createRoot, createSignal } from \"solid-js\";\nconst dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, (v) => {\n    createMemo(() => v * 2);\n  });\n  return dispose;\n});\n"
     },
     {
       "rule": "flush-in-effect-callback",
@@ -1303,7 +1325,7 @@
     {"rule": "caught-reactive-read", "dialect": "v2", "expect": "silent", "checker": "silent", "why": "The negative beside the keystone: the catch rethrows, so the suspension goes on and rc.21 reports nothing, with the same types.", "code": "import { createMemo } from \"solid-js\";\nexport const Case = () => {\n  const memo = createMemo(async () => 1);\n  const safe = createMemo(() => {\n    try {\n      return memo();\n    } catch (error) {\n      throw error;\n    }\n  });\n  return <div>{safe()}</div>;\n};\n"},
     {"rule": "no-store-mutation-outside-setter", "dialect": "v2", "sourceExtension": "ts", "expect": "silent", "checker": "reports", "checkerKind": "uncertifiable", "why": "Split from the `req.id` case above (ADR 0829). `nick`'s type includes `undefined`, so `delete store.user.nick` type-checks in both projects, but the property is not declared optional, so it is TS2790 under `exactOptionalPropertyTypes` and the Type Fact `writableOptionalProperty` does not mark it. The proxy drops the delete outside a setter (rc.17 `deleteProperty` trap), and nothing proves it optional or rejected, so the checker reports it uncertifiable, `delete-operand-unproven`, in both projects, never silent.", "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore({ user: { nick: undefined as string | undefined } });\nexport function Remove() {\n  delete store.user.nick;\n}\n"},
     {"rule": "missing-effect-function", "dialect": "v2", "sourceExtension": "ts", "expect": "silent", "checker": "reports", "why": "ADR 0830's keystone for a suppressed rejection. The one-argument call is TS2554 at the callee (case 9), but a `// @ts-ignore` on the line above silences it in both compilers, so nothing reports the call, and the rc.21 client runtime throws MISSING_EFFECT_FN there (probed). The rule's claim is then its own: a violation, because the directive is exact on the diagnostic's line.", "code": "import { createEffect } from \"solid-js\";\nexport function inOwner() {\n  // @ts-ignore\n  createEffect(() => 1);\n}\n"},
-    {"rule": "missing-effect-function", "dialect": "v2", "sourceExtension": "ts", "expect": "removed-because-redundant", "checker": "silent", "allow": [2554], "why": "ADR 0830's negative: the same call with the directive on another line. `// @ts-ignore` covers only the line below it (`const unused`), and a non-comment line ends the walk upwards, so TS2554 stands on the call and the claim is TypeScript's: silent, and no other finding shares its subject.", "code": "import { createEffect } from \"solid-js\";\nexport function inOwner() {\n  // @ts-ignore\n  const unused: number = \"a\";\n  createEffect(() => 1);\n}\n"},
+    {"rule": "missing-effect-function", "dialect": "v2", "sourceExtension": "ts", "expect": "removed-because-redundant", "checker": "silent", "distinctFindings": [{"rule": "leaf-owner-forbidden-call", "why": "The leaf universe's uncertifiable row (ADR 0969) says the creation may run under a leaf owner, because an unread package may run the exported function (B3): a claim about which owner runs the call, not about the number of arguments TypeScript rejects."}, {"rule": "primitive-in-effect-callback", "why": "The leaf universe's uncertifiable row (ADR 0969) says the creation may run on an effect's apply stack with no owner set, because an unread package may run the exported function (B3): a claim about where the call runs, not about the number of arguments TypeScript rejects."}], "allow": [2554], "why": "ADR 0830's negative: the same call with the directive on another line. `// @ts-ignore` covers only the line below it (`const unused`), and a non-comment line ends the walk upwards, so TS2554 stands on the call and the claim is TypeScript's: silent, and no other finding shares its subject.", "code": "import { createEffect } from \"solid-js\";\nexport function inOwner() {\n  // @ts-ignore\n  const unused: number = \"a\";\n  createEffect(() => 1);\n}\n"},
     {"rule": "no-store-mutation-outside-setter", "dialect": "v2", "sourceExtension": "ts", "expect": "silent", "checker": "reports", "why": "ADR 0830: `delete store.v!` is TS2703 at the operand (case 129), but a `// @ts-ignore` on the line above silences it in both compilers. The emitted delete is `delete store.v`, which reaches the proxy's `deleteProperty` trap outside a setter and warns STORE_WRITE_OUTSIDE_SETTER (probed): a violation, the operand judged as the optional member under the assertion.", "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  // @ts-ignore\n  delete store.v!;\n}\n"},
     {"rule": "no-store-mutation-outside-setter", "dialect": "v2", "sourceExtension": "ts", "expect": "removed-because-redundant", "checker": "silent", "allow": [2703], "why": "ADR 0830's negative beside it: the directive covers `const unused` only, so TS2703 stands on the asserted operand, the delete is TypeScript's, and the checker is silent.", "code": "import { createStore } from \"solid-js\";\nconst [store] = createStore<{ v?: number }>({ v: 0 });\nexport function Remove() {\n  // @ts-ignore\n  const unused: number = \"a\";\n  delete store.v!;\n}\n"}
   ]

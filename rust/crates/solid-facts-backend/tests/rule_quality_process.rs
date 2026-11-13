@@ -39,7 +39,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // ADR 0966 (batch 11, slice 5): two more, the uncertifiable
         // `leaf-operation-unaccounted` rows at the two `flush` calls in
         // `owned-scope-valid.tsx`'s memo body, pinned below. No violation moved.
-        ("leaf-owner-forbidden-call", 9),
+        // ADR 0969 (batch 11, slice 6): six more, the uncertifiable `leaf-operation-unaccounted` rows of the owner-call universe at a creation in an exported
+        // function of this open program (every export is handed: B3), in `after-await-valid.tsx`, `await-control-flow-valid.tsx`, `effect-apply-valid.tsx`,
+        // `effect-apply-invalid.tsx`, `effect-apply-extended-invalid.tsx` and `props-valid.tsx`, pinned below. No violation moved.
+        ("leaf-owner-forbidden-call", 15),
     ] {
         assert_rule_findings(&findings, rule, count);
     }
@@ -310,14 +313,26 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         }
     }
 
-    // ADR 0966: the leaf rows of the `-valid` file are the flush accounting's
-    // internal uncertifiables (`leaf-operation-unaccounted`), none a violation.
+    // ADR 0966, 0969: the leaf rows of these files are internal uncertifiables (`leaf-operation-unaccounted`: the flush accounting's, the owner-call
+    // universe's), none a violation; the violations are the two `leaf-invalid` and `owned-leaf-extended-invalid` files'.
     for finding in findings_for_rule(&findings, "leaf-owner-forbidden-call")
         .into_iter()
         .filter(|finding| {
             finding["primaryLocation"]["path"]
                 .as_str()
-                .is_some_and(|path| path.ends_with("owned-scope-valid.tsx"))
+                .is_some_and(|path| {
+                    [
+                        "owned-scope-valid.tsx",
+                        "after-await-valid.tsx",
+                        "await-control-flow-valid.tsx",
+                        "effect-apply-valid.tsx",
+                        "effect-apply-invalid.tsx",
+                        "effect-apply-extended-invalid.tsx",
+                        "props-valid.tsx",
+                    ]
+                    .iter()
+                    .any(|file| path.ends_with(file))
+                })
         })
     {
         assert_eq!(finding["kind"], "uncertifiable", "{finding:#?}");

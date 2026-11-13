@@ -2,10 +2,21 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "uncertifiable",
-      "blocker": "owner-nullable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-owner-binding/App.tsx",
+      "start": 311,
+      "end": 320,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/component-owner-binding/App.tsx",
       "start": 564,
@@ -19,8 +30,41 @@
       "blocker": "owner-nullable",
       "severity": "error",
       "path": "fixtures/reactive-ir/component-owner-binding/App.tsx",
+      "start": 564,
+      "end": 573,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-owner-binding/App.tsx",
       "start": 884,
       "end": 893,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-nullable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-owner-binding/App.tsx",
+      "start": 884,
+      "end": 893,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-owner-binding/App.tsx",
+      "start": 1253,
+      "end": 1262,
       "fixes": 0
     },
     {

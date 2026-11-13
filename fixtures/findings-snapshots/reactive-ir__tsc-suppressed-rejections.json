@@ -13,6 +13,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 224,
+      "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 224,
+      "end": 236,
+      "fixes": 0
+    },
+    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -20,6 +42,17 @@
       "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
       "start": 224,
       "end": 236,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 277,
+      "end": 289,
       "fixes": 0
     },
     {
@@ -34,9 +67,10 @@
       "fixes": 0
     },
     {
-      "rule": "missing-effect-function",
-      "code": "SC7001",
-      "kind": "violation",
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
       "start": 277,
@@ -49,8 +83,62 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 277,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
       "start": 328,
       "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 328,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 328,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 523,
+      "end": 535,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 523,
+      "end": 535,
       "fixes": 0
     },
     {
@@ -87,6 +175,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 859,
+      "end": 871,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -95,6 +194,39 @@
       "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
       "start": 859,
       "end": 871,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Exact.ts",
+      "start": 859,
+      "end": 871,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Nocheck.ts",
+      "start": 208,
+      "end": 220,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/tsc-suppressed-rejections/Nocheck.ts",
+      "start": 208,
+      "end": 220,
       "fixes": 0
     },
     {

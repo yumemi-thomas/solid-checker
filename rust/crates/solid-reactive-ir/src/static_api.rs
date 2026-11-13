@@ -123,14 +123,33 @@ impl LeafRowsAccount {
     }
 }
 
+/// No server build of the Solid packages is selected, or a client root is present (a fact of every file): the build the SC6002 producer and the
+/// owner-call universe (`proof_universe.rs`) ask their creation sites on. One definition.
+pub(crate) fn client_build(ctx: &AnalysisContext<'_>) -> bool {
+    !ctx.rule_options.runtime.selects_server_build()
+        || crate::execution_paths::client_root_present(ctx.facts, ctx.dialect)
+}
+
+/// Whether the first argument of `call` is a function literal (not a spread): the fact the dialect's `throws_creating_in_effect_callback` is asked
+/// with (`createSignal(() => …)` creates a computation, `createSignal(0)` does not). One definition: both SC6002 arms and the owner-call universe ask it.
+pub(crate) fn first_argument_is_function(call: &solid_facts::ast::CallFact) -> bool {
+    call.arguments.first().is_some_and(|argument| {
+        !argument.spread
+            && matches!(
+                argument.value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+            )
+    })
+}
+
 pub(crate) fn context_of<'a>(ctx: &AnalysisContext<'a>) -> StaticApiContext<'a> {
     StaticApiContext {
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
         symbol_names: ctx.symbol_names,
         tables: crate::late_chunks::DiscoveryTables::of(ctx),
-        client_build: !ctx.rule_options.runtime.selects_server_build()
-            || crate::execution_paths::client_root_present(ctx.facts, ctx.dialect),
+        client_build: client_build(ctx),
         package_instances: &ctx.rule_options.runtime.package_instances,
     }
 }
@@ -211,30 +230,48 @@ fn cleanup_return_unchecked(file: &FileFacts, call: &solid_facts::ast::CallFact)
     })
 }
 
+/// ADR 0710: whether the role of `site` runs off every effect apply's stack: an event handler (unless a synchronous dispatch may deliver it from an apply), a deferred
+/// callback, a directive apply, rendering, module code, or code the compiler discarded. The lexical role of the code: it says nothing of a function that is also entered by a
+/// route it does not follow (a handler or a timer callback saved to a variable and called from an apply), which the owner-call universe's silence asks on top of it
+/// (batch 11, slice 6; the review of #220, F2: the owner stage calls this).
+pub(crate) fn runs_off_every_apply(
+    file: &FileFacts,
+    site: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::ExecutionRole as Role;
+    match crate::execution_role::semantic_execution_role(
+        file,
+        site,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+    ) {
+        Role::DeferredCallback
+        | Role::DirectiveApply
+        | Role::TrackedJsx
+        | Role::UntrackedRendering
+        | Role::DiscardedRendering
+        | Role::ModuleInitialization => true,
+        Role::EventCallback => !lookup.synchronous_event_dispatch_present(),
+        _ => false,
+    }
+}
+
 impl StaticApiContext<'_> {
-    /// ADR 0710: a role that runs off every effect apply's stack: an event
-    /// handler (unless a synchronous dispatch may deliver it from an apply),
-    /// a deferred callback, a directive apply, rendering, module code, or
-    /// code the compiler discarded.
     fn runs_off_every_apply(&self, file: &FileFacts, site: Span, allowed: &[Span]) -> bool {
-        use crate::ExecutionRole as Role;
-        match crate::execution_role::semantic_execution_role(
+        runs_off_every_apply(
             file,
             site,
             allowed,
             self.entities,
             self.symbol_names,
             self.lookup,
-        ) {
-            Role::DeferredCallback
-            | Role::DirectiveApply
-            | Role::TrackedJsx
-            | Role::UntrackedRendering
-            | Role::DiscardedRendering
-            | Role::ModuleInitialization => true,
-            Role::EventCallback => !self.lookup.synchronous_event_dispatch_present(),
-            _ => false,
-        }
+        )
     }
 
     pub(super) fn check_file(&self, file: &FileFacts) -> StaticDirectiveFileResult {
@@ -908,17 +945,8 @@ impl StaticApiContext<'_> {
             // apply before this one; otherwise the claim is uncertifiable.
             if let Some(created) = kind
                 && self.client_build()
-                && dialect.throws_creating_in_effect_callback(
-                    created,
-                    call.arguments.first().is_some_and(|argument| {
-                        !argument.spread
-                            && matches!(
-                                argument.value,
-                                solid_facts::ast::ArgumentValueKind::Function
-                                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                            )
-                    }),
-                )
+                && dialect
+                    .throws_creating_in_effect_callback(created, first_argument_is_function(call))
                 && let Some(root) = self.lookup.callee_package_root(file, call.callee)
                 && let Some(origin) = crate::effect_phase::ownerless_effect_phase_origin(
                     file,
@@ -995,14 +1023,7 @@ impl StaticApiContext<'_> {
                 && self.client_build()
                 && dialect.throws_creating_in_effect_callback(
                     created,
-                    call.arguments.first().is_some_and(|argument| {
-                        !argument.spread
-                            && matches!(
-                                argument.value,
-                                solid_facts::ast::ArgumentValueKind::Function
-                                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                            )
-                    }),
+                    first_argument_is_function(call),
                 )
                 && !result.violations.iter().any(|violation| {
                     violation.id == "SC6002"
@@ -2803,6 +2824,53 @@ fn owner_set_around(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -
         }
     }
     false
+}
+
+/// Batch 11 (slice 6): the call of the exact primitive whose callback runs `site` under an owner that primitive creates (`createRoot`, a computation's
+/// compute), through the layers that run in place and add no owner (`untrack`, `latest`: as owned as their call), or `None`. [`owner_set_around`] answers "sets
+/// or may set an owner", enough to decline an obligation; this is the proof an owner is current, so a `runWithOwner` whose owner is a value (it may be null) and
+/// one that detaches (it is null) are not.
+///
+/// Every layer the climb crosses runs its code in the primitive's synchronous run: a generator's body runs where an iterator is stepped, a site in a parameter
+/// list runs where a call omits its argument, and one after a suspension of an async function runs from a later task, so none of them has the owner the primitive
+/// set around its callback (the review of #220, F3: `createRoot(function* () { createMemo(…) })` stepped from an apply). The owner stage's `plain` site is the
+/// same question asked of the innermost layer.
+pub(crate) fn owner_created_around_call(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut at = site;
+    for _ in 0..16 {
+        let function = file.ast.innermost_function_owning(at)?;
+        // A layer something else references (N2: a named function expression that saved itself) is run by whoever calls it, not only by the primitive.
+        if function.generator
+            || crate::owners::in_parameter_list(&file.ast, at)
+            || crate::execution_role::may_follow_suspension(file, at)
+            || !crate::owners::referenced_only_by_entry(file, function, lookup)
+        {
+            return None;
+        }
+        let (call, index) =
+            file.ast
+                .arguments_containing(function.span)
+                .find(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+                })?;
+        let primitive = lookup.primitive_at_call(file, call.span)?;
+        match lookup
+            .dialect
+            .slot_run(primitive, index, call.arguments.len())
+        {
+            SlotRun::InPlace(run) => match run.owner {
+                SlotOwner::Inherits => at = call.span,
+                SlotOwner::Creates => return Some(call.span),
+                SlotOwner::Supplied { .. } | SlotOwner::Detached => return None,
+            },
+            SlotRun::Computation | SlotRun::Deferred | SlotRun::Unknown => return None,
+        }
+    }
+    None
 }
 
 #[deny(clippy::wildcard_enum_match_arm)]
