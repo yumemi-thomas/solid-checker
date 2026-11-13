@@ -20,12 +20,12 @@ const built = (context) => {
 };
 
 describe("the pa contexts (a package the build does not read may call an action)", () => {
-  it("are seven package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
-    expect(PA_CONTEXT_NAMES).toHaveLength(35);
+  it("are eleven package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
+    expect(PA_CONTEXT_NAMES).toHaveLength(55);
     for (const name of PA_CONTEXT_NAMES) {
       const parts = paParts(name);
       expect(parts, name).not.toBeNull();
-      const throws = ["reach", "inline", "winself", "docview", "getter"].includes(parts.kind) && ["body", "memo", "root"].includes(parts.host);
+      const throws = ["reach", "inline", "winself", "docview", "getter", "gwrite", "gwritekey", "gwriteany"].includes(parts.kind) && ["body", "memo", "root"].includes(parts.host);
       expect(PA_CONTEXTS[name], name).toBe(throws ? "misuse" : "legal");
     }
     expect(paParts("pa-reach")).toBeNull();
@@ -49,6 +49,12 @@ describe("the pa contexts (a package the build does not read may call an action)
     expect(paPackageFiles("docview")["index.js"]).toContain("document.defaultView.__paAct()");
     expect(paPackageFiles("winself")["index.js"]).not.toContain("import");
     expect(paPackageFiles("getter")["index.js"]).toContain("get now()");
+    // ADR 0973: the writers replace `btoa`; the key is a literal member, a constant, a call's result (any global), or a symbol (no global).
+    expect(paPackageFiles("gwrite")["index.js"]).toContain("globalThis.btoa = ");
+    expect(paPackageFiles("gwritekey")["index.js"]).toContain('const KEY = "btoa";');
+    expect(paPackageFiles("gwriteany")["index.js"]).toContain("Object.assign(globalThis, loadPatches())");
+    expect(paPackageFiles("gwritesym")["index.js"]).toContain('Symbol.for("fz-gwritesym")');
+    for (const kind of ["gwrite", "gwritekey", "gwriteany", "gwritesym"]) expect(paPackageFiles(kind)["index.js"]).toContain('from "solid-js"');
   });
   it("are recall contexts of ACTION_CALLED_IN_OWNED_SCOPE only, base shape only", () => {
     expect(SPEC[PA_CODE].recallContexts.filter((context) => context.startsWith("pa-")).sort()).toEqual(PA_CONTEXT_NAMES.filter((name) => PA_CONTEXTS[name] === "misuse").sort());
@@ -70,5 +76,10 @@ describe("the pa contexts (a package the build does not read may call an action)
     expect(text("pa-getter-body")).toContain('import { clock } from "fz-getter";');
     expect(text("pa-getter-body")).toMatch(/\n {2}(__h\(\d+\); )?void clock\.now;/);
     expect(Object.keys(built("pa-winself-root").files)).toEqual(expect.arrayContaining(["node_modules/fz-pub/index.js", "node_modules/fz-winself/index.js"]));
+    // ADR 0973: a global a package replaces is imported for its effect and the site is the call of the global.
+    expect(text("pa-gwrite-body")).toContain('import "fz-gwrite";');
+    expect(text("pa-gwriteany-memo")).toMatch(/createMemo\(\(\) => \{\n\s+(__h\(\d+\); )?btoa\("x"\);/);
+    expect(text("pa-gwritesym-timer")).toContain('import "fz-gwritesym";');
+    expect(Object.keys(built("pa-gwritekey-root").files)).toContain("node_modules/fz-gwritekey/index.js");
   });
 });

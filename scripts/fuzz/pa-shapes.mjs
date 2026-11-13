@@ -10,6 +10,11 @@
 //                        the global object through its own member (ADR 0973: the scan followed one member and cleared it)
 //               docview  `fz-pub` and `fz-docview`, whose `paEnter()` calls `document.defaultView.__paAct()` (ADR 0973)
 //               getter   `fz-getter`: `clock` has `get now()` that calls the action; the site is the read `void clock.now`, no call (ADR 0973)
+//               gwrite   `fz-gwrite` replaces the host's `btoa` (`globalThis.btoa = …`) with a function that calls the action; the site is `btoa("x")`, a global the library
+//                        declares, so the compiler's signature is the host's (ADR 0973: the write comes from the scan of the package's closure)
+//               gwritekey  `fz-gwritekey`: the same, the key a `const KEY = "btoa"` (the file's constants decide it)
+//               gwriteany  `fz-gwriteany`: the same through `Object.assign(globalThis, loadPatches())`: a key nothing in the file decides, so any global may be written
+//               gwritesym  `fz-gwritesym` reaches Solid and writes only a symbol-keyed property: no global a call can run, `btoa("x")` is the host's (legal)
 //     hosts     body     the component's body                         owned
 //               memo     a memo's compute, read by the view           owned
 //               root     a `createRoot` body in the component's body  owned
@@ -21,13 +26,16 @@
 // (`paShape`), not crossed by the census, ACTION_CALLED_IN_OWNED_SCOPE only (not mirrored to ON_FLUSH_IN_OWNED_SCOPE: the package calls `action`, not `onFlush`).
 import { call, child, decl, expr, fn, num, prim, ref, ret } from "./model.mjs";
 
-export const PA_PACKAGE_KINDS = ["reach", "pure", "dyn", "inline", "winself", "docview", "getter"];
+export const PA_PACKAGE_KINDS = ["reach", "pure", "dyn", "inline", "winself", "docview", "getter", "gwrite", "gwritekey", "gwriteany", "gwritesym"];
 export const PA_HOSTS = ["body", "memo", "root", "timer", "micro"];
 const OWNED_HOSTS = ["body", "memo", "root"];
-const THROWING_KINDS = ["reach", "inline", "winself", "docview", "getter"];
+const THROWING_KINDS = ["reach", "inline", "winself", "docview", "getter", "gwrite", "gwritekey", "gwriteany"];
 export const PA_CODE = "ACTION_CALLED_IN_OWNED_SCOPE";
 /** The packages each kind imports from, in the order its site writes them (`inline` imports none); the last holds the entry. */
-export const PA_PACKAGES = { reach: ["fz-act"], pure: ["fz-calm"], dyn: ["fz-load"], winself: ["fz-pub", "fz-winself"], docview: ["fz-pub", "fz-docview"], getter: ["fz-getter"] };
+export const PA_PACKAGES = {
+  reach: ["fz-act"], pure: ["fz-calm"], dyn: ["fz-load"], winself: ["fz-pub", "fz-winself"], docview: ["fz-pub", "fz-docview"], getter: ["fz-getter"],
+  gwrite: ["fz-gwrite"], gwritekey: ["fz-gwritekey"], gwriteany: ["fz-gwriteany"], gwritesym: ["fz-gwritesym"],
+};
 /** `{ [context]: "misuse" | "legal" }`. */
 export const PA_CONTEXTS = Object.fromEntries(
   PA_PACKAGE_KINDS.flatMap((kind) => PA_HOSTS.map((host) => [`pa-${kind}-${host}`, THROWING_KINDS.includes(kind) && OWNED_HOSTS.includes(host) ? "misuse" : "legal"])),
@@ -58,6 +66,11 @@ export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
     "fz-winself": { js: ["export const paEnter = () => window.self.__paAct();"], dts: entry },
     "fz-docview": { js: ["export const paEnter = () => document.defaultView.__paAct();"], dts: entry },
     "fz-getter": { js: ['import { action } from "solid-js";', "", "export const clock = {", "  get now() {", "    void action(function* () {})();", "    return 1;", "  },", "};"], dts: ["export declare const clock: { readonly now: number };"] },
+    // ADR 0973: a package that replaces a global the library declares, imported for its effect: the type is sound for the declaration, the write comes from the scan.
+    "fz-gwrite": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "globalThis.btoa = (text) => {", "  void action(function* () {})();", "  return real(text);", "};"], dts: ["export {};"] },
+    "fz-gwritekey": { js: ['import { action } from "solid-js";', "", 'const KEY = "btoa";', "const real = globalThis[KEY];", "globalThis[KEY] = (text) => {", "  void action(function* () {})();", "  return real(text);", "};"], dts: ["export {};"] },
+    "fz-gwriteany": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "function loadPatches() {", "  return {", "    btoa: (text) => {", "      void action(function* () {})();", "      return real(text);", "    },", "  };", "}", "Object.assign(globalThis, loadPatches());"], dts: ["export {};"] },
+    "fz-gwritesym": { js: ['import { action } from "solid-js";', "", 'var MARK = /* @__PURE__ */ Symbol.for("fz-gwritesym");', "globalThis[MARK] = () => {", "  void action(function* () {})();", "};"], dts: ["export {};"] },
   }[name];
   return {
     "package.json": `${JSON.stringify({ name, version: "1.0.0", type: "module", exports: { ".": { types: "./index.d.ts", default: "./index.js" } } }, null, 2)}\n`,
@@ -70,6 +83,8 @@ export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
 export function paUse(kind) {
   const base = { solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: undefined };
   if (kind === "inline") return { ...base, solid: ["action"], text: "action(function* () {})()" };
+  // A global the library declares, replaced by a package imported for its effect: the call is of the global, no import names it.
+  if (kind.startsWith("gwrite")) return { ...base, text: 'btoa("x")', importLines: [`import "${PA_PACKAGES[kind][0]}";`] };
   // The read of a getter: no call, the member evaluated for its value.
   if (kind === "getter") return { ...base, text: "void clock.now", importLines: [`import { clock } from "${PA_PACKAGES[kind][0]}";`] };
   // A package that publishes the global is imported for its effect before the entry's.
