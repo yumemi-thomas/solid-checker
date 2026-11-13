@@ -448,6 +448,20 @@ pub(crate) enum PremiseKind {
     /// package analyzed as source: a style finding in a package's code is no runtime claim about the project
     /// (ADR 0949, `package-style-not-project`). The span is the finding's site, in the package.
     PackageStyleNotProject,
+    /// The owner graph's context of the function that holds the site (the owners every entry into it gives) has an edge, no leaf bit and is not the bare open-world
+    /// seed of an export, every entry into the layers around the site is a direct call or a render the graph holds, and no package the build does not read may run
+    /// the function: no leaf owner runs the site (batch 11, slice 6). The span is the function.
+    OwnerContextNoLeaf,
+    /// The same context holds an owner on every entry (owned, a leaf owner, or both: no unowned bit), under the same conditions: the owner is current where the
+    /// site creates a computation, so the effect callback's guard (`inEffectCallback && context === null`) does not meet it (batch 11, slice 6). The span is the
+    /// function.
+    OwnerContextCurrent,
+    /// A fact about the whole program a census answers (a primitive no file of the project names, in which no leaf scope opens), asked of the site's own span
+    /// (batch 11, slice 6). The span is the site.
+    ProgramCensus,
+    /// An exact owner-setting primitive's callback wraps the site (`runWithOwner`, `createRoot`, a computation's compute function): an owner is current there
+    /// (batch 11, slice 6). The span is that primitive call.
+    OwnerSetAround,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the
@@ -1090,6 +1104,25 @@ pub(crate) fn silent_codes(
         location.path.as_ref(),
         Some(location_pair(location)),
         object(line),
+    );
+}
+
+/// A reason an owner-call site (batch 11, slice 6, `owners/leaf_universe.rs`) has no silence for the codes it lists: a typed fact the producer found, never a proof and never an
+/// ending. The site keeps its uncertifiable row of each of those codes; the gate (`scripts/lib/proof-log.mjs`) accepts an owner-call site that ends in nothing only where the row
+/// stands and a `declined` line at the span lists the code, so "uncertifiable by policy" is a recorded fact (and a census of what a future proof must discharge). Nothing reads it back.
+pub(crate) fn declined(rule: &str, location: &Location, reason: &str, codes: &[&str]) {
+    if !enabled() {
+        return;
+    }
+    emit(
+        location.path.as_ref(),
+        Some(location_pair(location)),
+        object(json!({
+            "k": "declined",
+            "rule": rule,
+            "proof": reason,
+            "codes": codes,
+        })),
     );
 }
 

@@ -103,6 +103,56 @@ describe("a site has one line per Chrome code (batch 11, slice 4): the checks ar
   });
 });
 
+describe("an owner-call site's fail-closed ending is named (batch 11, slice 6; coordinator-approved, owner delegated)", () => {
+  const CLEANUP = "CLEANUP_IN_FORBIDDEN_SCOPE";
+  const CREATION = "PRIMITIVE_IN_FORBIDDEN_SCOPE";
+  const EFFECT = "PRIMITIVE_IN_EFFECT_CALLBACK";
+  const call = (s, code, extra = {}) => site(s, { t: "owner-call", source: "primitive", via: "call", code, ...extra });
+  // The final report's home row of each code: SC3001's `leaf-operation-unaccounted`, SC6002's `effect-creation-unaccounted`.
+  const home = (s, code, extra = {}) =>
+    code === EFFECT
+      ? verdict(s, { code: "SC6002", rule: "primitive-in-effect-callback", kind: "uncertifiable", ctx: "effect-creation-unaccounted", ...extra })
+      : verdict(s, { code: "SC3001", rule: "leaf-owner-forbidden-call", kind: "uncertifiable", ctx: "leaf-operation-unaccounted", ...extra });
+  const declined = (s, codes, extra = {}) => ({ k: "declined", ...at(s), rule: "owner-call", proof: "entry-by-reference", codes, ...extra });
+
+  test("a decline that lists the code and the code's home row end the site: no hit", () => {
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP), declined(10, [CLEANUP])]), []);
+    assert.deepEqual(kinds([call(10, CREATION), home(10, CREATION), declined(10, [CREATION, CLEANUP])]), []);
+  });
+
+  test("the row and the decline may stand at an alternate span of the site", () => {
+    const composite = { alt: [[11, 19]] };
+    assert.deepEqual(kinds([call(10, CLEANUP, composite), home(11, CLEANUP, { e: 19 }), declined(11, [CLEANUP], { e: 19 })]), []);
+    assert.deepEqual(kinds([call(10, CLEANUP, composite), home(10, CLEANUP), declined(11, [CLEANUP], { e: 19 })]), []);
+  });
+
+  test("each code of a site is named on its own: a creation's SC3001 and SC6002 codes need each its row and its decline", () => {
+    const both = [call(10, CREATION), call(10, EFFECT), home(10, CREATION), home(10, EFFECT)];
+    assert.deepEqual(kinds([...both, declined(10, [CREATION, EFFECT])]), []);
+    assert.deepEqual(kinds([...both, declined(10, [CREATION])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([...both, declined(10, [EFFECT])]), ["C1/no-decision"]);
+  });
+
+  test("a decline alone, or the row alone, is a hit: the ending is named only by both", () => {
+    assert.deepEqual(kinds([call(10, CLEANUP), declined(10, [CLEANUP])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP)]), ["C1/no-decision"]);
+    // The row of another code's rule is not the code's home row.
+    assert.deepEqual(kinds([call(10, EFFECT), home(10, CLEANUP), declined(10, [EFFECT])]), ["C1/no-decision"]);
+    // An obligation under another blocker, or a violation, is not the unaccounted row.
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP, { ctx: "function-run-unplaced" }), declined(10, [CLEANUP])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP, { kind: "violation" }), declined(10, [CLEANUP])]), ["C1/no-decision"]);
+  });
+
+  test("a decline names the codes it is about, at the site, for the owner-call table only", () => {
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP), declined(10, [CREATION])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP), declined(10, undefined)]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP), declined(30, [CLEANUP])]), ["C1/no-decision"]);
+    assert.deepEqual(kinds([call(10, CLEANUP), home(10, CLEANUP), declined(10, [CLEANUP], { rule: "pending" })]), ["C1/no-decision"]);
+    // Another table's site is no owner-call site: its row and a decline end nothing.
+    assert.deepEqual(kinds([site(10, { t: "write", code: "REACTIVE_WRITE_IN_OWNED_SCOPE" }), verdict(10, { code: "SC2001", rule: "no-write-in-pure-computation", kind: "uncertifiable", ctx: "write-unaccounted" }), declined(10, ["REACTIVE_WRITE_IN_OWNED_SCOPE"])]), ["C1/no-decision"]);
+  });
+});
+
 describe("C2: a reporting decision with nothing ending the site", () => {
   test("audit candidate S1: the classifier says the read reports, the producer left no row, no finding and no proof", () => {
     assert.deepEqual(kinds([site(10), decision(10)]), ["C2/reporting-decision-no-row"]);

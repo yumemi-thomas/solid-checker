@@ -23,6 +23,10 @@
 // classifier's decisions are about the table's first code (`SITE_CODE`), so a line of another code (SC2009 at a setter call) has no decision to be explained by: it is ended by a
 // row, a named end listing it, or it is a C1 hit.
 //
+// An owner-call site (SC3001, SC6002; batch 11, slice 6) that no proof ends gets the code's home uncertifiable row, which is the ruled ending for a function no package the build does not
+// read is known not to run, a layer entered by reference and the like. The gate accepts that ending only when it is named: the row stands at the site and a typed `declined` line (why no
+// silence applies, `owners/leaf_universe.rs`) lists the code; a decline ends nothing and is read by nothing else. Either alone, or a decline on another table's site, is a hit.
+//
 // C2, a label-only end and an unconfirmed premise are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a
 // stated reason.
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
@@ -40,6 +44,16 @@ export const SITE_CODE = {
   action: "ACTION_CALLED_IN_OWNED_SCOPE",
   "store-write": "STORE_WRITE_OUTSIDE_SETTER",
   "on-flush": "ON_FLUSH_IN_OWNED_SCOPE",
+};
+
+/**
+ * The uncertifiable row an owner-call site's code gets when nothing ends it (`proof_universe.rs` `SiteCode::home`): the rule that reports it and its blocker, which the final report
+ * carries as the finding's context.
+ */
+export const OWNER_CALL_HOME = {
+  CLEANUP_IN_FORBIDDEN_SCOPE: { rule: "leaf-owner-forbidden-call", blocker: "leaf-operation-unaccounted" },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { rule: "leaf-owner-forbidden-call", blocker: "leaf-operation-unaccounted" },
+  PRIMITIVE_IN_EFFECT_CALLBACK: { rule: "primitive-in-effect-callback", blocker: "effect-creation-unaccounted" },
 };
 
 /**
@@ -121,7 +135,7 @@ export function readProofLog(path) {
   return { lines, malformed: counter.malformed, missing: false };
 }
 
-const TABLES = ["decision", "owner", "pending", "row", "finding", "verdict", "drop", "reclass", "attributed", "site", "silent"];
+const TABLES = ["decision", "owner", "pending", "row", "finding", "verdict", "drop", "reclass", "attributed", "site", "silent", "declined"];
 
 /** The lines of one file, by kind. */
 function tablesOf() {
@@ -165,6 +179,7 @@ export function proofHits(lines) {
     const verdicts = groupBy(t.verdict, spanKey);
     const drops = groupBy([...t.drop, ...t.reclass], spanKey);
     const silents = groupBy(t.silent, spanKey);
+    const declines = groupBy(t.declined, spanKey);
     const decisionsAt = groupBy(t.decision, (decision) => `${decision.t}@${decision.s}`);
     // A row may sit at any alternate span of its site (a composite callee, a chain link): find the site by each.
     const siteAt = new Map();
@@ -211,6 +226,10 @@ export function proofHits(lines) {
       const spans = [spanKey(site), ...(site.alt ?? []).map(([s, e]) => `${s}:${e}`)];
       const silencedFor = (key) => (silents.get(key) ?? []).some((silent) => silent.rule === "end" && site.code !== undefined && Array.isArray(silent.codes) && silent.codes.includes(site.code));
       if (site.end !== "none" || spans.some(silencedFor)) continue;
+      // An owner-call site (batch 11, slice 6; coordinator-approved, owner delegated) whose proofs are not all in reach ends in the code's home uncertifiable row. That fail-closed ending is
+      // accepted only where it is named: the row stands at one of the site's spans AND a typed `declined` line at one of them lists the code (why no silence applies). Either alone is a
+      // hit, a decline ends no other table's site, and a line that lists no code names none.
+      if (site.t === "owner-call" && ownerCallDeclined(site, spans, verdicts, declines)) continue;
       // The classifier's decisions are about the table's first code: another code of the site has none.
       const kind = DECISION_KIND[site.t];
       const decisions = kind && (site.code === undefined || site.code === SITE_CODE[site.t]) ? decisionsFor(kind, site) : [];
@@ -265,6 +284,15 @@ export function proofHits(lines) {
     }
   }
   return hits;
+}
+
+/** Whether an owner-call site's fail-closed ending is named: the home row of its code stands at one of `spans` and a `declined` line at one of them lists the code. */
+function ownerCallDeclined(site, spans, verdicts, declines) {
+  const home = OWNER_CALL_HOME[site.code];
+  if (home === undefined) return false;
+  const rowStands = spans.some((key) => (verdicts.get(key) ?? []).some((verdict) => verdict.rule === home.rule && verdict.kind === "uncertifiable" && verdict.ctx === home.blocker));
+  const named = spans.some((key) => (declines.get(key) ?? []).some((line) => line.rule === "owner-call" && Array.isArray(line.codes) && line.codes.includes(site.code)));
+  return rowStands && named;
 }
 
 /** Counts of what the log holds, for the gate's summary line. */

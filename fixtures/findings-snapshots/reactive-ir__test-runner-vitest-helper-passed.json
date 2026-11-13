@@ -33,6 +33,17 @@
       "start": 446,
       "end": 464,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-passed/App.test.tsx",
+      "start": 446,
+      "end": 464,
+      "fixes": 0
     }
   ]
 }

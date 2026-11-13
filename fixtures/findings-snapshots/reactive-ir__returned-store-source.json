@@ -143,6 +143,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2456,
+      "end": 2468,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -151,6 +162,28 @@
       "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
       "start": 2483,
       "end": 2495,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2590,
+      "end": 2602,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2590,
+      "end": 2602,
       "fixes": 0
     },
     {

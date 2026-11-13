@@ -193,6 +193,31 @@ impl EmissionInputs<'_, '_, '_> {
     }
 }
 
+/// ADR 0868: whether the function making a run at `at` holds context zero (no owner edge reaches it) and is not proven never to run: the caller whose run
+/// the graph has no edge for. The emission asks it of every layer around a site, and so does the owner-call universe's leaf-owner proof (batch 11, slice 6).
+pub(super) fn caller_holds_no_context(
+    graph: &OwnerGraph,
+    reach: &crate::execution_role::SiteReach<'_, '_>,
+    lookup: &SemanticLookup<'_>,
+    caller_file: &solid_facts::FileFacts,
+    at: Span,
+) -> bool {
+    lookup.note_file_read(caller_file);
+    graph
+        .path_id(caller_file.path.as_str())
+        .is_some_and(|caller_pid| {
+            caller_file
+                .ast
+                .innermost_function_owning(at)
+                .is_some_and(|caller| {
+                    graph
+                        .node_context(caller_pid, caller.span)
+                        .is_some_and(|(_, context)| context == 0)
+                        && reach.function_runs(caller_file, caller)
+                })
+        })
+}
+
 /// The starts of the calls in `path` that run after an `await` on every path
 /// through their async function's own body (the producer's
 /// `calls_after_await` dominance fact, the one `reactive-read-after-await`
@@ -246,20 +271,7 @@ pub(super) fn emit_file(
     // ADR 0868: the function making a run at `at` holds context zero (no
     // edge reaches it) and is not proven never to run.
     let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
-        lookup.note_file_read(caller_file);
-        graph
-            .path_id(caller_file.path.as_str())
-            .is_some_and(|caller_pid| {
-                caller_file
-                    .ast
-                    .innermost_function_owning(at)
-                    .is_some_and(|caller| {
-                        graph
-                            .node_context(caller_pid, caller.span)
-                            .is_some_and(|(_, context)| context == 0)
-                            && reach.function_runs(caller_file, caller)
-                    })
-            })
+        caller_holds_no_context(graph, &reach, lookup, caller_file, at)
     };
     for candidate in &entry.fragment.requirements {
         if let Some(read) =
@@ -1116,7 +1128,7 @@ fn returned_unreached_function(
 /// renders, and at the innermost owner-creating region around `span`. A function that only may be a component is a layer like any other.
 /// `caller_unplaced` answers whether the function making a run at a span holds
 /// no owner context and may run (the emission's ADR 0534 question).
-fn named_layer_entry_open(
+pub(super) fn named_layer_entry_open(
     file: &solid_facts::FileFacts,
     span: Span,
     region: Option<Span>,
@@ -1132,7 +1144,112 @@ fn named_layer_entry_open(
         &caller_unplaced,
         &mut walked,
         LAYER_CALLER_DEPTH,
+        Premises::Emission,
     )
+}
+
+/// [`named_layer_entry_open`] without the component-render premise, for the owner-call universe's silences (batch 11, slice 6, the review of #220, F1): a function
+/// that returns JSX is entered by renders alone only where every reference of its binding is a JSX tag, and one a reference enters (`pick = view`, a prop, an
+/// array element) is a layer like any other, whose references decide. A package that renders a component is no more trusted than one that calls it (the ruling:
+/// no component-render premise; a render by a package whose source is read is the proof batch's).
+pub(super) fn layer_entry_open_by_reference(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
+) -> bool {
+    let mut walked = HashSet::default();
+    layer_entry_open(
+        file,
+        span,
+        None,
+        lookup,
+        &caller_unplaced,
+        &mut walked,
+        LAYER_CALLER_DEPTH,
+        Premises::Universe,
+    )
+}
+
+/// What the walk takes for granted where a layer's entry is not shown. The emission (SC4001) keeps the premises ADR 0868 gave it; the owner-call universe (SC3001,
+/// SC6002) asks for each of them to be proven (the reviews of #220: F1, B1, N1, N2), and a change to the emission's own proofs is a slice of its own with grid diffs.
+#[derive(Clone, Copy)]
+enum Premises {
+    /// A function the census proves a component ([`SemanticLookup::function_proven_component`]: it returns JSX, and no call enters it) is entered by renders alone,
+    /// whatever else references its binding (an escaped component keeps it); a callback an owner-creating primitive runs, or a control-flow child, is entered by
+    /// that position alone; a generator's body is a layer like any other.
+    Emission,
+    /// A function that returns JSX is entered by renders alone only where every reference of its binding is a JSX tag (F1); a callback an owner-creating primitive
+    /// runs or a control-flow child is entered by that position alone only where nothing references it (N2: a named function expression can hand itself on,
+    /// `createRoot(function f() { saved = f; … })`, and a run the primitive does not make has no owner); and a generator's body runs where an iterator is stepped,
+    /// which no edge shows, so a layer that is one is an open entry, and so is any function a generator's body calls (B1's lexical test was the first half; N1).
+    Universe,
+}
+
+/// Whether nothing references `function` but the position that enters it (N2): a callback with no binding (an arrow, an anonymous function) cannot be, and a
+/// named function expression can hand itself on (`createRoot(function f() { if (!saved) { saved = f; return; } … })`, then `saved()` from an effect's apply),
+/// after which a run the primitive does not make has no owner. A name whose references cannot be listed is referenced.
+pub(crate) fn referenced_only_by_entry(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    // A named function expression binds its name inside its own body, so its references are those of that name (the position that enters it is the argument or
+    // the child, not a reference): the name's one reference is its own declaration.
+    if function.kind == solid_facts::ast::FunctionKind::Expression
+        && let Some(own) = function.name.as_ref()
+    {
+        return lookup
+            .entities()
+            .at(file.path.as_str(), own.span)
+            .is_some_and(|symbol| {
+                lookup
+                    .symbol_references_if_present(symbol.as_str())
+                    .is_some_and(|references| {
+                        references.iter().all(|reference| {
+                            reference.path.as_ref() == file.path.as_str()
+                                && u32::try_from(reference.start_byte)
+                                    .is_ok_and(|start| start == own.span.start)
+                        })
+                    })
+            });
+    }
+    if function_binding_name(file, function).is_none() {
+        return true;
+    }
+    crate::local_access::function_reference_hand_offs(file, function, lookup)
+        .is_some_and(|local| local.is_empty())
+        && crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
+}
+
+/// Whether every reference of `function`'s binding, in its file and the others, is the name of a JSX tag (the opening one or the closing one: the same
+/// reference), and a tag renders it: the one way a render enters a function and no value flows anywhere else. A function with no binding, or none a tag
+/// renders, is not.
+fn entered_by_tags_only(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(local) = crate::local_access::function_reference_hand_offs(file, function, lookup)
+    else {
+        return false;
+    };
+    let tag_name = |at: Span| {
+        file.ast
+            .jsx_elements
+            .iter()
+            .any(|element| element.name.span == at || element.closing_name == Some(at))
+    };
+    // The other files' references the call graph holds (a call, a render) are accounted for; any other reference there is a value flow.
+    if !local.iter().all(|(at, _)| tag_name(*at))
+        || !crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
+    {
+        return false;
+    }
+    !local.is_empty()
+        || !lookup
+            .function_call_site_references(file.path.as_str(), function.span)
+            .is_empty()
 }
 
 /// How many calls [`layer_entry_open`] follows out through a closed layer's
@@ -1142,7 +1259,7 @@ const LAYER_CALLER_DEPTH: usize = 8;
 /// Whether `function` is the whole argument the dialect gives an owner it
 /// creates (`CallbackOwner::Creates`): who enters what is around that call
 /// changes nothing inside.
-fn creates_owner_for(
+pub(super) fn creates_owner_for(
     file: &solid_facts::FileFacts,
     function: Span,
     lookup: &SemanticLookup<'_>,
@@ -1163,6 +1280,7 @@ fn creates_owner_for(
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn layer_entry_open(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -1171,6 +1289,7 @@ fn layer_entry_open(
     caller_unplaced: &dyn Fn(&solid_facts::FileFacts, Span) -> bool,
     walked: &mut HashSet<(String, Span)>,
     depth: usize,
+    premises: Premises,
 ) -> bool {
     use crate::local_access::HandOff;
     let escapes = |hand_off: &HandOff| !matches!(hand_off, HandOff::Call | HandOff::Inline(_));
@@ -1185,12 +1304,22 @@ fn layer_entry_open(
         if region.is_some_and(|region| !region.contains(function.span)) {
             return false;
         }
-        if lookup.function_proven_component(file, function) {
+        let universe = matches!(premises, Premises::Universe);
+        // N1: a generator's body runs where an iterator is stepped, not where the generator is called, so a layer that is one (and, through the caller walk
+        // below, any function its body calls) is entered by a route no edge shows. It comes before the owner-creating stop: a root's generator callback is no
+        // owned run either.
+        if universe && function.generator {
+            return true;
+        }
+        if lookup.function_proven_component(file, function)
+            && (!universe || entered_by_tags_only(file, function, lookup))
+        {
             return false;
         }
         // Reached through a caller, no candidate names the region.
-        if creates_owner_for(file, function.span, lookup)
-            || is_control_flow_child(file, function, lookup)
+        if (creates_owner_for(file, function.span, lookup)
+            || is_control_flow_child(file, function, lookup))
+            && (!universe || referenced_only_by_entry(file, function, lookup))
         {
             return false;
         }
@@ -1276,7 +1405,16 @@ fn layer_entry_open(
         }
         for reference in &local {
             let run = run_at(reference);
-            if layer_entry_open(file, run, None, lookup, caller_unplaced, walked, depth - 1) {
+            if layer_entry_open(
+                file,
+                run,
+                None,
+                lookup,
+                caller_unplaced,
+                walked,
+                depth - 1,
+                premises,
+            ) {
                 return true;
             }
         }
@@ -1293,6 +1431,7 @@ fn layer_entry_open(
                         caller_unplaced,
                         walked,
                         depth - 1,
+                        premises,
                     ))
             {
                 return true;

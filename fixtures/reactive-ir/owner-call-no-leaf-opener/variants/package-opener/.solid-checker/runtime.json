@@ -1,0 +1,6 @@
+{
+  "target": "browser",
+  "build": "development",
+  "programBoundary": "closed",
+  "dependencySources": ["dep-leaf"]
+}

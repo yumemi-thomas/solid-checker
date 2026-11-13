@@ -767,6 +767,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 272,
+      "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 315,
+      "end": 325,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -830,6 +852,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 358,
       "end": 364,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 432,
+      "end": 444,
       "fixes": 0
     },
     {
@@ -885,6 +918,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 720,
       "end": 736,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 937,
+      "end": 947,
       "fixes": 0
     },
     {
@@ -962,6 +1006,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 1956,
       "end": 1972,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2053,
+      "end": 2063,
       "fixes": 0
     },
     {
@@ -1053,6 +1108,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 2844,
+      "end": 2854,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1086,6 +1152,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 3097,
+      "end": 3107,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1108,6 +1185,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 3225,
+      "end": 3235,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1127,6 +1215,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 3309,
       "end": 3315,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 3439,
+      "end": 3449,
       "fixes": 0
     },
     {
@@ -1171,6 +1270,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 4047,
       "end": 4271,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4154,
+      "end": 4164,
       "fixes": 0
     },
     {
@@ -1229,6 +1339,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4443,
+      "end": 4453,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -1270,6 +1391,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 4652,
       "end": 4832,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4711,
+      "end": 4721,
       "fixes": 0
     },
     {
@@ -1325,6 +1457,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 4925,
       "end": 5061,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 4985,
+      "end": 4995,
       "fixes": 0
     },
     {
@@ -1427,6 +1570,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 5766,
+      "end": 5776,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1468,6 +1622,17 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 6045,
       "end": 6094,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
+      "start": 6463,
+      "end": 6473,
       "fixes": 0
     },
     {

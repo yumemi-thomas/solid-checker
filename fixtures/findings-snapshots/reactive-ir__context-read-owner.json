@@ -73,6 +73,32 @@
       "fixes": 0,
       "message": "this read runs under an owner, and nothing proves a default for its context or a provider above every render of the function reading it; Solid throws `ContextNotFoundError` where a context with no default has no provider above",
       "hint": "Render a provider above every use of this component, or give the context a default."
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 2022,
+      "end": 2032,
+      "fixes": 0,
+      "message": "this creation (`createMemo`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 2022,
+      "end": 2032,
+      "fixes": 0,
+      "message": "this creation (`createMemo`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
     }
   ]
 }

@@ -60,7 +60,7 @@ impl FlushCode {
         match self {
             Self::Action => crate::blockers::FLUSH_IN_ACTION_UNACCOUNTED,
             Self::Effect => crate::blockers::FLUSH_IN_EFFECT_UNACCOUNTED,
-            Self::Leaf => crate::blockers::LEAF_FLUSH_UNACCOUNTED,
+            Self::Leaf => crate::blockers::LEAF_OPERATION_UNACCOUNTED,
         }
     }
 }
