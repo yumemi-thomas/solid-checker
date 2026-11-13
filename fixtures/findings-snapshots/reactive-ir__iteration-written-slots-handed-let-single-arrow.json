@@ -10,6 +10,17 @@
       "start": 109,
       "end": 115,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-let-single-arrow/body-write.tsx",
+      "start": 133,
+      "end": 136,
+      "fixes": 0
     }
   ]
 }

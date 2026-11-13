@@ -10,6 +10,17 @@
       "start": 107,
       "end": 113,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/export-star-as-solid/App.tsx",
+      "start": 215,
+      "end": 221,
+      "fixes": 0
     }
   ]
 }

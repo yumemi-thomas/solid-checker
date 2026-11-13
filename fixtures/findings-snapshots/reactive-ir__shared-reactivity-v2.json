@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 595,
+      "end": 614,
+      "fixes": 0
+    },
+    {
       "rule": "uncalled-accessor",
       "code": "SC1005",
       "kind": "violation",
@@ -9,6 +20,50 @@
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
       "start": 607,
       "end": 612,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 822,
+      "end": 843,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1090,
+      "end": 1100,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1090,
+      "end": 1100,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1136,
+      "end": 1159,
       "fixes": 0
     },
     {
@@ -32,6 +87,39 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1717,
+      "end": 1735,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2026,
+      "end": 2044,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2414,
+      "end": 2432,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -42,6 +130,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2791,
+      "end": 2809,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2811,
+      "end": 2822,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -49,6 +159,28 @@
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
       "start": 3079,
       "end": 3086,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3089,
+      "end": 3096,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3419,
+      "end": 3426,
       "fixes": 0
     },
     {
@@ -112,6 +244,17 @@
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
       "start": 5714,
       "end": 5724,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 5952,
+      "end": 5961,
       "fixes": 0
     }
   ]

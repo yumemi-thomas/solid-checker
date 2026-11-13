@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 603,
+      "end": 608,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -33,6 +44,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 944,
+      "end": 949,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -41,6 +63,17 @@
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
       "start": 1046,
       "end": 1067,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 1085,
+      "end": 1090,
       "fixes": 0
     },
     {
@@ -74,6 +107,28 @@
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
       "start": 1507,
       "end": 1514,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 1690,
+      "end": 1700,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 1690,
+      "end": 1700,
       "fixes": 0
     },
     {
@@ -121,6 +176,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 2110,
+      "end": 2115,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -129,6 +195,17 @@
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
       "start": 2215,
       "end": 2235,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 2253,
+      "end": 2258,
       "fixes": 0
     },
     {

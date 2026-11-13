@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Alias.tsx",
+      "start": 133,
+      "end": 138,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -21,6 +32,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Alias.tsx",
       "start": 184,
       "end": 191,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Alias.tsx",
+      "start": 206,
+      "end": 211,
       "fixes": 0
     },
     {
@@ -35,6 +57,50 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Alias.tsx",
+      "start": 277,
+      "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Alias.tsx",
+      "start": 727,
+      "end": 730,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Alias.tsx",
+      "start": 739,
+      "end": 742,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Alias.tsx",
+      "start": 751,
+      "end": 762,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -43,6 +109,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Before.tsx",
       "start": 146,
       "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Before.tsx",
+      "start": 168,
+      "end": 173,
       "fixes": 0
     },
     {
@@ -57,6 +134,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeInitializer.tsx",
+      "start": 168,
+      "end": 173,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -65,6 +153,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/BeforeJsx.tsx",
       "start": 146,
       "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeJsx.tsx",
+      "start": 168,
+      "end": 173,
       "fixes": 0
     },
     {
@@ -79,6 +178,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeObject.tsx",
+      "start": 168,
+      "end": 173,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -87,6 +197,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/BeforeTemplate.tsx",
       "start": 146,
       "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeTemplate.tsx",
+      "start": 168,
+      "end": 173,
       "fixes": 0
     },
     {
@@ -101,6 +222,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Called.tsx",
+      "start": 133,
+      "end": 138,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -109,6 +241,28 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Called.tsx",
       "start": 184,
       "end": 191,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Called.tsx",
+      "start": 206,
+      "end": 211,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Called.tsx",
+      "start": 481,
+      "end": 494,
       "fixes": 0
     },
     {
@@ -123,6 +277,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Cycle.tsx",
+      "start": 192,
+      "end": 197,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -131,6 +296,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Dynamic.tsx",
       "start": 128,
       "end": 135,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Dynamic.tsx",
+      "start": 150,
+      "end": 155,
       "fixes": 0
     },
     {
@@ -145,6 +321,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Dynamic.tsx",
+      "start": 223,
+      "end": 228,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -153,6 +340,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Dynamic.tsx",
       "start": 271,
       "end": 278,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Dynamic.tsx",
+      "start": 294,
+      "end": 299,
       "fixes": 0
     },
     {
@@ -178,6 +376,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/HelperCalled.tsx",
+      "start": 278,
+      "end": 283,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -186,6 +395,28 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/HelperCalled.tsx",
       "start": 329,
       "end": 339,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/HelperCalled.tsx",
+      "start": 354,
+      "end": 359,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/HelperCalled.tsx",
+      "start": 662,
+      "end": 675,
       "fixes": 0
     },
     {
@@ -200,6 +431,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Imported.tsx",
+      "start": 163,
+      "end": 168,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -208,6 +450,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Intrinsic.tsx",
       "start": 197,
       "end": 204,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Intrinsic.tsx",
+      "start": 219,
+      "end": 224,
       "fixes": 0
     },
     {
@@ -222,6 +475,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Intrinsic.tsx",
+      "start": 295,
+      "end": 300,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -230,6 +494,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Passed.tsx",
       "start": 111,
       "end": 118,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Passed.tsx",
+      "start": 133,
+      "end": 138,
       "fixes": 0
     },
     {
@@ -244,6 +519,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Passed.tsx",
+      "start": 206,
+      "end": 211,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -255,6 +541,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Reassigned.tsx",
+      "start": 133,
+      "end": 138,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -263,6 +560,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Reassigned.tsx",
       "start": 184,
       "end": 191,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Reassigned.tsx",
+      "start": 206,
+      "end": 211,
       "fixes": 0
     },
     {
@@ -274,6 +582,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Shadowed.tsx",
       "start": 111,
       "end": 118,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Shadowed.tsx",
+      "start": 133,
+      "end": 138,
       "fixes": 0
     },
     {
@@ -288,6 +607,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Shadowed.tsx",
+      "start": 210,
+      "end": 215,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -296,6 +626,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Shadowed.tsx",
       "start": 265,
       "end": 272,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Shadowed.tsx",
+      "start": 288,
+      "end": 293,
       "fixes": 0
     },
     {
@@ -310,6 +651,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Target.tsx",
+      "start": 138,
+      "end": 143,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -318,6 +670,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Target.tsx",
       "start": 193,
       "end": 200,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Target.tsx",
+      "start": 216,
+      "end": 221,
       "fixes": 0
     },
     {
@@ -332,6 +695,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
+      "start": 175,
+      "end": 180,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -343,6 +717,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
+      "start": 252,
+      "end": 257,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -351,6 +736,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
       "start": 306,
       "end": 313,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
+      "start": 328,
+      "end": 333,
       "fixes": 0
     },
     {
@@ -376,6 +772,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Tdz.tsx",
+      "start": 512,
+      "end": 517,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -384,6 +791,17 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Tdz.tsx",
       "start": 589,
       "end": 596,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Tdz.tsx",
+      "start": 611,
+      "end": 616,
       "fixes": 0
     }
   ]

@@ -51,6 +51,8 @@ import { SF_CONTEXT_NAMES, sfShape } from "./sf-shapes.mjs";
 import { RV_CONTEXT_NAMES, rvShape } from "./rv-shapes.mjs";
 import { NM_CONTEXT_NAMES, nmShape } from "./nm-shapes.mjs";
 import { LA_CONTEXT_NAMES, laShape } from "./la-shapes.mjs";
+import { ER_CONTEXT_NAMES, erShape } from "./er-shapes.mjs";
+import { EM_CONTEXT_NAMES, emShape } from "./em-shapes.mjs";
 import { FC_CONTEXT_NAMES, fcShape } from "./fc-shapes.mjs";
 import { PH_CONTEXT_NAMES, phShape } from "./ph-shapes.mjs";
 import { PA_CONTEXT_NAMES, paShape } from "./pa-shapes.mjs";
@@ -398,7 +400,7 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
 // await); `no-owner-context-aw-shared-*` keeps the shape.
 // ADR 0940: the `pl-*` contexts are the ten codes' cells, each measured (primitive-layer-shapes.mjs `PL_MEASURED`); a pair left out of them reports another code first,
 // never runs its site, or has a throw hidden by a later one, which the generic judge cannot score, so the census leaves them out for every code.
-const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
@@ -486,6 +488,10 @@ function recallAxesOf(code, context, base, variants, options = {}) {
   if (NM_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => nmShape(context, shape));
   // Batch 11: an `la-*` cell takes one base shape (la-shapes.mjs `laShape`): its question is the function assigned later, not the spelling of the site.
   if (LA_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => laShape(context, shape));
+  // Batch 11, slice 6 (the review of #220): an `er-*` cell takes one base shape (er-shapes.mjs `erShape`): its question is how the function is entered, not the spelling of the site.
+  if (ER_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => erShape(context, shape));
+  // Batch 11 (the follow-up to the review of #220): an `em-*` cell takes one base shape (em-shapes.mjs `emShape`): its question is how the JSX-returning function is entered, not the spelling of the site.
+  if (EM_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => emShape(context, shape));
   // Batch 11 (the review of #213): an `fc-*` cell takes one base shape (fc-shapes.mjs `fcShape`): its question is where the flush's function is entered, not the spelling of the site.
   if (FC_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => fcShape(context, shape));
   // Batch 11 (the B3 PR): a `ph-*` cell takes one base shape (ph-shapes.mjs `phShape`): its question is how the function reaches the package, not the spelling of the site.

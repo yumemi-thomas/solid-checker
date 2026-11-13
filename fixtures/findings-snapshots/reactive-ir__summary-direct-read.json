@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
+      "start": 294,
+      "end": 299,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -19,6 +30,28 @@
       "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
       "start": 400,
       "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
+      "start": 437,
+      "end": 442,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
+      "start": 594,
+      "end": 601,
       "fixes": 0
     },
     {
@@ -43,6 +76,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
+      "start": 789,
+      "end": 794,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -50,6 +94,17 @@
       "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
       "start": 865,
       "end": 884,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/summary-direct-read/App.tsx",
+      "start": 902,
+      "end": 907,
       "fixes": 0
     },
     {

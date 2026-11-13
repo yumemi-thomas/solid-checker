@@ -109,6 +109,17 @@
       "start": 1827,
       "end": 1837,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-unmodelled-slot/App.tsx",
+      "start": 1827,
+      "end": 1837,
+      "fixes": 0
     }
   ]
 }

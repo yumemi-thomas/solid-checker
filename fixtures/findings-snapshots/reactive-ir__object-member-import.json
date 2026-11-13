@@ -72,6 +72,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/App.tsx",
+      "start": 565,
+      "end": 590,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -99,6 +110,28 @@
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/App.tsx",
+      "start": 808,
+      "end": 809,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/fake-freeze.ts",
+      "start": 153,
+      "end": 162,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/fake-freeze.ts",
       "start": 153,
       "end": 162,
@@ -116,6 +149,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 76,
+      "end": 85,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -124,6 +168,17 @@
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 76,
       "end": 85,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 140,
+      "end": 149,
       "fixes": 0
     },
     {
@@ -138,6 +193,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 239,
+      "end": 248,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -146,6 +212,17 @@
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 239,
       "end": 248,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 340,
+      "end": 349,
       "fixes": 0
     },
     {
@@ -160,6 +237,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 459,
+      "end": 468,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -168,6 +256,17 @@
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 459,
       "end": 468,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 540,
+      "end": 549,
       "fixes": 0
     },
     {
@@ -182,6 +281,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 672,
+      "end": 681,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -190,6 +300,17 @@
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 672,
       "end": 681,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 754,
+      "end": 763,
       "fixes": 0
     },
     {
@@ -204,6 +325,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 904,
+      "end": 913,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -212,6 +344,17 @@
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 904,
       "end": 913,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 1035,
+      "end": 1044,
       "fixes": 0
     },
     {
@@ -226,10 +369,10 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "uncertifiable",
-      "blocker": "owner-callers-unenumerated",
+      "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 1115,
@@ -243,8 +386,41 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 1115,
+      "end": 1124,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
       "start": 1237,
       "end": 1246,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/negative.ts",
+      "start": 1237,
+      "end": 1246,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/source.ts",
+      "start": 136,
+      "end": 145,
       "fixes": 0
     },
     {

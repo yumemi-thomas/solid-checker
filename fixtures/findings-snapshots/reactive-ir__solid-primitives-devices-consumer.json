@@ -11,6 +11,28 @@
       "start": 76,
       "end": 89,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-primitives-devices-consumer/App.tsx",
+      "start": 134,
+      "end": 150,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-primitives-devices-consumer/App.tsx",
+      "start": 235,
+      "end": 240,
+      "fixes": 0
     }
   ]
 }

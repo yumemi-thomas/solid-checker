@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 395,
+      "end": 398,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -21,6 +32,17 @@
       "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
       "start": 460,
       "end": 467,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 520,
+      "end": 523,
       "fixes": 0
     },
     {
@@ -35,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 644,
+      "end": 647,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -43,6 +76,17 @@
       "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
       "start": 714,
       "end": 747,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 806,
+      "end": 809,
       "fixes": 0
     },
     {
@@ -57,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 940,
+      "end": 943,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -65,6 +120,17 @@
       "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
       "start": 1075,
       "end": 1081,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 1162,
+      "end": 1168,
       "fixes": 0
     },
     {
@@ -79,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 1327,
+      "end": 1330,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -87,6 +164,39 @@
       "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
       "start": 1529,
       "end": 1532,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 1547,
+      "end": 1557,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 1547,
+      "end": 1557,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Early.tsx",
+      "start": 1581,
+      "end": 1584,
       "fixes": 0
     },
     {
@@ -110,6 +220,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 327,
+      "end": 330,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -130,6 +251,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 508,
+      "end": 511,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -137,6 +269,17 @@
       "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
       "start": 615,
       "end": 618,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 641,
+      "end": 644,
       "fixes": 0
     },
     {
@@ -150,6 +293,39 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 868,
+      "end": 874,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 925,
+      "end": 935,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 925,
+      "end": 935,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -157,6 +333,17 @@
       "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
       "start": 966,
       "end": 969,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 985,
+      "end": 988,
       "fixes": 0
     },
     {
@@ -177,6 +364,17 @@
       "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
       "start": 1104,
       "end": 1116,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructured-binding-tdz/Late.tsx",
+      "start": 1131,
+      "end": 1139,
       "fixes": 0
     }
   ]

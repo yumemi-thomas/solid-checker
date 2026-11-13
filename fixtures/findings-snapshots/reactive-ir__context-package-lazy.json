@@ -33,6 +33,17 @@
       "start": 286,
       "end": 314,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-lazy/Local.tsx",
+      "start": 72,
+      "end": 86,
+      "fixes": 0
     }
   ]
 }

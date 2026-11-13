@@ -10,6 +10,17 @@
       "start": 373,
       "end": 391,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-handler-literal/App.tsx",
+      "start": 373,
+      "end": 391,
+      "fixes": 0
     }
   ]
 }

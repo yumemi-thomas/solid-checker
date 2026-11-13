@@ -698,9 +698,14 @@ async function runCase(id, slot) {
   writeFileSync(join(dir, "main.tsx"), mainSource(observations, spec.mount));
   assert(spec.haltMarker === undefined || typeof spec.haltMarker === "boolean", `${id}: haltMarker must be a boolean`);
   if (spec.haltMarker) writeFileSync(join(dir, "sc-halt.ts"), haltModule);
-  writeFileSync(join(dir, "index.html"), spec.haltMarker ? haltHtml : html);
+  // `external` names case files the page loads by a script of its own after the entry's and the checker's program does not hold: an importer outside the program, the
+  // caller an open boundary cannot see (ADR 0970, R3 of the re-review of #221). They are copied like the others; the tsconfig leaves them out and the entry never imports them.
+  const external = spec.external ?? [];
+  assert(Array.isArray(external) && external.every((name) => name !== "App.tsx" && files.includes(name)), `${id}: external must list case files other than App.tsx`);
+  const page = (spec.haltMarker ? haltHtml : html).replace('<script type="module" src="/main.tsx"></script>', (entry) => entry + external.map((name) => `<script type="module" src="/${name}"></script>`).join(""));
+  writeFileSync(join(dir, "index.html"), page);
   writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));
-  writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["main.tsx", ...files] }, null, 2));
+  writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["main.tsx", ...files.filter((name) => !external.includes(name))] }, null, 2));
   // The checker's program boundary follows the nearest manifest, which is the install's: it publishes
   // nothing, so the boundary is closed. `programBoundary` writes this case's own manifest: a publishing one
   // (an entry field) is open, a private one is closed.

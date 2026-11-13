@@ -268,6 +268,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 439,
+      "end": 450,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 603,
+      "end": 614,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
@@ -287,6 +309,17 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
       "start": 1026,
       "end": 1035,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1038,
+      "end": 1045,
       "fixes": 0
     },
     {
@@ -378,6 +411,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1700,
+      "end": 1710,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1700,
+      "end": 1710,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -389,6 +444,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1778,
+      "end": 1786,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -397,6 +463,28 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
       "start": 1778,
       "end": 1786,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1917,
+      "end": 1936,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 1917,
+      "end": 1936,
       "fixes": 0
     },
     {
@@ -452,6 +540,17 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
       "start": 2303,
       "end": 2321,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 2368,
+      "end": 2373,
       "fixes": 0
     },
     {

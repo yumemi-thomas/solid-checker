@@ -24,6 +24,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 796,
+      "end": 806,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 796,
+      "end": 806,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
@@ -32,6 +54,17 @@
       "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
       "start": 819,
       "end": 829,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 881,
+      "end": 884,
       "fixes": 0
     },
     {

@@ -79,6 +79,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 415,
+      "end": 429,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-outside-hold",
       "code": "SC5006",
       "kind": "uncertifiable",
@@ -90,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 524,
+      "end": 544,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-outside-hold",
       "code": "SC5006",
       "kind": "uncertifiable",
@@ -98,6 +120,28 @@
       "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
       "start": 609,
       "end": 621,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 639,
+      "end": 659,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 753,
+      "end": 761,
       "fixes": 0
     }
   ]

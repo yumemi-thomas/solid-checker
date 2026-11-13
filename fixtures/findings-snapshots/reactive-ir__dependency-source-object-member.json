@@ -47,11 +47,33 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
+      "start": 409,
+      "end": 410,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
       "start": 445,
       "end": 474,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-object-member/local.ts",
+      "start": 91,
+      "end": 100,
       "fixes": 0
     },
     {

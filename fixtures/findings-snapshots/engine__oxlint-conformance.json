@@ -11,6 +11,17 @@
       "start": 24,
       "end": 33,
       "fixes": 1
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/oxlint-conformance/failing.tsx",
+      "start": 70,
+      "end": 75,
+      "fixes": 0
     }
   ]
 }

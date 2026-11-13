@@ -2,10 +2,32 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 434,
+      "end": 446,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 434,
+      "end": 446,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
       "start": 434,
@@ -21,6 +43,28 @@
       "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
       "start": 514,
       "end": 521,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 543,
+      "end": 553,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 543,
+      "end": 553,
       "fixes": 0
     },
     {
@@ -54,6 +98,17 @@
       "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
       "start": 572,
       "end": 579,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 615,
+      "end": 618,
       "fixes": 0
     },
     {
@@ -79,6 +134,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 1010,
+      "end": 1020,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 1010,
+      "end": 1020,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -109,6 +186,17 @@
       "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
       "start": 1039,
       "end": 1046,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-settled/App.tsx",
+      "start": 1082,
+      "end": 1085,
       "fixes": 0
     }
   ]

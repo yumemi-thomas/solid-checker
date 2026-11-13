@@ -489,6 +489,14 @@
           "path": "<root>/Row.tsx",
           "startByte": 55,
           "endByte": 63
+        },
+        {
+          "id": "SC4001",
+          "rule": "missing-owner",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 88,
+          "endByte": 92
         }
       ],
       "metrics": {
@@ -608,6 +616,14 @@
           "path": "<root>/App.tsx",
           "startByte": 415,
           "endByte": 464
+        },
+        {
+          "id": "SC4001",
+          "rule": "missing-owner",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 505,
+          "endByte": 516
         }
       ],
       "metrics": {
@@ -888,6 +904,14 @@
           "path": "<root>/Row.tsx",
           "startByte": 55,
           "endByte": 63
+        },
+        {
+          "id": "SC4001",
+          "rule": "missing-owner",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 88,
+          "endByte": 92
         }
       ],
       "metrics": {
@@ -952,6 +976,14 @@
           "path": "<root>/Row.tsx",
           "startByte": 55,
           "endByte": 63
+        },
+        {
+          "id": "SC4001",
+          "rule": "missing-owner",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 88,
+          "endByte": 92
         },
         {
           "id": "SC9012",
@@ -1024,6 +1056,14 @@
           "path": "<root>/Row.tsx",
           "startByte": 55,
           "endByte": 63
+        },
+        {
+          "id": "SC4001",
+          "rule": "missing-owner",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 88,
+          "endByte": 92
         }
       ],
       "metrics": {

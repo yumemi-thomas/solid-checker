@@ -5115,6 +5115,11 @@
     "expect": [
      {
       "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC1002",
       "context": "unresolved-invocation"
      },
@@ -5323,6 +5328,16 @@
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
     "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
     "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
@@ -15817,6 +15832,11 @@
     "expect": [
      {
       "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
      },
@@ -16764,7 +16784,19 @@
     "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
    },
    "weight": 34,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0970",
+    "restoredBy": "Prove a package renders a component under an owner, from its dependency source (ADR 0970)",
+    "why": "certified clean before the owner emission took a function a reference enters for a layer like any other: `Admin` is exported and named only by `mod.Admin`, the module a `lazy` loader hands back, so no tag renders it in this program and the `{props.title}` render effect of `Admin` keeps an uncertifiable SC4001 row (`owner-callers-unenumerated`); the proof that `lazy`, a router or `Dynamic` renders the component it is handed under an owner, from the package's source, restores the expectation",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": ""
+     }
+    ]
+   }
   },
   {
    "id": "clean-loading-boundary",

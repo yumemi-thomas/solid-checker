@@ -39,7 +39,8 @@ export function FromHandler() {
 // ADR 0963 (a call the call graph withheld): a helper reached through a self-import of this module, the way another module's
 // import would reach it. The call graph keeps no edge to a `const` arrow here (ADR 0339: through a cycle the call may run before the
 // binding's declarator), so the walk found no caller and the helper was certified clean; the call is followed as a run the walk does
-// not prove, an uncertifiable row. A hoisted function has its edge: a violation.
+// not prove, an uncertifiable row. A hoisted function has its edge, and it is published by a specifier too (ADR 0970, R1 of the re-review of #221: `module_exports` took
+// no specifier for an export, so it was a violation, where an exported helper is an obligation, ADR 0516): an uncertifiable row, as `createsMemo`'s.
 const selfConstLocal = () => {
   createMemo(() => 5);
 };

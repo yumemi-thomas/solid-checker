@@ -23,10 +23,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 352,
+      "end": 362,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 352,
+      "end": 362,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
       "start": 352,
       "end": 362,
@@ -55,6 +77,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 721,
+      "end": 733,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -76,6 +109,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 721,
+      "end": 733,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -86,6 +130,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 1196,
+      "end": 1208,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
@@ -93,6 +148,28 @@
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
       "start": 1196,
       "end": 1208,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 1196,
+      "end": 1208,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 1265,
+      "end": 1272,
       "fixes": 0
     }
   ]

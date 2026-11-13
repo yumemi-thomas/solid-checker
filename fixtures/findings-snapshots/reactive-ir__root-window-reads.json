@@ -53,6 +53,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
+      "start": 1591,
+      "end": 1601,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -60,6 +71,28 @@
       "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
       "start": 1897,
       "end": 1904,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
+      "start": 2087,
+      "end": 2097,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/root-window-reads/App.tsx",
+      "start": 3033,
+      "end": 3043,
       "fixes": 0
     },
     {

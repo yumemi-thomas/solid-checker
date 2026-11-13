@@ -22,6 +22,17 @@
       "start": 533,
       "end": 548,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-root-patch-definer-key-same/App.tsx",
+      "start": 589,
+      "end": 594,
+      "fixes": 0
     }
   ]
 }

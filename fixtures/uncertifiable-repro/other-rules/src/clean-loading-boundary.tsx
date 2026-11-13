@@ -1,6 +1,7 @@
 // Clean. Mirrors every-deck-of-cards src/Layout.tsx:35-37 and expenses-app src/lib/current-user.tsx:28-34:
 // a Loading boundary around children, with a fallback element and a non-keyed Show reading context-free state.
 import { createMemo, Loading, Show } from "solid-js";
+import { render } from "@solidjs/web";
 import type { JSX } from "@solidjs/web";
 
 function Page(props: { children?: JSX.Element }) {
@@ -13,10 +14,13 @@ function Page(props: { children?: JSX.Element }) {
   );
 }
 
-export function App() {
+function App() {
   return (
     <Page>
       <main>body</main>
     </Page>
   );
 }
+
+// The mounted root, as in the apps this mirrors: every component is rendered from it, so none runs under a leaf owner (ADR 0969).
+render(() => <App />, document.body);

@@ -24,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-withheld-rows/App.tsx",
+      "start": 803,
+      "end": 815,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -35,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-withheld-rows/App.tsx",
+      "start": 1115,
+      "end": 1125,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -43,6 +65,17 @@
       "path": "fixtures/reactive-ir/impostor-withheld-rows/App.tsx",
       "start": 1156,
       "end": 1169,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-withheld-rows/App.tsx",
+      "start": 1217,
+      "end": 1227,
       "fixes": 0
     },
     {
@@ -98,6 +131,28 @@
       "path": "fixtures/reactive-ir/impostor-withheld-rows/App.tsx",
       "start": 1259,
       "end": 1263,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-withheld-rows/App.tsx",
+      "start": 1287,
+      "end": 1305,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/impostor-withheld-rows/App.tsx",
+      "start": 1308,
+      "end": 1323,
       "fixes": 0
     },
     {

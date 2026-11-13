@@ -22,7 +22,7 @@ mod context_census_workers_process;
 #[path = "server_rules_workers_process.rs"]
 mod server_rules_workers_process;
 
-use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
+use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule, owner_entry_row};
 
 #[test]
 fn conditional_package_getters_require_every_alternative() {
@@ -124,7 +124,7 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
         let end = source[start + 1..]
             .find("export function ")
             .map_or(source.len(), |offset| start + 1 + offset);
-        let rows = findings
+        let in_function = findings
             .iter()
             .filter(|row| {
                 row["primaryLocation"]["path"]
@@ -136,6 +136,31 @@ fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
                     && matches!(row["id"].as_str(), Some("SC3001" | "SC9012"))
             })
             .collect::<Vec<_>>();
+        // ADR 0969: every exported function writes its `createTrackedEffect(...)` in its own body, and an unread package may run an export
+        // under a leaf owner (B3), so that creation keeps the leaf universe's uncertifiable `leaf-operation-unaccounted` row, asserted
+        // apart from the walk's. Two functions have a second row at an `onCleanup` that never runs: `CleanImmediate`'s sits in a
+        // generator IIFE whose body is never started, `KnownArgument`'s behind an IIFE argument that is the literal `false`. The leaf
+        // walk proves both, but records no silence for them, so the home row stands (never a violation, never a silent clean).
+        let (universe, rows): (Vec<_>, Vec<_>) = in_function.into_iter().partition(|row| {
+            row["id"] == "SC3001" && row["blockedBy"]["kind"] == "leaf-operation-unaccounted"
+        });
+        let mut unaccounted =
+            vec![start + source[start..end].find("createTrackedEffect(").unwrap()];
+        if matches!(name, "CleanImmediate" | "KnownArgument") {
+            unaccounted.push(start + source[start..end].find("onCleanup(").unwrap());
+        }
+        assert_eq!(
+            universe
+                .iter()
+                .map(|row| row["primaryLocation"]["startByte"].as_u64().unwrap() as usize)
+                .collect::<Vec<_>>(),
+            unaccounted,
+            "{name}: {universe:#?}"
+        );
+        assert!(
+            universe.iter().all(|row| row["kind"] == "uncertifiable"),
+            "{name}: {universe:#?}"
+        );
         if let Some((code, kind)) = expected {
             // ADR 0454: the call in the IIFE's parameter list belongs to the
             // IIFE, so the leaf callback's walk no longer counts it as its own
@@ -471,14 +496,30 @@ fn merged_global_fetch_preserves_opaque_and_getter_obligations() {
             .collect::<Vec<_>>();
         // ADR 0963: the SC3001 net's row (`function-run-unplaced`) for code a member route runs stands beside the walk's rows, so it is
         // asserted apart: one in `FetchWithGetter` (the getter's `onCleanup`, inside the opaque `fetch(...)` call), none elsewhere.
-        let (net, rows): (Vec<_>, Vec<_>) = in_case.into_iter().partition(|row| {
+        let (net, rest): (Vec<_>, Vec<_>) = in_case.into_iter().partition(|row| {
             row["id"] == "SC3001" && row["blockedBy"]["kind"] == "function-run-unplaced"
+        });
+        // ADR 0969: so is the leaf universe's row for a creation no silence ends, here the `createTrackedEffect(...)` that
+        // `ShadowedFetch` writes in its exported body (an unread package may run the export under a leaf owner: B3), never a violation.
+        let (universe, rows): (Vec<_>, Vec<_>) = rest.into_iter().partition(|row| {
+            row["id"] == "SC3001" && row["blockedBy"]["kind"] == "leaf-operation-unaccounted"
         });
         if name == "FetchWithGetter" {
             assert_eq!(net.len(), 1, "{name}: {net:#?}");
             assert_eq!(net[0]["kind"], "uncertifiable", "{name}");
         } else {
             assert!(net.is_empty(), "{name}: {net:#?}");
+        }
+        if name == "ShadowedFetch" {
+            assert_eq!(universe.len(), 1, "{name}: {universe:#?}");
+            assert_eq!(universe[0]["kind"], "uncertifiable", "{name}");
+            let creation = start + source[start..end].find("createTrackedEffect(").unwrap();
+            assert_eq!(
+                universe[0]["primaryLocation"]["startByte"], creation as u64,
+                "{name}"
+            );
+        } else {
+            assert!(universe.is_empty(), "{name}: {universe:#?}");
         }
         if let Some((code, kind)) = expected {
             assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
@@ -502,6 +543,7 @@ fn optional_primitive_signatures_preserve_dispatch_and_callback_boundaries() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/Optional.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     let source = include_str!(
         "../../../../fixtures/reactive-ir/literal-argument-member-dispatch/Optional.tsx"
@@ -537,6 +579,7 @@ fn formatted_primitive_receivers_demand_exact_builtin_declarations() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/Formatted.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     assert_eq!(rows.len(), 1, "{rows:#?}");
     let row = rows[0];
@@ -653,6 +696,7 @@ fn routed_options_callbacks_compose_source_contexts() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/RoutedMembers.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     // ADR 0321: each `read` arrow is written in the argument literal, so its
     // dispatch resolves to it; the read keeps the source context proven here.
@@ -708,6 +752,7 @@ fn returned_literal_body_facts_project_reads_only_at_invocation() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/DirectReturns.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     assert_eq!(rows.len(), 1, "{rows:#?}");
     let start = source.find("const value = read()").unwrap() + "const value = ".len();
@@ -932,6 +977,7 @@ fn member_dispatch_keeps_the_source_invocation_context() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/MemberContexts.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     // ADR 0802: a memo over a parameter is open while its callers are not
     // followed: the three helpers that return a memo reading `options.read()`.
@@ -1338,6 +1384,7 @@ fn typed_options_wrappers_preserve_source_callback_execution() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/QueryOptions.tsx"))
         })
+        .filter(|finding| !support::owner_entry_row(finding))
         .collect::<Vec<_>>();
     // Three reads, and ADR 0665's SC5003 of the memo over the handed compute.
     // ADR 0775: and SC9012 at `options()` of the two wrappers nothing resolves:
@@ -1557,6 +1604,8 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
                     .as_str()
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
+            // ADR 0970: the owner obligations of the fixture's exported components no tag renders are not this test's subject.
+            .filter(|row| !owner_entry_row(row))
             .collect::<Vec<_>>();
         let mut found = reads
             .iter()
@@ -1653,7 +1702,14 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // ADR 0966 (batch 11, slice 5): one more, the uncertifiable `leaf-operation-unaccounted` row at the `flush()` in the
                 // out-of-band `onSettled` callback (App.tsx:58), which the owner graph proves is no leaf owner's: the accounting pass
                 // names no reason for it (that is the leaf universe's, slice 6).
-                ("leaf-owner-forbidden-call", 18),
+                // ADR 0969 (batch 11, slice 6): fifteen more, all uncertifiable `leaf-operation-unaccounted` (the home row of the leaf
+                // universe: no ending, no silence), none a violation, so sixteen violations and seventeen uncertifiable in all. They
+                // sit at the creations and cleanups the walk does not row: the `createMemo`, `createTrackedEffect` and `createEffect`
+                // calls written in the exported component bodies (lines 5, 14, 27, 28, 30, 33, 108, 119, 151, 155, 174, 175), where
+                // an unread package may run the export under a leaf owner (B3, policy A), the out-of-band `onSettled`'s `onCleanup`
+                // and `createMemo` (56, 57; its `flush()` is the row above), and the `onCleanup` in the handler arrow only built and
+                // returned by `buildTeardownHandler` (102), which no call edge places.
+                ("leaf-owner-forbidden-call", 33),
                 // Three inline (the function-seeded createSignal, createMemo,
                 // createRoot) plus the dynamic-extent trackDouble() reached
                 // through its helper.
@@ -1717,8 +1773,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         // runs every component under its own transparent root, and Chrome is
         // quiet for each; the call form `Loading(props)` still warns.
         // ADR 0868: `directRootHelper`'s two operations (lines 23-24) are
-        // uncertifiable: its census is not proven closed.
-        ("owner-presence", &[("missing-owner", 13)]),
+        // uncertifiable: its census is not proven closed. ADR 0970: and five
+        // uncertifiable `owner-callers-unenumerated` rows, the render effects and
+        // owner operations of the exported components no tag renders.
+        ("owner-presence", &[("missing-owner", 18)]),
         (
             "async-boundary",
             &[
@@ -1778,6 +1836,35 @@ fn settled_leaf_rules_follow_call_site_ownership() {
                     .as_str()
                     .is_some_and(|message| !message.contains("OutOfBand"))
             }),
+        "{findings:#?}"
+    );
+    // ADR 0969: what the exported `OutOfBand` keeps is never a violation. Its three leaf operations (`onCleanup`, `createMemo`, `flush`)
+    // are uncertifiable `leaf-operation-unaccounted` rows (ADR 0966's for the flush, ADR 0969's for the other two): an unread package
+    // may run the export, and the owner graph does not end the sites.
+    let source = include_str!("../../../../fixtures/reactive-ir/leaf-owner/App.tsx");
+    let out_of_band = source.find("export function OutOfBand(").unwrap() as u64
+        ..source.find("export function settleWithCleanup(").unwrap() as u64;
+    let kept = findings
+        .iter()
+        .filter(|finding| {
+            finding["rule"] == "leaf-owner-forbidden-call"
+                && finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/App.tsx"))
+                && finding["primaryLocation"]["startByte"]
+                    .as_u64()
+                    .is_some_and(|byte| out_of_band.contains(&byte))
+        })
+        .map(|finding| {
+            (
+                finding["kind"].as_str(),
+                finding["blockedBy"]["kind"].as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        kept,
+        [(Some("uncertifiable"), Some("leaf-operation-unaccounted")); 3],
         "{findings:#?}"
     );
     // The exported helper's call sites are unknowable, so its onSettled leaf
@@ -1878,12 +1965,19 @@ fn solid2_precision_corrections_are_end_to_end() {
         // writes: on the audited rc.17 `Store<T> = T`, so a root write
         // type-checks and is this checker's (asserted by span below).
         ("no-store-mutation-outside-setter", 7),
-        ("leaf-owner-forbidden-call", 1),
+        // One violation (the owner-backed settled cleanup written as a literal callback, line 237) and, since ADR 0969 (batch 11,
+        // slice 6), thirty-three uncertifiable `leaf-operation-unaccounted` rows, the leaf universe's home row where no ending and no
+        // silence holds: the 29 `createMemo` and `createEffect` creations written in the exported component bodies (an unread package
+        // may run an export under a leaf owner: B3, policy A) and the four `onCleanup(dispose)` calls in the wrapped, referenced,
+        // nested and handed-on callbacks (lines 249, 259, 271, 281) that no proven leaf scope places. None is a violation.
+        ("leaf-owner-forbidden-call", 34),
         // One fewer than before ADR 0345 review D: the wrapper-built callback is
         // no longer named, so its cleanup is not reported. Two more since ADR
         // 0534: the wrapped and handed-on cleanups (lines 248 and 270) run in
-        // no proven region, so they are obligations, never silent.
-        ("missing-owner", 9),
+        // no proven region, so they are obligations, never silent. ADR 0970: and
+        // thirty-four uncertifiable `owner-callers-unenumerated` rows, the render
+        // effects and owner operations of the exported components no tag renders.
+        ("missing-owner", 43),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -1892,14 +1986,37 @@ fn solid2_precision_corrections_are_end_to_end() {
     // own synchronous extent. Past this landmark every leaf-owner call in the
     // fixture is wrapper-built, handed over as an identifier reference, or
     // has its onCleanup in a nested function the callback merely builds — no
-    // leaf scope is proven at any of them, so SC3001 stops here while the
-    // genuinely unowned SC4001 continues.
+    // leaf scope is proven at any of them, so SC3001 reports no violation here
+    // while the genuinely unowned SC4001 continues.
     let non_literal_leaf = start_of("// `wrap` may stash");
     assert!(
-        starts("leaf-owner-forbidden-call")
+        findings_for_rule(&findings, "leaf-owner-forbidden-call")
             .iter()
-            .all(|start| *start < non_literal_leaf),
+            .filter(|finding| finding["kind"] == "violation")
+            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+            .all(|start| start < non_literal_leaf),
         "a leaf callback that is not the literal argument proves no leaf scope"
+    );
+    // ADR 0969: what SC3001 keeps past the landmark is the four `onCleanup(dispose)` rows of the leaf universe, uncertifiable and no
+    // violation: no leaf scope is proven at them, and nothing proves none can reach them either.
+    let past_landmark = findings_for_rule(&findings, "leaf-owner-forbidden-call")
+        .into_iter()
+        .filter(|finding| {
+            finding["primaryLocation"]["startByte"]
+                .as_u64()
+                .is_some_and(|start| start > non_literal_leaf)
+        })
+        .map(|finding| {
+            (
+                finding["kind"].as_str(),
+                finding["blockedBy"]["kind"].as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        past_landmark,
+        [(Some("uncertifiable"), Some("leaf-operation-unaccounted")); 4],
+        "{findings:#?}"
     );
     assert_eq!(
         owner_starts("onCleanup")
@@ -2372,14 +2489,40 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // are observer-free and stay silent (probed, rc.0).
         assert_rule_findings(&findings, "no-await-primitive-in-tracked-scope", 4);
         // ADR 0641: on rc.21 the tracked effect's throw is the observer guard's,
-        // so the claim is this rule's alone, not the leaf owner's.
-        assert_rule_findings(&findings, "leaf-owner-forbidden-call", 0);
+        // so the claim is this rule's alone, not the leaf owner's: no SC3001
+        // violation here.
+        // ADR 0969 (batch 11, slice 6): the leaf universe's uncertifiable rows
+        // stand beside it, never a violation. SC3001 `leaf-operation-unaccounted`
+        // at each creation written in an exported component body (`createMemo`,
+        // `createEffect`, `createTrackedEffect` and the `resolve` calls, which
+        // create a computation of their own), thirteen in all, because an
+        // unread package may run an export under a leaf owner (B3, policy A);
+        // and SC6002 `effect-creation-unaccounted` at twelve of them (every
+        // creation an apply refuses, `createTrackedEffect` aside, the `resolve`
+        // the effect's own apply calls among them): the role silence asks, since
+        // the review of #220 (F2), that no package the build does not read may
+        // run the exported function.
+        let leaf = assert_rule_findings(&findings, "leaf-owner-forbidden-call", 13);
         assert!(
-            findings
-                .iter()
-                .all(|finding| finding["rule"] == "no-await-primitive-in-tracked-scope"),
-            "{findings:#?}"
+            leaf.iter().all(|finding| finding["kind"] == "uncertifiable"
+                && finding["blockedBy"]["kind"] == "leaf-operation-unaccounted"),
+            "{leaf:#?}"
         );
+        let apply = assert_rule_findings(&findings, "primitive-in-effect-callback", 12);
+        assert!(
+            apply
+                .iter()
+                .all(|finding| finding["kind"] == "uncertifiable"
+                    && finding["blockedBy"]["kind"] == "effect-creation-unaccounted"),
+            "{apply:#?}"
+        );
+        // ADR 0970: and the owner obligations (SC4001) of the fixture's exported components no tag renders.
+        let owner = assert_rule_findings(&findings, "missing-owner", 6);
+        assert!(
+            owner.iter().all(|finding| owner_entry_row(finding)),
+            "{owner:#?}"
+        );
+        assert_eq!(findings.len(), 4 + 13 + 12 + 6, "{findings:#?}");
     }
     if let Some(findings) = diagnostic_fixture("rc9-until-scope") {
         // rc.9's `until` carries resolve's observer guard, so the same four
@@ -2402,10 +2545,27 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             1,
             "{findings:#?}"
         );
+        // ADR 0969 (batch 11, slice 6): and five uncertifiable SC3001
+        // `leaf-operation-unaccounted` rows, the leaf universe's home row at each
+        // `createMemo`, `createEffect` and `createTrackedEffect` creation written
+        // in an exported component body (lines 16, 25, 34, 47, 77): an unread
+        // package may run an export under a leaf owner (B3, policy A). None is a
+        // violation.
+        let universe = assert_rule_findings(&findings, "leaf-owner-forbidden-call", 5);
+        assert!(
+            universe
+                .iter()
+                .all(|finding| finding["kind"] == "uncertifiable"
+                    && finding["blockedBy"]["kind"] == "leaf-operation-unaccounted"),
+            "{universe:#?}"
+        );
+        // ADR 0970: and the owner obligations (SC4001) of the exported components no tag renders.
         assert!(
             findings.iter().all(|finding| {
                 finding["rule"] == "no-await-primitive-in-tracked-scope"
                     || finding["rule"] == "unaudited-solid-release"
+                    || finding["rule"] == "leaf-owner-forbidden-call"
+                    || owner_entry_row(finding)
             }),
             "{findings:#?}"
         );
@@ -2601,9 +2761,33 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             ],
             "{findings:#?}"
         );
-        // Eleven findings (two ADR 0534 owner obligations), and the SC9014
-        // notice: rc.9 is older than the audited rc.13 (ADR 0194).
-        assert_eq!(findings.len(), 12, "{findings:#?}");
+        // Eleven findings (two ADR 0534 owner obligations), the SC9014
+        // notice (rc.9 is older than the audited rc.13, ADR 0194), and, since
+        // ADR 0969, five uncertifiable SC3001 `leaf-operation-unaccounted` rows,
+        // one at each `createEffect` creation written in an exported component
+        // (lines 20, 27, 33, 91, 99): an unread package may run an exported
+        // function under a leaf owner, so no creation in it is proven outside
+        // one (B3), and the code's home row stands. None is a violation.
+        assert_eq!(findings.len(), 17, "{findings:#?}");
+        let unaccounted = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC3001")
+            .map(|finding| {
+                (
+                    line(finding),
+                    finding["kind"].as_str(),
+                    finding["blockedBy"]["kind"].as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let expected = [20, 27, 33, 91, 99].map(|at| {
+            (
+                Some(at),
+                Some("uncertifiable"),
+                Some("leaf-operation-unaccounted"),
+            )
+        });
+        assert_eq!(unaccounted, expected, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
@@ -2671,7 +2855,13 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             "{findings:#?}"
         );
         assert_eq!(unplaced.len(), 5, "{findings:#?}");
-        assert_eq!(findings.len(), 16, "{findings:#?}");
+        // ADR 0970: and the owner obligations (SC4001) of the fixture's exported components no tag renders.
+        let owner = findings
+            .iter()
+            .filter(|finding| owner_entry_row(finding))
+            .count();
+        assert_eq!(owner, 12, "{findings:#?}");
+        assert_eq!(findings.len(), 16 + owner, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
@@ -2685,11 +2875,13 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
     let Some(async_findings) = diagnostic_fixture("async-boundary") else {
         return;
     };
+    // ADR 0970: `Good.tsx`'s exported components no tag renders keep an owner obligation (SC4001), which is not this test's subject.
     assert!(
         async_findings.iter().all(|finding| {
-            !finding["primaryLocation"]["path"]
-                .as_str()
-                .is_some_and(|path| path.ends_with("Good.tsx"))
+            owner_entry_row(finding)
+                || !finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("Good.tsx"))
         }),
         "nested Loading and inline pending observers must stay clean: {async_findings:#?}"
     );
@@ -2890,7 +3082,8 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     assert!(!user.contains("SC9012"), "{user}");
 
     let open = run("feedback-tiers-open", "default");
-    let review = open.find("Needs review (1)").expect("review heading");
+    // ADR 0970: the SC1001 obligation and the SC4001 owner obligation of the exported `Shown`, which no tag renders.
+    let review = open.find("Needs review (2)").expect("review heading");
     let coverage = open
         .find("Analysis coverage: 1 site in 1 group")
         .expect("coverage heading");
@@ -3034,9 +3227,19 @@ fn searches_past_their_budget_are_uncertifiable() {
     // ADR 0692: the value-use census follows `a` through `fa1`'s parameter;
     // the chain runs past its 8 hops, so the census answers open beside the
     // forwarding loop's row.
+    // ADR 0969: the line also holds the `createEffect(...)` creation written in
+    // the exported `Forwarded`, which the leaf universe does not end (an unread
+    // package may run the export under a leaf owner or on an apply: B3), so its
+    // uncertifiable SC3001 `leaf-operation-unaccounted` and SC6002
+    // `effect-creation-unaccounted` rows stand first on the line, and (ADR 0970) the
+    // effect's SC4001 `owner-callers-unenumerated` between them: `Forwarded` is
+    // exported and no tag renders it.
     assert_eq!(
         short,
         [
+            ("SC3001", "uncertifiable", "leaf-operation-unaccounted"),
+            ("SC4001", "uncertifiable", "owner-callers-unenumerated"),
+            ("SC6002", "uncertifiable", "effect-creation-unaccounted"),
             (
                 "SC9012",
                 "uncertifiable",
@@ -3046,10 +3249,14 @@ fn searches_past_their_budget_are_uncertifiable() {
         ]
     );
     let long = rows_at(&findings, "App.tsx", line_of(app, "fb1({ read: a })"));
-    // ADR 0692: the census on the same chain, past its 8 hops.
+    // ADR 0692: the census on the same chain, past its 8 hops; and the
+    // creation's home row (ADR 0969) and its owner obligation (ADR 0970), as above.
     assert_eq!(
         long,
         [
+            ("SC3001", "uncertifiable", "leaf-operation-unaccounted"),
+            ("SC4001", "uncertifiable", "owner-callers-unenumerated"),
+            ("SC6002", "uncertifiable", "effect-creation-unaccounted"),
             ("SC9012", "uncertifiable", "parameter-use-unmodeled"),
             ("SC9012", "uncertifiable", "value-forwarded"),
         ]
@@ -3067,4 +3274,64 @@ fn searches_past_their_budget_are_uncertifiable() {
         line_of(optimistic, "function g3("),
     );
     assert!(within.is_empty(), "{within:?}");
+}
+
+/// The review of #226, B1: a getter that names its own object, and a component that renders itself passing a prop on in a nested arrow, walked the accessor
+/// question anew each time and overflowed the stack (exit 134, no report). The run ends, and the flushes of B1's getter, B2's reads in a JSX expression or a
+/// class field initializer and B3's `this` read keep their uncertifiable rows (never silence, never a violation), as do the re-check's N1 and N2 shapes.
+#[test]
+fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-accessors") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-accessors/App.tsx"
+    );
+    let line_of = |needle: &str| {
+        let at = source
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} in the fixture"));
+        source[..at].lines().count() as u64 + 1
+    };
+    assert!(
+        findings.iter().all(|row| row["kind"] != "violation"),
+        "{findings:#?}"
+    );
+    for site in [
+        "const selfNamed = {\n  x: 1,\n  get g(): number {\n    flush();",
+        "function typeofChild() {\n  flush();",
+        "function classFieldChild() {\n  flush();",
+        "const thisReader = {\n  get g(): number {\n    flush();",
+        // The re-check's N1 (a method call on an object of accessors binds `this`: a method written outside the literal, one assigned later, a prop of a
+        // component) and N2 (one callback returns the flushing function or the object: the function's flow, visited first, had cut the object's).
+        "const outerShorthand = {\n  get g(): number {\n    flush();",
+        "const outerProperty = {\n  get g(): number {\n    flush();",
+        "const assignedMethod = {\n  get g(): number {\n    flush();",
+        "function propsMethodChild() {\n  flush();",
+        "function pickHelper(): number {\n  flush();",
+    ] {
+        let flush = line_of(site) + site.lines().count() as u64 - 1;
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["id"] == "SC2006" && row["primaryLocation"]["line"].as_u64() == Some(flush)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 1, "{site}: {rows:#?}");
+        assert_eq!(rows[0]["kind"], "uncertifiable", "{site}");
+    }
+    // The twins, read where no package runs them, stay silent.
+    for twin in [
+        "const inlineFree = {\n  get g(): number {\n    flush();",
+        "function twinPickHelper(): number {\n  flush();",
+    ] {
+        let flush = line_of(twin) + twin.lines().count() as u64 - 1;
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["id"] == "SC2006" && row["primaryLocation"]["line"].as_u64() == Some(flush)
+            })
+            .count();
+        assert_eq!(rows, 0, "{twin}");
+    }
 }

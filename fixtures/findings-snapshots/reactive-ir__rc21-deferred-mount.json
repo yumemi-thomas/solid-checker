@@ -45,6 +45,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/ClientBody.tsx",
+      "start": 391,
+      "end": 392,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/ClientBody.tsx",
+      "start": 401,
+      "end": 402,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -52,6 +74,17 @@
       "path": "fixtures/reactive-ir/rc21-deferred-mount/LazyBody.tsx",
       "start": 196,
       "end": 199,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/LazyBody.tsx",
+      "start": 214,
+      "end": 215,
       "fixes": 0
     },
     {
@@ -63,6 +96,17 @@
       "path": "fixtures/reactive-ir/rc21-deferred-mount/Picked.tsx",
       "start": 168,
       "end": 171,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-deferred-mount/Picked.tsx",
+      "start": 186,
+      "end": 187,
       "fixes": 0
     }
   ]

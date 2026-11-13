@@ -24,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
+      "start": 543,
+      "end": 560,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -46,11 +57,33 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
+      "start": 623,
+      "end": 640,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
+      "start": 1009,
+      "end": 1026,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
       "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
       "start": 1009,
       "end": 1026,
@@ -65,6 +98,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
       "start": 1051,
       "end": 1056,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
+      "start": 1089,
+      "end": 1106,
       "fixes": 0
     },
     {

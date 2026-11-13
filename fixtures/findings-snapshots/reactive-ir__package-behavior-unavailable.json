@@ -11,6 +11,17 @@
       "start": 415,
       "end": 464,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-behavior-unavailable/App.tsx",
+      "start": 505,
+      "end": 516,
+      "fixes": 0
     }
   ]
 }
