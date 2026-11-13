@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are one hundred and one routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain"]);
+  it("are one hundred and twenty-one routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(554);
+    expect(PH_CONTEXT_NAMES).toHaveLength(674);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -307,5 +307,41 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(chain.some((line) => /^put\d+\(holder\);$/.test(line))).toBe(true);
     expect(chain.some((line) => /^outer\d+\(o\d+\);$/.test(line))).toBe(true);
     expect(textOf("FLUSH_IN_ACTION", "ph-putparam-step-never")).toContain("skipRun(() => {");
+  });
+  it("print the review of #232's routes: what the strict prefilter gives out, how a key is spelled, what a pattern parameter is, a write through the receiver, a symbol rewritten, Object.prototype", () => {
+    const rest = textOf("FLUSH_IN_ACTION", "ph-restcopy-step");
+    expect(rest.some((line) => /^const \{ \.\.\.rest\d+ \}: any = o\d+;$/.test(line))).toBe(true);
+    expect(rest.some((line) => /^rest\d+\.__proto__ = base\d+;$/.test(line))).toBe(true);
+    const pattern = textOf("FLUSH_IN_ACTION", "ph-nestedpattern-step");
+    expect(pattern.some((line) => /^const \{ sub\d+: s\d+ \}: any = hh\d+;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-nestedread-step").some((line) => /^const s\d+: any = hh\d+\.sub\d+;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-nestedchain-step").some((line) => /^hh\d+\.sub\d+\.__proto__ = base\d+;$/.test(line))).toBe(true);
+    const arg = textOf("FLUSH_IN_ACTION", "ph-nestedarg-step");
+    expect(arg.some((line) => /^function give\d+\(p: any\) \{$/.test(line))).toBe(true);
+    expect(arg.some((line) => /^p\.sub\d+\.__proto__ = base\d+;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-restnested-step").some((line) => /^\(this as any\)\.sub\d+\.m\d+\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-nestedspread-step").some((line) => /^const copy\d+: any = \{ \.\.\.hh\d+ \};$/.test(line))).toBe(true);
+    // A key spelled with a unicode escape, a number written as a key: the text is not the key.
+    expect(textOf("FLUSH_IN_ACTION", "ph-keyescape-step").some((line) => /^o\d+\.\\u006d\d+ = function \(\) \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-keyreadescape-step")).toContain("this.\\u006d1();");
+    expect(textOf("FLUSH_IN_ACTION", "ph-keymethodescape-step").some((line) => /^\\u006d\d+\(\): void \{$/.test(line))).toBe(true);
+    const hex = textOf("FLUSH_IN_ACTION", "ph-keyhex-step");
+    expect(hex).toContain("0x1(): void {");
+    expect(hex).toContain("(this as any)[1]();");
+    const float = textOf("FLUSH_IN_ACTION", "ph-keyfloat-step");
+    expect(float).toContain("1.0(): void {");
+    expect(float).toContain('(this as any)["1"]();');
+    // A parameter that is a pattern or a rest is no name for the receiver.
+    expect(textOf("FLUSH_IN_ACTION", "ph-parampattern-step").some((line) => /^function read\d+\(\{ m\d+ \}: any\) \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-paramgetter-step").some((line) => /^get m\d+\(\): number \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-paramarray-step")).toContain("*[Symbol.iterator]() {");
+    expect(textOf("FLUSH_IN_ACTION", "ph-paramrest-step").some((line) => /^function read\d+\(\.\.\.xs: any\[\]\) \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-paramrestpass-step").some((line) => /^read\d+\(xs\[0\]\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-assignthis-step").some((line) => /^Object\.assign\(this, \{ k\d+: 1 \}\);$/.test(line))).toBe(true);
+    const symbol = textOf("FLUSH_IN_ACTION", "ph-symbolrewrite-step");
+    expect(symbol.some((line) => /^let sym\d+: any = Symbol\(\);$/.test(line))).toBe(true);
+    expect(symbol.some((line) => /^\(\{ sym\d+ \} = \{ sym\d+: "m\d+" \}\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-objproto-step").some((line) => line === 'Object.defineProperty(Object.prototype, "h", {')).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-restcopy-step-never")).toContain("skipRun(() => {");
   });
 });

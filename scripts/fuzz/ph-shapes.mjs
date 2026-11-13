@@ -127,6 +127,29 @@
 //             putparam    `function put1(target: { m1(): void }) { target.m1 = function () { cb1(); }; }`, `const o1 = { m1(): void {} }`, `put1(o1)`, `runStep(() => { o1.m1(); })`
 //             putparamany the same with `target: any` and `const o1: any = {}`
 //             putchain    the argument is the parameter of an outer function: `function putOuter1(holder: …) { put1(holder); }`, `putOuter1(o1)`
+//           and the review of #232 (B1 to B5, S3: the strict prefilter proves a holder is no receiver, and what it gives out, how a key is spelled, what a parameter that is a pattern is, what
+//           a write through the receiver is, and which names are unique are its premises). Each reads `this.m1()` in a getter of `base1`, and `base1` is the prototype of the holder
+//           that has the flushing member, or is the holder's own getter:
+//             restcopy    `const { ...rest1 } = o1; rest1.__proto__ = base1`: a rest copy holds the same functions and is given the prototype
+//             nestedpattern `const { sub1 } = hh1`: the nested literal, bound by a pattern, given the prototype
+//             nestedread  `const s1 = hh1.sub1`: the nested literal, through a member read
+//             nestedchain `hh1.sub1.__proto__ = base1`: with no local
+//             nestedarg   `function give1(p) { p.sub1.__proto__ = base1; … }`, `give1({ sub1: { m1() { … } } })`: the nested literal in an argument of a function the build reads
+//             restnested  a rest copy of an object that holds the nested literal; `base1` reads `this.sub1.m1()`
+//             nestedspread `const copy1 = { ...hh1 }; copy1.sub1.__proto__ = base1`: a spread copy shares the nested literal
+//             keyescape   `o1.\u006d1 = function () { … }`: a key spelled with a unicode escape is the key `m1`
+//             keyreadescape the read `this.\u006d1()` of a key stored as `m1`
+//             keymethodescape `{ __proto__: base1, \u006d1() { … } }` read by `this.m1()`
+//             keyhex      `{ __proto__: base1, 0x1() { … } }` read by `this[1]()`: a number written as a key is its whole-number key
+//             keyfloat    `{ __proto__: base1, 1.0() { … } }` read by `this["1"]()`
+//             parampattern `function f1({ m1 }) { m1.call(null); }`, `f1(this)` in the getter: the pattern reads the key where the function runs
+//             paramgetter the pattern alone reads a getter of the receiver: `function f1({ m1 }) { void m1; }`
+//             paramarray  `function f1([a]) {}`: an array pattern runs the receiver's iterator
+//             paramrest   `function f1(...xs) { xs[0].m1(); }`, `f1(this)`: a rest parameter is an array that holds the receiver
+//             paramrestpass `function f1(...xs) { g1(xs[0]); }`: and passes it on
+//             assignthis  `Object.assign(this, { k1: 1 })` in the getter: a write of every key of the sources, which runs the setter `set k1` of the derived literal
+//             symbolrewrite `let s1 = Symbol(); ({ s1 } = { s1: "m1" }); o1[s1] = function () { … }`: a name an object pattern assignment rewrites is no unique symbol
+//             objproto    `Object.defineProperty(Object.prototype, "h", { get() { … this.m1() … } })`: every plain object inherits the accessor
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -139,7 +162,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -174,6 +197,12 @@ const callee = (route, host, never) => {
   const kind = ["member", "method", "holder", "class"].includes(route) ? "With" : route === "array" ? "All" : "";
   return never ? `skipRun${kind}` : `run${UPPER[host]}${kind}`;
 };
+
+/** A name with its first letter written as a unicode escape (`m1` as `\u006d1`): the same key, spelled another way (the review of #232, B2). */
+const escaped = (name) => `\\u${name.codePointAt(0).toString(16).padStart(4, "0")}${name.slice(1)}`;
+
+/** The prototype of the review of #232's holders: `h` is a getter that runs `read` in a step the package runs, with the holder as its receiver. */
+const prefilterBase = (f, base, read) => `const ${base} = {\n  get h(): number {\n    ${f}(() => {\n      ${read}\n    });\n    return 1;\n  },\n};`;
 
 /** The frame text of a route: `head` precedes the body (the callback's or the function's block), `close` follows it. */
 const ROUTE_FRAMES = {
@@ -679,10 +708,91 @@ const ROUTE_FRAMES = {
     const key = n("m");
     return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: { ${key}(): void }) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nfunction ${outer}(holder: { ${key}(): void }) {\n  ${put}(holder);\n}\nconst ${object} = {\n  ${key}(): void {},\n};\n${outer}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
   },
+  // The review of #232 (B1 to B5, S3). Every route stores the flushing function in a holder that the strict prefilter might call confined; `base1`'s getter reads it through `this`.
+  restcopy: (f, n) => {
+    const [cb, object, key, base, rest] = [n("cb"), n("o"), n("m"), n("base"), n("rest")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${object} = {\n  ${key}(): void {\n    ${cb}();\n  },\n};\nconst { ...${rest} }: any = ${object};\n${rest}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${rest}.h;\n});` };
+  },
+  nestedpattern: (f, n) => {
+    const [cb, outer, sub, key, base, inner] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("s")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst { ${sub}: ${inner} }: any = ${outer};\n${inner}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${inner}.h;\n});` };
+  },
+  nestedread: (f, n) => {
+    const [cb, outer, sub, key, base, inner] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("s")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst ${inner}: any = ${outer}.${sub};\n${inner}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${inner}.h;\n});` };
+  },
+  nestedchain: (f, n) => {
+    const [cb, outer, sub, key, base] = [n("cb"), n("hh"), n("sub"), n("m"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer}: any = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\n${outer}.${sub}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${outer}.${sub}.h;\n});` };
+  },
+  nestedarg: (f, n) => {
+    const [cb, give, sub, key, base] = [n("cb"), n("give"), n("sub"), n("m"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nfunction ${give}(p: any) {\n  p.${sub}.__proto__ = ${base};\n  setTimeout(() => {\n    void p.${sub}.h;\n  });\n}\n${give}({\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n});` };
+  },
+  restnested: (f, n) => {
+    const [cb, outer, sub, key, base, rest] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("rest")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${sub}.${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst { ...${rest} }: any = ${outer};\n${rest}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${rest}.h;\n});` };
+  },
+  nestedspread: (f, n) => {
+    const [cb, outer, sub, key, base, copy] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("copy")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst ${copy}: any = { ...${outer} };\n${copy}.${sub}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${copy}.${sub}.h;\n});` };
+  },
+  keyescape: (f, n) => {
+    const [cb, object, key] = [n("cb"), n("o"), n("m")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  },\n};\n${object}.${escaped(key)} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  keyreadescape: (f, n) => {
+    const [cb, object, key] = [n("cb"), n("o"), n("m")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      this.${escaped(key)}();\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  keymethodescape: (f, n) => {
+    const [cb, object, key, base] = [n("cb"), n("o"), n("m"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${object} = {\n  __proto__: ${base},\n  ${escaped(key)}(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  keyhex: (f, n) => {
+    const [cb, object, base] = [n("cb"), n("o"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, "(this as any)[1]();")}\nconst ${object} = {\n  __proto__: ${base},\n  0x1(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  keyfloat: (f, n) => {
+    const [cb, object, base] = [n("cb"), n("o"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, '(this as any)["1"]();')}\nconst ${object} = {\n  __proto__: ${base},\n  1.0(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  parampattern: (f, n) => {
+    const [cb, object, key, fn] = [n("cb"), n("o"), n("m"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}({ ${key} }: any) {\n  ${key}.call(null);\n}\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  paramgetter: (f, n) => {
+    const [cb, object, key, base, fn] = [n("cb"), n("o"), n("m"), n("base"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}({ ${key} }: any) {\n  void ${key};\n}\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  get ${key}(): number {\n    ${cb}();\n    return 1;\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  paramarray: (f, n) => {
+    const [cb, object, base, fn] = [n("cb"), n("o"), n("base"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}([a]: any) {\n  void a;\n}\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  *[Symbol.iterator]() {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  paramrest: (f, n) => {
+    const [cb, object, key, fn] = [n("cb"), n("o"), n("m"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}(...xs: any[]) {\n  xs[0].${key}();\n}\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  paramrestpass: (f, n) => {
+    const [cb, object, key, inner, outer] = [n("cb"), n("o"), n("m"), n("read"), n("pass")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${inner}(p: any) {\n  p.${key}();\n}\nfunction ${outer}(...xs: any[]) {\n  ${inner}(xs[0]);\n}\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      ${outer}(this);\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  assignthis: (f, n) => {
+    const [cb, object, key, base] = [n("cb"), n("o"), n("k"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      Object.assign(this, { ${key}: 1 });\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  set ${key}(value: number) {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  symbolrewrite: (f, n) => {
+    const [cb, object, key, symbol] = [n("cb"), n("o"), n("m"), n("sym")];
+    return { head: `const ${cb} = () => `, close: `;\nlet ${symbol}: any = Symbol();\n({ ${symbol} } = { ${symbol}: \"${key}\" });\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  },\n};\n${object}[${symbol}] = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  objproto: (f, n) => {
+    const [cb, object, key] = [n("cb"), n("o"), n("m")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object}: any = {};\n${object}.${key} = function () {\n  ${cb}();\n};\nObject.defineProperty(Object.prototype, \"h\", {\n  get() {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  },\n  configurable: true,\n});\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
 };
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };
