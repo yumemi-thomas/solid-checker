@@ -105,6 +105,10 @@ export function ReachValueHandler() {
 export function PureBody() {
   return <p>{measure(() => {})}</p>;
 }
+export function Ambient() {
+  legacyGlobal(() => {});
+  return null;
+}
 export function Shadowed() {
   const runStep = (cb: () => void) => cb();
   runStep(() => {});
@@ -145,6 +149,7 @@ export function App() {
       <ReachValueTimer />
       <ReachValueHandler />
       <PureBody />
+      <Ambient />
       <Shadowed />
       <InlineBody />
       <InlineHandler />
