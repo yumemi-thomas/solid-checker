@@ -329,3 +329,58 @@ const twinPicked = [0].map(twinPick);
 setTimeout(() => {
   void twinPicked[0].g;
 });
+
+// ---- the re-check 2 of #226 (P570, P593) and its follow-up: `super.x` reads the prototype's member with the object as `this`, so a getter of the prototype that reads
+// `this.g` runs the literal's getter. A literal that holds `super` is handed as one that holds `this` is: in an accessor read in a timer (no member call: `superAccessor`),
+// in a method that is called (`superMethod`, P570) and in a sibling nothing calls (`superSibling`, P593, whose called method never names either)
+const superBase = {
+  get x(): number {
+    return (this as any).g;
+  },
+};
+const superAccessor = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  get h(): number {
+    void runStep(() => {
+      void (super.x as any);
+    });
+    return 1;
+  },
+};
+(superAccessor as any).__proto__ = superBase;
+setTimeout(() => {
+  void superAccessor.h;
+});
+const superMethod = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  runIt() {
+    void runStep(() => {
+      void (super.x as any);
+    });
+  },
+};
+(superMethod as any).__proto__ = superBase;
+setTimeout(() => {
+  superMethod.runIt();
+});
+const superSibling = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  quiet() {
+    return 1;
+  },
+  other() {
+    return super.x as any;
+  },
+};
+setTimeout(() => {
+  void superSibling.quiet();
+});

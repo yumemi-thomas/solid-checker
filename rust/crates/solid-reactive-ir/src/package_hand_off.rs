@@ -15,8 +15,8 @@
 //!   handed;
 //!   An accessor runs where it is read: a project component's props (whose expressions are getters) and an object literal with a getter are followed as objects of
 //!   accessors, so a reference of them in code a package may run hands what the accessor runs (`runStep(() => { void props.children; })`); a method call on them
-//!   (`o.m()`, `props.pick()`) binds `this` to the object, and the method may read an accessor through `this`: it is handed unless the member resolves to exactly one
-//!   function that never names `this`;
+//!   (`o.m()`, `props.pick()`) binds `this` to the object, and the method may read an accessor through `this` or `super` (which reads the prototype's member with the
+//!   same `this`): it is handed unless the member resolves to exactly one function that never names either;
 //! - an argument of a call: the receiver decides ([`Receiver`]): a dialect primitive and the standard library's inline callbacks run it before they return, on the stack
 //!   of the function the call is written in; a reviewed fresh-stack scheduler, a DOM listener registration and a reviewed test runner's registration run it elsewhere and
 //!   keep nothing; a project function the call graph resolves exactly goes on in its parameter (a component's props are its first parameter, a reflective call's forwarded
@@ -86,8 +86,8 @@ enum Receiver<'a> {
 
 type Key = (Arc<str>, Span);
 
-/// The spans of the `this` expressions of one file, shared; `None` when the file does not parse.
-type ThisSpans = Option<Arc<Vec<Span>>>;
+/// The spans of the `this` and `super` expressions of one file, shared; `None` when the file does not parse.
+type ReceiverSpans = Option<Arc<Vec<Span>>>;
 
 /// What one question has visited, so that a cycle of copies or calls ends.
 #[derive(Default)]
@@ -148,8 +148,8 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     /// The files of the program by path (`SemanticLookup::files`, read once by the pass).
     files: &'l HashMap<&'l str, &'a FileFacts>,
     asked: RefCell<HashMap<Key, bool>>,
-    /// The spans of every `this` expression of a file, parsed once (`None`: the file does not parse, so nothing is known of its `this`).
-    this_spans: RefCell<HashMap<Arc<str>, ThisSpans>>,
+    /// The spans of every `this` and `super` expression of a file, parsed once (`None`: the file does not parse, so nothing is known of its receiver).
+    receiver_spans: RefCell<HashMap<Arc<str>, ReceiverSpans>>,
 }
 
 impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
@@ -161,7 +161,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             lookup,
             files,
             asked: RefCell::new(HashMap::new()),
-            this_spans: RefCell::new(HashMap::new()),
+            receiver_spans: RefCell::new(HashMap::new()),
         }
     }
 
@@ -237,13 +237,13 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             let Some(object) = object else {
                 return true;
             };
-            // `this` in the literal's own functions reads its members through no reference of the object (the review of #226, B3): handed, as is a file whose `this`
-            // uses cannot be read.
-            let Some(this_spans) = self.this_spans(file) else {
+            // `this` or `super` in the literal's own functions reads its members through no reference of the object (the review of #226, B3; `super.x` runs the
+            // prototype's `x` against the object, which a getter of the literal may be read through): handed, as is a file whose receivers cannot be read.
+            let Some(receiver_spans) = self.receiver_spans(file) else {
                 return true;
             };
-            let this_in_literal = this_spans.iter().any(|span| object.contains(*span));
-            if this_in_literal
+            let receiver_in_literal = receiver_spans.iter().any(|span| object.contains(*span));
+            if receiver_in_literal
                 || self.as_accessors(walk, None, |walk| self.position(file, object, walk))
             {
                 return true;
@@ -587,32 +587,32 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         nested && self.position(file, span, walk)
     }
 
-    /// The spans of every `this` expression of the file: syntax only, from a parse of the file's own text, kept per file. `None` when the file does not parse.
-    fn this_spans(&self, file: &FileFacts) -> ThisSpans {
+    /// The spans of every `this` and `super` expression of the file: syntax only, from a parse of the file's own text, kept per file. `None` when the file does not parse.
+    fn receiver_spans(&self, file: &FileFacts) -> ReceiverSpans {
         let path = file.path.shared();
-        if let Some(known) = self.this_spans.borrow().get(&path) {
+        if let Some(known) = self.receiver_spans.borrow().get(&path) {
             return known.clone();
         }
-        let spans = solid_facts::ast::this_expression_spans(
+        let spans = solid_facts::ast::receiver_expression_spans(
             std::path::Path::new(file.path.as_str()),
             &file.source,
         )
         .map(Arc::new);
-        self.this_spans.borrow_mut().insert(path, spans.clone());
+        self.receiver_spans.borrow_mut().insert(path, spans.clone());
         spans
     }
 
-    /// Whether `function` names `this` anywhere in its text (an arrow's is its enclosing function's, a nested function's its own: both count, which can only add).
-    /// A file that does not parse names it.
-    fn function_names_this(&self, file: &FileFacts, function: &FunctionFact) -> bool {
-        let Some(spans) = self.this_spans(file) else {
+    /// Whether `function` names `this` or `super` anywhere in its text (an arrow's is its enclosing function's, a nested function's its own: both count, which can only
+    /// add). A file that does not parse names them.
+    fn function_names_receiver(&self, file: &FileFacts, function: &FunctionFact) -> bool {
+        let Some(spans) = self.receiver_spans(file) else {
             return true;
         };
         spans.iter().any(|span| function.span.contains(*span))
     }
 
     /// Whether the member at `member`, read from an object of accessors, is called as a method (`o.m(…)`, `o.m\`…\``, `o.m?.()`), which makes the object the callee's `this`,
-    /// and the callee is not proved to be a function that never names `this`: a method written outside the literal (`{ m }`, `m: m`, an import), one the program
+    /// and the callee is not proved to be a function that never names `this` or `super`: a method written outside the literal (`{ m }`, `m: m`, an import), one the program
     /// replaces, a prop of a component, anything the call graph does not resolve to exactly one function. `this.g` in such a method reads an accessor through no reference
     /// of the object (the review of #226's re-check, N1).
     fn method_call_may_read_receiver(&self, file: &'a FileFacts, member: Span) -> bool {
@@ -632,7 +632,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let Some((callee_file, callee)) = self.callback_target(file, member) else {
             return true;
         };
-        self.function_names_this(callee_file, callee)
+        self.function_names_receiver(callee_file, callee)
     }
 
     /// `question` asked of an object of accessors (the props of `owner`, or an object literal), on the walk that asks: its visited positions and functions are
