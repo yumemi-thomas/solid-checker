@@ -1,5 +1,5 @@
 import { flush } from "solid-js";
-import { Pkg, runStep } from "steplib";
+import { Frame, Pkg, runStep } from "steplib";
 
 // The review of #222's check 3, R1 and R2: an accessor runs where it is read. `steplib` (its source is not read: its manifest names no Solid package) runs what it is handed
 // as an action's step. The program names no action, effect or leaf primitive, so the census says the three flush codes cannot arise; a flush the package may run keeps
@@ -137,4 +137,78 @@ function readsHere(p: { g: number }) {
 }
 setTimeout(() => {
   readsHere(twinGetterObject);
+});
+
+// ---- the review of #226. B1: a getter that names its own object and a component that renders itself (each walked the accessor question anew, without end: the
+// checker overflowed its stack). Both end now: the getter read in a step keeps its rows; the self-rendering tree never reads `x`, so `treeHelper` never runs.
+const selfNamed = {
+  x: 1,
+  get g(): number {
+    flush();
+    return selfNamed.x;
+  },
+};
+setTimeout(() => {
+  void runStep(() => {
+    void selfNamed.g;
+  });
+});
+declare const deeper: boolean;
+function treeHelper() {
+  flush();
+  return "x";
+}
+function Tree(props: { depth: number; onPick?: () => void; x?: unknown }): JSX.Element {
+  const kid = () => <Tree depth={1} onPick={props.onPick} x={treeHelper()} />;
+  return deeper ? kid() : null;
+}
+setTimeout(() => {
+  void (<Tree depth={0} />);
+});
+
+// B2: a props read written in the component's body, but in a JSX expression of a package's component (which reads it in its step) or in a class field initializer
+// (run when the class is made, in a step), runs there
+function typeofChild() {
+  flush();
+  return "x";
+}
+function TypeofReader(props: { children?: unknown }) {
+  return <Frame>{typeof props.children}</Frame>;
+}
+setTimeout(() => {
+  void (<TypeofReader>{typeofChild()}</TypeofReader>);
+});
+function classFieldChild() {
+  flush();
+  return "x";
+}
+function ClassFieldReader(props: { children?: unknown }) {
+  class Reads {
+    v = props.children === undefined;
+  }
+  setTimeout(() => {
+    void runStep(() => {
+      void new Reads();
+    });
+  });
+  return null;
+}
+setTimeout(() => {
+  void (<ClassFieldReader>{classFieldChild()}</ClassFieldReader>);
+});
+
+// B3: a getter read through `this` in its own literal's method, in a step
+const thisReader = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  m() {
+    void runStep(() => {
+      void this.g;
+    });
+  },
+};
+setTimeout(() => {
+  thisReader.m();
 });

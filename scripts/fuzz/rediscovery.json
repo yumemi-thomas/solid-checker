@@ -20301,5 +20301,55 @@
    "mx-flush-in-tracked-queue-callback-ph-getterparam-leaf-x-direct-none"
   ],
   "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 18 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 9 of 9 agree on each build): main 56aa6c126 and #222's 777299896 fail `make fuzz-focus` (focus exit 1, 9 false clean, the 9 twins clean), the fix exits 0, \"nothing needs a look\" (9 recall-gap, the 9 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the eight `props-read-*` and `getter-param-step` programs false clean on 777299896, fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a flush an installed package the build does not read runs, was certified with no row when an accessor read stood where the accessor walk did not look: a props read written in the component's body but inside a JSX expression of the package's component (`return <StepView>{typeof props.children}</StepView>`), which the package reads in its step; a props read in a class field initializer run when the class is made in a step; and an object literal's getter read through `this` in its own method's closure handed to the package. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "The Fable review of #226 at d82838fd3 (B2: P350-P355, P359, P362; B3: P381, P396), confirmed by Mac 5 in Chrome on main's code and on the fix (pattern lane `pkghand/props-read-jsx-typeof`, `props-read-class-field`, `getter-this-step`: FLUSH_IN_ACTION); silent on #222's build and on d82838fd3",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`): in the component's body a props read is still asked `evaluated_by_element` (only a read the component's own run evaluates is answered by its element's creation); a read in a class body is handed (a class's code runs where nothing here follows); a literal with an accessor whose own functions name `this` is handed, as is a file whose `this` uses cannot be read",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-propsjsx-step-x-direct-none",
+   "mx-flush-in-action-ph-propsclass-step-x-direct-none",
+   "mx-flush-in-action-ph-getterthis-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 30 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle agrees on every compared program): main's code (#222's 777299896, = aa9ba41be) and d82838fd3 fail `make fuzz-focus` (9 false clean: propsjsx, propsclass, getterthis on three hosts), the fix exits 0, \"nothing needs a look\" (15 recall-gap, the 15 twins uncertifiable)"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a flush an installed package the build does not read runs, was certified with no row when an accessor read stood where the accessor walk did not look: a props read written in the component's body but inside a JSX expression of the package's component (`return <StepView>{typeof props.children}</StepView>`), which the package reads in its step; a props read in a class field initializer run when the class is made in a step; and an object literal's getter read through `this` in its own method's closure handed to the package. Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "The Fable review of #226 at d82838fd3 (B2: P350-P355, P359, P362; B3: P381, P396), confirmed by Mac 5 in Chrome on main's code and on the fix (pattern lane `pkghand/props-read-jsx-typeof`, `props-read-class-field`, `getter-this-step`: FLUSH_IN_ACTION); silent on #222's build and on d82838fd3",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`): in the component's body a props read is still asked `evaluated_by_element` (only a read the component's own run evaluates is answered by its element's creation); a read in a class body is handed (a class's code runs where nothing here follows); a literal with an accessor whose own functions name `this` is handed, as is a file whose `this` uses cannot be read",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-propsjsx-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-propsclass-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-getterthis-apply-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 30 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle agrees on every compared program): main's code (#222's 777299896, = aa9ba41be) and d82838fd3 fail `make fuzz-focus` (9 false clean: propsjsx, propsclass, getterthis on three hosts), the fix exits 0, \"nothing needs a look\" (15 recall-gap, the 15 twins uncertifiable)"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a flush an installed package the build does not read runs, was certified with no row when an accessor read stood where the accessor walk did not look: a props read written in the component's body but inside a JSX expression of the package's component (`return <StepView>{typeof props.children}</StepView>`), which the package reads in its step; a props read in a class field initializer run when the class is made in a step; and an object literal's getter read through `this` in its own method's closure handed to the package. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "The Fable review of #226 at d82838fd3 (B2: P350-P355, P359, P362; B3: P381, P396), confirmed by Mac 5 in Chrome on main's code and on the fix (pattern lane `pkghand/props-read-jsx-typeof`, `props-read-class-field`, `getter-this-step`: FLUSH_IN_ACTION); silent on #222's build and on d82838fd3",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`): in the component's body a props read is still asked `evaluated_by_element` (only a read the component's own run evaluates is answered by its element's creation); a read in a class body is handed (a class's code runs where nothing here follows); a literal with an accessor whose own functions name `this` is handed, as is a file whose `this` uses cannot be read",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-propsjsx-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-propsclass-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-getterthis-leaf-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 30 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle agrees on every compared program): main's code (#222's 777299896, = aa9ba41be) and d82838fd3 fail `make fuzz-focus` (9 false clean: propsjsx, propsclass, getterthis on three hosts), the fix exits 0, \"nothing needs a look\" (15 recall-gap, the 15 twins uncertifiable)"
+ },
+ {
+  "finding": "The checker aborted with a stack overflow (exit 134, no report for the project) on a getter that names its own object (`const o = { x: 1, get g() { cb(); return o.x; } }`) and on a component that renders itself passing a prop on inside a nested arrow: each accessor walk (#226's d82838fd3) started a fresh visited set, so the question re-entered itself without end",
+  "found": "The Fable review of #226 at d82838fd3 (B1: P371, P372, P373); a regression of that commit, #222's build exits 0",
+  "fixed": "`package_hand_off.rs`: the accessor mode is set and restored on the walk of the question that asks (`as_accessors`), whose visited positions (per mode) and functions are shared, so a cycle through the object ends in the one walk; a function's own positions are asked with the mode off. Fixture flush-universe-package-hand-off-accessors (`selfNamed`, `Tree`) and the process test `accessor_walks_end_on_self_reference_and_keep_their_rows`",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-selfgetter-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13): d82838fd3 fails `make fuzz-focus` on the `selfgetter` cells (3 misuse and 3 legal programs `harness`: the checker aborts), main's code and the fix are recall-gap / uncertifiable. The `treerec` route (a self-rendering component that reads its prop in a step) does not abort on d82838fd3: the value walk answers handed before the recursion, as the review's P370; the fixture's `Tree` (no step, nothing answers early) aborted d82838fd3 (exit 134) and holds the recursive form with the process test"
  }
 ]

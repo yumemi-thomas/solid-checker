@@ -3068,3 +3068,42 @@ fn searches_past_their_budget_are_uncertifiable() {
     );
     assert!(within.is_empty(), "{within:?}");
 }
+
+/// The review of #226, B1: a getter that names its own object, and a component that renders itself passing a prop on in a nested arrow, walked the accessor
+/// question anew each time and overflowed the stack (exit 134, no report). The run ends, and the flushes of B1's getter, B2's reads in a JSX expression or a
+/// class field initializer and B3's `this` read keep their uncertifiable rows (never silence, never a violation).
+#[test]
+fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-accessors") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-accessors/App.tsx"
+    );
+    let line_of = |needle: &str| {
+        let at = source
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} in the fixture"));
+        source[..at].lines().count() as u64 + 1
+    };
+    assert!(
+        findings.iter().all(|row| row["kind"] != "violation"),
+        "{findings:#?}"
+    );
+    for site in [
+        "const selfNamed = {\n  x: 1,\n  get g(): number {\n    flush();",
+        "function typeofChild() {\n  flush();",
+        "function classFieldChild() {\n  flush();",
+        "const thisReader = {\n  get g(): number {\n    flush();",
+    ] {
+        let flush = line_of(site) + site.lines().count() as u64 - 1;
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["id"] == "SC2006" && row["primaryLocation"]["line"].as_u64() == Some(flush)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 1, "{site}: {rows:#?}");
+        assert_eq!(rows[0]["kind"], "uncertifiable", "{site}");
+    }
+}

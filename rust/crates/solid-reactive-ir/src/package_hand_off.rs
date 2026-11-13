@@ -89,25 +89,16 @@ type Key = (Arc<str>, Span);
 struct Walk {
     /// The value followed is an object whose members are accessors (a component's props, whose expressions the compiler makes getters; an object literal with a
     /// getter): reading a member runs the accessor where the read is written, so a reference of the object in code a package may run hands what the accessor runs
-    /// (the review of #222's check 3, R1 and R2). A walk in this mode is its own: its positions are not those of a walk of the value itself.
+    /// (the review of #222's check 3, R1 and R2). The mode is set and restored on the walk of the question that asks (`as_accessors`), so a cycle through it ends
+    /// in the one walk (the review of #226, B1); a position is visited once per mode.
     accessor: bool,
-    /// In that mode, the component whose props are followed: a reference written directly in its body reads them when the component runs, which is where its
-    /// element is created (already asked), so only a reference inside a function within it, or anywhere else, asks where it runs.
+    /// In that mode, the component whose props are followed: a reference written directly in its body, outside every JSX expression and class, reads them when the
+    /// component runs, which is where its element is created (already asked).
     accessor_owner: Option<Key>,
-    positions: HashSet<Key>,
+    positions: HashSet<(Key, bool, Option<Key>)>,
     functions: HashSet<Key>,
     returned_positions: HashSet<(Key, Key)>,
     returned_bindings: HashSet<(Key, Key)>,
-}
-
-impl Walk {
-    /// A walk of an object whose members are accessors.
-    fn accessors() -> Self {
-        Self {
-            accessor: true,
-            ..Self::default()
-        }
-    }
 }
 
 /// Whether the function is the value of an accessor property of an object literal (`get g() { … }`, `set g(v) { … }`: neither a data property nor a method),
@@ -174,8 +165,23 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         answer
     }
 
-    /// The function as a value (written where it is, or named by its binding's references), and the functions that call it.
+    /// The function as a value (written where it is, or named by its binding's references), and the functions that call it. Its positions are asked of the
+    /// function itself, not of an object of accessors, whatever mode the asking walk is in.
     fn function_in(
+        &self,
+        file: &'a FileFacts,
+        function: &'a FunctionFact,
+        walk: &mut Walk,
+    ) -> bool {
+        let saved = (walk.accessor, walk.accessor_owner.take());
+        walk.accessor = false;
+        let answer = self.function_value_in(file, function, walk);
+        walk.accessor = saved.0;
+        walk.accessor_owner = saved.1;
+        answer
+    }
+
+    fn function_value_in(
         &self,
         file: &'a FileFacts,
         function: &'a FunctionFact,
@@ -212,7 +218,18 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             let Some(object) = object else {
                 return true;
             };
-            if self.position(file, object, &mut Walk::accessors()) {
+            // `this` in the literal's own functions reads its members through no reference of the object (the review of #226, B3): handed, as is a file whose `this`
+            // uses cannot be read.
+            let Some(this_spans) = solid_facts::ast::this_expression_spans(
+                std::path::Path::new(file.path.as_str()),
+                &file.source,
+            ) else {
+                return true;
+            };
+            let this_in_literal = this_spans.iter().any(|span| object.contains(*span));
+            if this_in_literal
+                || self.as_accessors(walk, None, |walk| self.position(file, object, walk))
+            {
                 return true;
             }
         }
@@ -271,18 +288,34 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     fn position(&self, file: &'a FileFacts, at: Span, walk: &mut Walk) -> bool {
         let ast = &file.ast;
         let at = ast.peel_ts_sugar_span(at);
-        if !walk.positions.insert((file.path.shared(), at)) {
+        if !walk.positions.insert((
+            (file.path.shared(), at),
+            walk.accessor,
+            walk.accessor_owner.clone(),
+        )) {
             return false;
         }
         // A reference of an object whose members are accessors may read one where it is written: a member read, a destructuring, a spread, an iteration.
         if walk.accessor {
+            // In a class (a field initializer, a method): the class's code runs where an instance is made or a method called, which nothing here follows, as a
+            // class's functions are handed whole.
+            if ast.classes.iter().any(|class| class.span.contains(at)) {
+                return true;
+            }
             let in_owner = walk.accessor_owner.as_ref().is_some_and(|(path, owner)| {
                 path.as_ref() == file.path.as_str()
                     && ast
                         .innermost_function_owning(at)
                         .is_some_and(|function| function.span == *owner)
             });
-            if !in_owner && self.runs_where_written(file, at, walk) {
+            // In the component's own body the read runs with the component, unless it is written in a JSX prop, spread or child expression, which the element it is
+            // in evaluates where it chooses (`return <Pkg>{typeof props.children}</Pkg>`: the review of #226, B2).
+            let runs = if in_owner {
+                self.evaluated_by_element(file, at, walk)
+            } else {
+                self.runs_where_written(file, at, walk)
+            };
+            if runs {
                 return true;
             }
         }
@@ -534,6 +567,25 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         nested && self.position(file, span, walk)
     }
 
+    /// `question` asked of an object of accessors (the props of `owner`, or an object literal), on the walk that asks: its visited positions and functions are
+    /// the same, so a cycle through the object (a getter that names its own object, a component that renders itself) ends (the review of #226, B1).
+    fn as_accessors(
+        &self,
+        walk: &mut Walk,
+        owner: Option<Key>,
+        question: impl FnOnce(&mut Walk) -> bool,
+    ) -> bool {
+        let saved = (
+            walk.accessor,
+            std::mem::replace(&mut walk.accessor_owner, owner),
+        );
+        walk.accessor = true;
+        let answer = question(walk);
+        walk.accessor = saved.0;
+        walk.accessor_owner = saved.1;
+        answer
+    }
+
     /// Whether a function that owns `at` (a call, a tag, a carrier) may be run by a package: what is called there runs on its stack.
     fn runs_where_written(&self, file: &'a FileFacts, at: Span, walk: &mut Walk) -> bool {
         file.ast
@@ -584,9 +636,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         // void props.children; })` in the component, or a closure handed to a package's component). Its first parameter is followed as an object of accessors.
         // An unread package's component was answered by `receiver_hands` (handed); a known receiver or a dialect's element reads no props of a project function.
         if let Receiver::Parameter(component_file, component, parameter) = receiver {
-            let mut props = Walk::accessors();
-            props.accessor_owner = Some((component_file.path.shared(), component.span));
-            return self.parameter(component_file, component, parameter, &mut props);
+            let owner = Some((component_file.path.shared(), component.span));
+            return self.as_accessors(walk, owner, |walk| {
+                self.parameter(component_file, component, parameter, walk)
+            });
         }
         false
     }

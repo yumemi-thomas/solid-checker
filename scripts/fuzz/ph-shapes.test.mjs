@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are sixty-five routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam"]);
+  it("are seventy routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(338);
+    expect(PH_CONTEXT_NAMES).toHaveLength(368);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -193,5 +193,12 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(getter).toContain("get g() {");
     expect(getter).toContain("void p.g;");
     expect(getter.some((line) => /^w\d+\(o\d+\);$/.test(line))).toBe(true);
+  });
+  it("print the review of #226's routes: a self-named getter, a self-rendering component, props read in JSX or a class field, a getter read through `this`", () => {
+    expect(textOf("FLUSH_IN_ACTION", "ph-selfgetter-step").some((line) => /^return o\d+\.x;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-treerec-step").some((line) => /^const kid = \(\) => <Tree\d+ depth=\{1\} pick=\{props\.pick\} x=\{helper\d+\(\)\} \/>;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-propsjsx-apply")).toContain("return <ApplyView>{typeof props.children as never}</ApplyView>;");
+    expect(textOf("FLUSH_IN_ACTION", "ph-propsclass-step")).toContain("v = props.children === undefined;");
+    expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-getterthis-leaf")).toContain("void this.g;");
   });
 });
