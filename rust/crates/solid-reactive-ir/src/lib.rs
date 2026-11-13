@@ -80,6 +80,7 @@ pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHash
 /// See [`HashMap`].
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
+mod after_await_accounting;
 mod flush_accounting;
 mod package_action_calls;
 pub mod package_boundary;
@@ -1086,6 +1087,9 @@ pub enum AfterAwaitObligation {
     /// member of a local value that names no function body): whatever function the program stored there runs on the call's
     /// stack, and may read a source the continuation has not tracked.
     UnresolvedInvocation,
+    /// Batch 11, slice 9B (ADR 0973): a read, or a call of a project function or of a function value, written after its async function's own suspension that no
+    /// row of SC1002, no SC9012, no discard and no typed reason ends (`after_await_accounting.rs`): no walk places it and no fact rules the claim out.
+    Unaccounted,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1801,7 +1805,9 @@ fn default_async_provenance() -> bool {
 }
 
 pub use blockers::with_detail as blocked_context;
-pub use blockers::{PACKAGE_FINDING_AT_ENTRY, is_package_handed_claim};
+pub use blockers::{
+    PACKAGE_FINDING_AT_ENTRY, READ_AFTER_AWAIT_UNACCOUNTED, is_package_handed_claim,
+};
 pub use execution_paths::{ArmSide, BuildArm, ClientPath, ExecutionPaths};
 pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 

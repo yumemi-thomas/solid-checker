@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
+      "start": 218,
+      "end": 237,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -31,6 +42,17 @@
       "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
       "start": 253,
       "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
+      "start": 288,
+      "end": 305,
       "fixes": 0
     },
     {
