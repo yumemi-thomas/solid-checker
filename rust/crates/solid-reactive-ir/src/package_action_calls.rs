@@ -575,6 +575,10 @@ fn import_declaration(
             return None;
         }
         Some(solid_facts::SpecifierAttestation::Attested(row)) => {
+            // A linked workspace package resolves to its real path, which the program analyzes when it is source: that code is read, not assumed.
+            if !is_declaration_file(&row.resolved_path) && analyzed.contains(&*row.resolved_path) {
+                return None;
+            }
             if row.symlink_path.is_empty() {
                 row.resolved_path.to_string()
             } else {
