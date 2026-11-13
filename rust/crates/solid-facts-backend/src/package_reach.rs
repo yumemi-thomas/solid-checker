@@ -121,30 +121,88 @@ impl SolidPackages<'_> {
 }
 
 /// The reach verdicts for every installed package the project's facts name a declaration in.
+///
+/// A package's entries are what it declares (`exports`, `main`, `module`, `browser`), and a package with no `exports` map can be imported by a deep
+/// path no entry reaches. The runtime files that sit beside the declarations the project names (`dist/util.d.ts` beside `dist/util.js`) are entries
+/// too, so the verdict covers the code the project's own types point at.
 #[must_use]
 pub fn package_reach_index(
     facts: &solid_facts::ProjectFacts,
     solid: &SolidPackages<'_>,
 ) -> PackageReachIndex {
-    let mut index = PackageReachIndex::default();
-    let mut runtime = HashMap::<PathBuf, PackageReach>::new();
+    MANIFESTS.with(|held| held.borrow_mut().clear());
+    // The declaration roots, each with the runtime root that holds its code and the runtime files beside its declarations.
+    let mut roots = BTreeMap::<String, (Result<PathBuf, PackageReach>, BTreeSet<PathBuf>)>::new();
     for path in declaration_paths(facts) {
         let Some(root) = package_root_of(&path) else {
             continue;
         };
-        if index.by_root.contains_key(root) {
-            continue;
+        let (_, siblings) = roots
+            .entry(root.to_owned())
+            .or_insert_with(|| (runtime_root(Path::new(root)), BTreeSet::new()));
+        siblings.extend(runtime_siblings(&path));
+    }
+    // One verdict per runtime root, over the entries and the siblings of every declaration root that names it.
+    let mut by_runtime = BTreeMap::<PathBuf, BTreeSet<PathBuf>>::new();
+    for (root, (runtime, siblings)) in &roots {
+        if let Ok(runtime) = runtime {
+            let held = by_runtime.entry(runtime.clone()).or_default();
+            if Path::new(root) == runtime.as_path() {
+                held.extend(siblings.iter().cloned());
+            }
         }
-        let reach = match runtime_root(Path::new(root)) {
-            Ok(runtime_root) => runtime
-                .entry(runtime_root.clone())
-                .or_insert_with(|| package_reach(&runtime_root, solid))
-                .clone(),
+    }
+    let verdicts = by_runtime
+        .into_iter()
+        .map(|(runtime, siblings)| {
+            let reach = package_reach(&runtime, solid, &siblings);
+            (runtime, reach)
+        })
+        .collect::<HashMap<_, _>>();
+    let mut index = PackageReachIndex::default();
+    for (root, (runtime, _)) in roots {
+        let reach = match runtime {
+            Ok(runtime) => verdicts
+                .get(&runtime)
+                .cloned()
+                .unwrap_or_else(|| missing(format!("no verdict for {}", short(&runtime)))),
             Err(reach) => reach,
         };
-        index.by_root.insert(root.to_owned(), reach);
+        index.by_root.insert(root, reach);
     }
     index
+}
+
+/// The runtime files beside a declaration file of an installed package (`dist/util.d.ts`: `dist/util.js`, `.mjs`, `.cjs`, `.jsx`), and the file itself
+/// when it is a script (an untyped package the compiler resolved to its JavaScript). Only files that exist, canonical.
+fn runtime_siblings(path: &str) -> Vec<PathBuf> {
+    let stem = path
+        .strip_suffix(".d.ts")
+        .or_else(|| path.strip_suffix(".d.mts"))
+        .or_else(|| path.strip_suffix(".d.cts"));
+    let mut found = Vec::new();
+    match stem {
+        Some(stem) => {
+            for extension in [".js", ".mjs", ".cjs", ".jsx"] {
+                let candidate = PathBuf::from(format!("{stem}{extension}"));
+                if candidate.is_file()
+                    && let Ok(canonical) = candidate.canonicalize()
+                {
+                    found.push(canonical);
+                }
+            }
+        }
+        None => {
+            if SCRIPT_EXTENSIONS
+                .iter()
+                .any(|extension| path.ends_with(extension))
+                && let Ok(canonical) = Path::new(path).canonicalize()
+            {
+                found.push(canonical);
+            }
+        }
+    }
+    found
 }
 
 /// The installed files (under `node_modules`) the project's own files name a declaration in: each call's resolved declaration (outside the
@@ -235,18 +293,40 @@ fn runtime_root(root: &Path) -> Result<PathBuf, PackageReach> {
         })
 }
 
-fn manifest(root: &Path) -> Result<serde_json::Value, PackageReach> {
+/// The manifests read during one [`package_reach_index`] computation, by directory: a manifest is read and parsed once however many probes of the walk
+/// ask for it (every bare load, every self-reference check, every `main` of a directory). An index is computed from the tree as it stands, so one
+/// computation's manifests are one snapshot; the next computation starts empty.
+type Manifests = HashMap<PathBuf, Result<Arc<serde_json::Value>, PackageReach>>;
+
+thread_local! {
+    static MANIFESTS: std::cell::RefCell<Manifests> = std::cell::RefCell::default();
+}
+
+fn manifest(root: &Path) -> Result<Arc<serde_json::Value>, PackageReach> {
+    if let Some(held) = MANIFESTS.with(|held| held.borrow().get(root).cloned()) {
+        return held;
+    }
     let unread = |detail: String| PackageReach::Undecided {
         blocker: ReachBlocker::ManifestUnread,
         detail,
     };
-    let bytes = fs::read(root.join("package.json"))
-        .map_err(|error| unread(format!("{}: {error}", short(root))))?;
-    serde_json::from_slice(&bytes).map_err(|error| unread(format!("{}: {error}", short(root))))
+    let read = fs::read(root.join("package.json"))
+        .map_err(|error| unread(format!("{}: {error}", short(root))))
+        .and_then(|bytes| {
+            serde_json::from_slice(&bytes)
+                .map(Arc::new)
+                .map_err(|error| unread(format!("{}: {error}", short(root))))
+        });
+    MANIFESTS.with(|held| held.borrow_mut().insert(root.to_path_buf(), read.clone()));
+    read
 }
 
 /// The closure walk of one package.
-fn package_reach(root: &Path, solid: &SolidPackages<'_>) -> PackageReach {
+fn package_reach(
+    root: &Path,
+    solid: &SolidPackages<'_>,
+    extra_entries: &BTreeSet<PathBuf>,
+) -> PackageReach {
     let name = manifest(root)
         .ok()
         .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
@@ -260,7 +340,7 @@ fn package_reach(root: &Path, solid: &SolidPackages<'_>) -> PackageReach {
         queue: VecDeque::new(),
         packages: BTreeSet::new(),
     };
-    match walk.run(root) {
+    match walk.run(root, extra_entries) {
         Ok(()) => PackageReach::Clear,
         Err(reach) => reach,
     }
@@ -274,8 +354,11 @@ struct Walk<'s, 'd> {
 }
 
 impl Walk<'_, '_> {
-    fn run(&mut self, root: &Path) -> Result<(), PackageReach> {
+    fn run(&mut self, root: &Path, extra_entries: &BTreeSet<PathBuf>) -> Result<(), PackageReach> {
         self.enter_package(root)?;
+        for entry in extra_entries {
+            self.push(entry.clone());
+        }
         while let Some(file) = self.queue.pop_front() {
             if self.files.len() > MAX_CLOSURE_FILES {
                 return Err(PackageReach::Undecided {
@@ -1003,6 +1086,52 @@ mod tests {
             "export declare const x: number;",
         );
         assert_eq!(reach(root, "typesonly"), PackageReach::Clear);
+    }
+
+    /// A package with no `exports` map can be imported by a deep path no entry reaches: the runtime file beside the declaration the project names is an
+    /// entry, so a deep file that loads Solid is found.
+    #[test]
+    fn a_deep_file_the_project_names_is_an_entry() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/deep/package.json",
+            r#"{"name":"deep","main":"./index.js"}"#,
+        );
+        write(root, "node_modules/deep/index.js", "export const a = 1;");
+        write(
+            root,
+            "node_modules/deep/lib/deep.js",
+            "import { action } from 'solid-js'; export const run = action;",
+        );
+        write(
+            root,
+            "node_modules/deep/lib/deep.d.ts",
+            "export declare const run: () => void;",
+        );
+        assert_eq!(
+            reach(root, "deep"),
+            PackageReach::Clear,
+            "the entries alone do not reach the deep file"
+        );
+        let declaration = root
+            .join("node_modules/deep/lib/deep.d.ts")
+            .to_string_lossy()
+            .into_owned();
+        let siblings = runtime_siblings(&declaration)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(siblings.len(), 1);
+        let package = root.join("node_modules/deep").canonicalize().unwrap();
+        assert!(
+            matches!(
+                package_reach(&package, &SOLID, &siblings),
+                PackageReach::ReachesSolid { .. }
+            ),
+            "{:?}",
+            package_reach(&package, &SOLID, &siblings)
+        );
     }
 
     #[test]

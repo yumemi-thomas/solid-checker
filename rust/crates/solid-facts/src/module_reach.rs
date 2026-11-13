@@ -21,7 +21,9 @@ use std::sync::OnceLock;
 
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
-use oxc_ast::ast::{Expression, ImportOrExportKind, Statement, TSModuleReference, UnaryOperator};
+use oxc_ast::ast::{
+    Argument, Expression, ImportOrExportKind, Statement, TSModuleReference, UnaryOperator,
+};
 use oxc_parser::Parser;
 use oxc_semantic::{AstNodes, NodeId, SemanticBuilder};
 use oxc_span::{GetSpan, SourceType};
@@ -214,6 +216,12 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     _ => hazard(ModuleHazardKind::DynamicLoad, "require"),
                 },
                 "eval" => hazard(ModuleHazardKind::CodeGeneration, "eval"),
+                // A timer given a string evaluates it (`setTimeout("code", 0)`): as `eval`. A function or a name is the timer's ordinary use.
+                "setTimeout" | "setInterval" | "setImmediate" | "execScript"
+                    if string_timer(nodes, id) =>
+                {
+                    hazard(ModuleHazardKind::CodeGeneration, name);
+                }
                 "Function" => {
                     if !function_use_is_inert(nodes, id) {
                         hazard(ModuleHazardKind::CodeGeneration, "Function");
@@ -262,6 +270,25 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     scan.loads = loads;
     scan.hazards = hazards;
     scan
+}
+
+/// Whether the reference at `id` is the callee of a call whose first argument is a string literal or a template: the timer evaluates it.
+fn string_timer(nodes: &AstNodes<'_>, id: NodeId) -> bool {
+    let (child, parent) = parent_past_wrappers(nodes, id);
+    let AstKind::CallExpression(call) = nodes.get_node(parent).kind() else {
+        return false;
+    };
+    call.callee.get_inner_expression().span() == nodes.get_node(child).kind().span()
+        && call
+            .arguments
+            .first()
+            .and_then(Argument::as_expression)
+            .is_some_and(|first| {
+                matches!(
+                    first.get_inner_expression(),
+                    Expression::StringLiteral(_) | Expression::TemplateLiteral(_)
+                )
+            })
 }
 
 /// A specifier the expression fixes: a string literal, or a template with no substitution.
@@ -514,6 +541,15 @@ mod tests {
                 "{source}"
             );
         }
+        assert_eq!(
+            kinds(&scan("setTimeout('import(\"solid-js\")', 0);")),
+            [(ModuleHazardKind::CodeGeneration, "setTimeout")]
+        );
+        assert!(
+            scan("setTimeout(() => {}, 0); setInterval(tick, 10);")
+                .hazards
+                .is_empty()
+        );
         for source in [
             "export const f = (x) => x instanceof Function;",
             "export const g = Function.prototype.toString;",
