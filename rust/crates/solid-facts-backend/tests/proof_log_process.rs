@@ -171,6 +171,156 @@ fn an_owner_call_decline_ends_nothing() {
     fs::remove_dir_all(directory).ok();
 }
 
+// Batch 11, B2, the review of #225 (F2): the log names why a getter's creation and the sites of a function a getter calls keep their rows, and the controls are no site or are
+// silent. A getter (`<Outer><Inner /></Outer>`, `slot={<Inner />}`, `[1].map(() => <Inner />)`, `slot={createMemo(() => 1)}`) runs where the component reads the prop: declined
+// `getter-runs-where-read`, for both groups of codes. A function written outside the element and called in one (`renderView()`, `makeMemo()`) is entered by a run no edge shows:
+// declined `entry-by-reference` (the effect code; the program opens no leaf scope, so the leaf codes are the census's). What a dialect control-flow element or a context provider
+// renders in place, a function handed to one, and a helper only a render calls are no site, or are silenced.
+#[test]
+fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-getters");
+    let reasons = |lines: &[serde_json::Value], start: u64| {
+        lines
+            .iter()
+            .filter(|line| line["k"] == "declined" && line["s"] == start)
+            .map(|line| line["proof"].as_str().unwrap().to_owned())
+            .collect::<BTreeSet<_>>()
+    };
+    let is_site = |lines: &[serde_json::Value], start: u64| {
+        lines
+            .iter()
+            .any(|line| line["k"] == "site" && line["s"] == start)
+    };
+    let silent = |lines: &[serde_json::Value], start: u64| {
+        lines
+            .iter()
+            .any(|line| line["k"] == "silent" && line["s"] == start)
+    };
+    let at = |source: &str, anchor: &str, skip: &str| {
+        (source
+            .find(anchor)
+            .unwrap_or_else(|| panic!("no `{anchor}`"))
+            + skip.len()) as u64
+    };
+    // The getters.
+    let name = "owner-call-jsx-getter";
+    let log = directory.join("getter.jsx");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "<Outer>\n        <Inner />",
+            "<Outer>\n        ",
+            "children of Outer",
+        ),
+        (
+            "<Leaf>\n        <Inner />",
+            "<Leaf>\n        ",
+            "children of Leaf",
+        ),
+        ("slot={<Inner />}", "slot={", "a prop's value"),
+        (
+            "[1].map(() => <Inner />)",
+            "[1].map(() => ",
+            "a map callback in the children",
+        ),
+        (
+            "(() => <Inner />)()",
+            "(() => ",
+            "an immediately invoked arrow",
+        ),
+        (
+            "untrack(() => <Inner />)",
+            "untrack(() => ",
+            "an untrack callback",
+        ),
+        ("slot={createMemo(() => 1)}", "slot={", "a creating call"),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert_eq!(
+            reasons(&lines_of, start),
+            BTreeSet::from(["getter-runs-where-read".to_owned()]),
+            "{what}: declined for the getter, both groups"
+        );
+    }
+    // A function handed whole is a site like any other; the others are no site.
+    let handed = at(
+        &source,
+        "<Outer>{() => <Inner />}</Outer>",
+        "<Outer>{() => ",
+    );
+    assert!(is_site(&lines_of, handed), "a function child is a site");
+    assert!(!reasons(&lines_of, handed).contains("getter-runs-where-read"));
+    for (anchor, skip, what) in [
+        (
+            "<Show when={1}>\n      <Inner />",
+            "<Show when={1}>\n      ",
+            "Show's children",
+        ),
+        (
+            "{(_value) => <Inner />}",
+            "{(_value) => ",
+            "Show's function child",
+        ),
+        (
+            "<Ctx value={1}>\n      <Inner />",
+            "<Ctx value={1}>\n      ",
+            "a context provider's children",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(!is_site(&lines_of, start), "{what} is no site");
+    }
+    // The helper in a getter.
+    let name = "owner-call-getter-helper";
+    let log = directory.join("getter.helper");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "function renderView() {\n  return <Inner />",
+            "function renderView() {\n  return ",
+            "renderView's tag",
+        ),
+        (
+            "function makeMemo() {\n  return createMemo(",
+            "function makeMemo() {\n  return ",
+            "makeMemo's creation",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(
+            reasons(&lines_of, start).contains("entry-by-reference"),
+            "{what}: entered by a run no edge shows: {:?}",
+            reasons(&lines_of, start)
+        );
+    }
+    // The controls: a helper only a render calls, and one called in a `Show`'s getter, keep their silence.
+    for (anchor, skip, what) in [
+        (
+            "function controlMemo() {\n  return createMemo(",
+            "function controlMemo() {\n  return ",
+            "controlMemo",
+        ),
+        (
+            "function showMemo() {\n  return createMemo(",
+            "function showMemo() {\n  return ",
+            "showMemo",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(
+            !reasons(&lines_of, start).contains("entry-by-reference"),
+            "{what} is declined"
+        );
+        assert!(silent(&lines_of, start), "{what} keeps a silence");
+    }
+    fs::remove_dir_all(directory).ok();
+}
+
 // Batch 11, slice 0: a finding and a verdict name the rule that reported them, so a fold can say which rule ended a site (`scripts/lib/proof-credit.mjs`).
 #[test]
 fn a_finding_and_a_verdict_name_their_rule() {
