@@ -122,6 +122,11 @@
 //             lateself    the receiver kept in a local (`const self1 = this`) and read in the step: `self1.m1()`
 //             latedestr   `const { m1 } = this as any` in the step
 //             latecomputed `(this as any)[key1]()`, a key the program does not name
+//           and the neighbours the probing of #229's B2 found (no receiver in them: a function stored through a parameter's member is stored into the object the callers pass,
+//           and the code that reads that object reads it by the caller's name):
+//             putparam    `function put1(target: { m1(): void }) { target.m1 = function () { cb1(); }; }`, `const o1 = { m1(): void {} }`, `put1(o1)`, `runStep(() => { o1.m1(); })`
+//             putparamany the same with `target: any` and `const o1: any = {}`
+//             putchain    the argument is the parameter of an outer function: `function putOuter1(holder: …) { put1(holder); }`, `putOuter1(o1)`
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -134,7 +139,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -652,10 +657,32 @@ const ROUTE_FRAMES = {
     const name = n("k");
     return { head: `const ${cb} = () => `, close: `;\nconst ${name} = \"${key}\";\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any)[${name}]();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
   },
+  putparam: (f, n) => {
+    const cb = n("cb");
+    const put = n("put");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: { ${key}(): void }) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nconst ${object} = {\n  ${key}(): void {},\n};\n${put}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
+  },
+  putparamany: (f, n) => {
+    const cb = n("cb");
+    const put = n("put");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: any) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nconst ${object}: any = {};\n${put}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
+  },
+  putchain: (f, n) => {
+    const cb = n("cb");
+    const put = n("put");
+    const outer = n("outer");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: { ${key}(): void }) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nfunction ${outer}(holder: { ${key}(): void }) {\n  ${put}(holder);\n}\nconst ${object} = {\n  ${key}(): void {},\n};\n${outer}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
+  },
 };
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };

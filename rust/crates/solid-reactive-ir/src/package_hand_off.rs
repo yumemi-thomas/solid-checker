@@ -1749,7 +1749,108 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .iter()
             .flat_map(|import| &import.bindings)
             .any(|binding| binding.local.span == declaration);
-        imported || self.binding(file, declaration, walk)
+        imported
+            || self.binding(file, declaration, walk)
+            || self.parameter_holder_hands(file, declaration, walk)
+    }
+
+    /// A store into a member of a parameter (`t.m = f` in `function put(t) { … }`) stores into the object the callers pass, whose reads the walk of the parameter's own does not
+    /// reach (`put(o)`, then `runStep(() => { o.m(); })`): the holder is each caller's argument, followed like a store into it. Every use of the function must be a direct call
+    /// the build resolves (a use that is no call, an export a program may enter, a function nothing names, a parameter that is a pattern or a rest: the callers are not known,
+    /// and the store is handed). An argument that is a fresh object literal is reached through the parameter only.
+    fn parameter_holder_hands(
+        &self,
+        file: &'a FileFacts,
+        declaration: Span,
+        walk: &mut Walk,
+    ) -> bool {
+        let ast = &file.ast;
+        let plain = ast.functions.iter().find_map(|function| {
+            function
+                .parameters
+                .iter()
+                .position(|parameter| {
+                    parameter.shape == solid_facts::ast::BindingShape::Identifier
+                        && parameter.names.len() == 1
+                        && parameter.names[0].span == declaration
+                })
+                .map(|index| (function, index))
+        });
+        let Some((function, index)) = plain else {
+            // A parameter that is a pattern or a rest is no name of the argument; a name that is no parameter is a local, which `binding` followed.
+            return ast.functions.iter().any(|function| {
+                function
+                    .parameters
+                    .iter()
+                    .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+                    || function
+                        .rest_parameter_names
+                        .iter()
+                        .any(|name| name.span == declaration)
+            });
+        };
+        let (accessor, owner) = walk.mode();
+        if !walk
+            .positions
+            .insert(((file.path.shared(), declaration), accessor, owner))
+        {
+            return false;
+        }
+        let Some(callers) = self.exact_callers(file, function) else {
+            return true;
+        };
+        callers.into_iter().any(|(caller_file, call)| {
+            let Some(argument) = call.arguments.get(index) else {
+                return false;
+            };
+            if argument.spread {
+                return true;
+            }
+            let argument = caller_file.ast.peel_ts_sugar_span(argument.span);
+            if caller_file
+                .ast
+                .object_get_shapes
+                .iter()
+                .any(|shape| shape.span == argument)
+            {
+                return false;
+            }
+            self.assignment_hands(caller_file, argument, walk)
+        })
+    }
+
+    /// The calls that run `function`, when every use of it is a direct call; `None` when anything else may call it: a use that is no call (a copy, an argument, a tag), an
+    /// export a program may enter, a function no binding names.
+    fn exact_callers(
+        &self,
+        file: &'a FileFacts,
+        function: &'a FunctionFact,
+    ) -> Option<Vec<(&'a FileFacts, &'a CallFact)>> {
+        if self.exported(file, function)
+            && (!self.lookup.program_closed || self.lookup.escapes_unnamed(file.path.as_str()))
+        {
+            return None;
+        }
+        let placed =
+            crate::local_access::function_reference_hand_offs(file, function, self.lookup)?;
+        let foreign = crate::local_access::foreign_reference_hand_offs(file, function, self.lookup);
+        if placed
+            .iter()
+            .any(|(_, hand_off)| *hand_off != HandOff::Call)
+            || foreign
+                .iter()
+                .any(|(_, _, hand_off)| *hand_off != HandOff::Call)
+        {
+            return None;
+        }
+        let mut callers = Vec::new();
+        for (at, _) in placed {
+            callers.push((file, file.ast.calls_with_peeled_callee(at).next()?));
+        }
+        for (holder, at, _) in foreign {
+            callers.push((holder, holder.ast.calls_with_peeled_callee(at).next()?));
+        }
+        Some(callers)
     }
 
     /// A function returns the value (a `return`, an arrow's expression body): the calls of that function evaluate to it (`make()`, an immediately invoked function), so

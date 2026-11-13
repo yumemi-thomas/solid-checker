@@ -3606,6 +3606,36 @@ fn computed_prototype_keys_keep_their_rows() {
     );
 }
 
+/// A function stored through a parameter's member is stored into the object the callers pass, read by the caller's own name (the neighbours of the review of #229, B2; no
+/// receiver in the program): when every use of the function is a direct call the build resolves, the holder is each call's argument, followed like a store into it (a typed or an
+/// `any` holder, an argument that is the parameter of an outer function, a copy of the holder's name, an arrow with a rest parameter); a parameter that is a pattern has callers
+/// no walk follows, so the store is handed. A fresh literal argument, and a holder read on a timer by a member nothing calls, stay silent.
+#[test]
+fn parameter_holders_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-holder-param") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-holder-param/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "function putTyped(target: { putTypedM(): void }) {\n  target.putTypedM = function () {\n    flush();",
+            "function putAny(target: any) {\n  target.putAnyM = function () {\n    flush();",
+            "function putInner(target: { putChainM(): void }) {\n  target.putChainM = function () {\n    flush();",
+            "function putCopy(target: { putCopyM(): void }) {\n  target.putCopyM = function () {\n    flush();",
+            "const putArrow = (target: { putArrowM(): void }, ...rest: unknown[]) => {\n  void rest;\n  target.putArrowM = function () {\n    flush();",
+            "function putPattern({ target }: { target: { putPatternM(): void } }) {\n  target.putPatternM = function () {\n    flush();",
+        ],
+        &[
+            "function twinFresh(target: { twinFreshM(): void }) {\n  target.twinFreshM = function () {\n    flush();",
+            "function twinTimer(target: { twinTimerM(): void }) {\n  target.twinTimerM = function () {\n    flush();",
+        ],
+    );
+}
+
 /// The review of #226, B1: a getter that names its own object, and a component that renders itself passing a prop on in a nested arrow, walked the accessor
 /// question anew each time and overflowed the stack (exit 134, no report). The run ends, and the flushes of B1's getter, B2's reads in a JSX expression or a
 /// class field initializer and B3's `this` read keep their uncertifiable rows (never silence, never a violation), as do the re-check's N1 and N2 shapes.
