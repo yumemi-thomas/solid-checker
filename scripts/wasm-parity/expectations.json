@@ -813,6 +813,38 @@
           "endByte": 300
         },
         {
+          "id": "SC3001",
+          "rule": "leaf-owner-forbidden-call",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 371,
+          "endByte": 404
+        },
+        {
+          "id": "SC6002",
+          "rule": "primitive-in-effect-callback",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 371,
+          "endByte": 404
+        },
+        {
+          "id": "SC3001",
+          "rule": "leaf-owner-forbidden-call",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 383,
+          "endByte": 391
+        },
+        {
+          "id": "SC6002",
+          "rule": "primitive-in-effect-callback",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 383,
+          "endByte": 391
+        },
+        {
           "id": "SC4002",
           "rule": "missing-context-provider",
           "kind": "uncertifiable",
@@ -856,7 +888,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 12,
+        "proofObligations": 16,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
