@@ -59,7 +59,7 @@ import its root names, through the calls and project bindings that made it), nev
 object passed as an argument, a `{ shorthand }` property, a namespace member, a project binding that holds one) is a site, and so is the component a
 `lazy(() => import("pkg"))` makes, a call of a global a declaration file declares (a package of global declarations only, a project `declare function`,
 a member a project `interface Window` adds: the declaration does not say who provides the global, and a package may) and a member of an object the package made,
-evaluated for its value, where the package's closure may define an accessor under that name (`void clock.now`: a getter runs where it is read; ADR 0973): where its role may run under an owner or nothing
+evaluated for its value or read by an object pattern (`const { now } = made`), where the package's closure may define an accessor under that name (`void clock.now`: a getter runs where it is read; ADR 0973): where its role may run under an owner or nothing
 places it, it is **uncertifiable** (`package-may-call-action:<why>`), never a violation, unless the package's
 source, walked from every entry through every import, `require` and literal `import()`, names no Solid
 package (a `@solidjs/*` package counts) and loads nothing by a computed name, generates no code (`eval`,
