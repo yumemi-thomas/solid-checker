@@ -53,7 +53,9 @@ use thiserror::Error;
 /// with a direct `eval` or a `with` statement.
 /// 93 (ADR 0923): each `throw`'s operand, and a `catch` clause's identifier
 /// parameter.
-pub const AST_FACTS_SCHEMA: u32 = 93;
+/// 94 (the review of #232, B5): the shorthand target of an object assignment
+/// pattern (`({ s } = value)`, `({ s = 1 } = value)`) is a write target.
+pub const AST_FACTS_SCHEMA: u32 = 94;
 
 mod argument_completion;
 mod completion_call_cover;

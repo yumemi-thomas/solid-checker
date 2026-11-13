@@ -112,8 +112,12 @@ struct ReceiverRead<'a> {
 enum ReadKind {
     /// `this.k`, `super.k`, `this["k"]`, `this[key]`: the member expression, read (or called) there.
     Member,
-    /// The member is the target of a write (`this.k = v`, `super.k = v`): a setter of the key may run there, and nothing is read out.
+    /// The member is the target of a write (`this.k = v`, `super.k = v`), or the receiver is the target of `Object.assign(this, …)`, which writes every key of its sources
+    /// through `[[Set]]`: a setter of the key may run there, and nothing is read out.
     MemberWrite,
+    /// A pattern of the parameters of a function the receiver is passed to (`function f({ m }) {}`, `function f([a]) {}`): the pattern reads the keys it names (a rest
+    /// and an array pattern read them all, and run the iterator), and a getter of the receiver runs where the function does.
+    Pattern,
     /// `const { k } = this`: the local the pattern binds to the member.
     Local,
     /// The receiver is used as a value (`const self = this`, `f(this)`, `{ ...this }`, `return this`, a pattern with a rest): any member may be read from it, anywhere it goes.
@@ -197,10 +201,35 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     /// Whether a file of the program (a dependency source file too: a key it exports names the property as well) spells the `__proto__` key anywhere: what makes a write
     /// through a key the program does not name a possible prototype install.
     proto_key_spelled: std::cell::OnceCell<bool>,
+    /// The files of the program by path, listed once (`program_files`).
+    sorted_files: std::cell::OnceCell<Vec<&'a FileFacts>>,
     /// The uses of receivers in the files of the program, read once (`receiver_reads`).
     receiver_reads: std::cell::OnceCell<ReceiverReads<'a>>,
     /// Whether an object literal, asked as a holder, is provably confined (`literal_confined`), kept: the answer is the syntax's and the call graph's, not a walk's.
     confined: RefCell<HashMap<Key, bool>>,
+    /// The keys under which an object literal of the program holds another object literal (`nested_keys`).
+    nested_keys: std::cell::OnceCell<NestedKeys>,
+    /// Whether a file of the program may give `Object.prototype` a member (`object_prototype_written`).
+    object_prototype_written: std::cell::OnceCell<bool>,
+}
+
+/// The keys under which an object literal of the program holds another object literal directly (`{ sub: { … } }`), and whether one holds it under a key the program does not
+/// name. A read of such a key from an object may give a nested object, which goes on under the name that keeps it (the review of #232, B1): the strict prefilter asks that
+/// name's uses in turn. A read of any other key gives a value that is no object a literal built inside this one.
+#[derive(Default)]
+struct NestedKeys {
+    spelled: HashSet<String>,
+    any: bool,
+}
+
+impl NestedKeys {
+    /// Whether a read of `key` (`None`: a key the program does not name) may give an object a literal holds.
+    fn may_hold(&self, key: Option<&str>) -> bool {
+        match key {
+            Some(key) => self.any || self.spelled.contains(key),
+            None => self.any || !self.spelled.is_empty(),
+        }
+    }
 }
 
 impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
@@ -215,8 +244,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             receiver_spans: RefCell::new(HashMap::new()),
             receiver_literals: RefCell::new(HashMap::new()),
             proto_key_spelled: std::cell::OnceCell::new(),
+            sorted_files: std::cell::OnceCell::new(),
             receiver_reads: std::cell::OnceCell::new(),
             confined: RefCell::new(HashMap::new()),
+            nested_keys: std::cell::OnceCell::new(),
+            object_prototype_written: std::cell::OnceCell::new(),
         }
     }
 
@@ -729,7 +761,8 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let Some(member) = ast.member_at(ast.peel_ts_sugar_span(target)) else {
             return false;
         };
-        match crate::installed_members::member_name(file, member) {
+        // A unique symbol (`o[sym] = f`) is a key that is none of these: no string is its name.
+        match self.member_key(file, member).as_deref() {
             Some("__proto__") => !self.receiverless_literal_binding(file, member.object),
             Some("prototype") => true,
             Some(_) => false,
@@ -738,9 +771,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             // [`Self::placed_under_read_key`] and [`Self::assigned_under_read_key`].
             None => {
                 *self.proto_key_spelled.get_or_init(|| {
-                    self.files
-                        .values()
-                        .any(|file| file.source.contains("__proto__"))
+                    self.program_files().iter().any(|file| {
+                        file.source.contains("__proto__")
+                            || (file.source.contains('\\')
+                                && unescaped(&file.source).contains("__proto__"))
+                    })
                 }) && ast.computed_members.binary_search(&member.span).is_ok()
             }
         }
@@ -775,17 +810,25 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .is_some_and(|literals| !literals.contains(&literal))
     }
 
-    /// Every use of a receiver in the files of the program (a dependency source file too), read once and kept: [`ReceiverReads`].
-    fn receiver_reads(&self) -> &ReceiverReads<'a> {
-        self.receiver_reads.get_or_init(|| {
+    /// Every file of the program (a dependency source file too: `SemanticLookup::files`, the recorded whole-program read), by path and listed once: what the censuses of
+    /// receivers, nested keys, prototype spellings and `Object.prototype` read, in an order that is no map's.
+    fn program_files(&self) -> &[&'a FileFacts] {
+        self.sorted_files.get_or_init(|| {
             let mut files: Vec<(&str, &'a FileFacts)> = self
                 .files
                 .iter()
                 .map(|(path, file)| (*path, *file))
                 .collect();
             files.sort_unstable_by_key(|(path, _)| *path);
+            files.into_iter().map(|(_, file)| file).collect()
+        })
+    }
+
+    /// Every use of a receiver in the files of the program (a dependency source file too), read once and kept: [`ReceiverReads`].
+    fn receiver_reads(&self) -> &ReceiverReads<'a> {
+        self.receiver_reads.get_or_init(|| {
             let mut reads = ReceiverReads::default();
-            for (_, file) in files {
+            for file in self.program_files() {
                 self.collect_receiver_reads(file, &mut reads);
             }
             reads
@@ -936,6 +979,25 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             !call.arguments[*index].spread
                 && ast.peel_ts_sugar_span(call.arguments[*index].span) == value
         });
+        // `Object.assign(this, …)`: the receiver is the target, and every key of the sources is written to it through `[[Set]]`, which runs a setter of the receiver, own or
+        // inherited: a write of any key where the call is written (the review of #232, B4; `this.k = v` is recorded the same way). A call whose value is kept hands the
+        // receiver on as well.
+        if let Some((call, 0)) = argument
+            && self.is_object_assign(file, call)
+        {
+            reads.any.push(ReceiverRead {
+                file,
+                at: call.span,
+                kind: ReadKind::MemberWrite,
+            });
+            let dropped = ast
+                .inert_operands
+                .iter()
+                .any(|operand| ast.peel_ts_sugar_span(*operand) == call.span);
+            if dropped {
+                return;
+            }
+        }
         // `held.has(router)`, `requests.set(router, …)` on a weak collection: the object is a key whose identity is compared, and no key of one can be got back.
         if let Some((call, index)) = argument
             && self.unread_argument(file, call, index, false)
@@ -949,24 +1011,39 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 self.call_receiver(file, call, index)
             && !names_arguments(callee_file, callee)
         {
-            let names: Option<Vec<Span>> = match callee.parameters.get(parameter) {
-                Some(declared) => Some(declared.names.iter().map(|name| name.span).collect()),
-                None if callee.rest_parameter => Some(
-                    callee
-                        .rest_parameter_names
-                        .iter()
-                        .map(|name| name.span)
-                        .collect(),
-                ),
-                // An index past the list is no name; a function other than an arrow has an `arguments` object to read it through (`Self::parameter` hands it).
-                None => (callee.kind == FunctionKind::Arrow).then(Vec::new),
-            };
-            if let Some(names) = names {
-                for name in names {
-                    for reference in callee_file.ast.references_to(name) {
+            let followed = match callee.parameters.get(parameter) {
+                // A name the receiver is bound to: its uses are the receiver's.
+                Some(declared)
+                    if declared.shape == solid_facts::ast::BindingShape::Identifier
+                        && declared.names.len() == 1 =>
+                {
+                    for reference in callee_file.ast.references_to(declared.names[0].span) {
                         self.follow_receiver(callee_file, *reference, depth + 1, seen, reads);
                     }
+                    true
                 }
+                // A pattern is no name for the receiver (the review of #232, B3): it reads the keys it names, or every key (a rest, an array pattern's iterator), where the
+                // function runs, and binds its locals to the members' values. The receiver is also handed on as a value.
+                Some(pattern) => {
+                    reads.any.push(ReceiverRead {
+                        file: callee_file,
+                        at: pattern.pattern,
+                        kind: ReadKind::Pattern,
+                    });
+                    for name in &pattern.names {
+                        reads.any.push(ReceiverRead {
+                            file: callee_file,
+                            at: name.span,
+                            kind: ReadKind::Local,
+                        });
+                    }
+                    false
+                }
+                // An index past the list of an arrow is no name: nothing receives it. A function other than an arrow has an `arguments` object to read it through
+                // (`Self::parameter` hands it), and a rest parameter is an array that holds the receiver: handed as a value.
+                None => callee.kind == FunctionKind::Arrow && !callee.rest_parameter,
+            };
+            if followed {
                 return;
             }
         }
@@ -975,6 +1052,19 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             at: value,
             kind: ReadKind::Escape,
         });
+    }
+
+    /// Whether `call` is the library's `Object.assign` (resolved by the compiler, or the global `Object` of a script of a package whose calls resolve to no declaration): it
+    /// writes every key of its sources into its first argument.
+    fn is_object_assign(&self, file: &'a FileFacts, call: &CallFact) -> bool {
+        match self
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(crate::runtime_semantics::standard_call_name)
+        {
+            Some(name) => name == "ObjectConstructor.assign",
+            None => self.global_object_method(file, call.callee) == Some("assign"),
+        }
     }
 
     /// Whether a use of a receiver in code a package may run reads `key` (`None`: a key the program does not name, which any read may be), or the receiver as a value.
@@ -997,7 +1087,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         walk.accessor = false;
         let answer = match read.kind {
             ReadKind::Unreadable => true,
-            ReadKind::MemberWrite => self.runs_on_package_stack(read.file, read.at, walk),
+            ReadKind::MemberWrite | ReadKind::Pattern => {
+                self.runs_on_package_stack(read.file, read.at, walk)
+            }
             // A member that is called runs the function where the call is written; one that is only read goes on from there (the value the read gives is another's).
             ReadKind::Member => {
                 self.runs_on_package_stack(read.file, read.at, walk)
@@ -1102,7 +1194,15 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     /// call of a function the build reads whose parameter is confined in turn). An escape is no proof: a value passed to, returned to or stored where code nothing here
     /// follows can reach it (a package, a callee nothing resolves exactly, `return o`, `[o]`, `x.p = o`, an export) may be given a prototype, have a member called with it
     /// as `this`, or be made the receiver of a function with `.call`, and what is not proved is handed.
+    ///
+    /// What a use gives out is followed too (the review of #232, B1): a read of a member the program holds an object under (`hh.sub` where a literal writes `{ sub: { … } }`),
+    /// a pattern's local, a rest, an array pattern and a parameter that is a pattern name an object that is the holder's own or a copy of it, and their uses are asked as the
+    /// holder's are. An exported name of a program whose namespaces escape unnamed is reached by code nothing here follows. And no object is confined in a program that gives
+    /// `Object.prototype` a member (`object_prototype_written`): every plain object inherits it, so a read of any key may run an accessor with the object as its receiver.
     fn holder_confined(&self, file: &'a FileFacts, holder: Span) -> bool {
+        if self.object_prototype_written() {
+            return false;
+        }
         let ast = &file.ast;
         let holder = ast.peel_ts_sugar_span(holder);
         if ast
@@ -1126,6 +1226,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
 
     /// [`Self::holder_confined`] of an object literal: where it is written decides (the binding that names it, the parameter that receives it, the literal that holds it).
     fn literal_confined(&self, file: &'a FileFacts, literal: Span) -> bool {
+        if self.object_prototype_written() {
+            return false;
+        }
         let key = (file.path.shared(), literal);
         if let Some(known) = self.confined.borrow().get(&key) {
             return *known;
@@ -1214,6 +1317,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let Some(binding) = ast.identifier_binding(declaration) else {
             return false;
         };
+        // A name a pattern binds is the member's value (a nested object, a copy), no other name for the pattern's initializer (the review of #232, B1).
+        if binding.shape != solid_facts::ast::BindingShape::Identifier {
+            return false;
+        }
         let Some(initializer) = binding
             .initializer
             .map(|initializer| ast.peel_ts_sugar_span(initializer))
@@ -1243,7 +1350,8 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     }
 
     /// Every use of the name declared at `declaration` (in the file, and in the files that import it) is one that makes the object neither a receiver nor reachable by code
-    /// nothing here follows. An exported name is reached by the program's importers, which a program whose boundary is open does not enumerate.
+    /// nothing here follows. An exported name is reached by the program's importers, which a program whose boundary is open does not enumerate, and by a namespace that
+    /// escapes with no name the analysis reads (`runNs(NS)`, `NS[key]`: the namespace census, ADR 0347) in a closed one.
     fn references_confined(
         &self,
         file: &'a FileFacts,
@@ -1251,7 +1359,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         seen: &mut HashSet<(Arc<str>, Span)>,
     ) -> bool {
         let ast = &file.ast;
-        if !self.lookup.program_closed && crate::indexes::binding_exported(file, declaration) {
+        if crate::indexes::binding_exported(file, declaration)
+            && (!self.lookup.program_closed || self.lookup.escapes_unnamed(file.path.as_str()))
+        {
             return false;
         }
         ast.references_to(declaration)
@@ -1284,7 +1394,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let ast = &file.ast;
         let reference = ast.peel_ts_sugar_span(reference);
         if let Some(member) = ast.members_with_peeled_object(reference).next() {
-            let key = crate::installed_members::member_name(file, member);
+            let key = member_spelled_key(file, member);
             if ast
                 .write_targets
                 .iter()
@@ -1294,7 +1404,15 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 return key.is_some_and(|key| key != "__proto__");
             }
             // A call binds `this` to the object: a callee that may name it reads members through it.
-            return !self.method_call_may_read_receiver(file, member.span);
+            if self.called_as_method(file, member.span) {
+                return !self.method_call_may_read_receiver(file, member.span);
+            }
+            // A read gives out the member's value: an object the program holds under that key (a nested literal) goes on under whatever keeps it, and its uses are asked in
+            // turn (the review of #232, B1). Any other key gives a value that is no object a literal built inside this one.
+            return !self
+                .nested_keys()
+                .may_hold(self.member_key(file, member).as_deref())
+                || self.use_confined(file, member.span, seen);
         }
         if ast
             .inert_operands
@@ -1315,16 +1433,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 .initializer
                 .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == reference)
         }) {
-            return match binding.shape {
-                solid_facts::ast::BindingShape::Identifier => binding.names.iter().all(|name| {
-                    !seen.insert((file.path.shared(), name.span))
-                        || self.references_confined(file, name.span, seen)
-                }),
-                // A pattern reads the members it names (a rest copies them): the values go on in the names the pattern binds, where the store's own walk follows them.
-                solid_facts::ast::BindingShape::Array | solid_facts::ast::BindingShape::Object => {
-                    true
-                }
-            };
+            return self.pattern_confined(file, binding, seen);
         }
         if let Some((call, index)) = ast.arguments_containing(reference).find(|(call, index)| {
             !call.arguments[*index].spread
@@ -1407,9 +1516,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     /// Whether the argument at `index` of `call` is an object the call reads no member of, and gives no other name to: a key of a collection that compares its identity and never
     /// gives it back (the first argument of a call of `WeakMap`'s `get`, `has`, `delete` and `set`, of `WeakSet`'s `has`, `delete` and `add`, and of `Map`'s and `Set`'s `get`,
     /// `has` and `delete`: a `Map.set` and a `Set.add` keep it where an iteration gets it back), or the object `Object.isFrozen`, `isSealed`, `isExtensible`, `keys` and
-    /// `getOwnPropertyNames` ask of (names and booleans, no member read). `Object.defineProperty`, `defineProperties`, `assign`, `freeze`, `seal` and `preventExtensions` read none
+    /// `getOwnPropertyNames` ask of (names and booleans, no member read). `Object.defineProperty`, `defineProperties`, `freeze`, `seal` and `preventExtensions` read none
     /// either, but they return the object they are given, so the call is one only when its value is dropped (a statement); a prototype set (`Object.setPrototypeOf`) is the same, and it
-    /// makes the object the derived one, which `confining` asks (a holder is no longer provably no receiver, nor is one a descriptor may give a getter of its own). The declaration is
+    /// makes the object the derived one, which `confining` asks (a holder is no longer provably no receiver, nor is one a descriptor may give a getter of its own). `Object.assign` is
+    /// none of these: it writes every key of its sources into its target through `[[Set]]`, which runs a setter of the target, so it is the receiver's store ([`Self::follow_receiver`],
+    /// the review of #232, B4) and a holder's write that nothing here follows. The declaration is
     /// the standard library's, resolved by the compiler, or, in a script of a package whose calls resolve to no declaration, the library's global `Object` or a weak collection the file
     /// makes (the compiler resolves the global).
     fn unread_argument(
@@ -1447,7 +1558,6 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 | "ObjectConstructor.freeze"
                 | "ObjectConstructor.seal"
                 | "ObjectConstructor.preventExtensions"
-                | "ObjectConstructor.assign"
                 | "ObjectConstructor.setPrototypeOf" => dropped,
                 _ => false,
             };
@@ -1460,12 +1570,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                         true
                     }
                     "defineProperty" | "defineProperties" | "freeze" | "seal"
-                    | "preventExtensions" | "assign" | "setPrototypeOf" => dropped,
+                    | "preventExtensions" | "setPrototypeOf" => dropped,
                     _ => false,
                 })
     }
 
-    /// [`Self::holder_confined`] of an object passed as the argument at `index` of a function the build reads: the uses of the parameter.
+    /// [`Self::holder_confined`] of an object passed as the argument at `index` of a function the build reads: the uses of the parameter, or of what its pattern binds.
     fn parameter_confined(
         &self,
         file: &'a FileFacts,
@@ -1476,17 +1586,102 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         if names_arguments(file, function) {
             return false;
         }
-        let names: Vec<Span> = match function.parameters.get(index) {
-            Some(parameter) => parameter.names.iter().map(|name| name.span).collect(),
-            None if function.rest_parameter => function
-                .rest_parameter_names
-                .iter()
-                .map(|name| name.span)
-                .collect(),
-            None => return function.kind == FunctionKind::Arrow,
-        };
-        names.into_iter().all(|name| {
+        match function.parameters.get(index) {
+            Some(parameter) => self.pattern_confined(file, parameter, seen),
+            // A rest parameter is an array that holds the object (the review of #232, B3); an index past an arrow's list names nothing.
+            None => !function.rest_parameter && function.kind == FunctionKind::Arrow,
+        }
+    }
+
+    /// Whether the names a binding gives an object keep it confined. A name (`const p = o`, a parameter) is the object itself: its uses are asked. A pattern binds each local to
+    /// the member it names, which is a nested object when the program holds one under that key (asked as a read of it is), and a rest, an array pattern, a computed key and a
+    /// nested pattern bind members the pattern does not name one by one, or a copy of the object that holds the same members: every local is asked (the review of #232, B1).
+    fn pattern_confined(
+        &self,
+        file: &'a FileFacts,
+        binding: &'a solid_facts::ast::BindingFact,
+        seen: &mut HashSet<(Arc<str>, Span)>,
+    ) -> bool {
+        let mut confined = |name: Span| {
             !seen.insert((file.path.shared(), name)) || self.references_confined(file, name, seen)
+        };
+        match binding.shape {
+            solid_facts::ast::BindingShape::Identifier => {
+                binding.names.iter().all(|name| confined(name.span))
+            }
+            solid_facts::ast::BindingShape::Object
+                if !binding.object_slots.is_empty()
+                    && binding.object_slots.len() == binding.names.len()
+                    && binding
+                        .object_slots
+                        .iter()
+                        .all(|slot| slot.plain_identifier_key) =>
+            {
+                binding.object_slots.iter().all(|slot| {
+                    !self.nested_keys().may_hold(Some(slot.property.as_str()))
+                        || confined(slot.local.span)
+                })
+            }
+            solid_facts::ast::BindingShape::Object | solid_facts::ast::BindingShape::Array => {
+                binding.names.iter().all(|name| confined(name.span))
+            }
+        }
+    }
+
+    /// The keys under which an object literal of any file of the program holds another object literal, read once.
+    fn nested_keys(&self) -> &NestedKeys {
+        self.nested_keys.get_or_init(|| {
+            let mut nested = NestedKeys::default();
+            for file in self.program_files() {
+                let ast = &file.ast;
+                let literal_spans: HashSet<Span> = ast
+                    .object_get_shapes
+                    .iter()
+                    .map(|shape| shape.span)
+                    .collect();
+                for property in &ast.object_properties {
+                    if literal_spans.contains(&ast.peel_ts_sugar_span(property.value)) {
+                        match self.property_key(file, property) {
+                            Some(key) => {
+                                nested.spelled.insert(key);
+                            }
+                            None => nested.any = true,
+                        }
+                    }
+                }
+            }
+            nested
+        })
+    }
+
+    /// Whether a file of the program may give `Object.prototype` a member, read once: the object every plain object inherits from, so an accessor on it runs with any object as
+    /// its receiver where a member of that object is read, and no object is provably no receiver (the review of #232, S3). A file does when it spells `__defineGetter__` or
+    /// `__defineSetter__`, or uses the member `prototype` of the global `Object` other than as an operand nothing takes (`proto === Object.prototype`) or as the object of a
+    /// read of one of its built-in methods (`Object.prototype.hasOwnProperty.call(o, k)`). A package a build does not read as source is a premise (the dependency source
+    /// premises, ADRs 0266 and 0300), and a route to the prototype that spells none of these (`Object.getPrototypeOf({})`) is named in `docs/open-work.md`.
+    fn object_prototype_written(&self) -> bool {
+        *self.object_prototype_written.get_or_init(|| {
+            self.program_files().iter().any(|file| {
+                file.source.contains("__defineGetter__")
+                    || file.source.contains("__defineSetter__")
+                    || file
+                        .ast
+                        .members
+                        .iter()
+                        .any(|member| object_prototype_touched(file, member))
+                    || file.ast.bindings.iter().any(|binding| {
+                        // `const { prototype } = Object`: a pattern that names the key, or one that names keys the program does not (a rest, a computed key).
+                        binding.shape == solid_facts::ast::BindingShape::Object
+                            && binding.initializer.is_some_and(|initializer| {
+                                names_global_object(file, initializer, 0)
+                            })
+                            && (binding.object_slots.len() != binding.names.len()
+                                || binding
+                                    .object_slots
+                                    .iter()
+                                    .any(|slot| slot.property == "prototype"))
+                    })
+            })
         })
     }
 
@@ -1511,16 +1706,14 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         file: &FileFacts,
         member: &solid_facts::ast::MemberFact,
     ) -> Option<String> {
-        crate::installed_members::member_name(file, member)
-            .map(str::to_owned)
-            .or_else(|| {
-                file.ast
-                    .computed_members
-                    .binary_search(&member.span)
-                    .is_ok()
-                    .then(|| self.symbol_key(file, member.property))
-                    .flatten()
-            })
+        member_spelled_key(file, member).or_else(|| {
+            file.ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok()
+                .then(|| self.symbol_key(file, member.property))
+                .flatten()
+        })
     }
 
     /// The key of a computed expression that names a unique symbol: a reference to a name the file binds once, to a call of the library's global `Symbol` (the compiler resolves
@@ -2659,7 +2852,9 @@ fn direct_properties(
     })
 }
 
-/// The key a property's key text names: `m`, `"m"` and `["m"]` name `m`, `[m]` and `[\`m\`]` name nothing the program fixes, and a quoted text with an escape is no plain name.
+/// The key a property's key text names, as the property key the runtime gives it (the review of #232, B2: texts are no keys, `\u006d` and `m` are one property, and so are
+/// `1`, `0x1` and `1.0`): `m`, `"m"` and `["m"]` name `m`, a name's unicode escapes are decoded, a number written as the key names its whole-number key, `[m]` and
+/// `[\`m\`]` name nothing the program fixes, and a quoted text with an escape is no plain name.
 fn key_of_text(text: &str, computed: bool) -> Option<String> {
     let quoted = ["\"", "'"].into_iter().find_map(|quote| {
         text.strip_prefix(quote)
@@ -2668,9 +2863,215 @@ fn key_of_text(text: &str, computed: bool) -> Option<String> {
     });
     match (computed, quoted) {
         (_, Some(inner)) => Some(inner.to_owned()),
-        (false, None) if !text.starts_with(['"', '\'']) => Some(text.to_owned()),
+        (false, None) if !text.starts_with(['"', '\'']) => spelled_key(text),
         _ => None,
     }
+}
+
+/// Whether the expression at `span` is the global `Object` (`Object`, `globalThis.Object`, `window.Object`, `self.Object`, `global.Object`, under any TypeScript cast, or a
+/// name a binding of the file gives one of them: `const O = Object`): a name no binding of the file declares, or an alias of one.
+fn names_global_object(file: &FileFacts, span: Span, depth: usize) -> bool {
+    let ast = &file.ast;
+    let global = |name: Span, expected: &[&str]| {
+        file.source_text(name)
+            .is_some_and(|text| expected.contains(&text))
+            && ast.reference_declaration(name).is_none()
+    };
+    let span = ast.peel_ts_sugar_span(span);
+    match ast.member_at(span) {
+        Some(member) => {
+            member_spelled_key(file, member).as_deref() == Some("Object")
+                && global(
+                    ast.peel_ts_sugar_span(member.object),
+                    &["globalThis", "window", "self", "global"],
+                )
+        }
+        None => {
+            global(span, &["Object"])
+                || (depth < 3
+                    && ast
+                        .reference_declaration(span)
+                        .and_then(|declaration| ast.identifier_binding(declaration))
+                        .and_then(|binding| binding.initializer)
+                        .is_some_and(|initializer| {
+                            names_global_object(file, initializer, depth + 1)
+                        }))
+        }
+    }
+}
+
+/// Whether the member is the global `Object`'s `prototype` (or a key of it the program does not name) used as anything but an operand nothing takes or the object of a read of
+/// a built-in method of `Object.prototype`: see [`UnreadPackageHandOff::object_prototype_written`].
+fn object_prototype_touched(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> bool {
+    if !names_global_object(file, member.object, 0) {
+        return false;
+    }
+    match member_spelled_key(file, member).as_deref() {
+        Some("prototype") => {}
+        Some(_) => return false,
+        None => return true,
+    }
+    let ast = &file.ast;
+    if ast
+        .inert_operands
+        .iter()
+        .any(|operand| ast.peel_ts_sugar_span(*operand) == member.span)
+    {
+        return false;
+    }
+    match ast.members_with_peeled_object(member.span).next() {
+        Some(parent) => {
+            let written = ast
+                .write_targets
+                .iter()
+                .any(|target| ast.peel_ts_sugar_span(*target) == parent.span);
+            let builtin = member_spelled_key(file, parent).is_some_and(|key| {
+                matches!(
+                    key.as_str(),
+                    "hasOwnProperty"
+                        | "isPrototypeOf"
+                        | "propertyIsEnumerable"
+                        | "toLocaleString"
+                        | "toString"
+                        | "valueOf"
+                )
+            });
+            written || !builtin
+        }
+        None => true,
+    }
+}
+
+/// The key a member reads or stores under, as the property key the runtime gives it: a computed member's literal key (the facts' own, cooked), or the name written after the
+/// dot with its unicode escapes decoded (`this.\u006d` is `this.m`). `None` for a computed key the program does not name.
+fn member_spelled_key(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Option<String> {
+    let name = crate::installed_members::member_name(file, member)?;
+    if file
+        .ast
+        .computed_members
+        .binary_search(&member.span)
+        .is_ok()
+        || !name.contains('\\')
+    {
+        return Some(name.to_owned());
+    }
+    decode_escaped_name(name)
+}
+
+/// The property key a name or a number written as a key spells: a name's unicode escapes decoded (`\u006d` is `m`), a number's whole-number value (`1`, `0x1`, `1.0`,
+/// `1_0` and `1e1` are the keys `1`, `1`, `1`, `10` and `10`). A number no whole number below 2^53 (a fraction, a bigint, a legacy octal) names nothing the program fixes.
+fn spelled_key(text: &str) -> Option<String> {
+    let first = text.chars().next()?;
+    if first.is_ascii_digit() || first == '.' {
+        return numeric_key(text);
+    }
+    if text.contains('\\') {
+        return decode_escaped_name(text);
+    }
+    Some(text.to_owned())
+}
+
+/// The key of a numeric literal written as a property key: its value when it is a whole number below 2^53 (the numbers the runtime prints without a fraction or an
+/// exponent), `None` for any other (a fraction, a bigint, a legacy octal, a number that does not parse).
+fn numeric_key(text: &str) -> Option<String> {
+    let digits: String = text.chars().filter(|character| *character != '_').collect();
+    let (radix, body) = match digits.get(..2) {
+        Some("0x" | "0X") => (16, &digits[2..]),
+        Some("0o" | "0O") => (8, &digits[2..]),
+        Some("0b" | "0B") => (2, &digits[2..]),
+        _ => (10, digits.as_str()),
+    };
+    const BOUND: u64 = 1 << 53;
+    if radix != 10 {
+        return u64::from_str_radix(body, radix)
+            .ok()
+            .filter(|value| *value < BOUND)
+            .map(|value| value.to_string());
+    }
+    // A legacy octal or a decimal with a leading zero (`017`, `08`) is no key this names.
+    if body.len() > 1
+        && body.starts_with('0')
+        && body.chars().all(|character| character.is_ascii_digit())
+    {
+        return None;
+    }
+    let value = body.parse::<f64>().ok()?;
+    // The whole number's digits (below 2^53, so exact).
+    (value.is_finite() && value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0)
+        .then(|| format!("{value:.0}"))
+}
+
+/// A name written with unicode escapes (`\u006d`, `\u{6d}`), decoded; `None` for any other escape or a code point that is none.
+fn decode_escaped_name(text: &str) -> Option<String> {
+    let mut decoded = String::new();
+    let mut characters = text.chars();
+    while let Some(character) = characters.next() {
+        if character != '\\' {
+            decoded.push(character);
+            continue;
+        }
+        if characters.next()? != 'u' {
+            return None;
+        }
+        let mut hex = String::new();
+        if characters.clone().next()? == '{' {
+            characters.next();
+            loop {
+                match characters.next()? {
+                    '}' => break,
+                    digit => hex.push(digit),
+                }
+            }
+        } else {
+            for _ in 0..4 {
+                hex.push(characters.next()?);
+            }
+        }
+        if hex.is_empty() || !hex.chars().all(|digit| digit.is_ascii_hexdigit()) {
+            return None;
+        }
+        decoded.push(char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?);
+    }
+    Some(decoded)
+}
+
+/// The text with every `\u` and `\x` escape replaced by the character it spells (a string, a template and a name alike); one that is no escape is kept.
+fn unescaped(source: &str) -> String {
+    let mut decoded = String::with_capacity(source.len());
+    let mut rest = source;
+    while let Some(at) = rest.find('\\') {
+        decoded.push_str(&rest[..at]);
+        rest = &rest[at..];
+        let spelled = match rest.as_bytes().get(1) {
+            Some(b'u') if rest.as_bytes().get(2) == Some(&b'{') => rest.find('}').and_then(|end| {
+                let character = u32::from_str_radix(&rest[3..end], 16)
+                    .ok()
+                    .and_then(char::from_u32)?;
+                Some((character, end + 1))
+            }),
+            Some(b'u') => rest.get(2..6).and_then(|hex| {
+                let character = u32::from_str_radix(hex, 16).ok().and_then(char::from_u32)?;
+                Some((character, 6))
+            }),
+            Some(b'x') => rest.get(2..4).and_then(|hex| {
+                let character = u32::from_str_radix(hex, 16).ok().and_then(char::from_u32)?;
+                Some((character, 4))
+            }),
+            _ => None,
+        };
+        match spelled {
+            Some((character, length)) => {
+                decoded.push(character);
+                rest = &rest[length..];
+            }
+            None => {
+                decoded.push('\\');
+                rest = &rest[1..];
+            }
+        }
+    }
+    decoded.push_str(rest);
+    decoded
 }
 
 /// Whether the receiver at `receiver` is the object of a private member (`this.#k`, `this?.#k`): a slot only the class's own code names, which no store from outside reaches.
@@ -2701,7 +3102,7 @@ fn root_identifier(ast: &AstFacts, target: Span) -> Option<Span> {
 
 #[cfg(test)]
 mod tests {
-    use super::{key_of_text, private_member_follows};
+    use super::{key_of_text, private_member_follows, unescaped};
 
     #[test]
     fn a_property_key_is_a_name_or_a_plain_string() {
@@ -2725,6 +3126,55 @@ mod tests {
                 "{text} (computed: {computed})"
             );
         }
+    }
+
+    /// The review of #232, B2: a key is the property key the runtime gives it, not its text. A name's unicode escapes are decoded, and a number written as a key is its
+    /// whole-number value, so a store and a read that spell one property two ways meet; a spelling nothing here decodes names no key.
+    #[test]
+    fn a_property_key_is_the_key_the_runtime_gives_not_its_text() {
+        for (text, key) in [
+            ("\\u006d", Some("m")),
+            ("\\u{6d}", Some("m")),
+            ("m\\u0061", Some("ma")),
+            ("\\u005f_proto__", Some("__proto__")),
+            ("__\\u0070roto__", Some("__proto__")),
+            ("0", Some("0")),
+            ("1", Some("1")),
+            ("0x1", Some("1")),
+            ("0X1F", Some("31")),
+            ("0b11", Some("3")),
+            ("0o7", Some("7")),
+            ("1.0", Some("1")),
+            ("1e1", Some("10")),
+            ("1_0", Some("10")),
+            (".5e1", Some("5")),
+            ("9007199254740991", Some("9007199254740991")),
+            // No key the program fixes: a fraction, a bigint, a legacy octal, a number past 2^53, a decimal with a leading zero, an escape that is no unicode escape.
+            ("1.5", None),
+            ("1n", None),
+            ("017", None),
+            ("08", None),
+            ("9007199254740993", None),
+            ("1e21", None),
+            ("\\x6d", None),
+            ("\\u00", None),
+            ("\\u{110000}", None),
+            ("\\u{}", None),
+        ] {
+            assert_eq!(key_of_text(text, false).as_deref(), key, "{text}");
+        }
+        // A computed number or name is no plain key (a computed literal's key is the facts' own, `literal_computed_members`).
+        assert_eq!(key_of_text("1", true), None);
+        assert_eq!(key_of_text("\\u006d", true), None);
+    }
+
+    #[test]
+    fn escapes_are_decoded_where_a_text_may_spell_a_key() {
+        assert_eq!(unescaped("a\\u0062c"), "abc");
+        assert_eq!(unescaped("\\u{5f}\\x5f"), "__");
+        assert_eq!(unescaped("\\n \\q"), "\\n \\q");
+        assert_eq!(unescaped("\\u{"), "\\u{");
+        assert!(unescaped("o[\"__\\u0070roto__\"]").contains("__proto__"));
     }
 
     #[test]

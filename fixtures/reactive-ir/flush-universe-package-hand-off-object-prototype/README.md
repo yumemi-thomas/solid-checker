@@ -1,0 +1,9 @@
+# flush-universe-package-hand-off-object-prototype
+
+**Claim (the review of #232, S3; ADR 0967 amended).** Every plain object inherits from `Object.prototype`, so an accessor a program puts on it runs with any object as its receiver where a member of that object is read: `Object.defineProperty(Object.prototype, "g", { get() { … this.m() … } })` makes `holder.g` read `m` of the holder. No object is then provably no receiver, so a program that gives `Object.prototype` a member (`Object.defineProperty`, `__defineGetter__`, a write of one of its members, a use of it as a value nothing here follows) asks every store of the name net, a plain `const` literal included: a function stored under a key a receiver reads, in code a package may run, keeps its three uncertifiable rows (SC2006 `flush-in-action-unaccounted`, SC2008 `flush-in-effect-unaccounted`, SC3001 `leaf-operation-unaccounted`), never silence, never a violation. Chrome (rc.21) reports FLUSH_IN_ACTION at the first two; the head the review read certified them with no finding (`scripts/fuzz/patterns/pkghand/object-prototype-step`). The third (`plainHolder`, never read as a receiver) is the cost: the holder is plain, and Chrome is quiet, but nothing here proves it in a program that wrote `Object.prototype`.
+
+**Twins.** A program that only reads a built-in method of `Object.prototype` or compares with it keeps its plain holders confined: they are in `flush-universe-package-hand-off-receiver-confinement` (`twinHasOwn`, and the twins above it, stay silent).
+
+**Not detected, named in `docs/open-work.md`.** A route to `Object.prototype` that spells none of these (`Object.getPrototypeOf({})`, a package the build does not read as source) is a premise of the dependency source (ADRs 0266 and 0300), not a proof.
+
+Published bytes: `node_modules/steplib` is synthetic; `@solidjs/web/types/index.d.ts` is the same excerpt. `.solid-checker/runtime.json` closes the program boundary.

@@ -2658,6 +2658,28 @@ fn destructuring_assignment_leaves_are_plain_write_targets() {
 }
 
 #[test]
+fn a_shorthand_target_of_an_object_assignment_pattern_is_a_write_target() {
+    // The review of #232, B5: `({ s } = value)` rewrites `s` although no simple
+    // assignment target spells it. A default's read and a shorthand property of
+    // a literal are no writes.
+    let source = "let s: any = Symbol(); ({ s } = value); ({ t = fallback } = value); ({ u: v } = value); const read = { s };";
+    let facts = extract("targets.ts", source).unwrap();
+    let written = facts
+        .write_targets
+        .iter()
+        .map(|target| &source[target.start as usize..target.end as usize])
+        .collect::<Vec<_>>();
+    assert_eq!(written, vec!["s", "t", "v"]);
+    let name_after = |anchor: &str, skip: usize, name: &str| {
+        let start = u32::try_from(source.find(anchor).unwrap() + skip).unwrap();
+        Span::new(start, start + u32::try_from(name.len()).unwrap())
+    };
+    assert!(facts.is_plain_write_target(name_after("{ s } =", 2, "s")));
+    assert!(facts.is_plain_write_target(name_after("{ t =", 2, "t")));
+    assert!(!facts.is_plain_write_target(name_after("fallback", 0, "fallback")));
+}
+
+#[test]
 fn a_member_never_read_is_a_plain_write_or_a_delete_operand() {
     // `delete` runs the proxy's `deleteProperty` trap, no Get; the path to the
     // deleted key is read, and a compound assignment reads its target.

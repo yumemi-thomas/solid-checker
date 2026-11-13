@@ -1503,6 +1503,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads-twins/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads-twins/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-patterns/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-receiver-patterns/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-object-prototype/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-object-prototype/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key-source/node_modules/

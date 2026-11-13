@@ -3562,7 +3562,123 @@ fn receiver_value_uses_keep_their_rows() {
             "twinEscape.twinEscapeM = function () {\n  flush();",
             "twinRead.twinReadM = function () {\n  flush();",
             "const twinKeyBase = {\n  get g(): number {\n    flush();",
+            // The review of #232 (B3): a pattern parameter of a function nothing hands a package reads a key where it runs.
+            "twinPattern.twinPatternM = function () {\n  flush();",
         ],
+    );
+}
+
+/// The review of #232 (B1, B2, B5): the strict prefilter proves a holder is no receiver, and what its uses give out (a rest copy, a nested literal bound by a pattern, read through a
+/// member or a chain, passed to a function the build reads, spread, exported to a namespace picked by a key the analysis does not read), how a key is spelled (a unicode escape in a
+/// store, a read, a literal's method or `__proto__`; a number written as a key), and which names are unique (a symbol an object pattern assignment rewrites) are its premises: each
+/// site keeps its three uncertifiable rows. The twins use every one of those shapes in a way that keeps the holder plain, or store under a key nothing reads: silent.
+#[test]
+fn receiver_confinement_keeps_its_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-confinement")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "const restCopyHolder = {\n  restCopyM(): void {\n    flush();",
+            "const nestedPatternOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();",
+            "const nestedReadOuter = {\n  nestedReadSub: {\n    nestedReadM(): void {\n      flush();",
+            "const nestedChainOuter: any = {\n  nestedChainSub: {\n    nestedChainM(): void {\n      flush();",
+            "nestedArgGive({\n  nestedArgSub: {\n    nestedArgM(): void {\n      flush();",
+            "const restNestedOuter = {\n  restNestedSub: {\n    restNestedM(): void {\n      flush();",
+            "const nestedSpreadOuter = {\n  nestedSpreadSub: {\n    nestedSpreadM(): void {\n      flush();",
+            "keyEscapeStore.\\u006beyEscapeStoreM = function () {\n  flush();",
+            "keyEscapeRead.keyEscapeReadM = function () {\n  flush();",
+            "const keyEscapeMethod = {\n  __proto__: keyEscapeMethodBase,\n  \\u006beyEscapeMethodM(): void {\n    flush();",
+            "const keyProtoEscapeHolder: any = {\n  keyProtoEscapeM(): void {\n    flush();",
+            "const keyHex = {\n  __proto__: keyNumberBase,\n  0x1(): void {\n    flush();",
+            "const keyFloat = {\n  __proto__: keyNumberBase,\n  2.0(): void {\n    flush();",
+            "symbolRewrite[symbolRewritten] = function () {\n  flush();",
+        ],
+        &[
+            "const twinRestHolder = {\n  restCopyM(): void {\n    flush();",
+            "const twinNestedOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();",
+            "const twinNestedOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();\n    },\n  },\n  nestedReadSub: {\n    nestedReadM(): void {\n      flush();",
+            "const twinNestedOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();\n    },\n  },\n  nestedReadSub: {\n    nestedReadM(): void {\n      flush();\n    },\n  },\n  nestedChainSub: {\n    nestedChainM(): void {\n      flush();",
+            "const twinLeafHolder = {\n  twinLeafCount: 1,\n  restCopyM(): void {\n    flush();",
+            "twinKeyEscape.\\u0074winKeyEscapeM = function () {\n  flush();",
+            "const twinKeyNumber = {\n  __proto__: keyNumberBase,\n  0x3(): void {\n    flush();",
+            "twinSymbol[twinSymbolFirst] = function () {\n  flush();",
+        ],
+    );
+    // The exported holder (the flush is in the other file, line 5): the namespace is picked by a key the analysis does not read, so what the module exports may be given a prototype.
+    for id in ["SC2006", "SC2008", "SC3001"] {
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["id"] == id
+                    && row["primaryLocation"]["path"]
+                        .as_str()
+                        .is_some_and(|path| path.ends_with("exported-holder.ts"))
+                    && row["primaryLocation"]["line"].as_u64() == Some(5)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 1, "exported holder: {id}: {rows:#?}");
+        assert_eq!(rows[0]["kind"], "uncertifiable", "exported holder: {id}");
+    }
+}
+
+/// The review of #232 (B3, B4): a parameter that is a pattern or a rest is no name for the receiver (it reads the key, or every key, where the function runs), and
+/// `Object.assign(this, …)` writes every key of its sources through `[[Set]]`, which runs a setter. The twins are holders that provably cannot be receivers: silent beside the reads.
+#[test]
+fn receiver_parameters_and_writes_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-patterns")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-patterns/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "patternCall.patternCallM = function () {\n  flush();",
+            "const patternGetter = {\n  __proto__: patternGetterBase,\n  get patternGetterM(): number {\n    flush();",
+            "const patternArray = {\n  __proto__: patternArrayBase,\n  *[Symbol.iterator]() {\n    flush();",
+            "restParam.restParamM = function () {\n  flush();",
+            "restPass.restPassM = function () {\n  flush();",
+            "const assignThis = {\n  __proto__: assignThisBase,\n  set assignThisK(value: number) {\n    void value;\n    flush();",
+        ],
+        &[
+            "const twinPlain = {\n  twinPlainM(): void {\n    flush();",
+            "const twinNested = {\n  twinNestedSub: {\n    twinNestedM(): void {\n      flush();",
+            "const twinLeaf = {\n  twinLeafCount: 1,\n  twinLeafM(): void {\n    flush();",
+        ],
+    );
+}
+
+/// The review of #232 (S3): a program that gives `Object.prototype` a member (`Object.defineProperty`, `__defineGetter__`) makes every plain object a possible receiver of that
+/// accessor, so no holder is confined: the stores under a key a receiver reads keep their rows, a plain literal included. A program that only reads a built-in method of
+/// `Object.prototype` keeps its holders plain (the twins, in `flush-universe-package-hand-off-receiver-reads-twins`).
+#[test]
+fn object_prototype_writes_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-object-prototype")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-object-prototype/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "objectProtoHolder.objectProtoM = function () {\n  flush();",
+            "definedHolder.definedM = function () {\n  flush();",
+            "const plainHolder = {\n  objectProtoM(): void {\n    flush();",
+        ],
+        &[],
     );
 }
 

@@ -1844,6 +1844,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.conditional_flow_depth -= 1;
     }
 
+    /// `({ s } = value)` and `({ s = 1 } = value)`: the shorthand target writes the name it spells, and no `SimpleAssignmentTarget` carries it (the review of #232,
+    /// B5: a name rewritten this way was a name written never). It is a leaf of the destructuring assignment like `{ a: s }`'s `s` (ADR 0526).
+    fn visit_assignment_target_property_identifier(
+        &mut self,
+        property: &oxc_ast::ast::AssignmentTargetPropertyIdentifier<'a>,
+    ) {
+        self.write_targets.push(span(property.binding.span));
+        walk::walk_assignment_target_property_identifier(self, property);
+    }
+
     fn visit_simple_assignment_target(
         &mut self,
         target: &oxc_ast::ast::SimpleAssignmentTarget<'a>,

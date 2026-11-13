@@ -949,6 +949,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/package_hand_off.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "polarity: yes means the program may give Object.prototype a member (`Object.prototype` used as a value nothing here follows: an argument, an initializer), which only withholds the strict prefilter, so a store is asked of the name net (an uncertifiable row, never a silence); a use that is a read of a built-in method or an operand nothing takes is the harmless case and answers no"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/pending_accounting.rs": {
       "default-on-missing": {
         "count": 1,

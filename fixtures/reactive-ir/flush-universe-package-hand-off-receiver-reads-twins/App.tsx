@@ -47,6 +47,21 @@ setTimeout(() => {
   void twinKeyTarget.g;
 });
 
+// the review of #232 (B3): a pattern parameter reads every key where the function runs, and nothing hands a package the function that passes the receiver to it
+function twinPatternRead({ twinPatternM }: { twinPatternM: () => void }): void {
+  void twinPatternM;
+}
+function twinPatternHost(this: { twinPatternM: () => void }): void {
+  twinPatternRead(this);
+}
+const twinPattern: any = Object.create(null);
+twinPattern.twinPatternM = function () {
+  flush();
+};
+setTimeout(() => {
+  void twinPattern;
+});
+
 // a package takes the step, and no receiver is read
 void runStep(() => {});
 
