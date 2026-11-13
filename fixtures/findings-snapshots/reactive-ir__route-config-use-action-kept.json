@@ -159,6 +159,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
+      "start": 530,
+      "end": 574,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
       "start": 540,
       "end": 573,
       "fixes": 0

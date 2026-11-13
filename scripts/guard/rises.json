@@ -511,6 +511,24 @@
    "adr": "ADR 0972",
    "fact": "a call, render or hand-off of a package the build does not read as source, written where an owner may be active: the package's closure reaches a Solid package or carries a hazard (an undeclared global, a computed load, code generation, missing source, unread JavaScript beside a declaration file), so whether it calls action is not proven",
    "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at such a call when the package calls action, and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/route-config-use-action-kept",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0972",
+   "fact": "a call, render or hand-off of a package the build does not read as source, written where an owner may be active: the package's closure reaches a Solid package or carries a hazard (an undeclared global, a computed load, code generation, missing source, unread JavaScript beside a declaration file), so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at such a call when the package calls action, and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-kept",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0972",
+   "fact": "a call, render or hand-off of a package the build does not read as source, written where an owner may be active: the package's closure reaches a Solid package or carries a hazard (an undeclared global, a computed load, code generation, missing source, unread JavaScript beside a declaration file), so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at such a call when the package calls action, and the checker was silent; the new rows are uncertifiable (never violations)"
   }
  ]
 }

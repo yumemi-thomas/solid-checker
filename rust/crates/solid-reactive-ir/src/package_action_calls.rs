@@ -345,6 +345,22 @@ fn file_sites(
             push(property.value, property.value, Entry::Value, Some(origin));
         }
     }
+    // A call's result handed on as an argument (`[…].forEach(pick())`): the call that receives it runs it, and the value is what the inner call made.
+    for call in &file.ast.calls {
+        for argument in &call.arguments {
+            let at = file.ast.peel_ts_sugar_span(argument.span);
+            if file.ast.call_at(at).is_none() {
+                continue;
+            }
+            let Origin::Package(origin) = origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
+            else {
+                continue;
+            };
+            if callable_fact(ctx, file, at) == Some(true) && handed_as_value(ctx, file, at) {
+                push(call.span, at, Entry::Value, Some(origin));
+            }
+        }
+    }
     sites.sort_by_key(|site| (site.at.start, site.at.end));
     sites
 }
@@ -541,15 +557,16 @@ const ORIGIN_DEPTH: usize = 6;
 enum Origin {
     /// Code of a package the build does not read: the declaration path that names its package.
     Package(DeclarationAt),
-    /// No package's code: the dialect's runtime, a `node:` builtin, or code the program reads.
-    NoPackage,
-    /// A global the standard library declares: the host's own, unless a member read off it is one the library does not declare ([`host_member_origin`]).
-    Host,
     /// The component a dialect's `lazy` made of a module a package holds ([`lazy_origin`]): the value runs the package's code where it is rendered or called, and its
     /// members (`preload`) are the dialect's.
     Lazy(DeclarationAt),
-    /// The chain ends where this pass does not follow it (a parameter, a property, the result of a project function, an import it does not resolve): the
-    /// callee's declaration decides.
+    /// The host's own function or object, proven: a global the standard library declares, and a member of one that the standard library declares too (a member a
+    /// package adds to the global's type is not this: `window.fzRun`, `Uint8Array.fzFrom`, see [`host_member_origin`]). No package's code runs for it.
+    Host,
+    /// The dialect's runtime or a `node:` builtin: its catalog answers for it and for its members.
+    Runtime,
+    /// The chain ends where this pass does not follow it (a parameter, a property, the result of a host or runtime function that may hand back what it was given:
+    /// `untrack`, `useContext`, `Object.freeze`): the callee's declaration decides.
     Unknown,
 }
 
@@ -577,9 +594,10 @@ fn installed_path(
         .or_else(|| index.is_project_js(path).then(|| path.to_owned()))
 }
 
-/// Where the value `span` names came from: what a call or `new` makes comes from its callee's code, a member is read off its object, an import names its
-/// package, and a project binding of one plain name to one initializer holds what that makes. A global the standard library declares is the host's, whatever
-/// a package adds to its type.
+/// Where the value `span` names came from: what a call or `new` makes comes from its callee's code (a package function's result is the package's; a project
+/// function's result is what it returns; a host or runtime function's result is not followed, except a host constructor's fresh object), a member is read off
+/// its object, an import names its package, an array literal holds its elements, and a project binding of one plain name to one initializer holds what that
+/// makes. A global the standard library declares is the host's, whatever a package adds to its type.
 fn origin_of(
     ctx: &AnalysisContext<'_>,
     analyzed: &HashSet<&str>,
@@ -602,18 +620,46 @@ fn origin_of(
         {
             return lazy_origin(ctx, analyzed, file, call, index);
         }
-        return origin_of(ctx, analyzed, file, bound, call.callee, depth - 1);
+        return match origin_of(ctx, analyzed, file, bound, call.callee, depth - 1) {
+            Origin::Package(declaration) => Origin::Package(declaration),
+            // What a component the dialect's `lazy` made returns is the package's.
+            Origin::Lazy(declaration) => Origin::Package(declaration),
+            // A host constructor makes a fresh host object; any other host or runtime function may hand back what it was given or a value a package made.
+            Origin::Host
+                if call.construct
+                    && ast
+                        .reference_declaration(ast.peel_ts_sugar_span(call.callee))
+                        .is_none() =>
+            {
+                Origin::Host
+            }
+            Origin::Host | Origin::Runtime => Origin::Unknown,
+            Origin::Unknown => function_return_origin(ctx, analyzed, file, call.callee, depth - 1),
+        };
     }
     if let Some(member) = ast.member_at(span) {
-        let object = origin_of(ctx, analyzed, file, bound, member.object, depth - 1);
-        // A member of a global the standard library declares is the host's where the library declares the member too, and code something else provides
-        // where only an augmentation does (`window.__act`).
-        return match object {
-            Origin::Host => host_member_origin(ctx, analyzed, file, member.span, member.property),
+        return match origin_of(ctx, analyzed, file, bound, member.object, depth - 1) {
+            Origin::Package(declaration) => Origin::Package(declaration),
             // `Lazy.preload` is the dialect's wrapper, not the package's component.
-            Origin::Lazy(_) => Origin::NoPackage,
-            other => other,
+            Origin::Lazy(_) | Origin::Runtime => Origin::Runtime,
+            // A member of a global the standard library declares is the host's where the library alone declares the member, and code something else provides
+            // where a package or a declaration file adds it (`window.__act`).
+            Origin::Host => host_member_origin(ctx, analyzed, file, member.span, member.property),
+            Origin::Unknown => namespace_member_origin(ctx, analyzed, file, bound, member),
         };
+    }
+    if let Some(array) = ast.array_literal_at(span) {
+        for element in array.elements.iter().take(16) {
+            if element.kind == solid_facts::ast::ArrayElementKind::Hole {
+                continue;
+            }
+            if let Origin::Package(declaration) =
+                origin_of(ctx, analyzed, file, bound, element.span, depth - 1)
+            {
+                return Origin::Package(declaration);
+            }
+        }
+        return Origin::Unknown;
     }
     let Some(declaration) = ast.reference_declaration(span) else {
         return global_origin(ctx, analyzed, file, span);
@@ -644,7 +690,7 @@ fn lazy_origin(
     loader: usize,
 ) -> Origin {
     let Some(loader) = call.arguments.get(loader) else {
-        return Origin::NoPackage;
+        return Origin::Runtime;
     };
     let loader = file.ast.peel_ts_sugar_span(loader.span);
     let mut chosen = None::<DeclarationAt>;
@@ -690,12 +736,13 @@ fn lazy_origin(
             Some(_) => {}
         }
     }
-    chosen.map_or(Origin::NoPackage, Origin::Lazy)
+    chosen.map_or(Origin::Runtime, Origin::Lazy)
 }
 
-/// Where a global (a name no binding of the file declares) came from, by where the compiler says it is declared: the standard library is the host's; an installed
-/// package's declaration is decided by that package; a project declaration file that no module of the program implements (`declare function gtag(…)`) declares
-/// a global the host, a script or an installed package may provide (ADR 0973: a package that writes the global is code the program loads, and Chrome ran it).
+/// Where a global (a name no binding of the file declares) came from, by where the compiler says it is declared: the standard library is the host's, whatever a
+/// package also declares of it; an installed package's declaration is decided by that package; a project declaration file that no module of the program implements
+/// (`declare function gtag(…)`) declares a global the host, a script or an installed package may provide (ADR 0973: a package that writes the global is code the
+/// program loads, and Chrome ran it).
 fn global_origin(
     ctx: &AnalysisContext<'_>,
     analyzed: &HashSet<&str>,
@@ -707,18 +754,19 @@ fn global_origin(
     let Some(declarations) = ctx.semantic_lookup.alias_root_declarations(file, span) else {
         return Origin::Unknown;
     };
-    if declarations.is_empty() {
+    let paths = declaration_paths_of(declarations);
+    if paths.is_empty() || paths.iter().any(|path| path.starts_with("bundled:")) {
         return Origin::Host;
     }
-    declarations_origin(ctx, analyzed, &declaration_paths_of(declarations))
-        .unwrap_or(Origin::Unknown)
+    declarations_origin(ctx, analyzed, &paths).unwrap_or(Origin::Unknown)
 }
 
 /// Where a member read off a global the standard library declares came from, by where the compiler says the member itself is declared (the symbol of its property
 /// name: the member expression starts where its object does, and names the object's symbol; a member that is the callee of a call has the call's resolved declaration
-/// when no symbol is recorded). A member the library declares is the host's; one only an installed package's declaration adds is that package's; one only a project
-/// declaration file adds is ambient (`window.__act` under `interface Window { __act(cb: () => void): void }`, `globalThis.__act` under `declare function __act`). A
-/// member the facts say nothing of (an `any`, an index signature) stays the host's: named in ADR 0973.
+/// when no symbol is recorded). The host's own only where the standard library alone declares the member: a member a package adds to the global's type, or an
+/// overload it adds to one the library declares (`Uint8Array.from`), is declared elsewhere too, and what it runs is that package's; one only a project declaration
+/// file adds is ambient (`window.__act` under `interface Window { __act(cb: () => void): void }`, `globalThis.__act` under `declare function __act`). A member the facts
+/// say nothing of (an `any`, an index signature) is not proven the host's: it ends where this pass does not follow it, and the callee's declaration decides.
 fn host_member_origin(
     ctx: &AnalysisContext<'_>,
     analyzed: &HashSet<&str>,
@@ -727,21 +775,21 @@ fn host_member_origin(
     property: Span,
 ) -> Origin {
     let lookup = ctx.semantic_lookup;
-    if let Some(declarations) = lookup.alias_root_declarations(file, property) {
-        return declarations_origin(ctx, analyzed, &declaration_paths_of(declarations))
-            .unwrap_or(Origin::Host);
+    let paths = match lookup.alias_root_declarations(file, property) {
+        Some(declarations) => declaration_paths_of(declarations),
+        None => match lookup
+            .resolved_callee_call(file, member)
+            .and_then(|resolved| resolved.declaration.as_ref())
+        {
+            Some(declaration) if declaration.standard_library => return Origin::Host,
+            Some(declaration) => vec![declaration.location.path.to_string()],
+            None => Vec::new(),
+        },
+    };
+    if !paths.is_empty() && paths.iter().all(|path| path.starts_with("bundled:")) {
+        return Origin::Host;
     }
-    match lookup
-        .resolved_callee_call(file, member)
-        .and_then(|resolved| resolved.declaration.as_ref())
-    {
-        Some(declaration) if declaration.standard_library => Origin::Host,
-        Some(declaration) => {
-            declarations_origin(ctx, analyzed, &[declaration.location.path.to_string()])
-                .unwrap_or(Origin::Host)
-        }
-        None => Origin::Host,
-    }
+    declarations_origin(ctx, analyzed, &paths).unwrap_or(Origin::Unknown)
 }
 
 fn declaration_paths_of(declarations: &[typefacts::Declaration]) -> Vec<String> {
@@ -751,20 +799,22 @@ fn declaration_paths_of(declarations: &[typefacts::Declaration]) -> Vec<String> 
         .collect()
 }
 
-/// The origin the declarations of a global (or of a member of one) give it, or `None` when they name none (no declaration at all, or only project source).
+/// The origin the declarations of a member (or of a global the standard library does not declare) give it: an installed package's declaration names that package
+/// (also where the standard library declares the member too: a package's overload is the package's), a project declaration file alone makes it ambient. `None` when
+/// they name neither (no declaration at all, project source, or the standard library with a project declaration file beside it: the host implements the member).
 fn declarations_origin(
     ctx: &AnalysisContext<'_>,
     analyzed: &HashSet<&str>,
     paths: &[String],
 ) -> Option<Origin> {
-    if paths.iter().any(|path| path.starts_with("bundled:")) {
-        return Some(Origin::Host);
-    }
     if let Some(path) = paths
         .iter()
         .find_map(|path| installed_path(ctx, analyzed, path))
     {
         return Some(Origin::Package(DeclarationAt { path }));
+    }
+    if paths.iter().any(|path| path.starts_with("bundled:")) {
+        return None;
     }
     paths
         .iter()
@@ -773,6 +823,80 @@ fn declarations_origin(
             Origin::Package(DeclarationAt {
                 path: format!("{AMBIENT_PREFIX}{path}"),
             })
+        })
+}
+
+/// The origin of what a project function returns when it is called at `callee`: the first package origin among its return values (a `return` argument, an
+/// arrow's expression body). Anything else is not followed.
+fn function_return_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    callee: Span,
+    depth: usize,
+) -> Origin {
+    let Some((function_file, function)) = ctx
+        .semantic_lookup
+        .function_called_at(file.path.as_str(), callee)
+    else {
+        return Origin::Unknown;
+    };
+    let table = import_bindings(ctx, function_file);
+    let ast = &function_file.ast;
+    // The `return` statements of this function's own body (not of a function written inside it), and an arrow's expression body.
+    let nested = ast
+        .functions
+        .iter()
+        .filter(|inner| inner.span != function.span && function.body.contains(inner.span))
+        .map(|inner| inner.span)
+        .collect::<Vec<_>>();
+    let returned = ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            function.body.contains(returned.span)
+                && !nested.iter().any(|inner| inner.contains(returned.span))
+        })
+        .chain(function.expression_return.iter())
+        .filter_map(|returned| returned.argument)
+        .take(8);
+    for value in returned {
+        if let Origin::Package(declaration) =
+            origin_of(ctx, analyzed, function_file, &table, value, depth)
+        {
+            return Origin::Package(declaration);
+        }
+    }
+    Origin::Unknown
+}
+
+/// The origin of a member read off a namespace import of the project's own module (`import * as re from "./re"; re.reRun`): the member's own symbol is the
+/// re-export, which the compiler's resolution ends on the package's declaration.
+fn namespace_member_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    bound: &HashMap<Span, ImportBinding<'_>>,
+    member: &solid_facts::ast::MemberFact,
+) -> Origin {
+    let ast = &file.ast;
+    let object = ast.peel_ts_sugar_span(member.object);
+    let namespace_of_project_module = ast
+        .reference_declaration(object)
+        .and_then(|declaration| bound.get(&declaration))
+        .is_some_and(|import| import.namespace && import.decided_elsewhere);
+    if !namespace_of_project_module {
+        return Origin::Unknown;
+    }
+    ctx.semantic_lookup
+        .alias_root_declarations(file, member.property)
+        .and_then(|declarations| {
+            declarations
+                .iter()
+                .find_map(|declaration| installed_path(ctx, analyzed, &declaration.location.path))
+        })
+        .map_or(Origin::Unknown, |path| {
+            Origin::Package(DeclarationAt { path })
         })
 }
 
@@ -787,11 +911,21 @@ fn import_origin(
 ) -> Origin {
     let lookup = ctx.semantic_lookup;
     if import.module.starts_with("node:") || is_runtime_module(ctx, import.module) {
-        return Origin::NoPackage;
+        return Origin::Runtime;
     }
     if !import.decided_elsewhere {
         return import_declaration(ctx, analyzed, file, import)
             .map_or(Origin::Unknown, Origin::Package);
+    }
+    // JavaScript the import names that the program does not analyze (a declaration file or an ambient `declare module` stands for it).
+    if let Some(index) = ctx.package_reach {
+        let base = solid_facts::package_reach::join_relative(file.path.as_str(), import.module);
+        if let Some(path) = solid_facts::package_reach::script_candidates(&base)
+            .into_iter()
+            .find(|candidate| index.is_project_js(candidate))
+        {
+            return Origin::Package(DeclarationAt { path });
+        }
     }
     // The project's own module: what it exports of one plain name bound to one initializer is what that makes; a re-export of a package's function is the
     // declaration the compiler's resolution ends on.
@@ -897,7 +1031,7 @@ fn package_declaration(
     // bindings that only hold a value a call made (`const handle = makeHandle()`). A global of the standard library is the host's, whatever a package augments.
     match origin_of(ctx, analyzed, file, bound, callee, ORIGIN_DEPTH) {
         Origin::Package(declaration) | Origin::Lazy(declaration) => return Some(declaration),
-        Origin::NoPackage | Origin::Host => return None,
+        Origin::Host | Origin::Runtime => return None,
         Origin::Unknown => {}
     }
     let mut paths = Vec::<String>::new();

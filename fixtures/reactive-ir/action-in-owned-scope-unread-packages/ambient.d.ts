@@ -1,2 +1,2 @@
-// A global a script provides: no installed package holds its code, and it cannot reach this build's Solid instance unless the program hands it a function.
+// A global some script or package provides: the declaration names no provider, so a call of it is uncertifiable (`unknown-global`, ADR 0973).
 declare function legacyGlobal(cb: () => void): number;

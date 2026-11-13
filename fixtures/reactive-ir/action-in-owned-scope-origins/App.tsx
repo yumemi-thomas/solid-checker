@@ -1,10 +1,13 @@
-import { createMemo } from "solid-js";
+import { createMemo, untrack } from "solid-js";
 import { listener, makeHandle, makeVoid, typedStep } from "fz-typed";
 import { noop } from "fz-types";
 import kernel from "fz-obj";
 import { runStep } from "fz-step";
 import { typedPure } from "fz-pure";
 import "fz-augment";
+import "fz-aug";
+import { vendorStep as shimmedStep } from "./step.vendor.js";
+import * as re from "./re";
 import { reRun } from "./re";
 import { vendorStep } from "./vendor/step";
 
@@ -12,6 +15,17 @@ import { vendorStep } from "./vendor/step";
 const stored = makeVoid();
 const handle = makeHandle();
 const alias = runStep;
+const copy = Object.assign({}, kernel);
+const fns = [makeVoid()];
+function made() {
+  return makeVoid();
+}
+const fromFunction = made();
+function madeHandle() {
+  return makeHandle();
+}
+const handleFromFunction = madeHandle();
+const pick = () => runStep;
 const { run: destructured } = kernel;
 
 // B1: the code a callee runs is its value's origin (the import its root names), not where its signature type is declared.
@@ -104,4 +118,63 @@ export function VendorHandler() {
 // handler runs it in the memo's compute).
 export function BarrelValueInHandler() {
   return <button onClick={() => [() => {}].forEach(reRun)}>x</button>;
+}
+
+// R1 of the re-check: a member a package adds to a host global's type and installs is the package's code, and a host or runtime call may hand back a package value.
+export function AugWindow() {
+  window.fzRun(() => {}); // `interface Window { fzRun }` and `window.fzRun = …` in fz-aug
+  return null;
+}
+export function AugConstructor() {
+  Uint8Array.fzFrom(() => {}); // the same on a typed-array constructor, with code behind it
+  return null;
+}
+export function ThroughFreeze() {
+  Object.freeze(kernel).run(() => {});
+  return null;
+}
+export function ThroughAssign() {
+  copy.run(() => {});
+  return null;
+}
+export function ThroughUntrack() {
+  untrack(() => kernel).run(() => {});
+  return null;
+}
+export function UntrackedMember(props: { k: typeof kernel }) {
+  const run = untrack(() => props.k.run);
+  run(() => {});
+  return null;
+}
+export function ThroughMemo() {
+  const get = createMemo(() => kernel);
+  get().run(() => {});
+  return null;
+}
+// R2: a namespace import of the barrel.
+export function NamespaceOfBarrel() {
+  [() => {}].forEach(re.reRun);
+  return null;
+}
+// R3: an array element, and what a project function returns.
+export function ArrayElement() {
+  fns[0]();
+  return null;
+}
+export function FunctionReturnsVoid() {
+  fromFunction();
+  return null;
+}
+export function FunctionReturnsHandle() {
+  handleFromFunction.dispose();
+  return null;
+}
+export function FunctionReturnsValue() {
+  [() => {}].forEach(pick());
+  return null;
+}
+// R4: JavaScript a wildcard ambient module (`declare module "*.vendor.js"`) stands for.
+export function WildcardShim() {
+  shimmedStep(() => {});
+  return null;
 }
