@@ -315,12 +315,48 @@ fn runtime_root(root: &Path) -> Result<PathBuf, PackageReach> {
     if described == "node" {
         return Err(PackageReach::Clear);
     }
-    find_package_root(&root.join("package.json"), &described, None)
+    match find_package_root(&root.join("package.json"), &described, None)
         .and_then(|root| root.canonicalize().ok())
-        .ok_or_else(|| PackageReach::Undecided {
+    {
+        Some(runtime) => Ok(runtime),
+        // Types for the host (`@types/webxr`, the browser's APIs): declarations with no module in them, so no installed package holds their code.
+        None if declares_only_globals(root) => Err(PackageReach::Clear),
+        None => Err(PackageReach::Undecided {
             blocker: ReachBlocker::MissingSource,
             detail: format!("{name} describes {described}, which is not installed"),
-        })
+        }),
+    }
+}
+
+/// Whether the declaration package at `root` is a script of global declarations: its entry declaration file (`types`, `typings`, `index.d.ts`) has no
+/// top-level `import` or `export`, so it describes what the host provides (`@types/webxr`), not a module an installed package implements.
+fn declares_only_globals(root: &Path) -> bool {
+    let Ok(manifest) = manifest(root) else {
+        return false;
+    };
+    let entry = ["types", "typings"]
+        .iter()
+        .find_map(|field| manifest.get(field).and_then(serde_json::Value::as_str))
+        .map_or_else(|| root.join("index.d.ts"), |types| root.join(types));
+    let Ok(source) = fs::read_to_string(&entry) else {
+        return false;
+    };
+    let allocator = oxc_allocator::Allocator::default();
+    let parsed = oxc_parser::Parser::new(&allocator, &source, oxc_span::SourceType::d_ts()).parse();
+    if parsed.panicked || !parsed.errors.is_empty() {
+        return false;
+    }
+    !parsed.program.body.iter().any(|statement| {
+        matches!(
+            statement,
+            oxc_ast::ast::Statement::ImportDeclaration(_)
+                | oxc_ast::ast::Statement::ExportAllDeclaration(_)
+                | oxc_ast::ast::Statement::ExportNamedDeclaration(_)
+                | oxc_ast::ast::Statement::ExportDefaultDeclaration(_)
+                | oxc_ast::ast::Statement::TSExportAssignment(_)
+                | oxc_ast::ast::Statement::TSImportEqualsDeclaration(_)
+        ) || matches!(statement, oxc_ast::ast::Statement::TSModuleDeclaration(module) if matches!(module.id, oxc_ast::ast::TSModuleDeclarationName::StringLiteral(_)))
+    })
 }
 
 /// The manifests read during one [`package_reach_index`] computation, by directory: a manifest is read and parsed once however many probes of the walk
@@ -514,6 +550,12 @@ impl Walk<'_, '_> {
             || specifier.starts_with("../")
             || specifier.starts_with('/')
         {
+            // `./shader.frag?raw`, `./logo.svg?url`: a bundler's query on a file, read as a string or a URL, runs nothing; any other query names the
+            // file the same way without it.
+            let (specifier, query) = specifier.split_once('?').unwrap_or((specifier, ""));
+            if matches!(query, "raw" | "url" | "inline" | "no-inline") {
+                return Ok(());
+            }
             let target = resolve_path(&directory.join(specifier)).ok_or_else(|| {
                 missing(format!(
                     "{} loads {specifier}, which resolves to no file",
@@ -1405,6 +1447,69 @@ mod tests {
             "export declare const a: number;",
         );
         assert_eq!(reach(root, "data"), PackageReach::Clear);
+    }
+
+    /// `@types/webxr` declares host globals with no module in them and no runtime package: nothing to read, no Solid in it. A types package that is a module
+    /// (`export …`) for a package that is not installed stays undecided.
+    #[test]
+    fn types_of_the_host_are_clear_and_types_of_a_missing_package_are_not() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/@types/hostapi/package.json",
+            r#"{"name":"@types/hostapi","types":"index.d.ts"}"#,
+        );
+        write(
+            root,
+            "node_modules/@types/hostapi/index.d.ts",
+            "interface Xr { run(): void }\ndeclare var xr: Xr;",
+        );
+        write(
+            root,
+            "node_modules/@types/gone2/package.json",
+            r#"{"name":"@types/gone2","types":"index.d.ts"}"#,
+        );
+        write(
+            root,
+            "node_modules/@types/gone2/index.d.ts",
+            "export declare const run: () => void;",
+        );
+        let host = root
+            .join("node_modules/@types/hostapi")
+            .canonicalize()
+            .unwrap();
+        let gone = root
+            .join("node_modules/@types/gone2")
+            .canonicalize()
+            .unwrap();
+        assert_eq!(runtime_root(&host).unwrap_err(), PackageReach::Clear);
+        assert!(matches!(
+            runtime_root(&gone),
+            Err(PackageReach::Undecided {
+                blocker: ReachBlocker::MissingSource,
+                ..
+            })
+        ));
+    }
+
+    /// A bundler's `?raw` and `?url` on a relative load name data, and any other query names the file without it.
+    #[test]
+    fn an_asset_query_runs_nothing() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/assets/package.json",
+            r#"{"name":"assets","main":"index.js"}"#,
+        );
+        write(
+            root,
+            "node_modules/assets/index.js",
+            "import frag from './s.frag?raw'; import u from './l.svg?url'; import w from './w.js?worker'; export default [frag, u, w];",
+        );
+        write(root, "node_modules/assets/w.js", "export default 1;");
+        assert_eq!(reach(root, "assets"), PackageReach::Clear);
     }
 
     #[test]

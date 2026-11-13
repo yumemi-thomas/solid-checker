@@ -209,7 +209,9 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             let reference = scoping.get_reference(*reference);
             let id = reference.node_id();
             let at = nodes.get_node(id).kind().span();
-            if under_typeof(nodes, id)
+            // A reference in a type position (`callback: Function`, `session: XRSession`) is erased: no value is looked up.
+            if reference.is_type()
+                || under_typeof(nodes, id)
                 || dead
                     .iter()
                     .any(|span| span.start <= at.start && at.end <= span.end)
@@ -637,6 +639,15 @@ mod tests {
                 .hazards
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn a_type_reference_looks_nothing_up() {
+        let scan = scan_module(
+            Path::new("/p/node_modules/x/index.ts"),
+            "export function f(callback: Function, session: XRSession): Promise<void> { return callback as never; }",
+        );
+        assert!(scan.hazards.is_empty(), "{:?}", scan.hazards);
     }
 
     #[test]
