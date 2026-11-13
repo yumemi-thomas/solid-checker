@@ -502,3 +502,17 @@ pub(crate) fn universe_sites<'a>(
     }
     found
 }
+
+#[cfg(test)]
+mod tests {
+    use super::package_name;
+
+    #[test]
+    fn a_module_names_its_package() {
+        assert_eq!(package_name("solid-js"), "solid-js");
+        assert_eq!(package_name("solid-js/store"), "solid-js");
+        assert_eq!(package_name("@solidjs/web/storage"), "@solidjs/web");
+        assert_eq!(package_name("@solidjs/web"), "@solidjs/web");
+        assert_eq!(package_name("fz-step"), "fz-step");
+    }
+}
