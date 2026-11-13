@@ -122,46 +122,76 @@ impl SolidPackages<'_> {
 
 /// The reach verdicts for every installed package the project's facts name a declaration in.
 ///
-/// A package's entries are what it declares (`exports`, `main`, `module`, `browser`), and a package with no `exports` map can be imported by a deep
-/// path no entry reaches. The runtime files that sit beside the declarations the project names (`dist/util.d.ts` beside `dist/util.js`) are entries
-/// too, so the verdict covers the code the project's own types point at.
+/// A walk starts from what the program loads: the subpaths of each package its attested imports name (`pkg`, `pkg/sub`), each resolved through the
+/// package's `exports` under every condition, so that no host's conditions are assumed and a subpath nothing imports is not walked. A package named
+/// by declarations alone (a type another package's declarations mention) has no import to read: every entry stands. A package with no `exports`
+/// map can be imported by a deep path no entry reaches, so the runtime files beside the declarations the program names (`dist/util.d.ts` beside
+/// `dist/util.js`) are entries too.
 #[must_use]
 pub fn package_reach_index(
     facts: &solid_facts::ProjectFacts,
     solid: &SolidPackages<'_>,
 ) -> PackageReachIndex {
     MANIFESTS.with(|held| held.borrow_mut().clear());
-    // The declaration roots, each with the runtime root that holds its code and the runtime files beside its declarations.
-    let mut roots = BTreeMap::<String, (Result<PathBuf, PackageReach>, BTreeSet<PathBuf>)>::new();
+    // Each declaration root, with the runtime root that holds its code, the runtime files beside its declarations and the subpaths the program imports.
+    struct Named {
+        runtime: Result<PathBuf, PackageReach>,
+        siblings: BTreeSet<PathBuf>,
+        subpaths: BTreeSet<String>,
+    }
+    let mut roots = BTreeMap::<String, Named>::new();
     for path in declaration_paths(facts) {
         let Some(root) = package_root_of(&path) else {
             continue;
         };
-        let (_, siblings) = roots
-            .entry(root.to_owned())
-            .or_insert_with(|| (runtime_root(Path::new(root)), BTreeSet::new()));
-        siblings.extend(runtime_siblings(&path));
+        let named = roots.entry(root.to_owned()).or_insert_with(|| Named {
+            runtime: runtime_root(Path::new(root)),
+            siblings: BTreeSet::new(),
+            subpaths: BTreeSet::new(),
+        });
+        named.siblings.extend(runtime_siblings(&path));
+    }
+    // The subpaths of every attested import of a bare specifier, an analyzed package's own imports included.
+    if let Some(imports) = &facts.resolved_imports {
+        for (_, import) in imports.iter() {
+            if import.resolved_path.is_empty() {
+                continue;
+            }
+            let Some((_, subpath)) = split_bare_specifier(&import.text) else {
+                continue;
+            };
+            let path = if import.symlink_path.is_empty() {
+                &import.resolved_path
+            } else {
+                &import.symlink_path
+            };
+            if let Some(named) = package_root_of(path).and_then(|root| roots.get_mut(root)) {
+                named.subpaths.insert(subpath);
+            }
+        }
     }
     // One verdict per runtime root, over the entries and the siblings of every declaration root that names it.
-    let mut by_runtime = BTreeMap::<PathBuf, BTreeSet<PathBuf>>::new();
-    for (root, (runtime, siblings)) in &roots {
-        if let Ok(runtime) = runtime {
-            let held = by_runtime.entry(runtime.clone()).or_default();
+    let mut by_runtime = BTreeMap::<PathBuf, (Demand, BTreeSet<PathBuf>)>::new();
+    for (root, named) in &roots {
+        if let Ok(runtime) = &named.runtime {
+            let (demand, siblings) = by_runtime.entry(runtime.clone()).or_default();
+            demand.subpaths.extend(named.subpaths.iter().cloned());
+            demand.everything |= named.subpaths.is_empty();
             if Path::new(root) == runtime.as_path() {
-                held.extend(siblings.iter().cloned());
+                siblings.extend(named.siblings.iter().cloned());
             }
         }
     }
     let verdicts = by_runtime
         .into_iter()
-        .map(|(runtime, siblings)| {
-            let reach = package_reach(&runtime, solid, &siblings);
+        .map(|(runtime, (demand, siblings))| {
+            let reach = package_reach(&runtime, solid, &demand, &siblings);
             (runtime, reach)
         })
         .collect::<HashMap<_, _>>();
     let mut index = PackageReachIndex::default();
-    for (root, (runtime, _)) in roots {
-        let reach = match runtime {
+    for (root, named) in roots {
+        let reach = match named.runtime {
             Ok(runtime) => verdicts
                 .get(&runtime)
                 .cloned()
@@ -321,10 +351,29 @@ fn manifest(root: &Path) -> Result<Arc<serde_json::Value>, PackageReach> {
     read
 }
 
+/// Which entries of a package a walk starts from.
+#[derive(Clone, Debug, Default)]
+struct Demand {
+    /// The subpaths the program loads (`.`, `./sub`): only what an `exports` map (or the files themselves) names for them.
+    subpaths: BTreeSet<String>,
+    /// The package is named by its declarations alone, no load the compiler attested: every entry stands, whatever a resolver may pick.
+    everything: bool,
+}
+
+impl Demand {
+    fn subpath(subpath: &str) -> Self {
+        Self {
+            subpaths: BTreeSet::from([subpath.to_owned()]),
+            everything: false,
+        }
+    }
+}
+
 /// The closure walk of one package.
 fn package_reach(
     root: &Path,
     solid: &SolidPackages<'_>,
+    demand: &Demand,
     extra_entries: &BTreeSet<PathBuf>,
 ) -> PackageReach {
     let name = manifest(root)
@@ -338,9 +387,9 @@ fn package_reach(
         solid,
         files: BTreeSet::new(),
         queue: VecDeque::new(),
-        packages: BTreeSet::new(),
+        entered: BTreeSet::new(),
     };
-    match walk.run(root, extra_entries) {
+    match walk.run(root, demand, extra_entries) {
         Ok(()) => PackageReach::Clear,
         Err(reach) => reach,
     }
@@ -350,12 +399,18 @@ struct Walk<'s, 'd> {
     solid: &'s SolidPackages<'d>,
     files: BTreeSet<PathBuf>,
     queue: VecDeque<PathBuf>,
-    packages: BTreeSet<PathBuf>,
+    /// The (package, subpath) pairs whose entries were pushed; `*` is every entry.
+    entered: BTreeSet<(PathBuf, String)>,
 }
 
 impl Walk<'_, '_> {
-    fn run(&mut self, root: &Path, extra_entries: &BTreeSet<PathBuf>) -> Result<(), PackageReach> {
-        self.enter_package(root)?;
+    fn run(
+        &mut self,
+        root: &Path,
+        demand: &Demand,
+        extra_entries: &BTreeSet<PathBuf>,
+    ) -> Result<(), PackageReach> {
+        self.enter(root, demand)?;
         for entry in extra_entries {
             self.push(entry.clone());
         }
@@ -377,16 +432,22 @@ impl Walk<'_, '_> {
         }
     }
 
-    /// Every entry of the package at `root`, once.
-    fn enter_package(&mut self, root: &Path) -> Result<(), PackageReach> {
+    /// The entries `demand` asks of the package at `root`, each pair once.
+    fn enter(&mut self, root: &Path, demand: &Demand) -> Result<(), PackageReach> {
         let root = root
             .canonicalize()
             .map_err(|error| missing(format!("{}: {error}", short(root))))?;
-        if !self.packages.insert(root.clone()) {
-            return Ok(());
+        if demand.everything && self.entered.insert((root.clone(), "*".to_owned())) {
+            for entry in all_entries(&root)? {
+                self.push(entry);
+            }
         }
-        for entry in package_entries(&root)? {
-            self.push(entry);
+        for subpath in &demand.subpaths {
+            if self.entered.insert((root.clone(), subpath.clone())) {
+                for entry in subpath_entries(&root, subpath)? {
+                    self.push(entry);
+                }
+            }
         }
         Ok(())
     }
@@ -502,19 +563,8 @@ impl Walk<'_, '_> {
                 via: format!("{} loads {specifier}", short(file)),
             });
         }
-        if subpath == "." || manifest(&root)?.get("exports").is_some() {
-            // `exports` lists every file a subpath may select: the package's entries are a superset of any one.
-            return self.enter_package(&root);
-        }
-        let target =
-            resolve_path(&root.join(subpath.trim_start_matches("./"))).ok_or_else(|| {
-                missing(format!(
-                    "{} loads {specifier}, which resolves to no file",
-                    short(file)
-                ))
-            })?;
-        self.push(target);
-        Ok(())
+        // Only what the load names: the subpath's targets of an `exports` map, or the file a deep path names.
+        self.enter(&root, &Demand::subpath(&subpath))
     }
 }
 
@@ -574,9 +624,27 @@ fn scanned(file: &Path) -> Result<Arc<ModuleScan>, PackageReach> {
     Ok(scan)
 }
 
-/// A path as a bundler resolves it: the file, the file with an extension, a directory's manifest `main` or its `index` file. Canonical.
+/// A path as a bundler resolves it: the file, a `.ts` source for a `.js` specifier (TypeScript's ESM convention), the file with an extension, a
+/// directory's manifest `main` or its `index` file. Canonical.
 fn resolve_path(base: &Path) -> Option<PathBuf> {
     resolve_path_following(base, true)
+}
+
+/// The TypeScript source extensions a JavaScript specifier may name: `./a.js` is `a.ts` or `a.tsx`, `./a.jsx` is `a.tsx`, `./a.mjs` is `a.mts`.
+fn source_spellings(path: &str) -> Vec<String> {
+    let table: &[(&str, &[&str])] = &[
+        (".js", &[".ts", ".tsx"]),
+        (".jsx", &[".tsx"]),
+        (".mjs", &[".mts"]),
+        (".cjs", &[".cts"]),
+    ];
+    let mut spellings = Vec::new();
+    for (from, to) in table {
+        if let Some(stem) = path.strip_suffix(from) {
+            spellings.extend(to.iter().map(|extension| format!("{stem}{extension}")));
+        }
+    }
+    spellings
 }
 
 /// [`resolve_path`]; `follow_main` is whether a directory's `main` is read, which only the first directory of a resolution does (a `main` naming a
@@ -586,6 +654,12 @@ fn resolve_path_following(base: &Path, follow_main: bool) -> Option<PathBuf> {
         return base.canonicalize().ok();
     }
     let text = base.to_string_lossy();
+    for spelling in source_spellings(&text) {
+        let candidate = PathBuf::from(spelling);
+        if candidate.is_file() {
+            return candidate.canonicalize().ok();
+        }
+    }
     for extension in RESOLVE_EXTENSIONS {
         let candidate = PathBuf::from(format!("{text}{extension}"));
         if candidate.is_file() {
@@ -618,9 +692,9 @@ enum Target {
     Bare(String),
 }
 
-/// Every runtime file a package can be entered at: the targets of `exports` under every condition (patterns expanded), `main`, `module`,
-/// an object `browser` field's files, else `index.js`. A target that is not installed loads nothing and is skipped.
-fn package_entries(root: &Path) -> Result<Vec<PathBuf>, PackageReach> {
+/// Every runtime file a package can be entered at: the targets of `exports` under every condition (patterns expanded over the scripts they match),
+/// `main`, `module`, an object `browser` field's files, else `index.js`. A target that is not installed loads nothing and is skipped.
+fn all_entries(root: &Path) -> Result<Vec<PathBuf>, PackageReach> {
     let manifest = manifest(root)?;
     let mut targets = Vec::<String>::new();
     if let Some(exports) = manifest.get("exports") {
@@ -629,6 +703,12 @@ fn package_entries(root: &Path) -> Result<Vec<PathBuf>, PackageReach> {
             detail: format!("{}: {detail}", short(root)),
         })?;
     }
+    legacy_fields(&manifest, &mut targets);
+    Ok(resolve_targets(root, targets))
+}
+
+/// The files `main`, `module` and `browser` name, for a resolver that does not read `exports` (and the only entry of a package with none).
+fn legacy_fields(manifest: &serde_json::Value, targets: &mut Vec<String>) {
     for field in ["main", "module"] {
         if let Some(target) = manifest.get(field).and_then(serde_json::Value::as_str) {
             targets.push(target.to_owned());
@@ -645,16 +725,17 @@ fn package_entries(root: &Path) -> Result<Vec<PathBuf>, PackageReach> {
         }
         _ => {}
     }
+}
+
+/// The files of `targets` (paths relative to the package, `*` expanded over the scripts it matches): `index.js` when none names anything.
+fn resolve_targets(root: &Path, mut targets: Vec<String>) -> Vec<PathBuf> {
+    // `"main": ""` (csstype, @webgpu/types) names nothing: Node falls back to `index.js`.
     targets.retain(|target| !target.is_empty());
     if targets.is_empty() {
         targets.push("./index.js".to_owned());
     }
     let mut entries = BTreeSet::new();
     for target in targets {
-        // `"main": ""` (csstype, @webgpu/types) names nothing: Node falls back to `index.js`, which `targets` already holds when none else is named.
-        if target.is_empty() {
-            continue;
-        }
         let relative = target.trim_start_matches("./");
         if target.contains('*') {
             entries.extend(expand_pattern(root, relative));
@@ -667,7 +748,80 @@ fn package_entries(root: &Path) -> Result<Vec<PathBuf>, PackageReach> {
             entries.insert(path);
         }
     }
-    Ok(entries.into_iter().collect())
+    entries.into_iter().collect()
+}
+
+/// The entries one subpath of the package at `root` selects (`.`, `./sub`): what an `exports` map names for it under every condition (an exact key,
+/// else a `*` pattern with its match substituted), or without `exports` the legacy fields for `.` and the file a deep path names. A subpath the map
+/// does not name resolves to nothing at run time; here it keeps every entry, since a resolver this walk does not model may read it another way.
+fn subpath_entries(root: &Path, subpath: &str) -> Result<Vec<PathBuf>, PackageReach> {
+    let manifest = manifest(root)?;
+    let unread = |detail: String| PackageReach::Undecided {
+        blocker: ReachBlocker::ManifestUnread,
+        detail: format!("{}: {detail}", short(root)),
+    };
+    let mut targets = Vec::<String>::new();
+    match manifest.get("exports") {
+        Some(exports) => {
+            let mapped = exports_for_subpath(exports, subpath, &mut targets).map_err(unread)?;
+            if !mapped {
+                return all_entries(root);
+            }
+            if subpath == "." {
+                legacy_fields(&manifest, &mut targets);
+            }
+        }
+        None if subpath == "." => legacy_fields(&manifest, &mut targets),
+        None => targets.push(subpath.to_owned()),
+    }
+    Ok(resolve_targets(root, targets))
+}
+
+/// Pushes the targets an `exports` value maps `subpath` to; whether it maps it at all. A value with no subpath keys is the `.` entry's alone.
+fn exports_for_subpath(
+    exports: &serde_json::Value,
+    subpath: &str,
+    targets: &mut Vec<String>,
+) -> Result<bool, String> {
+    let serde_json::Value::Object(map) = exports else {
+        return match exports {
+            serde_json::Value::String(_) | serde_json::Value::Array(_) if subpath == "." => {
+                collect_targets(exports, targets, 0)?;
+                Ok(true)
+            }
+            _ => Ok(false),
+        };
+    };
+    if !map.keys().any(|key| key.starts_with('.')) {
+        // Conditions only: the `.` entry.
+        if subpath != "." {
+            return Ok(false);
+        }
+        collect_targets(exports, targets, 0)?;
+        return Ok(true);
+    }
+    if let Some(value) = map.get(subpath) {
+        collect_targets(value, targets, 0)?;
+        return Ok(true);
+    }
+    let mut mapped = false;
+    for (key, value) in map {
+        let Some((prefix, suffix)) = key.split_once('*') else {
+            continue;
+        };
+        if subpath.len() < key.len() - 1
+            || !subpath.starts_with(prefix)
+            || !subpath.ends_with(suffix)
+        {
+            continue;
+        }
+        let star = &subpath[prefix.len()..subpath.len() - suffix.len()];
+        let mut found = Vec::new();
+        collect_targets(value, &mut found, 0)?;
+        targets.extend(found.into_iter().map(|target| target.replace('*', star)));
+        mapped = true;
+    }
+    Ok(mapped)
 }
 
 /// Every string target of an `exports` value: every condition's, every array element's.
@@ -725,8 +879,13 @@ fn expand_pattern(root: &Path, pattern: &str) -> Vec<PathBuf> {
                 continue;
             };
             let relative = relative.to_string_lossy();
+            // A pattern such as `./*` matches every file of the package: the scripts are entries, a licence or a stylesheet is data.
             if relative.starts_with(prefix)
                 && relative.ends_with(&suffix)
+                && SCRIPT_EXTENSIONS
+                    .iter()
+                    .any(|extension| relative.ends_with(extension))
+                && !is_declaration_file(&relative)
                 && let Ok(path) = path.canonicalize()
             {
                 found.push(path);
@@ -885,6 +1044,24 @@ mod tests {
         package_reach(
             &root.join("node_modules").join(name).canonicalize().unwrap(),
             &SOLID,
+            &everything(),
+            &BTreeSet::new(),
+        )
+    }
+
+    fn everything() -> Demand {
+        Demand {
+            everything: true,
+            ..Demand::default()
+        }
+    }
+
+    fn reach_of(root: &Path, name: &str, demand: &Demand) -> PackageReach {
+        package_reach(
+            &root.join("node_modules").join(name).canonicalize().unwrap(),
+            &SOLID,
+            demand,
+            &BTreeSet::new(),
         )
     }
 
@@ -947,6 +1124,16 @@ mod tests {
         );
         write(
             root,
+            "node_modules/outer2/package.json",
+            r#"{"name":"outer2","module":"./o.mjs"}"#,
+        );
+        write(
+            root,
+            "node_modules/outer2/o.mjs",
+            "export { action } from 'inner/other';",
+        );
+        write(
+            root,
             "node_modules/inner/package.json",
             r#"{"name":"inner","exports":{"./sub":"./sub.js","./other":"./other.js"}}"#,
         );
@@ -956,9 +1143,10 @@ mod tests {
             "node_modules/inner/other.js",
             "export { action } from '@solidjs/signals';",
         );
-        // Every export of `inner` is a candidate: a superset never clears what one subpath could reach.
+        // A package is entered at the subpath a load names: `outer` loads `inner/sub`, which loads nothing; `outer2` loads `inner/other`.
+        assert_eq!(reach(root, "outer"), PackageReach::Clear);
         assert!(matches!(
-            reach(root, "outer"),
+            reach(root, "outer2"),
             PackageReach::ReachesSolid { .. }
         ));
     }
@@ -1126,12 +1314,97 @@ mod tests {
         let package = root.join("node_modules/deep").canonicalize().unwrap();
         assert!(
             matches!(
-                package_reach(&package, &SOLID, &siblings),
+                package_reach(&package, &SOLID, &everything(), &siblings),
                 PackageReach::ReachesSolid { .. }
             ),
             "{:?}",
-            package_reach(&package, &SOLID, &siblings)
+            package_reach(&package, &SOLID, &everything(), &siblings)
         );
+    }
+
+    /// A walk starts from the subpaths the program loads: a subpath nothing imports is not walked, so a Solid load behind it is not reached.
+    #[test]
+    fn only_the_imported_subpaths_are_entries() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/sub/package.json",
+            r#"{"name":"sub","exports":{".":"./a.js","./solid":{"default":"./b.js"},"./lib/*":"./lib/*.js"}}"#,
+        );
+        write(root, "node_modules/sub/a.js", "export const a = 1;");
+        write(
+            root,
+            "node_modules/sub/b.js",
+            "import { action } from 'solid-js'; export const b = action;",
+        );
+        write(root, "node_modules/sub/lib/x.js", "export const x = 1;");
+        write(root, "node_modules/sub/lib/y.js", "import 'solid-js';");
+        assert_eq!(
+            reach_of(root, "sub", &Demand::subpath(".")),
+            PackageReach::Clear
+        );
+        assert_eq!(
+            reach_of(root, "sub", &Demand::subpath("./lib/x")),
+            PackageReach::Clear
+        );
+        assert!(matches!(
+            reach_of(root, "sub", &Demand::subpath("./solid")),
+            PackageReach::ReachesSolid { .. }
+        ));
+        assert!(matches!(
+            reach_of(root, "sub", &Demand::subpath("./lib/y")),
+            PackageReach::ReachesSolid { .. }
+        ));
+        assert!(matches!(
+            reach_of(root, "sub", &everything()),
+            PackageReach::ReachesSolid { .. }
+        ));
+        // A subpath the map does not name keeps every entry.
+        assert!(matches!(
+            reach_of(root, "sub", &Demand::subpath("./nowhere")),
+            PackageReach::ReachesSolid { .. }
+        ));
+    }
+
+    /// A `.js` specifier names a `.ts` source, and a `./*` pattern matches scripts only (a licence is data).
+    #[test]
+    fn typescript_sources_and_data_files_are_read_as_a_bundler_reads_them() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/ts/package.json",
+            r#"{"name":"ts","main":"index.ts"}"#,
+        );
+        write(
+            root,
+            "node_modules/ts/index.ts",
+            "import { b } from './b.js'; export const a = b;",
+        );
+        write(
+            root,
+            "node_modules/ts/b.ts",
+            "import { action } from 'solid-js'; export const b = action;",
+        );
+        assert!(
+            matches!(reach(root, "ts"), PackageReach::ReachesSolid { .. }),
+            "{:?}",
+            reach(root, "ts")
+        );
+        write(
+            root,
+            "node_modules/data/package.json",
+            r#"{"name":"data","exports":{"./*":"./*","./package.json":"./package.json"}}"#,
+        );
+        write(root, "node_modules/data/index.js", "export const a = 1;");
+        write(root, "node_modules/data/LICENSE", "MIT");
+        write(
+            root,
+            "node_modules/data/types.d.ts",
+            "export declare const a: number;",
+        );
+        assert_eq!(reach(root, "data"), PackageReach::Clear);
     }
 
     #[test]

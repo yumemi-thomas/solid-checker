@@ -52,13 +52,18 @@ An action called where it is created, with no binding (`action(function* () {})(
 and is placed as a bound one is (ADR 0972).
 
 A call into code of an installed package the build does not read as source may call `action` inside the
-package, where the program shows none (ADR 0972). Each such call, `new`, tagged template and render of the
-package's component is a site: where its role may run under an owner or nothing places it, it is
-**uncertifiable** (`package-may-call-action:<why>`), unless the package's source, walked from every entry
-through every import, `require` and literal `import()`, names no Solid package and loads nothing by a
-computed name, generates no code (`eval`, `Function`) and reads no global the pinned TypeScript's
-`lib.es*`/`lib.dom*` files do not declare. Missing source, a native module, an unparseable file and the WASM
-`analyze` entry (no filesystem) stay uncertifiable. A package the build reads as source is analyzed (ADR 0949).
+package, where the program shows none (ADR 0972). Each such call, `new`, tagged template, render of the
+package's component and function handed on as a value (an import binding passed as an argument, a
+`{ shorthand }` property, a namespace member) is a site: where its role may run under an owner or nothing
+places it, it is **uncertifiable** (`package-may-call-action:<why>`), never a violation, unless the package's
+source, walked from every entry through every import, `require` and literal `import()`, names no Solid
+package (a `@solidjs/*` package counts) and loads nothing by a computed name, generates no code (`eval`,
+`Function`, a string timer) and reads no global the pinned TypeScript's `lib.es*`/`lib.dom*` files do not
+declare. Missing source, a native module, an unparseable file and the WASM `checkSync` entry (no filesystem)
+stay uncertifiable. A package the build reads as source is analyzed, and a row in its code stands at the
+project's entry (ADR 0949); the dialect's own runtime, the standard library, a reviewed test runner's
+registration, a global a project declaration file declares and a function the project itself defines are no
+sites.
 
 ## Why is this bad?
 

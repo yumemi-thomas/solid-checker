@@ -28,7 +28,7 @@ use crate::{HashMap, HashSet};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use solid_facts::package_reach::{
-    PackageReach, ReachBlocker, is_declaration_file, package_root_of,
+    PackageReach, ReachBlocker, is_declaration_file, package_label, package_root_of,
 };
 
 use crate::execution_role::RootBodyGuard;
@@ -181,10 +181,7 @@ fn file_sites(
             return;
         }
         let package = package_root_of(&declaration.path)
-            .and_then(|root| {
-                root.rsplit_once("/node_modules/")
-                    .map(|(_, name)| name.to_owned())
-            })
+            .map(package_label)
             .unwrap_or_else(|| declaration.path.clone());
         sites.push(PackageSite {
             at,

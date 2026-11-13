@@ -188,13 +188,32 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             _ => {}
         }
     }
+    // The right operand of `0 && …` never runs: esbuild writes `0 && (module.exports = { a, b })` as a hint for CommonJS named exports, naming bindings a
+    // re-export never declares in the file.
+    let dead = nodes
+        .iter()
+        .filter_map(|node| match node.kind() {
+            AstKind::LogicalExpression(logical)
+                if logical.operator == oxc_syntax::operator::LogicalOperator::And
+                    && matches!(&logical.left, Expression::NumericLiteral(zero) if zero.value == 0.0) =>
+            {
+                Some(logical.right.span())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
     let scoping = semantic.scoping();
     for (name, references) in scoping.root_unresolved_references() {
         let name = name.as_str();
         for reference in references {
             let reference = scoping.get_reference(*reference);
             let id = reference.node_id();
-            if under_typeof(nodes, id) {
+            let at = nodes.get_node(id).kind().span();
+            if under_typeof(nodes, id)
+                || dead
+                    .iter()
+                    .any(|span| span.start <= at.start && at.end <= span.end)
+            {
                 continue;
             }
             let read = reference.is_read();
@@ -251,7 +270,9 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             }
         }
     }
-    // A call or `new` of a `.constructor` member, or one handed on, reaches the `Function` constructor from any function value.
+    // `fn.constructor("code")` and `x.constructor.constructor("code")` reach the `Function` constructor. A class instance's `.constructor` is its class
+    // (`new this.constructor()`, `x.constructor === Foo`, `this.constructor = d`), which is no code generation; that a function value's is `Function` is
+    // not seen unless the call hands it a string literal.
     for node in nodes.iter() {
         let AstKind::StaticMemberExpression(member) = node.kind() else {
             continue;
@@ -259,7 +280,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
         if member.property.name != "constructor" {
             continue;
         }
-        if !constructor_use_is_inert(nodes, node.id()) {
+        if constructor_generates_code(nodes, node.id(), member) {
             hazard(ModuleHazardKind::CodeGeneration, ".constructor");
         }
     }
@@ -402,28 +423,37 @@ fn function_use_is_inert(nodes: &AstNodes<'_>, id: NodeId) -> bool {
     }
 }
 
-/// Whether the `.constructor` member at `id` is only compared or read through (`x.constructor === Object`, `x.constructor.name`), never
-/// called, constructed, stored or handed on.
-fn constructor_use_is_inert(nodes: &AstNodes<'_>, id: NodeId) -> bool {
+/// Whether the `.constructor` member at `id` can generate code: its object is itself a `.constructor` (`x.constructor.constructor`, the `Function`
+/// constructor of any value), or the member is called (or constructed) with a string literal or a template for its first argument.
+fn constructor_generates_code(
+    nodes: &AstNodes<'_>,
+    id: NodeId,
+    member: &oxc_ast::ast::StaticMemberExpression<'_>,
+) -> bool {
+    if let Expression::StaticMemberExpression(inner) = member.object.get_inner_expression()
+        && inner.property.name == "constructor"
+    {
+        return true;
+    }
     let (child, parent) = parent_past_wrappers(nodes, id);
     let child_span = nodes.get_node(child).kind().span();
+    let code_string = |arguments: &[Argument<'_>]| {
+        arguments
+            .first()
+            .and_then(Argument::as_expression)
+            .is_some_and(|first| {
+                matches!(
+                    first.get_inner_expression(),
+                    Expression::StringLiteral(_) | Expression::TemplateLiteral(_)
+                )
+            })
+    };
     match nodes.get_node(parent).kind() {
-        AstKind::StaticMemberExpression(member) => {
-            member.object.span() == child_span && member.property.name != "constructor"
+        AstKind::CallExpression(call) => {
+            call.callee.get_inner_expression().span() == child_span && code_string(&call.arguments)
         }
-        AstKind::BinaryExpression(_) => true,
-        AstKind::UnaryExpression(unary) => unary.operator == UnaryOperator::Typeof,
-        AstKind::IfStatement(_)
-        | AstKind::ConditionalExpression(_)
-        | AstKind::LogicalExpression(_) => {
-            // A test reads its truthiness; an arm or operand passes the value on.
-            match nodes.get_node(parent).kind() {
-                AstKind::IfStatement(statement) => statement.test.span() == child_span,
-                AstKind::ConditionalExpression(conditional) => {
-                    conditional.test.span() == child_span
-                }
-                _ => false,
-            }
+        AstKind::NewExpression(new) => {
+            new.callee.get_inner_expression().span() == child_span && code_string(&new.arguments)
         }
         _ => false,
     }
@@ -532,7 +562,8 @@ mod tests {
             "new Function('return 1');",
             "Function('return this')();",
             "(() => {}).constructor('x')();",
-            "const F = (async () => {}).constructor;",
+            "new (function () {}).constructor('return 1');",
+            "export const f = (x) => x.constructor.constructor('return this')();",
         ] {
             assert!(
                 kinds(&scan(source))
@@ -546,7 +577,7 @@ mod tests {
             [(ModuleHazardKind::CodeGeneration, "setTimeout")]
         );
         assert!(
-            scan("setTimeout(() => {}, 0); setInterval(tick, 10);")
+            scan("const tick = () => {}; setTimeout(() => {}, 0); setInterval(tick, 10);")
                 .hazards
                 .is_empty()
         );
@@ -555,6 +586,13 @@ mod tests {
             "export const g = Function.prototype.toString;",
             "export const n = (x) => x.constructor === Object || x.constructor.name;",
             "export const t = (x) => typeof eval;",
+            // A class instance's constructor is its class: the clone idiom, a write, a switch.
+            "export class V { clone() { return new this.constructor(this.x); } }",
+            "function Base() {} function Sub() { this.constructor = Base; }",
+            "export const k = (a) => { switch (a.constructor) { case Array: return 1; default: return 2; } };",
+            "export const F = (async () => {}).constructor;",
+            // esbuild's CommonJS export hint names bindings a re-export never declares: dead code.
+            "0 && (module.exports = { handle, defaultIsContentTypeBinary });",
         ] {
             assert!(
                 scan(source).hazards.is_empty(),
