@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/context/Read.tsx",
+      "start": 197,
+      "end": 222,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -21,17 +32,6 @@
       "path": "fixtures/reactive-ir/route-config/variants/context/Read.tsx",
       "start": 197,
       "end": 207,
-      "fixes": 0
-    },
-    {
-      "rule": "action-called-in-owned-scope",
-      "code": "SC2002",
-      "kind": "uncertifiable",
-      "blocker": "package-may-call-action",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/route-config/variants/context/Read.tsx",
-      "start": 208,
-      "end": 221,
       "fixes": 0
     },
     {

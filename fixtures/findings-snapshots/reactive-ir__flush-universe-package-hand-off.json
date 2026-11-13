@@ -305,8 +305,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off/App.tsx",
-      "start": 2745,
-      "end": 2750,
+      "start": 2738,
+      "end": 2751,
       "fixes": 0
     },
     {
@@ -635,8 +635,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off/App.tsx",
-      "start": 4358,
-      "end": 4365,
+      "start": 4344,
+      "end": 4421,
       "fixes": 0
     },
     {

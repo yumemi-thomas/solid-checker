@@ -140,8 +140,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-unread-packages/App.tsx",
-      "start": 1310,
-      "end": 1321,
+      "start": 1302,
+      "end": 1322,
       "fixes": 0
     },
     {
