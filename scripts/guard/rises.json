@@ -16,6 +16,54 @@
    "to": 14,
    "adr": "ADR 0971",
    "fact": "the follow-ups of the re-check of #225 (N1, N2) pin sites that stay uncertifiable and are never silenced: a Show function child with a default or rest parameter (Function.length 0, so Show returns it and whoever reads the Show calls it), an auto-accessor field's initializer (instance-field-initializer), an Errored fallback that reads arguments (the entry walk does not close it: entry-by-reference), and the getter rows of the component-child Show elements (getter-runs-where-read)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 0967",
+   "fact": "the name net's known cost (the review of #229, B2): a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain: twinProto and twinWritten (their base is the prototype of another object) and the accessors fixture's twinPick (its object reaches an array's element through a callback's return), legal in Chrome and kept as the expectation"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 0967",
+   "fact": "the name net's known cost (the review of #229, B2): a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain: twinProto and twinWritten (their base is the prototype of another object) and the accessors fixture's twinPick (its object reaches an array's element through a callback's return), legal in Chrome and kept as the expectation"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 0967",
+   "fact": "the name net's known cost (the review of #229, B2): a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain: twinProto and twinWritten (their base is the prototype of another object) and the accessors fixture's twinPick (its object reaches an array's element through a callback's return), legal in Chrome and kept as the expectation"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the name net's known cost (the review of #229, B2): a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain: twinProto and twinWritten (their base is the prototype of another object) and the accessors fixture's twinPick (its object reaches an array's element through a callback's return), legal in Chrome and kept as the expectation"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the name net's known cost (the review of #229, B2): a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain: twinProto and twinWritten (their base is the prototype of another object) and the accessors fixture's twinPick (its object reaches an array's element through a callback's return), legal in Chrome and kept as the expectation"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the name net's known cost (the review of #229, B2): a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain: twinProto and twinWritten (their base is the prototype of another object) and the accessors fixture's twinPick (its object reaches an array's element through a callback's return), legal in Chrome and kept as the expectation"
   }
  ]
 }

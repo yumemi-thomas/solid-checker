@@ -1320,8 +1320,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                     !seen.insert((file.path.shared(), name.span))
                         || self.references_confined(file, name.span, seen)
                 }),
-                // A pattern reads the members it names (a rest copies them).
-                _ => true,
+                // A pattern reads the members it names (a rest copies them): the values go on in the names the pattern binds, where the store's own walk follows them.
+                solid_facts::ast::BindingShape::Array | solid_facts::ast::BindingShape::Object => {
+                    true
+                }
             };
         }
         if let Some((call, index)) = ast.arguments_containing(reference).find(|(call, index)| {
@@ -1765,7 +1767,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         walk: &mut Walk,
     ) -> bool {
         let ast = &file.ast;
-        let plain = ast.functions.iter().find_map(|function| {
+        // (Named apart from the walk's `functions` set: the lexical ratchet on hash map iteration reads a name, not a type.)
+        let declared = &ast.functions;
+        let plain = declared.iter().find_map(|function| {
             function
                 .parameters
                 .iter()
@@ -1778,7 +1782,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         });
         let Some((function, index)) = plain else {
             // A parameter that is a pattern or a rest is no name of the argument; a name that is no parameter is a local, which `binding` followed.
-            return ast.functions.iter().any(|function| {
+            return declared.iter().any(|function| {
                 function
                     .parameters
                     .iter()
