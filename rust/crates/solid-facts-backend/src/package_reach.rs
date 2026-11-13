@@ -404,12 +404,16 @@ fn imports_of_unread_js(
             .iter()
             .filter(|import| !import.type_only)
             .map(|import| (import.span, import.module.as_str()));
-        let loads = file.ast.module_loads.iter().filter_map(|load| {
-            (load.kind == solid_facts::ast::ModuleLoadKind::DynamicImport)
-                .then(|| load.specifier.as_deref())
-                .flatten()
-                .map(|text| (load.specifier_span.unwrap_or(load.span), text))
-        });
+        let loads = file
+            .ast
+            .module_loads
+            .iter()
+            .filter(|load| load.kind == solid_facts::ast::ModuleLoadKind::DynamicImport)
+            .filter_map(|load| {
+                load.specifier
+                    .as_deref()
+                    .map(|text| (load.specifier_span.unwrap_or(load.span), text))
+            });
         for (at, text) in imports.chain(loads) {
             if !(text.starts_with("./") || text.starts_with("../")) {
                 continue;
