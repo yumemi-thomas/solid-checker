@@ -34,6 +34,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 1255,
+      "end": 1260,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -45,6 +56,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 1750,
+      "end": 1755,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -53,6 +75,17 @@
       "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
       "start": 2079,
       "end": 2093,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
+      "start": 2116,
+      "end": 2121,
       "fixes": 0
     }
   ]

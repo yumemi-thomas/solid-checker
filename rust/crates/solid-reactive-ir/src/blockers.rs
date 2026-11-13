@@ -149,6 +149,10 @@ pub(crate) const OPTIMISTIC_WRITE_UNACCOUNTED: &str = "optimistic-write-unaccoun
 /// ADR 0838: a pending rule's claim at a read no producer accounted for: no
 /// row of that rule, no SC9012 at the read, no recorded reason.
 pub(crate) const ASYNC_READ_UNACCOUNTED: &str = "async-read-unaccounted";
+/// Batch 11, slice 9B (ADR 0973): a read, or a call of a project function or of a function value, written after its async function's own suspension
+/// (`after_await_accounting.rs`) that no row of the SC1002 family, no SC9012, no discard and no typed reason ends: whether the continuation reads a reactive
+/// source untracked there is not decided.
+pub const READ_AFTER_AWAIT_UNACCOUNTED: &str = "read-after-await-unaccounted";
 /// ADR 0926: SC5003's or SC5008's claim at a read a pending source's census
 /// walk met where an SC9012 row holds it: no row follows the value to the
 /// read, so nothing places it for a code that has no position of its own.

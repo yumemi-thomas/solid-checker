@@ -1489,3 +1489,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-package-hand-off-causes/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-accessors/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-accessors/node_modules/**
+!fixtures/reactive-ir/after-await-universe/node_modules/
+!fixtures/reactive-ir/after-await-universe/node_modules/**
+!fixtures/reactive-ir/after-await-universe-none/node_modules/
+!fixtures/reactive-ir/after-await-universe-none/node_modules/**
+!fixtures/reactive-ir/after-await-universe-census/node_modules/
+!fixtures/reactive-ir/after-await-universe-census/node_modules/**

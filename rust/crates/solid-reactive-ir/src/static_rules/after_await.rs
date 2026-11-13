@@ -581,6 +581,16 @@ fn unresolved_invocation_known(
         })
 }
 
+/// Whether `call` invokes a function value the walk cannot resolve, by either of the net's predicates (the rows of ADR 0964 as filed in batch 10b and the
+/// ones batch 10c widened them by): the site shape the SC1002 universe lists beside the calls of project functions (slice 9B's accounting, `after_await_accounting.rs`).
+pub(super) fn unresolved_invocation_shaped(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> bool {
+    unresolved_invocation_known(ctx, file, call) || unresolved_invocation(ctx, file, call)
+}
+
 /// Batch 10c (B1): the invocations [`unresolved_invocation`] takes beyond [`unresolved_invocation_known`]: a slot, `.call` and `.apply`, a
 /// reassigned `let`, a `new`. Added rows only: they are filed after the rows the net filed before ([`Walk::invoked`]), claim no callee
 /// another row stands at, and stand only where no other row does.

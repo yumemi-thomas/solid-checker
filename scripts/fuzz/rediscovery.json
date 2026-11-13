@@ -21120,5 +21120,23 @@
    "mx-primitive-in-effect-callback-er-classfield-apply-jsx-component-direct-none"
   ],
   "rediscovered": "the head of #225 (a8a6bd69c, release build): 7 false-clean programs (the five JSX variants and two call variants), Chrome confirming (same); the fix: none (8 recall-gap programs, an uncertifiable row stands). The legal twins (the stored class is never constructed) are clean (some) or uncertifiable on the head and uncertifiable on the fix (the named cost; 0 false positives)"
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's site, the read after the `await` of an async function DECLARATION the program starts as a tracked async computation through a form the producers' index of computations does not follow (a project wrapper that gives its parameter to `createMemo` or `createEffect`: `track(work)`, where ADR 0873's hand-off follows a function literal and an arrow but not a declaration; `.call`; `Reflect.apply`; an array element), had no SC1002 row: SC1001's `function-run-unplaced` uncertifiable row beside it claims another code, so the program was certified clean for the claiming rule (a false clean). Chrome (rc.21) reports the code at the read",
+  "found": "batch 11, slice 9B (mac8, 2026-11-13): the Chrome probe of the slice's first build (its census reason silently ended the wrapper read: the oracle cases after-await-universe-census-{wrapper,call,reflect,element}) and the coordinator's ruling that a clean main is a false clean; as the computation-start shapes of `cs-shapes.mjs` (`cs-*`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0973 (batch 11, slice 9B): `after_await_accounting.rs` lists every read and project call written after an async function's own suspension and gives the site no row, SC9012, discard or typed reason ends SC1002's uncertifiable row (`read-after-await-unaccounted`); the census reason that would have ended these sites was not kept",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-cs-wrapper-memo-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-x-direct-none",
+   "mx-untracked-read-after-await-cs-call-memo-x-direct-none",
+   "mx-untracked-read-after-await-cs-call-effect-x-direct-none",
+   "mx-untracked-read-after-await-cs-reflect-memo-x-direct-none",
+   "mx-untracked-read-after-await-cs-reflect-effect-x-direct-none",
+   "mx-untracked-read-after-await-cs-element-memo-x-direct-none",
+   "mx-untracked-read-after-await-cs-element-effect-x-direct-none"
+  ],
+  "rediscovered": "main 177402dfb (release, checker sha256 51bb4a4aff15…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's uncertifiable row at the read is the only finding; 8 oracle comparisons, 0 differences). This build (release, checker sha256 17086252a38f…): recall-gap 8, 0 false clean. The 16 twins (`lg-recall`: `-never` starts nothing, `-before` reads ahead of the await) are uncertifiable on both builds (SC1001's row), 0 false positive"
  }
 ]

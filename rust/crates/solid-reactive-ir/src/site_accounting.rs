@@ -700,8 +700,12 @@ fn unaccounted_row(file: &FileFacts, site: &Site, code: SiteCode) -> StaticViola
 /// Ends every code of every site of the universe in the final `program`, or gives it the uncertifiable row of the code's own rule. Run once per build,
 /// after every producer and pass that adds or removes a row and before the reachability queries over the rows. A site ends for a code only by an
 /// ending that answers that code (a row of its table, an SC9012, a finding of a rule the dialect's policy says claims it, the compiler's discard) or by a
-/// silence that names it; what stands at the span for another code ends nothing here (batch 11, slice 4).
-pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program, ends: &SiteEnds) {
+/// silence that names it; what stands at the span for another code ends nothing here (batch 11, slice 4). Returns the universe it listed.
+pub(crate) fn account<'a>(
+    ctx: &AnalysisContext<'a>,
+    program: &mut Program,
+    ends: &SiteEnds,
+) -> Vec<(&'a FileFacts, Site)> {
     let universe = proof_universe::sites(ctx);
     let named = ends.named();
     let dialect = ctx.dialect;
@@ -743,12 +747,11 @@ pub(crate) fn account(ctx: &AnalysisContext<'_>, program: &mut Program, ends: &S
             crate::proof_candidates::log(ctx, &universe);
         }
     }
-    if rows.is_empty() {
-        return;
-    }
     // In the universe's order, after the rows the program holds: the findings
     // are ordered by place when they are projected.
     program.static_violations.extend(rows);
+    // The universe is the one list of the build's sites: the passes that run after this one (batch 11, slice 9B) read it rather than list it again.
+    universe
 }
 
 #[cfg(test)]
