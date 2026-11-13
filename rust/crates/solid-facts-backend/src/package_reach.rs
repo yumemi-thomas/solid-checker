@@ -364,7 +364,60 @@ fn project_js(
         .iter()
         .map(|file| file.path.as_str())
         .collect::<BTreeSet<_>>();
-    declarations_with_unread_js(declarations, &analyzed)
+    let mut unread = declarations_with_unread_js(declarations, &analyzed);
+    unread.extend(imports_of_unread_js(facts, &analyzed));
+    unread
+}
+
+/// The runtime files a relative import of the project reaches that the program does not analyze, where the compiler resolved the import to no analyzed
+/// source (an ambient `declare module "*.vendor.js"`, a declaration file): the bundler loads the file the specifier names, and nobody reads it. Each file is
+/// named by its path as the import joins it and by its canonical path.
+fn imports_of_unread_js(
+    facts: &solid_facts::ProjectFacts,
+    analyzed: &BTreeSet<&str>,
+) -> BTreeSet<String> {
+    let mut found = BTreeSet::new();
+    for file in &facts.files {
+        let importer = file.path.as_str();
+        if importer.contains("/node_modules/") || facts.dependency_source_root(importer).is_some() {
+            continue;
+        }
+        for import in &file.ast.imports {
+            let text = import.module.as_str();
+            if import.type_only || !(text.starts_with("./") || text.starts_with("../")) {
+                continue;
+            }
+            // The compiler resolved it to a file the program analyzes: that source is read.
+            let resolved = facts
+                .resolved_imports
+                .as_ref()
+                .map(|attested| attested.specifier(importer, import.span, text));
+            if let Some(solid_facts::SpecifierAttestation::Attested(row)) = resolved
+                && analyzed.contains(&*row.resolved_path)
+            {
+                continue;
+            }
+            let base = solid_facts::package_reach::join_relative(importer, text);
+            for candidate in solid_facts::package_reach::script_candidates(&base) {
+                let path = Path::new(&candidate);
+                if !path.is_file() {
+                    continue;
+                }
+                let canonical = path
+                    .canonicalize()
+                    .ok()
+                    .and_then(|real| real.to_str().map(str::to_owned))
+                    .unwrap_or_else(|| candidate.clone());
+                if !analyzed.contains(candidate.as_str()) && !analyzed.contains(canonical.as_str())
+                {
+                    found.insert(candidate);
+                    found.insert(canonical);
+                }
+                break;
+            }
+        }
+    }
+    found
 }
 
 fn declarations_with_unread_js(

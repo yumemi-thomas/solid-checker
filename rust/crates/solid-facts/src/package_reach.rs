@@ -158,6 +158,44 @@ impl PackageReachIndex {
     }
 }
 
+/// The path a relative `specifier` names from the directory of `importer`, normalized lexically (`.` and `..` resolved, no filesystem read).
+#[must_use]
+pub fn join_relative(importer: &str, specifier: &str) -> String {
+    let mut parts = importer.split('/').collect::<Vec<_>>();
+    parts.pop();
+    for part in specifier.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.len() > 1 {
+                    parts.pop();
+                }
+            }
+            other => parts.push(other),
+        }
+    }
+    parts.join("/")
+}
+
+/// The runtime files a bundler tries for the path `base` an import names: the path itself when it carries a script extension, else each extension, then the
+/// directory's `index`.
+#[must_use]
+pub fn script_candidates(base: &str) -> Vec<String> {
+    const EXTENSIONS: [&str; 4] = [".js", ".mjs", ".cjs", ".jsx"];
+    if EXTENSIONS.iter().any(|extension| base.ends_with(extension)) {
+        return vec![base.to_owned()];
+    }
+    EXTENSIONS
+        .iter()
+        .map(|extension| format!("{base}{extension}"))
+        .chain(
+            EXTENSIONS
+                .iter()
+                .map(|extension| format!("{base}/index{extension}")),
+        )
+        .collect()
+}
+
 /// The installed package directory a path is in: the prefix through the package name after the last `node_modules` component
 /// (`/p/node_modules/@scope/name/dist/x.d.ts` is `/p/node_modules/@scope/name`). A yarn `pnpm`-linker store keeps each package in
 /// `node_modules/.store/<slot>/package`, so that is the root there. `None` for a path in no `node_modules`.
@@ -291,6 +329,23 @@ mod tests {
         let reach = index.for_declaration("/p/vendor/step.d.ts");
         assert_eq!(reach.word(), "unanalyzed-project-js");
         assert!(!reach.is_clear());
+    }
+
+    #[test]
+    fn a_relative_specifier_joins_lexically() {
+        assert_eq!(
+            join_relative("/p/src/App.tsx", "./vendor/step.js"),
+            "/p/src/vendor/step.js"
+        );
+        assert_eq!(join_relative("/p/src/a/App.tsx", "../x/./y"), "/p/src/x/y");
+        assert_eq!(
+            script_candidates("/p/src/step").first().map(String::as_str),
+            Some("/p/src/step.js")
+        );
+        assert_eq!(
+            script_candidates("/p/src/step.vendor.js"),
+            vec!["/p/src/step.vendor.js"]
+        );
     }
 
     #[test]
