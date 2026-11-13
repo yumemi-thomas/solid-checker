@@ -333,6 +333,9 @@ impl PackageBoundary {
             folded.linked.extend(index.linked);
             folded.project_js.extend(index.project_js);
             folded.accessors.extend(index.accessors);
+            for (root, ids) in index.reviewed {
+                folded.reviewed.entry(root).or_default().extend(ids);
+            }
         }
     }
 
@@ -403,6 +406,15 @@ impl PackageBoundary {
             hash.update((index.project_js.len() as u64).to_be_bytes());
             for path in &index.project_js {
                 text(hash, path);
+            }
+            // ADR 0973: the reviewed premises that hold, by root.
+            hash.update((index.reviewed.len() as u64).to_be_bytes());
+            for (root, ids) in &index.reviewed {
+                text(hash, root);
+                hash.update((ids.len() as u64).to_be_bytes());
+                for id in ids {
+                    text(hash, id);
+                }
             }
             // ADR 0973: where each closure may define an accessor.
             hash.update((index.accessors.len() as u64).to_be_bytes());

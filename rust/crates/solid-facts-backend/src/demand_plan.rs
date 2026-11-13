@@ -719,6 +719,35 @@ fn collect_return_spans(
     }
 }
 
+/// Whether the callee (through its members and the calls it is a member of) roots in an import of a bare specifier: a package's binding, not the project's own
+/// module or a Node builtin. A demand only: what the fact decides is asked of the resolved declaration.
+fn callee_roots_at_package_import(file: &FileFacts, callee: Span) -> bool {
+    let ast = &file.ast;
+    let mut at = ast.peel_ts_sugar_span(callee);
+    for _ in 0..32 {
+        if let Some(member) = ast.member_at(at) {
+            at = ast.peel_ts_sugar_span(member.object);
+        } else if let Some(call) = ast.call_at(at) {
+            at = ast.peel_ts_sugar_span(call.callee);
+        } else {
+            break;
+        }
+    }
+    let Some(declaration) = ast.reference_declaration(at) else {
+        return false;
+    };
+    ast.imports.iter().any(|import| {
+        !import.type_only
+            && !import.module.starts_with('.')
+            && !import.module.starts_with('/')
+            && !import.module.starts_with("node:")
+            && import
+                .bindings
+                .iter()
+                .any(|binding| !binding.type_only && binding.local.span == declaration)
+    })
+}
+
 fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
     let DemandSpans {
         symbol_spans,
@@ -763,6 +792,17 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
         if let Some(value) = file.asserted_call_value(call.callee) {
             add_symbol(value, false);
             library_type_spans.insert(value);
+        }
+        // ADR 0973: a reviewed reading of a package's API (a matcher handed a value) is judged by whether each value it is handed is a primitive, which is
+        // stable for every inhabitant of a type. Asked at the arguments of a call into an installed package's function, a member of it, or a result of one.
+        if callee_roots_at_package_import(file, call.callee) {
+            for argument in call.arguments.iter().filter(|argument| !argument.spread) {
+                let span = argument.value_span.unwrap_or(argument.span);
+                add_symbol(span, false);
+                primitive_value_domain_spans.insert(span);
+                // The type the compiler prints says whether the primitive domain is a type parameter's constraint.
+                type_descriptor_spans.insert(span);
+            }
         }
         for argument in &call.arguments {
             match argument.value {

@@ -207,9 +207,11 @@ fn file_sites(
         });
     };
     for call in &file.ast.calls {
-        // A dialect primitive is the catalog's; a reviewed test runner's registration (`describe`, `it`) runs the callback on its own stack and calls no action.
+        // A dialect primitive is the catalog's; a reviewed test runner's registration (`describe`, `it`) runs the callback on its own stack and calls no action;
+        // a reviewed reading of a package's API (ADR 0973) shows what it calls for the value it is handed.
         if lookup.primitive_at_call(file, call.span).is_some()
             || lookup.reviewed_test_runner_registration(file, call)
+            || crate::reviewed_api::clears_call(ctx, file, call)
         {
             continue;
         }
@@ -284,12 +286,12 @@ fn file_sites(
             callable_fact(ctx, file, identifier.span) == Some(true)
         };
         if function && handed_as_value(ctx, file, identifier.span) {
-            push(
-                handed_at(file, identifier.span),
-                identifier.span,
-                Entry::Value,
-                Some(origin),
-            );
+            let at = handed_at(file, identifier.span);
+            // A reviewed reading shows the call the value is handed to never calls it (ADR 0973).
+            if crate::reviewed_api::clears_call_at(ctx, file, at) {
+                continue;
+            }
+            push(at, identifier.span, Entry::Value, Some(origin));
         }
     }
     for member in &file.ast.members {
@@ -311,12 +313,10 @@ fn file_sites(
                 callable_fact(ctx, file, member.span) == Some(true)
             };
         if function && handed_as_value(ctx, file, member.span) {
-            push(
-                handed_at(file, member.span),
-                member.span,
-                Entry::Value,
-                Some(origin),
-            );
+            let at = handed_at(file, member.span);
+            if !crate::reviewed_api::clears_call_at(ctx, file, at) {
+                push(at, member.span, Entry::Value, Some(origin));
+            }
             continue;
         }
         // The member is evaluated for its value where it stands (`void clock.now`): a getter or a setter the package's closure defines under a name of the chain

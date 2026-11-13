@@ -151,6 +151,9 @@ pub struct PackageReachIndex {
     pub project_js: std::collections::BTreeSet<String>,
     /// Where each decided package's closure may define an accessor, by the same root.
     pub accessors: BTreeMap<String, AccessorFacts>,
+    /// The reviewed premises that hold for each root: a reading of the package's source for one API (ADR 0973), pinned to digests of the files read, so it holds
+    /// only where the installed bytes are those. The ids are the analysis's (`reviewed_api`).
+    pub reviewed: BTreeMap<String, std::collections::BTreeSet<String>>,
 }
 
 impl PackageReachIndex {
@@ -178,6 +181,14 @@ impl PackageReachIndex {
     #[must_use]
     pub fn is_project_js(&self, path: &str) -> bool {
         self.project_js.contains(path)
+    }
+
+    /// Whether the reviewed premise `id` holds for the package a declaration at `path` is in.
+    #[must_use]
+    pub fn premise_holds(&self, path: &str, id: &str) -> bool {
+        package_root_of(path)
+            .and_then(|root| self.reviewed.get(root))
+            .is_some_and(|ids| ids.contains(id))
     }
 
     /// Where the closure of the package a declaration at `path` describes may define an accessor. A path the backend did not decide, and a pseudo-path of a site

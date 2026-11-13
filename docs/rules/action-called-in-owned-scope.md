@@ -68,7 +68,7 @@ declare, however the global object is reached (`window.self.x`, `globalThis.glob
 whole closure is read and holds no accessor (class, object literal or `defineProperty` getter and setter, a `Proxy`) under a name of the chain. Missing source, a native module, an unparseable file and the WASM `checkSync` entry (no filesystem)
 stay uncertifiable. A package the build reads as source is analyzed, and a row in its code stands at the
 project's entry (ADR 0949); the dialect's own runtime, the standard library (and a member of a standard-library global the library declares), a reviewed test runner's
-registration and a function the project itself defines are no
+registration, a call the reviewed reading of vitest 4.1's `expect` and `vi` clears (ADR 0974: pinned to the digests of the files read, for the matchers and values it names) and a function the project itself defines are no
 sites.
 
 ## Why is this bad?

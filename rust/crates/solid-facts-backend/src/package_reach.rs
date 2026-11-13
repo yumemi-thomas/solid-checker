@@ -215,6 +215,16 @@ pub fn package_reach_index(
     }
     index.linked = linked_roots(facts);
     index.project_js = project_js(facts, &project_declarations);
+    // ADR 0973: the reviewed premises whose files match the installed bytes.
+    let installed_roots = index
+        .by_root
+        .keys()
+        .filter_map(|root| Some((root.clone(), Path::new(root).canonicalize().ok()?)))
+        .collect::<BTreeMap<_, _>>();
+    index.reviewed = crate::reviewed_packages::verified_premises(
+        &installed_roots,
+        crate::reviewed_packages::PREMISES,
+    );
     index
 }
 
