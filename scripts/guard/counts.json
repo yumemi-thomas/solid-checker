@@ -2114,6 +2114,26 @@
    "kind": "relabel",
    "relabeledTo": "SC4001 owner-callers-unenumerated",
    "note": "the `onCleanup` in `Immediate.tsx`'s IIFE keeps its SC4001 row at the same span: the owner emission now asks the entry of the layer around it first (a function a reference enters is a layer like any other), so the row names that reason"
+  },
+  {
+   "fixture": "engine/eslint-reactivity-v2",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 15,
+   "to": 8,
+   "adr": "ADR 0970",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 value-forwarded",
+   "note": "seven `createMemo(async ...)` sites (`after-await-local-accessor`, `-member`, `-parameter`, `-plain-function`, `before-await-accessor`, `conditional-await-accessor`, `nested-after-await-accessor`), each the value an exported function forwards in an OPEN program: on main (#220) the owner-call universe filed this code's home row at each; with R1-R3 of the re-review of #221 (`entered_by_unseen_code`: in an open program every export is an entry the program does not hold) the site is credited to the SC9012 `value-forwarded` row at the same span (the proof log: `end: census`, `reactive-dispatch-unresolved:value-forwarded`) and its SC5003 `pending-read-unresolved` row, so the home row is not filed: the rows stay uncertifiable under another blocker. Found when #221 was merged with main after #220 (the guard's base then held #220's rows)"
+  },
+  {
+   "fixture": "engine/eslint-reactivity-v2",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 14,
+   "to": 7,
+   "adr": "ADR 0970",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 value-forwarded",
+   "note": "seven `createMemo(async ...)` sites (`after-await-local-accessor`, `-member`, `-parameter`, `-plain-function`, `before-await-accessor`, `conditional-await-accessor`, `nested-after-await-accessor`), each the value an exported function forwards in an OPEN program: on main (#220) the owner-call universe filed this code's home row at each; with R1-R3 of the re-review of #221 (`entered_by_unseen_code`: in an open program every export is an entry the program does not hold) the site is credited to the SC9012 `value-forwarded` row at the same span (the proof log: `end: census`, `reactive-dispatch-unresolved:value-forwarded`) and its SC5003 `pending-read-unresolved` row, so the home row is not filed: the rows stay uncertifiable under another blocker. Found when #221 was merged with main after #220 (the guard's base then held #220's rows)"
   }
  ],
  "renames": []
