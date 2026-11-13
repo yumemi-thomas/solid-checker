@@ -142,9 +142,10 @@ pub(crate) struct UniverseJsxSite {
 /// it is a forbidden creation (SC3001). They are the sites [`jsx_sites`] finds minus a child the compiler left static that may hold a function (possible only), once each by span, with
 /// what a component element around the site makes of it (the review of #225, F2): the body of a function the element hands to the component (a prop's value, a whole child
 /// expression) is run by whoever calls it, so the site is as any other; JSX written anywhere else in the element's props or children is a getter, run where the component reads the
-/// prop, a function the getter's own evaluation calls (a `.map` callback, an immediately invoked arrow, an `untrack` callback) included, and a getter of a component that renders it in
-/// place (a dialect control-flow element, a context provider) creates under the owner that render sets and is no site; any other getter is a site no fact of the function that holds
-/// it can place.
+/// prop, a function the getter's own evaluation calls (a `.map` callback, an immediately invoked arrow, an `untrack` callback) included; what a component that renders its getter in
+/// place (a dialect control-flow element, a context provider) reads is created under the owner that render sets and is no site, when it is written directly in the getter or in the
+/// body of the function handed to the element (a function written inside either runs where it is called: a site like any other); any other getter is a site no fact of the function
+/// that holds it can place.
 pub(crate) fn universe_jsx_sites(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
@@ -178,12 +179,14 @@ pub(crate) fn universe_jsx_sites(
 /// What the innermost component element around a site makes of it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GetterRelation {
-    /// The outermost function between the element and the site is handed to the component (a prop's value, a whole child expression): the body runs where the function is called.
+    /// The outermost function between the element and the site is handed to the component (a prop's value, a whole child expression): the body runs where the function is called. So
+    /// does a function written inside what a dialect control-flow element or a context provider renders in place (inside the function handed to `For`, or in `Show`'s children): it
+    /// runs where it is called, which no fact of the element says.
     Plain,
     /// Written in a prop of a component that does not render it in place, with no such function between: a getter, evaluated where the component reads the prop.
     Getter,
-    /// A getter of a dialect control-flow element or a context provider, or a function handed to a dialect control-flow element: rendered or called in place, under the owner of
-    /// the render that reads it.
+    /// Written directly in a getter of a dialect control-flow element or a context provider (no function between), or in the body of a function handed to a dialect control-flow
+    /// element (the site's innermost function is that function): rendered or called in place, under the owner of the render that reads it.
     InPlace,
 }
 
@@ -206,17 +209,21 @@ fn getter_relation(
     let Some(element) = element else {
         return GetterRelation::Plain;
     };
-    // The outermost function written inside the element that holds the site. Handed to the component as a prop's value or as a whole child expression, it runs where whoever has
-    // it calls it. Any other function in the value (a `.map` callback, an immediately invoked arrow, an `untrack` callback, a branch of a conditional) is a function the getter's
-    // own evaluation may call, or a value it returns to a caller no fact names: where the component reads the prop either way.
-    let outermost = file
-        .ast
-        .functions_owning(span)
-        .filter(|function| element.span.contains(function.span))
-        .max_by_key(|function| function.span.end - function.span.start);
+    // The functions written inside the element that hold the site. The outermost, handed to the component as a prop's value or as a whole child expression, runs where whoever has it
+    // calls it. Any other function in the value (a `.map` callback, an immediately invoked arrow, an `untrack` callback, a branch of a conditional) is a function the getter's own
+    // evaluation may call, or a value it returns to a caller no fact names: where the component reads the prop either way. The innermost is the function whose body the site is
+    // written in: it runs when that function is called.
+    let holders = || {
+        file.ast
+            .functions_owning(span)
+            .filter(|function| element.span.contains(function.span))
+    };
+    let outermost = holders().max_by_key(|function| function.span.end - function.span.start);
+    let innermost = holders().min_by_key(|function| function.span.end - function.span.start);
+    let primitive = crate::owners::element_primitive(lookup, file, element);
     // The primitives `stored_throw::element_prop_handled` takes to render a prop in place.
     let in_place_primitive = matches!(
-        crate::owners::element_primitive(lookup, file, element),
+        primitive,
         Some(
             Primitive::Errored
                 | Primitive::For
@@ -228,24 +235,32 @@ fn getter_relation(
                 | Primitive::Loading,
         )
     );
-    if outermost.is_some_and(|function| handed_to_component(file, element, function.span)) {
+    if let Some(function) =
+        outermost.filter(|function| handed_to_component(file, element, function.span))
+    {
         // A function handed to a dialect control-flow element (`For`'s row function, `Show`'s function child, `Errored`'s fallback) is called by that element's own render, under
-        // the owner it sets: a creation in it throws nowhere, so it is no site. A function handed to any other component is run by whoever that component gives it to.
-        return if in_place_primitive {
+        // the owner it sets: a creation written in ITS body throws nowhere, so it is no site. A function written inside it is no part of that call (it runs where it is called: stored
+        // and called by an effect's apply, it creates with no owner set), so a site in one is a site like any other, as is any site in a function handed to any other component.
+        return if in_place_primitive && innermost.is_some_and(|inner| inner.span == function.span) {
             GetterRelation::InPlace
         } else {
             GetterRelation::Plain
         };
     }
-    // The same primitives, and a context provider (which reads its children in place; a function it is handed as a value is stored, not run, which is the case above).
-    let in_place = in_place_primitive
-        || (crate::owners::element_primitive(lookup, file, element).is_none()
-            && lookup.is_context_reference(file.path.as_str(), element.name.span));
-    if in_place {
-        GetterRelation::InPlace
-    } else {
-        GetterRelation::Getter
+    // The same primitives, and a context provider (which reads its children in place; a function it is handed as a value is stored, not run, which is the case above): what is
+    // written directly in the getter, with no function between, is evaluated by that read, under the owner of the render. A function written inside the getter (an immediately
+    // invoked arrow, a `.map` callback, a handler, an arrow stored for later) runs where it is called, so its sites are sites like any other.
+    if in_place_primitive
+        || (primitive.is_none()
+            && lookup.is_context_reference(file.path.as_str(), element.name.span))
+    {
+        return if outermost.is_none() {
+            GetterRelation::InPlace
+        } else {
+            GetterRelation::Plain
+        };
     }
+    GetterRelation::Getter
 }
 
 /// Whether code written at `span` (a creating call, a call of a function, a callee's name) is a component element's getter (the review of #225, F2, found while fixing

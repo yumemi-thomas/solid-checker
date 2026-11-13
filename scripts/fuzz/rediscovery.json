@@ -20846,5 +20846,40 @@
    "mx-primitive-in-effect-callback-er-childhelper-apply-effect-direct-none"
   ],
   "rediscovered": "the head of #220 (e823d5416, release build): 16 false-clean programs (8 variants x 2 routes), Chrome confirming (same); the first build of the F2 fix (getters and prop arrows filed, the entry walk unchanged): the same 16, Chrome same; the fix: none (16 recall-gap programs, an uncertifiable row stands). The legal twins (the child reads nothing) are clean on the head and on the first build and uncertifiable on the fix (the named cost; 0 false positives)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a JSX creation (the five JSX variants) written in an ARROW inside the function a dialect control-flow element is handed (`<For each={[1]}>{() => { sv = () => <site>; return <p />; }}</For>`, the function child of `<Show when={1}>`) or inside the element's in-place getter (an immediately invoked arrow or a `.map` callback in `Show`'s children, an immediately invoked arrow in a context provider's children), stored in a variable that an effect's apply calls with no owner set, was certified with no row: the in-place rule as first built took every site inside the handed function or the getter for one the element runs in place under its own owner, nested functions included, but a function written inside one runs where it is called. Chrome rc.21 reports PRIMITIVE_IN_EFFECT_CALLBACK at the tag",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): found by my own review of the in-place rule, after the coordinator had accepted it on the Chrome evidence of the direct forms (probe inplace-nested, then the oracle case owner-call-inplace-nested: ByRow, ByShow, ByShowIife, ByShowMap, ByProvider); the getter forms were silent on the first F2 fix too (g1, g2), the handed-function forms only from the in-place rule (g3); the coordinator approved the fix and asked for the closure made by a call (oracle case owner-call-inplace-closure: covered on every build)",
+  "fixed": "ADR 0971 (the in-place rule's boundary, the review of #225): `jsx_sites::getter_relation` takes a site for one run in place only when its innermost function is the function handed to a dialect control-flow element, or no function lies between it and an in-place getter; a site in a function written inside either is a site like any other. Fixture owner-call-inplace-nested; the oracle cases owner-call-inplace-nested and owner-call-inplace-closure; the cells er-rownest-apply, er-shownest-apply, er-getteriife-apply, er-gettermap-apply and er-providernest-apply (module code, so B3's row at every site written inside an exported component does not hide the rule)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-rownest-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-rownest-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-rownest-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-rownest-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-rownest-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-shownest-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-shownest-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-shownest-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-shownest-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-shownest-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-getteriife-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-getteriife-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-getteriife-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-getteriife-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-getteriife-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-gettermap-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-gettermap-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-gettermap-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-gettermap-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-gettermap-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-providernest-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-providernest-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-providernest-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-providernest-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-providernest-apply-jsx-component-direct-none"
+  ],
+  "rediscovered": "the in-place rule as first built (g3, release build): 25 false-clean programs (the five JSX variants of five routes), Chrome confirming (same); the fix: none (40 recall-gap programs, an uncertifiable row stands; the call variants createMemo, createRoot and createEffect are recall-gaps on both builds). The legal twins (the stored arrow is never called) are clean (10) or uncertifiable (30) on g3 and uncertifiable on the fix (40 of 40, 0 false positives: the named cost)"
  }
 ]

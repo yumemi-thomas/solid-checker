@@ -273,6 +273,95 @@ fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons()
         let start = at(&source, anchor, skip);
         assert!(!is_site(&lines_of, start), "{what} is no site");
     }
+    // The in-place rule's boundary: a site written directly in what a dialect element runs in place is no site; one in a function written inside it is a site like any other.
+    let name = "owner-call-inplace-nested";
+    let log = directory.join("inplace.nested");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "<For each={[1]}>{() => <Inner />}",
+            "<For each={[1]}>{() => ",
+            "For's row function, directly",
+        ),
+        (
+            "{(_value) => <Inner />}",
+            "{(_value) => ",
+            "Show's function child, directly",
+        ),
+        (
+            "<Show when={1}>\n      <Inner />",
+            "<Show when={1}>\n      ",
+            "Show's children, directly",
+        ),
+        (
+            "<Ctx value={1}>\n      <Inner />",
+            "<Ctx value={1}>\n      ",
+            "a context provider's children, directly",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(!is_site(&lines_of, start), "{what} is no site");
+    }
+    for (anchor, skip, what) in [
+        (
+            "const view = () => <Inner />;\n        pickRow",
+            "const view = () => ",
+            "a function written in For's row function",
+        ),
+        (
+            "const view = () => <Inner />;\n        pickShow",
+            "const view = () => ",
+            "a function written in Show's function child",
+        ),
+        (
+            "pickIife = () => <Inner />",
+            "pickIife = () => ",
+            "an arrow stored from an immediately invoked arrow in Show's children",
+        ),
+        (
+            "pickMap = () => <Inner />",
+            "pickMap = () => ",
+            "an arrow stored from a map callback in Show's children",
+        ),
+        (
+            "pickProvider = () => <Inner />",
+            "pickProvider = () => ",
+            "an arrow stored from an immediately invoked arrow in a provider's children",
+        ),
+        (
+            "return () => <Inner />",
+            "return () => ",
+            "a closure a called function makes",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(is_site(&lines_of, start), "{what} is a site");
+        let declined = reasons(&lines_of, start);
+        assert!(
+            !declined.contains("getter-runs-where-read"),
+            "{what}: a site like any other, not a getter's"
+        );
+        // Declined for the effect code: entered by a reference no edge shows, or (a context provider, which no fact reads) a component an unread package may run.
+        assert!(
+            !declined.is_empty()
+                && declined
+                    .iter()
+                    .all(|reason| reason == "entry-by-reference"
+                        || reason == "unread-package-may-run"),
+            "{what}: declined {declined:?}"
+        );
+        // The leaf codes end by the program census (no leaf owner is opened anywhere); the effect-callback code, which Chrome reports there, is silenced by nothing.
+        assert!(
+            !lines_of.iter().any(|line| line["k"] == "silent"
+                && line["s"] == start
+                && line["codes"].as_array().is_some_and(|codes| codes
+                    .iter()
+                    .any(|code| code == "PRIMITIVE_IN_EFFECT_CALLBACK"))),
+            "{what} is silenced for the effect code"
+        );
+    }
     // The helper in a getter.
     let name = "owner-call-getter-helper";
     let log = directory.join("getter.helper");

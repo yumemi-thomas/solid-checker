@@ -41,11 +41,19 @@
 //             slothelper, childhelper  the site is in a FUNCTION written outside the element and CALLED in the getter, `function h() { <site>; return 1; }` and `<Kid slot={h()} />` or
 //                     `<Kid>{h()}</Kid>` (module scope as above): the call runs the callee where the component reads the prop, so the analyses that place a callee by the position
 //                     of its call (the role, the owner graph's edge, the entry walk) placed it in the render that wrote the call (the helper-in-getter hole found while fixing F2)
+//             rownest, shownest  the site is in an ARROW written INSIDE the function handed to a dialect control-flow element, `<For each={[1]}>{() => { sv = () => { <site> }; return <p />; }}</For>`
+//                     (and `<Show when={1}>{(v) => { ... }}</Show>`), which the host's apply calls through the variable: a dialect element calls the function it is handed in place, under
+//                     the owner of its render, but a function written inside that one runs where it is called, and the in-place rule as first built dropped every site inside the handed
+//                     function, nested ones included (found by the first self-review of the rule: Chrome PRIMITIVE_IN_EFFECT_CALLBACK, the checker silent). In module code, so B3 files
+//                     no row and only the rule decides: `Show` evaluates what it is handed as it is created, so `shownest` and the two getter routes below sit in a module-level
+//                     `createRoot`; `For` and a provider evaluate theirs when the result is read, so `rownest` and `providernest` sit in a module-level component the host's view renders
+//             getteriife, gettermap, providernest  the same arrow stored from INSIDE an in-place getter: an immediately invoked arrow in `Show`'s children, a `.map` callback in them,
+//                     an immediately invoked arrow in a context provider's children (`<Ctx value={1}>`); the first build of the in-place getter dropped these too
 // The twin registers nothing and calls nothing (a handler that runs an `onCleanup` is NO_OWNER_CLEANUP, a code of its own), so it is the misuse text with no site run. Recall
 // contexts, the direct binding bare (`erShape`), not crossed by the census, out of api-fire's plan.
 import { cbProp, contain, decl, domExpr, expr, fn, iife, jsx, namedButton, num, prim, propEl, ref, ret } from "./model.mjs";
 
-export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper"];
+export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest"];
 export const ER_HOSTS = ["apply", "tracked", "settled"];
 /** The (route, host) pairs the grid places: every route on an apply, and the `view` route on the two leaf hosts. */
 const PLACED = [...ER_ROUTES.map((route) => [route, "apply"]), ["view", "tracked"], ["view", "settled"]];
@@ -197,6 +205,30 @@ export function erContext(context, stmts, kit) {
       const helper = contain("frame", 9, [...stmts, ret(num(1))], { head: `function ${h}() `, close: "" });
       const element = inSlot ? `<${kid} slot={${h}()} />` : `<${kid}>{${h}()}</${kid}>`;
       return { hoisted: [kidDecl(kid, read), helper, expr(domExpr(`createRoot(() => { void (${element}); })`, undefined, ["createRoot"]))], body: [], view: [] };
+    }
+    case "rownest": case "shownest": case "getteriife": case "gettermap": case "providernest": {
+      // The site is in an arrow stored by code written inside a dialect element's function or in-place getter; the host's apply calls the stored arrow (the twin never does). Written
+      // in module code, so B3 files no row: `Show` evaluates its function child and its children as it is created, so a module-level `createRoot` runs them; `For` and a context
+      // provider evaluate theirs when the result is READ, so there the element is written in a module-level component that the host's view renders.
+      const sv = kit.name("sv");
+      const ctx = kit.name("Ctx");
+      const rn = kit.name("Rows");
+      const [open, close] = {
+        rownest: [`<For each={[1]}>{() => { ${sv} = () => `, `; return <p>r</p>; }}</For>`],
+        shownest: [`<Show when={1}>{(v) => { void v; ${sv} = () => `, `; return <p>s</p>; }}</Show>`],
+        getteriife: [`<Show when={1}>{(() => { ${sv} = () => `, `; return <p>i</p>; })()}</Show>`],
+        gettermap: [`<Show when={1}>{[1].map(() => { ${sv} = () => `, `; return <p>m</p>; })}</Show>`],
+        providernest: [`<${ctx} value={1}>{(() => { ${sv} = () => `, `; return <p>c</p>; })()}</${ctx}>`],
+      }[route];
+      const rendered = route === "rownest" || route === "providernest";
+      const frame = contain("frame", 9, stmts, {
+        head: rendered ? `function ${rn}(_props: { a?: unknown }) { return <p>${open}` : `createRoot(() => { void (${open}`,
+        close: rendered ? `${close}</p>; }` : `${close}); });`,
+        imports: [...(rendered ? [] : ["createRoot"]), ...(route === "rownest" ? ["For"] : route === "providernest" ? ["createContext"] : ["Show"])],
+      });
+      const hoisted = [expr(domExpr(`let ${sv}: (() => void) | undefined`))];
+      if (route === "providernest") hoisted.push(expr(domExpr(`const ${ctx} = createContext(1)`, undefined, ["createContext"])));
+      return { hoisted: [...hoisted, frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: rendered ? [propEl(rn, num(1))] : [] };
     }
     default: throw new Error(`no entry-by-reference route ${route}`);
   }

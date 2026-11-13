@@ -22,10 +22,10 @@ const textOf = (code, context, variant) => {
 };
 
 describe("the er contexts (a function reached by a reference)", () => {
-  it("are seventeen routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper"]);
+  it("are twenty-two routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest"]);
     expect(ER_HOSTS).toEqual(["apply", "tracked", "settled"]);
-    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (17 + 2));
+    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (22 + 2));
     for (const name of ER_CONTEXT_NAMES) {
       const parts = erParts(name);
       expect(parts, name).not.toBeNull();
@@ -185,9 +185,40 @@ describe("the er contexts (a function reached by a reference)", () => {
       expect(twin, route).toMatch(/h\d+\(\)/);
     }
   });
-  it("take the JSX variants of PRIMITIVE_IN_EFFECT_CALLBACK in the view, prop, slot, children, slotcall, childcall, slothelper and childhelper cells only (a JSX creation is a site of the universe, ADR 0971)", () => {
+  it("print the nested in-place routes: an arrow stored by code written inside the function a dialect element is handed, or inside its in-place getter, at module scope in a root (the twin keeps the holder only)", () => {
+    const row = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-rownest-apply", "jsx-insert");
+    expect(row).toContain("let sv1: (() => void) | undefined;");
+    const at = row.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><For each={[1]}>{() => { sv1 = () => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(row.slice(at, at + 4).join(" ")).toContain("<p>{String(Math.random())}</p>; }; return <p>r</p>; }}</For></p>; }");
+    expect(row).toContain("sv1!();");
+    expect(row.join("\n")).toContain("<Rows1 a={1} />");
+    // Module code: no function of the exported component around the creation (B3 files a row at every site written inside an exported component).
+    expect(row.findIndex((line) => line.startsWith("export function C1"))).toBeGreaterThan(at);
+    const show = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-shownest-apply", "memo");
+    expect(show.findIndex((line) => line.startsWith("createRoot(() => { void (<Show when={1}>{(v) => { void v; sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(show.join(" ")).toContain("createMemo(() => 1); }; return <p>s</p>; }}</Show>); });");
+    const iife = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-getteriife-apply", "jsx-component");
+    expect(iife.findIndex((line) => line.startsWith("createRoot(() => { void (<Show when={1}>{(() => { sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(iife.join(" ")).toContain("<JsxComp1 />; }; return <p>i</p>; })()}</Show>); });");
+    const map = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-gettermap-apply", "jsx-attr");
+    expect(map.findIndex((line) => line.startsWith("createRoot(() => { void (<Show when={1}>{[1].map(() => { sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(map.join(" ")).toContain("}; return <p>m</p>; })}</Show>); });");
+    const provider = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-providernest-apply", "jsx-insert");
+    expect(provider).toContain("const Ctx1 = createContext(1);");
+    expect(provider.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><Ctx1 value={1}>{(() => { sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(provider.join(" ")).toContain("}; return <p>c</p>; })()}</Ctx1></p>; }");
+    expect(provider.join("\n")).toContain("<Rows1 a={1} />");
+    for (const route of ["rownest", "shownest", "getteriife", "gettermap", "providernest"]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert").join("\n");
+      expect(twin, route).toContain("void sv1;");
+      expect(twin, route).not.toContain("sv1!()");
+      expect(twin, route).toContain("sv1 = () => {");
+    }
+  });
+  it("take the JSX variants of PRIMITIVE_IN_EFFECT_CALLBACK in the view, prop, slot, children, slotcall, childcall, slothelper, childhelper and nested in-place cells only (a JSX creation is a site of the universe, ADR 0971)", () => {
     const jsx = ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"];
-    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper"]) {
+    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest"]) {
       const variants = recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply`).map((shape) => shape.variant);
       for (const variant of jsx) expect(variants, `${route} ${variant}`).toContain(variant);
       expect(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`).map((shape) => shape.variant), route).toEqual(expect.arrayContaining(jsx));

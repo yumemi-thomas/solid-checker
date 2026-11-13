@@ -496,7 +496,7 @@ const ITER_SWAP_LINES = [
 ];
 
 /** Batch 11, B2 (the re-review of #220): the JSX variants join the entry-by-reference cell of a function a reference makes the apply run (er-shapes.mjs `view`): a JSX creation is a site of the owner-call universe as a creating call is. The review of #225 adds the cells of a JSX creation written inside a component element, which the apply reaches by a prop arrow it calls (`prop`) or by a getter it reads (`slot`, `children`, and, at module scope where B3 files no row, `slotcall` and `childcall` for an arrow the getter calls in place and `slothelper` and `childhelper` for a function it calls). */
-const JSX_ER = ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper"].flatMap((route) => [`er-${route}-apply`, `er-${route}-apply-never`]);
+const JSX_ER = ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest"].flatMap((route) => [`er-${route}-apply`, `er-${route}-apply-never`]);
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
