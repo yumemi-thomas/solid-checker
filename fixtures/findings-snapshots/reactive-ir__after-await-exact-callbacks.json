@@ -23,6 +23,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 405,
+      "end": 408,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -52,6 +63,17 @@
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
       "start": 590,
       "end": 600,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 628,
+      "end": 631,
       "fixes": 0
     },
     {
@@ -95,6 +117,17 @@
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
       "start": 819,
       "end": 820,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 858,
+      "end": 861,
       "fixes": 0
     },
     {
@@ -153,6 +186,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 1153,
+      "end": 1156,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -172,6 +216,17 @@
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
       "start": 1408,
       "end": 1418,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 1442,
+      "end": 1445,
       "fixes": 0
     },
     {
@@ -219,6 +274,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 1960,
+      "end": 1963,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -263,6 +329,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 2270,
+      "end": 2273,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -304,6 +381,17 @@
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
       "start": 2488,
       "end": 2489,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 2533,
+      "end": 2536,
       "fixes": 0
     },
     {
@@ -403,6 +491,17 @@
       "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
       "start": 2908,
       "end": 2918,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-exact-callbacks/App.tsx",
+      "start": 2946,
+      "end": 2949,
       "fixes": 0
     },
     {

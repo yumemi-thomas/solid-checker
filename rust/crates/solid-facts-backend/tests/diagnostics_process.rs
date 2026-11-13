@@ -22,7 +22,7 @@ mod context_census_workers_process;
 #[path = "server_rules_workers_process.rs"]
 mod server_rules_workers_process;
 
-use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
+use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule, owner_entry_row};
 
 #[test]
 fn conditional_package_getters_require_every_alternative() {
@@ -543,6 +543,7 @@ fn optional_primitive_signatures_preserve_dispatch_and_callback_boundaries() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/Optional.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     let source = include_str!(
         "../../../../fixtures/reactive-ir/literal-argument-member-dispatch/Optional.tsx"
@@ -578,6 +579,7 @@ fn formatted_primitive_receivers_demand_exact_builtin_declarations() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/Formatted.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     assert_eq!(rows.len(), 1, "{rows:#?}");
     let row = rows[0];
@@ -694,6 +696,7 @@ fn routed_options_callbacks_compose_source_contexts() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/RoutedMembers.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     // ADR 0321: each `read` arrow is written in the argument literal, so its
     // dispatch resolves to it; the read keeps the source context proven here.
@@ -749,6 +752,7 @@ fn returned_literal_body_facts_project_reads_only_at_invocation() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/DirectReturns.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     assert_eq!(rows.len(), 1, "{rows:#?}");
     let start = source.find("const value = read()").unwrap() + "const value = ".len();
@@ -973,6 +977,7 @@ fn member_dispatch_keeps_the_source_invocation_context() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/MemberContexts.tsx"))
         })
+        .filter(|row| !support::owner_entry_row(row))
         .collect::<Vec<_>>();
     // ADR 0802: a memo over a parameter is open while its callers are not
     // followed: the three helpers that return a memo reading `options.read()`.
@@ -1379,6 +1384,7 @@ fn typed_options_wrappers_preserve_source_callback_execution() {
                 .as_str()
                 .is_some_and(|path| path.ends_with("/QueryOptions.tsx"))
         })
+        .filter(|finding| !support::owner_entry_row(finding))
         .collect::<Vec<_>>();
     // Three reads, and ADR 0665's SC5003 of the memo over the handed compute.
     // ADR 0775: and SC9012 at `options()` of the two wrappers nothing resolves:
@@ -1598,6 +1604,8 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
                     .as_str()
                     .is_some_and(|path| path.ends_with("App.tsx"))
             })
+            // ADR 0970: the owner obligations of the fixture's exported components no tag renders are not this test's subject.
+            .filter(|row| !owner_entry_row(row))
             .collect::<Vec<_>>();
         let mut found = reads
             .iter()
@@ -1765,8 +1773,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         // runs every component under its own transparent root, and Chrome is
         // quiet for each; the call form `Loading(props)` still warns.
         // ADR 0868: `directRootHelper`'s two operations (lines 23-24) are
-        // uncertifiable: its census is not proven closed.
-        ("owner-presence", &[("missing-owner", 13)]),
+        // uncertifiable: its census is not proven closed. ADR 0970: and five
+        // uncertifiable `owner-callers-unenumerated` rows, the render effects and
+        // owner operations of the exported components no tag renders.
+        ("owner-presence", &[("missing-owner", 18)]),
         (
             "async-boundary",
             &[
@@ -1964,8 +1974,10 @@ fn solid2_precision_corrections_are_end_to_end() {
         // One fewer than before ADR 0345 review D: the wrapper-built callback is
         // no longer named, so its cleanup is not reported. Two more since ADR
         // 0534: the wrapped and handed-on cleanups (lines 248 and 270) run in
-        // no proven region, so they are obligations, never silent.
-        ("missing-owner", 9),
+        // no proven region, so they are obligations, never silent. ADR 0970: and
+        // thirty-four uncertifiable `owner-callers-unenumerated` rows, the render
+        // effects and owner operations of the exported components no tag renders.
+        ("missing-owner", 43),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -2504,7 +2516,13 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                     && finding["blockedBy"]["kind"] == "effect-creation-unaccounted"),
             "{apply:#?}"
         );
-        assert_eq!(findings.len(), 4 + 13 + 12, "{findings:#?}");
+        // ADR 0970: and the owner obligations (SC4001) of the fixture's exported components no tag renders.
+        let owner = assert_rule_findings(&findings, "missing-owner", 6);
+        assert!(
+            owner.iter().all(|finding| owner_entry_row(finding)),
+            "{owner:#?}"
+        );
+        assert_eq!(findings.len(), 4 + 13 + 12 + 6, "{findings:#?}");
     }
     if let Some(findings) = diagnostic_fixture("rc9-until-scope") {
         // rc.9's `until` carries resolve's observer guard, so the same four
@@ -2541,11 +2559,13 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                     && finding["blockedBy"]["kind"] == "leaf-operation-unaccounted"),
             "{universe:#?}"
         );
+        // ADR 0970: and the owner obligations (SC4001) of the exported components no tag renders.
         assert!(
             findings.iter().all(|finding| {
                 finding["rule"] == "no-await-primitive-in-tracked-scope"
                     || finding["rule"] == "unaudited-solid-release"
                     || finding["rule"] == "leaf-owner-forbidden-call"
+                    || owner_entry_row(finding)
             }),
             "{findings:#?}"
         );
@@ -2835,7 +2855,13 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
             "{findings:#?}"
         );
         assert_eq!(unplaced.len(), 5, "{findings:#?}");
-        assert_eq!(findings.len(), 16, "{findings:#?}");
+        // ADR 0970: and the owner obligations (SC4001) of the fixture's exported components no tag renders.
+        let owner = findings
+            .iter()
+            .filter(|finding| owner_entry_row(finding))
+            .count();
+        assert_eq!(owner, 12, "{findings:#?}");
+        assert_eq!(findings.len(), 16 + owner, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
@@ -2849,11 +2875,13 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
     let Some(async_findings) = diagnostic_fixture("async-boundary") else {
         return;
     };
+    // ADR 0970: `Good.tsx`'s exported components no tag renders keep an owner obligation (SC4001), which is not this test's subject.
     assert!(
         async_findings.iter().all(|finding| {
-            !finding["primaryLocation"]["path"]
-                .as_str()
-                .is_some_and(|path| path.ends_with("Good.tsx"))
+            owner_entry_row(finding)
+                || !finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("Good.tsx"))
         }),
         "nested Loading and inline pending observers must stay clean: {async_findings:#?}"
     );
@@ -3054,7 +3082,8 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     assert!(!user.contains("SC9012"), "{user}");
 
     let open = run("feedback-tiers-open", "default");
-    let review = open.find("Needs review (1)").expect("review heading");
+    // ADR 0970: the SC1001 obligation and the SC4001 owner obligation of the exported `Shown`, which no tag renders.
+    let review = open.find("Needs review (2)").expect("review heading");
     let coverage = open
         .find("Analysis coverage: 1 site in 1 group")
         .expect("coverage heading");
@@ -3202,11 +3231,14 @@ fn searches_past_their_budget_are_uncertifiable() {
     // the exported `Forwarded`, which the leaf universe does not end (an unread
     // package may run the export under a leaf owner or on an apply: B3), so its
     // uncertifiable SC3001 `leaf-operation-unaccounted` and SC6002
-    // `effect-creation-unaccounted` rows stand first on the line.
+    // `effect-creation-unaccounted` rows stand first on the line, and (ADR 0970) the
+    // effect's SC4001 `owner-callers-unenumerated` between them: `Forwarded` is
+    // exported and no tag renders it.
     assert_eq!(
         short,
         [
             ("SC3001", "uncertifiable", "leaf-operation-unaccounted"),
+            ("SC4001", "uncertifiable", "owner-callers-unenumerated"),
             ("SC6002", "uncertifiable", "effect-creation-unaccounted"),
             (
                 "SC9012",
@@ -3218,11 +3250,12 @@ fn searches_past_their_budget_are_uncertifiable() {
     );
     let long = rows_at(&findings, "App.tsx", line_of(app, "fb1({ read: a })"));
     // ADR 0692: the census on the same chain, past its 8 hops; and the
-    // creation's home row (ADR 0969), as above.
+    // creation's home row (ADR 0969) and its owner obligation (ADR 0970), as above.
     assert_eq!(
         long,
         [
             ("SC3001", "uncertifiable", "leaf-operation-unaccounted"),
+            ("SC4001", "uncertifiable", "owner-callers-unenumerated"),
             ("SC6002", "uncertifiable", "effect-creation-unaccounted"),
             ("SC9012", "uncertifiable", "parameter-use-unmodeled"),
             ("SC9012", "uncertifiable", "value-forwarded"),

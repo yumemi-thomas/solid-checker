@@ -5,6 +5,17 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 2113,
+      "end": 2134,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
       "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
@@ -33,6 +44,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 5919,
+      "end": 5925,
+      "fixes": 0
+    },
+    {
       "rule": "uncalled-accessor",
       "code": "SC1005",
       "kind": "violation",
@@ -40,6 +62,39 @@
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
       "start": 6838,
       "end": 6842,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 7136,
+      "end": 7142,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 7307,
+      "end": 7313,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 8233,
+      "end": 8239,
       "fixes": 0
     }
   ]

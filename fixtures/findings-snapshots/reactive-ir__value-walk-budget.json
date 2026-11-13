@@ -44,6 +44,17 @@
       "start": 13214,
       "end": 13218,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-budget/App.tsx",
+      "start": 13308,
+      "end": 13313,
+      "fixes": 0
     }
   ]
 }

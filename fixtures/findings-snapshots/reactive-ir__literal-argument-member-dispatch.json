@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 359,
+      "end": 363,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 507,
+      "end": 511,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -10,6 +32,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
       "start": 676,
       "end": 681,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 699,
+      "end": 703,
       "fixes": 0
     },
     {
@@ -35,6 +68,39 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 939,
+      "end": 943,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 1239,
+      "end": 1243,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 1456,
+      "end": 1460,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -46,6 +112,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 1631,
+      "end": 1635,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/App.tsx",
+      "start": 1798,
+      "end": 1803,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -54,6 +142,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/DeclarationDispatch.tsx",
       "start": 321,
       "end": 332,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/DeclarationDispatch.tsx",
+      "start": 352,
+      "end": 368,
       "fixes": 0
     },
     {
@@ -79,6 +178,50 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/DeclarationDispatch.tsx",
+      "start": 542,
+      "end": 558,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Formatted.tsx",
+      "start": 216,
+      "end": 221,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Formatted.tsx",
+      "start": 318,
+      "end": 323,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Formatted.tsx",
+      "start": 416,
+      "end": 421,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -87,6 +230,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Formatted.tsx",
       "start": 578,
       "end": 582,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Formatted.tsx",
+      "start": 600,
+      "end": 605,
       "fixes": 0
     },
     {
@@ -189,6 +343,39 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 426,
+      "end": 432,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 574,
+      "end": 580,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 788,
+      "end": 794,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -211,6 +398,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 996,
+      "end": 1002,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -230,6 +428,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 1106,
       "end": 1117,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 1135,
+      "end": 1141,
       "fixes": 0
     },
     {
@@ -255,6 +464,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 1430,
+      "end": 1436,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 1576,
+      "end": 1582,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -263,6 +494,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 1769,
       "end": 1774,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 1792,
+      "end": 1798,
       "fixes": 0
     },
     {
@@ -277,6 +519,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 1957,
+      "end": 1963,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -285,6 +538,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 2114,
       "end": 2119,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 2137,
+      "end": 2143,
       "fixes": 0
     },
     {
@@ -310,6 +574,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 2432,
+      "end": 2438,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -321,6 +596,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 2566,
+      "end": 2572,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 2694,
+      "end": 2700,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -329,6 +626,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 2786,
       "end": 2795,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 2813,
+      "end": 2819,
       "fixes": 0
     },
     {
@@ -351,6 +659,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 2945,
       "end": 2956,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 2974,
+      "end": 2980,
       "fixes": 0
     },
     {
@@ -376,6 +695,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 3174,
+      "end": 3180,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -384,6 +714,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
       "start": 3291,
       "end": 3322,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 3340,
+      "end": 3346,
       "fixes": 0
     },
     {
@@ -409,6 +750,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 3582,
+      "end": 3588,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 3717,
+      "end": 3723,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -431,6 +794,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 4081,
+      "end": 4087,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -442,6 +816,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx",
+      "start": 4230,
+      "end": 4236,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Optional.tsx",
+      "start": 284,
+      "end": 289,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -450,6 +846,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Optional.tsx",
       "start": 365,
       "end": 369,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Optional.tsx",
+      "start": 387,
+      "end": 391,
       "fixes": 0
     },
     {
@@ -508,6 +915,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 340,
+      "end": 369,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -527,6 +945,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 529,
       "end": 540,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 558,
+      "end": 574,
       "fixes": 0
     },
     {
@@ -563,6 +992,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 1084,
+      "end": 1100,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -582,6 +1022,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 1270,
       "end": 1279,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 1296,
+      "end": 1329,
       "fixes": 0
     },
     {
@@ -640,6 +1091,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 1537,
+      "end": 1553,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -648,6 +1110,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 1763,
       "end": 1774,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 1797,
+      "end": 1814,
       "fixes": 0
     },
     {
@@ -673,6 +1146,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 2063,
+      "end": 2083,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -681,6 +1165,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 2264,
       "end": 2275,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 2294,
+      "end": 2310,
       "fixes": 0
     },
     {
@@ -717,6 +1212,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 2592,
+      "end": 2625,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -739,6 +1245,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 2822,
+      "end": 2858,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -758,6 +1275,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 3046,
       "end": 3057,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 3075,
+      "end": 3091,
       "fixes": 0
     },
     {
@@ -816,6 +1344,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 3320,
+      "end": 3336,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -857,6 +1396,17 @@
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
       "start": 3824,
       "end": 3835,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx",
+      "start": 3853,
+      "end": 3889,
       "fixes": 0
     },
     {

@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-default/App.tsx",
+      "start": 357,
+      "end": 369,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -65,6 +76,17 @@
       "path": "fixtures/reactive-ir/flush-veto-default/App.tsx",
       "start": 402,
       "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-default/App.tsx",
+      "start": 449,
+      "end": 452,
       "fixes": 0
     }
   ]

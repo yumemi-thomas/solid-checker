@@ -37,6 +37,13 @@ export const mainSourceFor = (oracleJson) => {
   return mount ? oracleMainSource(undefined, mount) : MAIN_SOURCE;
 };
 
+/** The manifest a case's oracle.json `programBoundary` asks for, the one the oracle writes (scripts/runtime-oracle.mjs): a publishing one (an entry field) is open, a private one closed; none without it. */
+export const boundaryManifest = (oracleJson, id) => {
+  const boundary = oracleJson ? JSON.parse(oracleJson).programBoundary : undefined;
+  if (boundary === undefined) return undefined;
+  return `${JSON.stringify(boundary === "open" ? { name: id, main: "main.tsx" } : { name: id, private: true }, null, 2)}\n`;
+};
+
 /** Writes a case's generated packages (`{ name: { file: text } }`) into `<dir>/node_modules/<name>`: the project's own dependency, never the shared install's. */
 export function installPackages(dir, packages = {}) {
   for (const [name, files] of Object.entries(packages)) {
@@ -90,6 +97,8 @@ export function checkerProjectFiles(built, { twin = false } = {}) {
   for (const name of modules) files[name] = built.files[name];
   files["main.tsx"] = mainSourceFor(built.files["oracle.json"]);
   files["tsconfig.json"] = tsconfigFor(["main.tsx", "App.tsx", ...modules]);
+  const manifest = boundaryManifest(built.files["oracle.json"], built.id);
+  if (manifest) files["package.json"] = manifest;
   for (const [name, packageFiles] of Object.entries(built.packages ?? {})) {
     for (const [file, text] of Object.entries(packageFiles)) files[join("node_modules", name, file)] = text;
   }
@@ -107,6 +116,8 @@ export function materializeFromDirectory(caseDir, install, id) {
   if (existsSync(join(caseDir, "node_modules"))) cpSync(join(caseDir, "node_modules"), join(dir, "node_modules"), { recursive: true });
   writeFileSync(join(dir, "main.tsx"), mainSourceFor(existsSync(join(caseDir, "oracle.json")) ? readFileSync(join(caseDir, "oracle.json"), "utf8") : undefined));
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx", ...modules]));
+  const manifest = boundaryManifest(existsSync(join(caseDir, "oracle.json")) ? readFileSync(join(caseDir, "oracle.json"), "utf8") : undefined, id);
+  if (manifest) writeFileSync(join(dir, "package.json"), manifest);
   return dir;
 }
 

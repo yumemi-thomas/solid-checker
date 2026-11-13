@@ -34,6 +34,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 343,
+      "end": 346,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -63,6 +74,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 452,
       "end": 463,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 492,
+      "end": 495,
       "fixes": 0
     },
     {
@@ -109,6 +131,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 640,
+      "end": 643,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -138,6 +171,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 745,
       "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 783,
+      "end": 786,
       "fixes": 0
     },
     {
@@ -173,6 +217,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 924,
+      "end": 927,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -202,6 +257,28 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 1030,
       "end": 1068,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1097,
+      "end": 1100,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 1199,
+      "end": 1227,
       "fixes": 0
     },
     {
@@ -556,6 +633,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3015,
+      "end": 3018,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -585,6 +673,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 3178,
       "end": 3185,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3215,
+      "end": 3218,
       "fixes": 0
     },
     {
@@ -620,6 +719,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3417,
+      "end": 3420,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -639,6 +749,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 3609,
       "end": 3613,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3639,
+      "end": 3642,
       "fixes": 0
     },
     {
@@ -668,6 +789,17 @@
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 3849,
+      "end": 3858,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 3849,
@@ -741,6 +873,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4081,
+      "end": 4084,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -760,6 +903,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 4216,
       "end": 4226,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4285,
+      "end": 4288,
       "fixes": 0
     },
     {
@@ -807,6 +961,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4482,
+      "end": 4485,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -837,6 +1002,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 4706,
       "end": 4718,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4751,
+      "end": 4754,
       "fixes": 0
     },
     {
@@ -873,6 +1049,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4982,
+      "end": 4985,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 4987,
+      "end": 4990,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -902,6 +1100,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 5124,
       "end": 5141,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 5170,
+      "end": 5173,
       "fixes": 0
     },
     {
@@ -1135,6 +1344,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7301,
+      "end": 7304,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7306,
+      "end": 7318,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -1142,6 +1373,17 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 7434,
       "end": 7446,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7461,
+      "end": 7473,
       "fixes": 0
     },
     {
@@ -1153,6 +1395,28 @@
       "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
       "start": 7627,
       "end": 7631,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7657,
+      "end": 7660,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callee-spelling/App.tsx",
+      "start": 7662,
+      "end": 7674,
       "fixes": 0
     }
   ]

@@ -62,6 +62,19 @@
       "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 1644,
+      "end": 1654,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -73,6 +86,19 @@
       "fixes": 0,
       "message": "this read runs under an owner, and nothing proves a default for its context or a provider above every render of the function reading it; Solid throws `ContextNotFoundError` where a context with no default has no provider above",
       "hint": "Render a provider above every use of this component, or give the context a default."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 1683,
+      "end": 1688,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; available runtime facts do not prove whether this effect reaches owner registration; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Resolve the effective runtime entry and argument shape before treating this as a violation. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
     },
     {
       "rule": "leaf-owner-forbidden-call",
@@ -99,6 +125,19 @@
       "fixes": 0,
       "message": "this creation (`createMemo`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
       "hint": "No analysis produced a row for this site and none named a fact that rules it out; it is reported as an obligation until one does."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 2083,
+      "end": 2090,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; this function is exported, so solid-checker cannot prove its callers provide an owner",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project."
     }
   ]
 }

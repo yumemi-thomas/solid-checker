@@ -386,6 +386,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-valid.tsx",
+      "start": 238,
+      "end": 271,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -394,6 +405,17 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-valid.tsx",
       "start": 526,
       "end": 537,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-valid.tsx",
+      "start": 576,
+      "end": 581,
       "fixes": 0
     },
     {
@@ -1389,6 +1411,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-invalid.tsx",
+      "start": 191,
+      "end": 195,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1397,6 +1430,17 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-invalid.tsx",
       "start": 341,
       "end": 352,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-invalid.tsx",
+      "start": 368,
+      "end": 372,
       "fixes": 0
     },
     {
@@ -1422,6 +1466,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-valid.tsx",
+      "start": 261,
+      "end": 270,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-extended-valid.tsx",
+      "start": 272,
+      "end": 282,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1430,6 +1496,17 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-invalid.tsx",
       "start": 143,
       "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-invalid.tsx",
+      "start": 169,
+      "end": 173,
       "fixes": 0
     },
     {
@@ -1444,6 +1521,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-invalid.tsx",
+      "start": 319,
+      "end": 324,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1452,6 +1540,17 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-invalid.tsx",
       "start": 415,
       "end": 423,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-invalid.tsx",
+      "start": 441,
+      "end": 450,
       "fixes": 0
     },
     {
@@ -1464,6 +1563,28 @@
       "start": 519,
       "end": 527,
       "fixes": 1
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-invalid.tsx",
+      "start": 541,
+      "end": 545,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-valid.tsx",
+      "start": 131,
+      "end": 141,
+      "fixes": 0
     },
     {
       "rule": "leaf-owner-forbidden-call",
@@ -1485,6 +1606,28 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-valid.tsx",
       "start": 234,
       "end": 244,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-valid.tsx",
+      "start": 278,
+      "end": 284,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/props-valid.tsx",
+      "start": 412,
+      "end": 422,
       "fixes": 0
     }
   ]

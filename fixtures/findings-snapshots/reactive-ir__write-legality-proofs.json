@@ -24,6 +24,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 612,
+      "end": 615,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 822,
+      "end": 825,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -32,6 +54,17 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 1066,
       "end": 1077,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 1113,
+      "end": 1116,
       "fixes": 0
     },
     {
@@ -45,6 +78,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 1416,
+      "end": 1419,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -53,6 +97,17 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 1731,
       "end": 1738,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 1785,
+      "end": 1788,
       "fixes": 0
     },
     {
@@ -74,6 +129,17 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 2065,
       "end": 2072,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 2119,
+      "end": 2122,
       "fixes": 0
     },
     {
@@ -165,6 +231,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 3284,
+      "end": 3287,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -184,6 +261,28 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 3582,
       "end": 3594,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 3613,
+      "end": 3616,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 4393,
+      "end": 4396,
       "fixes": 0
     },
     {
@@ -261,6 +360,17 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 5574,
       "end": 5582,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 5654,
+      "end": 5657,
       "fixes": 0
     }
   ]

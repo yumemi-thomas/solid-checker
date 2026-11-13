@@ -24,10 +24,32 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Early.tsx",
+      "start": 549,
+      "end": 552,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Early.tsx",
+      "start": 652,
+      "end": 664,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/named-callback-tdz/Early.tsx",
       "start": 652,
@@ -43,6 +65,17 @@
       "path": "fixtures/reactive-ir/named-callback-tdz/Early.tsx",
       "start": 715,
       "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Early.tsx",
+      "start": 736,
+      "end": 739,
       "fixes": 0
     },
     {
@@ -68,6 +101,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Early.tsx",
+      "start": 966,
+      "end": 969,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Early.tsx",
+      "start": 971,
+      "end": 978,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -89,10 +144,32 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
+      "start": 391,
+      "end": 394,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
+      "start": 500,
+      "end": 512,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
       "start": 500,
@@ -107,6 +184,17 @@
       "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
       "start": 552,
       "end": 555,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
+      "start": 584,
+      "end": 587,
       "fixes": 0
     },
     {
@@ -128,6 +216,28 @@
       "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
       "start": 774,
       "end": 777,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
+      "start": 827,
+      "end": 830,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/named-callback-tdz/Late.tsx",
+      "start": 832,
+      "end": 839,
       "fixes": 0
     },
     {

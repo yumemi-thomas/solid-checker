@@ -43,25 +43,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-local-accessor.tsx",
       "start": 120,
-      "end": 130,
+      "end": 197,
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-local-accessor.tsx",
       "start": 120,
-      "end": 130,
+      "end": 197,
       "fixes": 0
     },
     {
@@ -87,25 +87,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-member.tsx",
       "start": 118,
-      "end": 128,
+      "end": 201,
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-member.tsx",
       "start": 118,
-      "end": 128,
+      "end": 201,
       "fixes": 0
     },
     {
@@ -140,25 +140,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-parameter.tsx",
       "start": 107,
-      "end": 117,
+      "end": 214,
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-parameter.tsx",
       "start": 107,
-      "end": 117,
+      "end": 214,
       "fixes": 0
     },
     {
@@ -173,25 +173,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-plain-function.tsx",
       "start": 88,
-      "end": 98,
+      "end": 165,
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-plain-function.tsx",
       "start": 88,
-      "end": 98,
+      "end": 165,
       "fixes": 0
     },
     {
@@ -237,25 +237,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/before-await-accessor.tsx",
       "start": 107,
-      "end": 117,
+      "end": 213,
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/before-await-accessor.tsx",
       "start": 107,
-      "end": 117,
+      "end": 213,
       "fixes": 0
     },
     {
@@ -314,6 +314,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-alias.tsx",
+      "start": 108,
+      "end": 113,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -322,6 +333,17 @@
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-body-destructure.tsx",
       "start": 50,
       "end": 59,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-body-destructure.tsx",
+      "start": 83,
+      "end": 88,
       "fixes": 0
     },
     {
@@ -358,6 +380,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-local-merge.tsx",
+      "start": 229,
+      "end": 234,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -366,6 +399,17 @@
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-merge-alias.tsx",
       "start": 148,
       "end": 160,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-merge-alias.tsx",
+      "start": 176,
+      "end": 181,
       "fixes": 0
     },
     {
@@ -380,6 +424,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
+      "start": 72,
+      "end": 79,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -388,6 +443,17 @@
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
       "start": 109,
       "end": 131,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
+      "start": 169,
+      "end": 174,
       "fixes": 0
     },
     {
@@ -402,6 +468,28 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
+      "start": 273,
+      "end": 280,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
+      "start": 283,
+      "end": 288,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -411,6 +499,17 @@
       "start": 14,
       "end": 23,
       "fixes": 1
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-destructure.tsx",
+      "start": 60,
+      "end": 65,
+      "fixes": 0
     },
     {
       "rule": "reactive-dispatch-unresolved",
@@ -432,6 +531,17 @@
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-read.tsx",
       "start": 58,
       "end": 69,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-read.tsx",
+      "start": 85,
+      "end": 90,
       "fixes": 0
     },
     {
@@ -465,6 +575,17 @@
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-tracked-destructure.tsx",
       "start": 157,
       "end": 162,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-tracked-destructure.tsx",
+      "start": 184,
+      "end": 191,
       "fixes": 0
     },
     {
@@ -523,25 +644,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/conditional-await-accessor.tsx",
       "start": 128,
-      "end": 138,
+      "end": 221,
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/conditional-await-accessor.tsx",
       "start": 128,
-      "end": 138,
+      "end": 221,
       "fixes": 0
     },
     {
@@ -858,25 +979,25 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/nested-after-await-accessor.tsx",
       "start": 107,
-      "end": 117,
+      "end": 190,
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
+      "blocker": "value-forwarded",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/nested-after-await-accessor.tsx",
       "start": 107,
-      "end": 117,
+      "end": 190,
       "fixes": 0
     },
     {

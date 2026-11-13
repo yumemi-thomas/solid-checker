@@ -68,6 +68,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
+      "start": 667,
+      "end": 678,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -98,6 +109,28 @@
       "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
       "start": 1106,
       "end": 1118,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-identity-open/App.tsx",
+      "start": 1135,
+      "end": 1139,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-identity-open/tabs.ts",
+      "start": 185,
+      "end": 195,
       "fixes": 0
     },
     {

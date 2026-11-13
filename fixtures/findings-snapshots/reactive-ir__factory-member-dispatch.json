@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 427,
+      "end": 432,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 615,
+      "end": 620,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -10,6 +32,17 @@
       "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
       "start": 779,
       "end": 785,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 803,
+      "end": 808,
       "fixes": 0
     },
     {
@@ -24,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 1009,
+      "end": 1014,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -32,6 +76,17 @@
       "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
       "start": 1229,
       "end": 1235,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 1253,
+      "end": 1258,
       "fixes": 0
     },
     {
@@ -46,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 1556,
+      "end": 1561,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -54,6 +120,17 @@
       "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
       "start": 1724,
       "end": 1730,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 1748,
+      "end": 1753,
       "fixes": 0
     },
     {
@@ -68,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 1951,
+      "end": 1956,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -79,6 +167,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 2169,
+      "end": 2174,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -87,6 +186,17 @@
       "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
       "start": 2303,
       "end": 2320,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/factory-member-dispatch/App.tsx",
+      "start": 2338,
+      "end": 2343,
       "fixes": 0
     },
     {

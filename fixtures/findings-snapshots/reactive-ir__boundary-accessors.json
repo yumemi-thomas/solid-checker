@@ -64,6 +64,17 @@
       "start": 359,
       "end": 380,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/boundary-accessors/App.tsx",
+      "start": 413,
+      "end": 431,
+      "fixes": 0
     }
   ]
 }

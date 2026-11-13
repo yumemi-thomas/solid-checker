@@ -27,8 +27,7 @@
 //!   callback of an in-place primitive in a generator's body is the generator's code, up to the layer whose callback runs under an owner its primitive
 //!   creates, which is current there whoever steps what is around it: B1, the re-review of #220);
 //! - no layer around it is entered by a route the graph has no edge for ([`super::owner_emission::layer_entry_open_by_reference`], ADR 0868: a function stored,
-//!   assigned, handed on or a method, a reference that is not a direct call or an inline run), asked with the universe's premises
-//!   ([`super::owner_emission`]'s `Premises::Universe`): a function that returns JSX is entered by renders alone only where every reference of its binding is a
+//!   assigned, handed on or a method, a reference that is not a direct call or an inline run): a function that returns JSX is entered by renders alone only where every reference of its binding is a
 //!   JSX tag (F1); a layer that is a generator is an open entry, written around the site or reached as the caller at the end of a call (B1, N1); and a callback
 //!   an owner-creating primitive runs is entered by it alone only where nothing references it (N2). The primitive-wrapped silence needs no entry fact of its
 //!   own beyond the last: the primitive's own run is the entry;

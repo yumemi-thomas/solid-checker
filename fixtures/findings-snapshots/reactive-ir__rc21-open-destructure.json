@@ -13,6 +13,17 @@
       "fixes": 1
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 122,
+      "end": 127,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -156,6 +167,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 346,
+      "end": 355,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -175,6 +197,17 @@
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 412,
       "end": 417,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 434,
+      "end": 435,
       "fixes": 0
     },
     {
@@ -208,6 +241,17 @@
       "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
       "start": 658,
       "end": 665,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-open-destructure/App.tsx",
+      "start": 681,
+      "end": 692,
       "fixes": 0
     }
   ]

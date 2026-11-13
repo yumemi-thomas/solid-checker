@@ -16784,7 +16784,19 @@
     "commit": "b005c00acb61c07b60612430753d3a2400182bbd"
    },
    "weight": 34,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0970",
+    "restoredBy": "Prove a package renders a component under an owner, from its dependency source (ADR 0970)",
+    "why": "certified clean before the owner emission took a function a reference enters for a layer like any other: `Admin` is exported and named only by `mod.Admin`, the module a `lazy` loader hands back, so no tag renders it in this program and the `{props.title}` render effect of `Admin` keeps an uncertifiable SC4001 row (`owner-callers-unenumerated`); the proof that `lazy`, a router or `Dynamic` renders the component it is handed under an owner, from the package's source, restores the expectation",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC4001",
+      "context": ""
+     }
+    ]
+   }
   },
   {
    "id": "clean-loading-boundary",

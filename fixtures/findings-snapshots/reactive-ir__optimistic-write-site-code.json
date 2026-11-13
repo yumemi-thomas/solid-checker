@@ -107,6 +107,17 @@
       "start": 1871,
       "end": 1879,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx",
+      "start": 1924,
+      "end": 1933,
+      "fixes": 0
     }
   ]
 }

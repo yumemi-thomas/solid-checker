@@ -1,4 +1,16 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handed-root-patch-definer-key-other/App.tsx",
+      "start": 644,
+      "end": 649,
+      "fixes": 0
+    }
+  ]
 }

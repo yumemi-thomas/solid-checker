@@ -24,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 853,
+      "end": 867,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
@@ -54,6 +65,17 @@
       "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
       "start": 1362,
       "end": 1372,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 1923,
+      "end": 1961,
       "fixes": 0
     },
     {

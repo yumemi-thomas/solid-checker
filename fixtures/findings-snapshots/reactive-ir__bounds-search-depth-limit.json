@@ -122,6 +122,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 1988,
+      "end": 2000,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -144,6 +155,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2025,
+      "end": 2037,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -166,6 +188,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2062,
+      "end": 2074,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -188,6 +221,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2099,
+      "end": 2111,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -196,6 +240,17 @@
       "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
       "start": 2099,
       "end": 2111,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2149,
+      "end": 2152,
       "fixes": 0
     },
     {
@@ -251,6 +306,17 @@
       "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
       "start": 2513,
       "end": 2514,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/App.tsx",
+      "start": 2535,
+      "end": 2538,
       "fixes": 0
     },
     {
@@ -363,6 +429,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx",
+      "start": 762,
+      "end": 774,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -371,6 +448,17 @@
       "path": "fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx",
       "start": 762,
       "end": 774,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bounds-search-depth-limit/stepped.tsx",
+      "start": 829,
+      "end": 832,
       "fixes": 0
     }
   ]

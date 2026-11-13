@@ -31,6 +31,7 @@ import { RV_CONTEXT_NAMES } from "./rv-shapes.mjs";
 import { NM_CONTEXT_NAMES } from "./nm-shapes.mjs";
 import { LA_CONTEXT_NAMES } from "./la-shapes.mjs";
 import { ER_CONTEXT_NAMES } from "./er-shapes.mjs";
+import { EM_CONTEXT_NAMES } from "./em-shapes.mjs";
 import { FC_CONTEXT_NAMES } from "./fc-shapes.mjs";
 import { PH_CONTEXT_NAMES } from "./ph-shapes.mjs";
 import { TABLE_CONTEXT_NAMES } from "./table-shapes.mjs";
@@ -47,7 +48,7 @@ export const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer", ...DEAD_CONT
 // kept out, the plan stays what it was before them.
 // ADR 0963: so are the object-boundary shapes (a site run by a getter, a coercion, an iterator step, a trap, a constructor, a field, a tag or an exported helper, and the twin that
 // never runs it), judged by the Chrome host (focus.mjs): kept out, the plan stays what it was before them. ADR 0964: so are the stored-function shapes; batch 10c: so are the review spellings (`rs-*`, `rm-*`). Batch 11: so are the named-callback shapes (`nm-*`), the later-assignment shapes (`la-*`) and the flush-class shapes (`fc-*`).
-const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context) && !TABLE_CONTEXT_NAMES.includes(context) && !WRAP_CONTEXT_NAMES.includes(context) && !ARM_CONTEXT_NAMES.includes(context) && !SEAM_CONTEXT_NAMES.includes(context) && !REF_LAYER_CONTEXT_NAMES.includes(context) && !ENTRY_CONTEXT_NAMES.includes(context) && !OB_CONTEXT_NAMES.includes(context) && !SF_CONTEXT_NAMES.includes(context) && !RV_CONTEXT_NAMES.includes(context) && !NM_CONTEXT_NAMES.includes(context) && !LA_CONTEXT_NAMES.includes(context) && !ER_CONTEXT_NAMES.includes(context) && !FC_CONTEXT_NAMES.includes(context) && !PH_CONTEXT_NAMES.includes(context)),
+const EQUIVALENT = new Set([...BASE_ONLY_CONTEXTS().filter((context) => !API_CONTEXTS.includes(context) && !TABLE_CONTEXT_NAMES.includes(context) && !WRAP_CONTEXT_NAMES.includes(context) && !ARM_CONTEXT_NAMES.includes(context) && !SEAM_CONTEXT_NAMES.includes(context) && !REF_LAYER_CONTEXT_NAMES.includes(context) && !ENTRY_CONTEXT_NAMES.includes(context) && !OB_CONTEXT_NAMES.includes(context) && !SF_CONTEXT_NAMES.includes(context) && !RV_CONTEXT_NAMES.includes(context) && !NM_CONTEXT_NAMES.includes(context) && !LA_CONTEXT_NAMES.includes(context) && !ER_CONTEXT_NAMES.includes(context) && !EM_CONTEXT_NAMES.includes(context) && !FC_CONTEXT_NAMES.includes(context) && !PH_CONTEXT_NAMES.includes(context)),
   ...CBP_CONTEXTS.filter((context) => context.startsWith("cbp-attached"))]);
 
 /** One program per (code, context, variant) the recall grids hold for the API variants and contexts, direct, no layer. */
