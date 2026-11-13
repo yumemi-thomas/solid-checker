@@ -121,7 +121,7 @@ or a render effect in it is uncertifiable: the timer, handler or apply that call
 through the reference runs it with no owner. The same walk opens a generator's body
 and any function it calls (a body runs where an iterator is stepped), and keeps an
 owner-creating callback's stop only where nothing references the callback (a named
-function expression that saves itself is run by whoever calls it). A function the
+function expression that saves itself is run by whoever calls it). A call written in a component element's getter (a prop's value or the children, with no function the element hands to the component between) runs where the component reads the prop, on whatever stack that is, so it places no callee (ADR 0971, the review of #225): the function it calls is a layer entered by a run no edge shows, and an owner operation in it is uncertifiable too (`<Outer slot={makeEffect()} />` with `Outer` reading `props.slot` on an effect's apply). A function the
 census takes for a component that is handed to a call (`const Wrapped = hoc(() => {
 onCleanup(..); return <p/>; })`) is entered by whoever the callee is: only a
 primitive's position and a standard-library call that runs it inline place it. A

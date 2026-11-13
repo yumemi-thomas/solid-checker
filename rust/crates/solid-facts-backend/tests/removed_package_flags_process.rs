@@ -95,7 +95,15 @@ fn the_requirement_boundary_survives_without_any_package_source() {
     ));
     assert_eq!(disabled["status"], "uncertifiable");
     // ADR 0970: the fixture's exported component no tag renders keeps an owner obligation (SC4001), which is not this test's subject.
-    let rows = findings_without_owner_rows(&disabled);
+    // ADR 0971 (batch 11, B2): nor are the SC3001 and SC6002 uncertifiable rows of its one JSX creation, beside the requirement's SC9005.
+    let (creations, rows): (Vec<_>, Vec<_>) = findings_without_owner_rows(&disabled)
+        .into_iter()
+        .partition(|row| matches!(row.0.as_str(), "SC3001" | "SC6002"));
+    assert_eq!(creations.len(), 2, "{creations:?}");
+    assert!(
+        creations.iter().all(|row| row.1 == "uncertifiable"),
+        "{creations:?}"
+    );
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(
         (rows[0].0.as_str(), rows[0].1.as_str()),

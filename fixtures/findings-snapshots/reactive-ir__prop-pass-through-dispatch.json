@@ -77,6 +77,17 @@
       "start": 946,
       "end": 959,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-pass-through-dispatch/App.tsx",
+      "start": 946,
+      "end": 959,
+      "fixes": 0
     }
   ]
 }

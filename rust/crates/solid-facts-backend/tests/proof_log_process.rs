@@ -171,6 +171,333 @@ fn an_owner_call_decline_ends_nothing() {
     fs::remove_dir_all(directory).ok();
 }
 
+// Batch 11, B2, the review of #225 (F2): the log names why a getter's creation and the sites of a function a getter calls keep their rows, and the controls are no site or are
+// silent. A getter (`<Outer><Inner /></Outer>`, `slot={<Inner />}`, `[1].map(() => <Inner />)`, `slot={createMemo(() => 1)}`) runs where the component reads the prop: declined
+// `getter-runs-where-read`, for both groups of codes. A function written outside the element and called in one (`renderView()`, `makeMemo()`) is entered by a run no edge shows:
+// declined `entry-by-reference` (the effect code; the program opens no leaf scope, so the leaf codes are the census's). What a dialect control-flow element or a context provider
+// renders in place, a function handed to one, and a helper only a render calls are no site, or are silenced.
+#[test]
+fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-getters");
+    let reasons = |lines: &[serde_json::Value], start: u64| {
+        lines
+            .iter()
+            .filter(|line| line["k"] == "declined" && line["s"] == start)
+            .map(|line| line["proof"].as_str().unwrap().to_owned())
+            .collect::<BTreeSet<_>>()
+    };
+    let is_site = |lines: &[serde_json::Value], start: u64| {
+        lines
+            .iter()
+            .any(|line| line["k"] == "site" && line["s"] == start)
+    };
+    let silent = |lines: &[serde_json::Value], start: u64| {
+        lines
+            .iter()
+            .any(|line| line["k"] == "silent" && line["s"] == start)
+    };
+    let at = |source: &str, anchor: &str, skip: &str| {
+        (source
+            .find(anchor)
+            .unwrap_or_else(|| panic!("no `{anchor}`"))
+            + skip.len()) as u64
+    };
+    // The getters.
+    let name = "owner-call-jsx-getter";
+    let log = directory.join("getter.jsx");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "<Outer>\n        <Inner />",
+            "<Outer>\n        ",
+            "children of Outer",
+        ),
+        (
+            "<Leaf>\n        <Inner />",
+            "<Leaf>\n        ",
+            "children of Leaf",
+        ),
+        ("slot={<Inner />}", "slot={", "a prop's value"),
+        (
+            "[1].map(() => <Inner />)",
+            "[1].map(() => ",
+            "a map callback in the children",
+        ),
+        (
+            "(() => <Inner />)()",
+            "(() => ",
+            "an immediately invoked arrow",
+        ),
+        (
+            "untrack(() => <Inner />)",
+            "untrack(() => ",
+            "an untrack callback",
+        ),
+        ("slot={createMemo(() => 1)}", "slot={", "a creating call"),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert_eq!(
+            reasons(&lines_of, start),
+            BTreeSet::from(["getter-runs-where-read".to_owned()]),
+            "{what}: declined for the getter, both groups"
+        );
+    }
+    // A function handed whole is a site like any other; the others are no site.
+    let handed = at(
+        &source,
+        "<Outer>{() => <Inner />}</Outer>",
+        "<Outer>{() => ",
+    );
+    assert!(is_site(&lines_of, handed), "a function child is a site");
+    assert!(!reasons(&lines_of, handed).contains("getter-runs-where-read"));
+    for (anchor, skip, what) in [
+        (
+            "<Show when={1}>\n      <Inner />",
+            "<Show when={1}>\n      ",
+            "Show's children",
+        ),
+        (
+            "{(_value) => <Inner />}",
+            "{(_value) => ",
+            "Show's function child",
+        ),
+        (
+            "<Ctx value={1}>\n      <Inner />",
+            "<Ctx value={1}>\n      ",
+            "a context provider's children",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(!is_site(&lines_of, start), "{what} is no site");
+    }
+    // The in-place rule's boundary: a site written directly in what a dialect element runs in place is no site; one in a function written inside it is a site like any other.
+    let name = "owner-call-inplace-nested";
+    let log = directory.join("inplace.nested");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "<For each={[1]}>{() => <Inner />}",
+            "<For each={[1]}>{() => ",
+            "For's row function, directly",
+        ),
+        (
+            "{(_value) => <Inner />}",
+            "{(_value) => ",
+            "Show's function child, directly",
+        ),
+        (
+            "<Show when={1}>\n      <Inner />",
+            "<Show when={1}>\n      ",
+            "Show's children, directly",
+        ),
+        (
+            "<Ctx value={1}>\n      <Inner />",
+            "<Ctx value={1}>\n      ",
+            "a context provider's children, directly",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(!is_site(&lines_of, start), "{what} is no site");
+    }
+    for (anchor, skip, what) in [
+        (
+            "const view = () => <Inner />;\n        pickRow",
+            "const view = () => ",
+            "a function written in For's row function",
+        ),
+        (
+            "const view = () => <Inner />;\n        pickShow",
+            "const view = () => ",
+            "a function written in Show's function child",
+        ),
+        (
+            "pickIife = () => <Inner />",
+            "pickIife = () => ",
+            "an arrow stored from an immediately invoked arrow in Show's children",
+        ),
+        (
+            "pickMap = () => <Inner />",
+            "pickMap = () => ",
+            "an arrow stored from a map callback in Show's children",
+        ),
+        (
+            "pickProvider = () => <Inner />",
+            "pickProvider = () => ",
+            "an arrow stored from an immediately invoked arrow in a provider's children",
+        ),
+        (
+            "return () => <Inner />",
+            "return () => ",
+            "a closure a called function makes",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(is_site(&lines_of, start), "{what} is a site");
+        let declined = reasons(&lines_of, start);
+        assert!(
+            !declined.contains("getter-runs-where-read"),
+            "{what}: a site like any other, not a getter's"
+        );
+        // Declined for the effect code: entered by a reference no edge shows, or (a context provider, which no fact reads) a component an unread package may run.
+        assert!(
+            !declined.is_empty()
+                && declined
+                    .iter()
+                    .all(|reason| reason == "entry-by-reference"
+                        || reason == "unread-package-may-run"),
+            "{what}: declined {declined:?}"
+        );
+        // The leaf codes end by the program census (no leaf owner is opened anywhere); the effect-callback code, which Chrome reports there, is silenced by nothing.
+        assert!(
+            !lines_of.iter().any(|line| line["k"] == "silent"
+                && line["s"] == start
+                && line["codes"].as_array().is_some_and(|codes| codes
+                    .iter()
+                    .any(|code| code == "PRIMITIVE_IN_EFFECT_CALLBACK"))),
+            "{what} is silenced for the effect code"
+        );
+    }
+    // The re-review of #225 (B1-B4): a dialect element calls in place only the function in a position the dialect names, written directly in its body; a function that hands
+    // itself on, a function in `Show`'s `when`, an instance field's initializer and a `Match` outside a `Switch` are sites, declined for the effect code and never silent.
+    let name = "owner-call-inplace-escapes";
+    let log = directory.join("inplace.escapes");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "{function row() {\n        return <Inner />",
+            "{function row() {\n        return ",
+            "a named function expression that never uses its name",
+        ),
+        (
+            "<Switch>\n      <Match when={1}>\n        <Inner />",
+            "<Switch>\n      <Match when={1}>\n        ",
+            "a Match under a Switch",
+        ),
+        (
+            "{(_value) => <Inner />}",
+            "{(_value) => ",
+            "Show's function child with its parameter",
+        ),
+        (
+            "{/* a note */}\n      {(_value) => <Inner />}",
+            "{/* a note */}\n      {(_value) => ",
+            "Show's function child after a comment",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(!is_site(&lines_of, start), "{what} is no site");
+    }
+    for (anchor, skip, what) in [
+        (
+            "pickNamed = row;\n        return <Inner />",
+            "pickNamed = row;\n        return ",
+            "B1: a named function expression that stores itself",
+        ),
+        (
+            "pickFallback = fb;\n        return <Inner />",
+            "pickFallback = fb;\n        return ",
+            "B1: a named fallback that stores itself",
+        ),
+        (
+            "keyed\n      when={() => (\n        <Inner />",
+            "keyed\n      when={() => (\n        ",
+            "B2: a function in Show's when, keyed",
+        ),
+        (
+            "class Holder {\n    view = (\n      <Inner />",
+            "class Holder {\n    view = (\n      ",
+            "B3: an instance field's initializer in a component",
+        ),
+        (
+            "class Holder {\n          view = (\n            <Inner />",
+            "class Holder {\n          view = (\n            ",
+            "B3: an instance field's initializer in a function a dialect element calls",
+        ),
+        (
+            "<Tabs>\n      <Match when={1}>\n        <Inner />",
+            "<Tabs>\n      <Match when={1}>\n        ",
+            "B4: a Match outside a Switch",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(is_site(&lines_of, start), "{what} is a site");
+        let declined = reasons(&lines_of, start);
+        assert!(
+            !declined.is_empty()
+                && declined.iter().all(|reason| matches!(
+                    reason.as_str(),
+                    "entry-by-reference"
+                        | "no-edge-into-function"
+                        | "instance-field-initializer"
+                        | "getter-runs-where-read"
+                        | "unread-package-may-run"
+                )),
+            "{what}: declined {declined:?}"
+        );
+        assert!(
+            !lines_of.iter().any(|line| line["k"] == "silent"
+                && line["s"] == start
+                && line["codes"].as_array().is_some_and(|codes| codes
+                    .iter()
+                    .any(|code| code == "PRIMITIVE_IN_EFFECT_CALLBACK"))),
+            "{what} is silenced for the effect code"
+        );
+    }
+    // The helper in a getter.
+    let name = "owner-call-getter-helper";
+    let log = directory.join("getter.helper");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "function renderView() {\n  return <Inner />",
+            "function renderView() {\n  return ",
+            "renderView's tag",
+        ),
+        (
+            "function makeMemo() {\n  return createMemo(",
+            "function makeMemo() {\n  return ",
+            "makeMemo's creation",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(
+            reasons(&lines_of, start).contains("entry-by-reference"),
+            "{what}: entered by a run no edge shows: {:?}",
+            reasons(&lines_of, start)
+        );
+    }
+    // The controls: a helper only a render calls, and one called in a `Show`'s getter, keep their silence.
+    for (anchor, skip, what) in [
+        (
+            "function controlMemo() {\n  return createMemo(",
+            "function controlMemo() {\n  return ",
+            "controlMemo",
+        ),
+        (
+            "function showMemo() {\n  return createMemo(",
+            "function showMemo() {\n  return ",
+            "showMemo",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(
+            !reasons(&lines_of, start).contains("entry-by-reference"),
+            "{what} is declined"
+        );
+        assert!(silent(&lines_of, start), "{what} keeps a silence");
+    }
+    fs::remove_dir_all(directory).ok();
+}
+
 // Batch 11, slice 0: a finding and a verdict name the rule that reported them, so a fold can say which rule ended a site (`scripts/lib/proof-credit.mjs`).
 #[test]
 fn a_finding_and_a_verdict_name_their_rule() {

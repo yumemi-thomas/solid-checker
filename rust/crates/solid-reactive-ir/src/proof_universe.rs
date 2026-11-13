@@ -1092,6 +1092,7 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
     let lookup = ctx.semantic_lookup;
     let dialect = ctx.dialect;
     let client_build = crate::static_api::client_build(ctx);
+    let jsx_codes = jsx_site_codes(client_build);
     for file in crate::base::reads::file_slots(ctx.facts) {
         if lookup.in_dependency_source(file.path.as_str()) {
             continue;
@@ -1130,6 +1131,34 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
                 },
             ));
         }
+        // The JSX creation sites of the same file (batch 11, B2: the re-review of #220 found a certified program that throws at a component tag a reference runs on an apply's
+        // stack, `pick = view; createEffect(() => 0, () => { pick!(); })` with `view` returning `<Inner />`, no creating call written anywhere): each site
+        // [`crate::owners::universe_jsx_sites`] lists, with the codes [`jsx_site_codes`] gives it, at its own span and its anchor (the element's name). One pass over the file
+        // slots with the calls.
+        for site in crate::owners::universe_jsx_sites(file, lookup) {
+            found.push((
+                file,
+                Site {
+                    table: "owner-call",
+                    source: "jsx",
+                    via: if site.getter { "jsx-getter" } else { "jsx" },
+                    at: site.span,
+                    alternates: vec![site.anchor],
+                    codes: jsx_codes,
+                },
+            ));
+        }
+    }
+}
+
+/// The codes of a JSX creation site of the owner-call universe (batch 11, B2): on a client build it may throw on an effect's apply stack with no owner set
+/// (PRIMITIVE_IN_EFFECT_CALLBACK, SC6002) or be a forbidden creation under a leaf owner (PRIMITIVE_IN_FORBIDDEN_SCOPE, SC3001); one definition for the list and for the
+/// owner stage's silences.
+pub(crate) const fn jsx_site_codes(client_build: bool) -> &'static [SiteCode] {
+    if client_build {
+        CREATION_AND_EFFECT_CODES
+    } else {
+        CREATION_CODES
     }
 }
 

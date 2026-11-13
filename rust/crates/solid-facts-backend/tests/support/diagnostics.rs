@@ -80,3 +80,20 @@ pub fn assert_rule_findings<'a>(
     }
     selected
 }
+
+/// ADR 0971 (batch 11, B2): the uncertifiable rows of the owner-call universe at a JSX creation site (a component element, an expression container's insert): an
+/// SC3001 `leaf-operation-unaccounted` and an SC6002 `effect-creation-unaccounted` per site. Split from `rows` so a test that pins the rest keeps its meaning and
+/// pins these by count; only a fixture with no such row of its own before B2 (a creation call's, ADR 0969) may use it.
+#[allow(dead_code)] // the test binaries that include this module and keep those rows leave it unused
+pub fn partition_creation_rows(
+    rows: Vec<&serde_json::Value>,
+) -> (Vec<&serde_json::Value>, Vec<&serde_json::Value>) {
+    rows.into_iter().partition(|row| {
+        row["kind"] == "uncertifiable"
+            && matches!(
+                (row["id"].as_str(), row["analysisContext"].as_str()),
+                (Some("SC3001"), Some("leaf-operation-unaccounted"))
+                    | (Some("SC6002"), Some("effect-creation-unaccounted"))
+            )
+    })
+}

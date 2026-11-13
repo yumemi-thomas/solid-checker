@@ -51,6 +51,28 @@
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/primitive-prop-argument.tsx",
+      "start": 1128,
+      "end": 1154,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/primitive-prop-argument.tsx",
+      "start": 1128,
+      "end": 1154,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
       "start": 439,
       "end": 449,
@@ -101,6 +123,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
+      "start": 705,
+      "end": 720,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -123,6 +156,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
+      "start": 705,
+      "end": 720,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -131,6 +175,28 @@
       "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
       "start": 705,
       "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
+      "start": 764,
+      "end": 790,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/query-key-callback.tsx",
+      "start": 764,
+      "end": 790,
       "fixes": 0
     },
     {
@@ -178,6 +244,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 1005,
+      "end": 1025,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -186,6 +263,39 @@
       "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
       "start": 1005,
       "end": 1025,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 1005,
+      "end": 1025,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 1049,
+      "end": 1184,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/open-program/packages/ui/src/select.tsx",
+      "start": 1049,
+      "end": 1184,
       "fixes": 0
     }
   ]

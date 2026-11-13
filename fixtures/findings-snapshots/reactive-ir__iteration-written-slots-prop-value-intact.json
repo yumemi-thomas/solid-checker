@@ -12,6 +12,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 154,
+      "end": 161,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 154,
+      "end": 161,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -19,6 +41,72 @@
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
       "start": 243,
       "end": 254,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 270,
+      "end": 277,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 270,
+      "end": 277,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 419,
+      "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 419,
+      "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 450,
+      "end": 474,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value-intact/body-write.tsx",
+      "start": 450,
+      "end": 474,
       "fixes": 0
     }
   ]

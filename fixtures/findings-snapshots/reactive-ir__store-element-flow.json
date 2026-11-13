@@ -240,6 +240,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
+      "start": 1492,
+      "end": 1577,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
+      "start": 1492,
+      "end": 1577,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -248,6 +270,28 @@
       "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
       "start": 1546,
       "end": 1549,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
+      "start": 1584,
+      "end": 1693,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
+      "start": 1584,
+      "end": 1693,
       "fixes": 0
     },
     {
@@ -325,6 +369,28 @@
       "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
       "start": 2312,
       "end": 2314,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
+      "start": 2355,
+      "end": 2447,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-element-flow/App.tsx",
+      "start": 2355,
+      "end": 2447,
       "fixes": 0
     }
   ]

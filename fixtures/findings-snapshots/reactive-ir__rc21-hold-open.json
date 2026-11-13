@@ -68,6 +68,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 376,
+      "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 376,
+      "end": 444,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-outside-hold",
       "code": "SC5006",
       "kind": "uncertifiable",
@@ -87,6 +109,28 @@
       "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
       "start": 415,
       "end": 429,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 485,
+      "end": 559,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 485,
+      "end": 559,
       "fixes": 0
     },
     {
@@ -112,6 +156,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 600,
+      "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 600,
+      "end": 674,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-outside-hold",
       "code": "SC5006",
       "kind": "uncertifiable",
@@ -131,6 +197,28 @@
       "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
       "start": 639,
       "end": 659,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 714,
+      "end": 776,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-hold-open/App.tsx",
+      "start": 714,
+      "end": 776,
       "fixes": 0
     },
     {

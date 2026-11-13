@@ -13,6 +13,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 411,
+      "end": 429,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 411,
+      "end": 429,
+      "fixes": 0
+    },
+    {
       "rule": "optimistic-write-before-load",
       "code": "SC2009",
       "kind": "uncertifiable",
@@ -35,6 +57,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 530,
+      "end": 575,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 530,
+      "end": 575,
+      "fixes": 0
+    },
+    {
       "rule": "optimistic-write-before-load",
       "code": "SC2009",
       "kind": "uncertifiable",
@@ -52,8 +96,74 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 788,
+      "end": 806,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 788,
+      "end": 806,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 813,
+      "end": 831,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 813,
+      "end": 831,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
       "start": 971,
       "end": 987,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1013,
+      "end": 1049,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1013,
+      "end": 1049,
       "fixes": 0
     },
     {
@@ -87,6 +197,28 @@
       "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
       "start": 1212,
       "end": 1228,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1304,
+      "end": 1340,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1304,
+      "end": 1340,
       "fixes": 0
     },
     {
@@ -134,6 +266,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1347,
+      "end": 1382,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1347,
+      "end": 1382,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -153,6 +307,50 @@
       "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
       "start": 1367,
       "end": 1374,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1462,
+      "end": 1470,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1462,
+      "end": 1470,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1472,
+      "end": 1479,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-handed-prop/App.tsx",
+      "start": 1472,
+      "end": 1479,
       "fixes": 0
     }
   ]

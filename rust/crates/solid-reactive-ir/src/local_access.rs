@@ -11049,6 +11049,30 @@ pub(crate) fn unreached_write_may_run(
         )
 }
 
+/// The review of #225 (B3): whether `span` is written directly in the initializer of an instance field, with no function between it and the field: the initializer
+/// runs at each construction, which may be on any stack, so the function the class is written in says nothing of where it runs (a class in a component, stored and
+/// constructed on an effect's apply). A function written in the initializer holds its own sites.
+pub(crate) fn in_instance_field_initializer_directly(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    file.ast
+        .classes
+        .iter()
+        .flat_map(|class| &class.elements)
+        .any(|element| {
+            element.kind == solid_facts::ast::ClassElementKind::Field
+                && !element.r#static
+                && element.value.is_some_and(|value| {
+                    value.contains(span)
+                        && !file
+                            .ast
+                            .functions_owning(span)
+                            .any(|function| value.contains(function.span))
+                })
+        })
+}
+
 /// Whether `span` is in the initializer of an instance field, which runs when
 /// an instance is constructed.
 pub(crate) fn in_instance_field_initializer(

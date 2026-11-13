@@ -22,6 +22,28 @@
       "start": 186,
       "end": 191,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-server-entry-only/App.tsx",
+      "start": 247,
+      "end": 254,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-server-entry-only/App.tsx",
+      "start": 247,
+      "end": 254,
+      "fixes": 0
     }
   ]
 }

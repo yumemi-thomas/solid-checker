@@ -9823,7 +9823,7 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 0971 (B2, the review of #225, F2) adds four SC3001 and four SC6002 rows at the JSX a package component's children and props hold (a getter the checker does not prove where the component reads, decline `getter-runs-where-read`); they stay until a getter proof ends them, and are not what this item restores.",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10069,6 +10069,46 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
      }
     ]
    }
@@ -16788,12 +16828,32 @@
    "held": {
     "adr": "0970",
     "restoredBy": "Prove a package renders a component under an owner, from its dependency source (ADR 0970)",
-    "why": "certified clean before the owner emission took a function a reference enters for a layer like any other: `Admin` is exported and named only by `mod.Admin`, the module a `lazy` loader hands back, so no tag renders it in this program and the `{props.title}` render effect of `Admin` keeps an uncertifiable SC4001 row (`owner-callers-unenumerated`); the proof that `lazy`, a router or `Dynamic` renders the component it is handed under an owner, from the package's source, restores the expectation",
+    "why": "certified clean before the owner emission took a function a reference enters for a layer like any other: `Admin` is exported and named only by `mod.Admin`, the module a `lazy` loader hands back, so no tag renders it in this program and the `{props.title}` render effect of `Admin` keeps an uncertifiable SC4001 row (`owner-callers-unenumerated`); the proof that `lazy`, a router or `Dynamic` renders the component it is handed under an owner, from the package's source, restores the expectation ADR 0971 (B2, the review of #225) adds the SC3001 and SC6002 rows of B3 (`unread-package-may-run`, policy A) at the `<h1>` of `Admin` (handed to the `lazy` package) and at the `<Loading>` of `Route` (the module's namespace escapes through the dynamic `import()`); the same proof-batch item ends them, so the expectation returns to the SC4001 row alone only when they are gone.",
     "expect": [
      {
       "kind": "uncertifiable",
       "rule": "SC4001",
       "context": ""
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
      }
     ]
    }
@@ -16828,7 +16888,24 @@
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
    "weight": 5,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0971",
+    "restoredBy": "Prove a package renders a component under an owner, from its dependency source (ADR 0970)",
+    "why": "(HELD_CAP 59 to 60: raise approved by the coordinator 2026-11-13, restoredBy proof-batch item 1) certified clean before the review of #225 (F2): the children of `<Portal>` are a getter that runs where `Portal` reads `props.children`, which the checker does not prove for a component whose source it has not read for the question; `@solidjs/web`'s `Portal` reads them in a `createMemo` (`dist/web.js`, `portalImpl`), under an owner, so the tracked `{text()}` of the tip's panel keeps an uncertifiable SC3001 and SC6002 row (decline `getter-runs-where-read`); the proof from the component's dependency source, that every read of the prop is in a render or tracked position, restores the expectation",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     }
+    ]
+   }
   },
   {
    "id": "clean-switch-match",

@@ -22,6 +22,28 @@
       "start": 668,
       "end": 677,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-emission-eval/App.tsx",
+      "start": 808,
+      "end": 818,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-emission-eval/App.tsx",
+      "start": 825,
+      "end": 834,
+      "fixes": 0
     }
   ]
 }
