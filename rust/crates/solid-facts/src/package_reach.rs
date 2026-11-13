@@ -58,6 +58,10 @@ impl ReachBlocker {
 /// file: `declare function gtag(…)`), whose provider the declaration does not say: the host, a script or a package may write it (ADR 0973).
 pub const AMBIENT_PREFIX: &str = "ambient:";
 
+/// The prefix of a site's pseudo-path for a global the standard library declares that an installed package writes at run time (`global-write:<name>:<writer root>`): a call
+/// of it runs the writer's code, whatever type the library declares the global with. Its verdict is the writer's (ADR 0973).
+pub const WRITE_PREFIX: &str = "global-write:";
+
 /// The prefix of a site's pseudo-path for a value whose origin the walk could not follow to its end: it stopped at a limit (`origin-limit:array of more than 256 elements`),
 /// so what runs for the value is not decided (ADR 0973).
 pub const LIMIT_PREFIX: &str = "origin-limit:";
@@ -162,6 +166,12 @@ pub struct PackageReachIndex {
     /// The reviewed premises that hold for each root: a reading of the package's source for one API (ADR 0973), pinned to digests of the files read, so it holds
     /// only where the installed bytes are those. The ids are the analysis's (`reviewed_api`).
     pub reviewed: BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// The packages whose closure writes the global of each name (`globalThis.x = …`, `Object.defineProperty(window, "x", …)`), by root (ADR 0973): the installed code the
+    /// program loads that may be what a call of that global runs.
+    pub global_writers: BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// The packages whose closure writes a global under a name the syntax does not fix (`window[key] = v`, `Object.assign(globalThis, source)`): recorded, and not
+    /// followed (see [`PackageReachIndex::global_writer`]).
+    pub global_writers_any: std::collections::BTreeSet<String>,
 }
 
 impl PackageReachIndex {
@@ -199,6 +209,23 @@ impl PackageReachIndex {
             .is_some_and(|ids| ids.contains(id))
     }
 
+    /// The root of an installed package whose closure writes the global `name` and may reach a Solid action: the first such writer, by root. `None` when no installed
+    /// package the program loads writes it by that name, or each that does is clear. A writer under a name the syntax does not fix (`global_writers_any`) is not one for
+    /// every name: measured, a storybook package that writes so made a row of every `Math.max`, `JSON.parse` and `new Map` of a twelve-file project (318 rows).
+    #[must_use]
+    pub fn global_writer(&self, name: &str) -> Option<&str> {
+        self.global_writers
+            .get(name)
+            .into_iter()
+            .flatten()
+            .find(|root| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(String::as_str)
+    }
+
     /// Where the closure of the package a declaration at `path` describes may define an accessor. A path the backend did not decide, and a pseudo-path of a site
     /// ([`AMBIENT_PREFIX`], [`COMPUTED_LOAD_PREFIX`]), is open: any member may be one.
     #[must_use]
@@ -206,6 +233,7 @@ impl PackageReachIndex {
         if path.starts_with(AMBIENT_PREFIX)
             || path.starts_with(COMPUTED_LOAD_PREFIX)
             || path.starts_with(LIMIT_PREFIX)
+            || path.starts_with(WRITE_PREFIX)
             || self.project_js.contains(path)
         {
             return AccessorFacts::open();
@@ -223,6 +251,19 @@ impl PackageReachIndex {
                 detail: format!(
                     "{declared} declares a global, and the host, a script or an installed package may provide it"
                 ),
+            };
+        }
+        if let Some(written) = path.strip_prefix(WRITE_PREFIX) {
+            // `global-write:<name>:<writer root>`: the writer's closure decides.
+            let (name, root) = written.split_once(':').unwrap_or((written, ""));
+            return match self.by_root.get(root) {
+                Some(reach) => reach.clone(),
+                None => PackageReach::Undecided {
+                    blocker: ReachBlocker::UnknownGlobal,
+                    detail: format!(
+                        "{root} writes the global {name}, and no verdict is recorded for it"
+                    ),
+                },
             };
         }
         if let Some(what) = path.strip_prefix(LIMIT_PREFIX) {
@@ -442,6 +483,41 @@ mod tests {
         let computed = index.for_declaration("computed-load:import()");
         assert_eq!(computed.word(), "dynamic-load");
         assert!(!computed.is_clear());
+        // A global a package writes answers with the writer's verdict.
+        let mut written = PackageReachIndex::default();
+        written.by_root.insert(
+            "/p/node_modules/w".to_owned(),
+            PackageReach::ReachesSolid {
+                via: "solid-js".to_owned(),
+            },
+        );
+        written
+            .by_root
+            .insert("/p/node_modules/c".to_owned(), PackageReach::Clear);
+        written
+            .global_writers
+            .entry("setTimeout".to_owned())
+            .or_default()
+            .extend([
+                "/p/node_modules/c".to_owned(),
+                "/p/node_modules/w".to_owned(),
+            ]);
+        assert_eq!(
+            written.global_writer("setTimeout"),
+            Some("/p/node_modules/w")
+        );
+        assert_eq!(written.global_writer("fetch"), None);
+        assert_eq!(
+            written
+                .for_declaration("global-write:setTimeout:/p/node_modules/w")
+                .word(),
+            "reaches-solid"
+        );
+        // A writer under no fixed name is no global's in particular: it is not followed.
+        written
+            .global_writers_any
+            .insert("/p/node_modules/w".to_owned());
+        assert_eq!(written.global_writer("fetch"), None);
         let limit = index.for_declaration("origin-limit:an array of more than 256 elements");
         assert_eq!(limit.word(), "origin-limit");
         assert!(!limit.is_clear());

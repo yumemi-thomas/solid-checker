@@ -29,7 +29,7 @@ use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use solid_facts::package_reach::{
     AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, LIMIT_PREFIX, PackageReach, ReachBlocker,
-    is_declaration_file, package_label, package_root_of,
+    WRITE_PREFIX, is_declaration_file, package_label, package_root_of,
 };
 
 use crate::execution_role::RootBodyGuard;
@@ -92,6 +92,8 @@ pub(crate) enum Provider {
     Ambient,
     /// A value whose origin the walk could not follow to its end ([`LIMIT_PREFIX`]).
     Limit,
+    /// A global the standard library declares that an installed package writes at run time ([`WRITE_PREFIX`]): the call runs the writer's code.
+    Written,
 }
 
 /// How a site's callee is resolved to the code it enters.
@@ -210,16 +212,24 @@ fn file_sites(
         if !seen.insert((at, entry)) {
             return;
         }
-        let package = package_root_of(&declaration.path)
-            .map(|root| installed_name(ctx, root))
-            .unwrap_or_else(|| {
-                declaration
-                    .path
-                    .strip_prefix(AMBIENT_PREFIX)
-                    .or_else(|| declaration.path.strip_prefix(LIMIT_PREFIX))
-                    .unwrap_or(&declaration.path)
-                    .to_owned()
-            });
+        let package = match declaration.path.strip_prefix(WRITE_PREFIX) {
+            // `global-write:<name>:<writer root>`: the global the call is of; the closure the row names is the writer's.
+            Some(written) => written
+                .split_once(':')
+                .map_or(written, |(name, _)| name)
+                .to_owned(),
+            None => package_root_of(&declaration.path).map_or_else(
+                || {
+                    declaration
+                        .path
+                        .strip_prefix(AMBIENT_PREFIX)
+                        .or_else(|| declaration.path.strip_prefix(LIMIT_PREFIX))
+                        .unwrap_or(&declaration.path)
+                        .to_owned()
+                },
+                |root| installed_name(ctx, root),
+            ),
+        };
         sites.push(PackageSite {
             at,
             callee,
@@ -230,6 +240,8 @@ fn file_sites(
                 Provider::Ambient
             } else if declaration.path.starts_with(LIMIT_PREFIX) {
                 Provider::Limit
+            } else if declaration.path.starts_with(WRITE_PREFIX) {
+                Provider::Written
             } else {
                 Provider::Package
             },
@@ -713,6 +725,7 @@ fn is_pseudo(path: &str) -> bool {
     path.starts_with(AMBIENT_PREFIX)
         || path.starts_with(LIMIT_PREFIX)
         || path.starts_with(COMPUTED_LOAD_PREFIX)
+        || path.starts_with(WRITE_PREFIX)
 }
 
 /// Where the value an expression names came from.
@@ -815,7 +828,14 @@ fn origin_of(
             Origin::Lazy(_) | Origin::Runtime => Origin::Runtime,
             // A member of a global the standard library declares is the host's where the library alone declares the member, and code something else provides
             // where a package or a declaration file adds it (`window.__act`).
-            Origin::Host => host_member_origin(ctx, analyzed, file, member.span, member.property),
+            Origin::Host => host_member_origin(
+                ctx,
+                analyzed,
+                file,
+                member.span,
+                member.object,
+                member.property,
+            ),
             // A member of a project module's namespace is what the module exports under that name.
             Origin::Namespace(path) => {
                 namespace_export_origin(ctx, analyzed, file, member, &path, depth - 1)
@@ -977,9 +997,47 @@ fn global_origin(
     };
     let paths = declaration_paths_of(declarations);
     if paths.is_empty() || paths.iter().any(|path| path.starts_with("bundled:")) {
-        return Origin::Host;
+        // The library's declaration types the global; whether an installed package replaces it at run time is a fact of the packages' code, not of the type.
+        return file
+            .source_text(span)
+            .and_then(|name| written_global(ctx, name))
+            .unwrap_or(Origin::Host);
     }
     declarations_origin(ctx, analyzed, &paths).unwrap_or(Origin::Unknown)
+}
+
+/// The origin of a global the standard library declares that some installed package the program loads writes at run time and may reach a Solid action there
+/// (`globalThis.setTimeout = …`, `Object.defineProperty(window, "fetch", …)`, found by the scan of each package's closure): the writer's code is what a call of it runs,
+/// whatever type the library declares the global with. The premise is that types are sound for declarations and runtime writes come from the scan.
+fn written_global(ctx: &AnalysisContext<'_>, name: &str) -> Option<Origin> {
+    let root = ctx.package_reach?.global_writer(name)?;
+    Some(Origin::Package(DeclarationAt {
+        path: format!("{WRITE_PREFIX}{name}:{root}"),
+    }))
+}
+
+/// Whether `span` is the global object: an unbound `window`, `self`, `globalThis`, … or a member of it that gives it back (`window.self`, `document.defaultView`).
+fn is_global_object(file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    if let Some(member) = ast.member_at(span) {
+        if ast.computed_members.binary_search(&span).is_ok() {
+            return false;
+        }
+        let Some(name) = file.source_text(member.property) else {
+            return false;
+        };
+        let object = ast.peel_ts_sugar_span(member.object);
+        return (solid_facts::module_reach::is_global_object_name(name)
+            && is_global_object(file, object))
+            || (matches!(name, "defaultView")
+                && ast.reference_declaration(object).is_none()
+                && matches!(file.source_text(object), Some("document")));
+    }
+    ast.reference_declaration(span).is_none()
+        && file
+            .source_text(span)
+            .is_some_and(solid_facts::module_reach::is_global_object_name)
 }
 
 /// Where a member read off a global the standard library declares came from, by where the compiler says the member itself is declared (the symbol of its property
@@ -993,20 +1051,35 @@ fn host_member_origin(
     analyzed: &HashSet<&str>,
     file: &FileFacts,
     member: Span,
+    object: Span,
     property: Span,
 ) -> Origin {
     let lookup = ctx.semantic_lookup;
+    // A member of the global object is a global: one an installed package writes at run time is that package's code, whatever the library's declaration says.
+    let written = || {
+        is_global_object(file, object)
+            .then(|| file.source_text(property))
+            .flatten()
+            .and_then(|name| written_global(ctx, name))
+    };
     let paths = match lookup.alias_root_declarations(file, property) {
         Some(declarations) => declaration_paths_of(declarations),
         None => match lookup
             .resolved_callee_call(file, member)
             .and_then(|resolved| resolved.declaration.as_ref())
         {
-            Some(declaration) if declaration.standard_library => return Origin::Host,
+            Some(declaration) if declaration.standard_library => {
+                return written().unwrap_or(Origin::Host);
+            }
             Some(declaration) => vec![declaration.location.path.to_string()],
             None => Vec::new(),
         },
     };
+    if paths.iter().any(|path| path.starts_with("bundled:"))
+        && let Some(origin) = written()
+    {
+        return origin;
+    }
     if !paths.is_empty() && paths.iter().all(|path| path.starts_with("bundled:")) {
         return Origin::Host;
     }
@@ -2197,6 +2270,7 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
             match site.provider {
                 Provider::Ambient => "a declaration file whose global the host, a script or a package this build does not read as source may provide",
                 Provider::Limit => "a value whose origin this build's walk could not follow to its end",
+                Provider::Written => "a global the standard library declares, which an installed package this build does not read as source writes at run time",
                 Provider::Package => "a package this build does not read as source",
             },
             site.reach.describe()

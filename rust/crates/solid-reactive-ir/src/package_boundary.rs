@@ -333,6 +333,10 @@ impl PackageBoundary {
             folded.linked.extend(index.linked);
             folded.project_js.extend(index.project_js);
             folded.accessors.extend(index.accessors);
+            for (name, roots) in index.global_writers {
+                folded.global_writers.entry(name).or_default().extend(roots);
+            }
+            folded.global_writers_any.extend(index.global_writers_any);
             for (root, ids) in index.reviewed {
                 folded.reviewed.entry(root).or_default().extend(ids);
             }
@@ -390,7 +394,7 @@ impl PackageBoundary {
         }
         // ADR 0972: an absent index adds nothing, so the digest of a boundary without one is unchanged.
         if let Some(index) = &self.package_reach {
-            hash.update(b"package-reach-v2");
+            hash.update(b"package-reach-v3");
             hash.update((index.by_root.len() as u64).to_be_bytes());
             for (root, reach) in &index.by_root {
                 text(hash, root);
@@ -415,6 +419,19 @@ impl PackageBoundary {
                 for id in ids {
                     text(hash, id);
                 }
+            }
+            // ADR 0973: the packages that write each global.
+            hash.update((index.global_writers.len() as u64).to_be_bytes());
+            for (name, roots) in &index.global_writers {
+                text(hash, name);
+                hash.update((roots.len() as u64).to_be_bytes());
+                for root in roots {
+                    text(hash, root);
+                }
+            }
+            hash.update((index.global_writers_any.len() as u64).to_be_bytes());
+            for root in &index.global_writers_any {
+                text(hash, root);
             }
             // ADR 0973: where each closure may define an accessor.
             hash.update((index.accessors.len() as u64).to_be_bytes());

@@ -194,17 +194,31 @@ pub fn package_reach_index(
         .collect::<HashMap<_, _>>();
     let mut index = PackageReachIndex::default();
     for (root, named) in roots {
-        let (reach, accessors) = match named.runtime {
-            Ok(runtime) => match verdicts.get(&runtime) {
+        let (reach, accessors) = match &named.runtime {
+            Ok(runtime) => match verdicts.get(runtime) {
                 Some(closure) => (closure.reach.clone(), closure.accessors.clone()),
                 None => (
-                    missing(format!("no verdict for {}", short(&runtime))),
+                    missing(format!("no verdict for {}", short(runtime))),
                     AccessorFacts::open(),
                 ),
             },
-            Err(reach) => (reach, AccessorFacts::open()),
+            Err(reach) => (reach.clone(), AccessorFacts::open()),
         };
         index.accessors.insert(root.clone(), accessors);
+        if let Ok(runtime) = &named.runtime
+            && let Some(closure) = verdicts.get(runtime)
+        {
+            for written in &closure.global_writes.names {
+                index
+                    .global_writers
+                    .entry(written.clone())
+                    .or_default()
+                    .insert(root.clone());
+            }
+            if closure.global_writes.any_name {
+                index.global_writers_any.insert(root.clone());
+            }
+        }
         if let Some(name) = manifest(Path::new(&root))
             .ok()
             .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
@@ -604,6 +618,8 @@ struct Closure {
     problems: Vec<PackageReach>,
     /// Where the closure may define an accessor.
     accessors: AccessorFacts,
+    /// The globals the closure writes (ADR 0973).
+    global_writes: solid_facts::module_reach::GlobalWrites,
 }
 
 /// The closure walk of one package. It reads the whole closure: a hazard, an unreadable file or a load of Solid ends nothing but that branch (a Solid package is
@@ -624,6 +640,7 @@ fn package_reach(
             reach: PackageReach::ReachesSolid { via: name.clone() },
             problems: vec![PackageReach::ReachesSolid { via: name }],
             accessors: AccessorFacts::open(),
+            global_writes: solid_facts::module_reach::GlobalWrites::default(),
         };
     }
     let mut walk = Walk {
@@ -634,6 +651,8 @@ fn package_reach(
         problems: Vec::new(),
         accessor_names: BTreeSet::new(),
         accessors_any_name: false,
+        written: BTreeSet::new(),
+        written_any: false,
     };
     walk.run(root, demand, extra_entries);
     // Only a load of Solid's runtime is a known value from outside the closure: any other problem leaves code, or a value, the walk did not read.
@@ -653,6 +672,10 @@ fn package_reach(
             names: walk.accessor_names,
             any_name: walk.accessors_any_name,
         },
+        global_writes: solid_facts::module_reach::GlobalWrites {
+            names: walk.written.into_iter().collect(),
+            any_name: walk.written_any,
+        },
     }
 }
 
@@ -670,6 +693,9 @@ struct Walk<'s, 'd> {
     /// The names accessors are defined under in the files read, and whether any is defined under a name the syntax does not fix.
     accessor_names: BTreeSet<String>,
     accessors_any_name: bool,
+    /// The globals the files read write (ADR 0973), and whether any is written under a name the syntax does not fix.
+    written: BTreeSet<String>,
+    written_any: bool,
 }
 
 impl Walk<'_, '_> {
@@ -770,6 +796,9 @@ impl Walk<'_, '_> {
         self.accessor_names
             .extend(scan.accessors.names.iter().cloned());
         self.accessors_any_name |= scan.accessors.any_name;
+        self.written
+            .extend(scan.global_writes.names.iter().cloned());
+        self.written_any |= scan.global_writes.any_name;
         let directory = file.parent().unwrap_or(Path::new("/"));
         for specifier in &scan.loads {
             if let Err(problem) = self.load(file, directory, specifier) {
