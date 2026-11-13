@@ -615,6 +615,15 @@
    "rules": [
     "sync-computation-received-async"
    ]
+  },
+  {
+   "id": "pkgaction/patch-f32-undeclared",
+   "item": "ADR 0973 named miss: a builtin prototype a package extends without declaring it (`Float32Array.prototype.reverse = …`): no fact of the whole program says who writes the shared object",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
   }
  ],
  "notGenerated": [
