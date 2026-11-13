@@ -88,6 +88,17 @@
       "start": 683,
       "end": 688,
       "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/links/Routes.tsx",
+      "start": 922,
+      "end": 938,
+      "fixes": 0
     }
   ]
 }

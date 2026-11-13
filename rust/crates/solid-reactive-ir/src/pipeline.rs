@@ -339,6 +339,10 @@ pub(crate) struct AnalysisContext<'a> {
     /// the compatibility pass).
     pub(crate) source_reference_locations:
         std::sync::OnceLock<std::sync::Arc<crate::cache::SourceReferenceLocations>>,
+    /// ADR 0972: the sites that enter code of a package the build does not read ([`crate::package_action_calls::sites`]): found once per
+    /// build, for both the row pass and the proof universe.
+    pub(crate) package_sites:
+        std::sync::OnceLock<Vec<Vec<crate::package_action_calls::PackageSite>>>,
 }
 
 /// What one analysis is given about the code it cannot read: the package
@@ -769,6 +773,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         rule_options,
         unchanged_paths: &source_discovery.unchanged_paths,
         source_reference_locations: std::sync::OnceLock::new(),
+        package_sites: std::sync::OnceLock::new(),
     };
     // The two after-await rules, the prepass's and the one over calls the
     // interprocedural pass attributed, ask the same project-wide index: it is

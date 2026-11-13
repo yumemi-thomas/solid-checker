@@ -46,6 +46,27 @@ export function ReachValue() {
   run(() => {});
   return null;
 }
+export function ReachRenderMember() {
+  return <Reach.StepView />;
+}
+export function ReachRenderAlias() {
+  const View = Reach.StepView;
+  return <View />;
+}
+export function ReachNamespaceValue() {
+  [1].map(Reach.reset);
+  return null;
+}
+export function ReachShorthand() {
+  const table = { runStep };
+  void table;
+  return null;
+}
+export function ReachDestructured() {
+  const { runStep: go } = Reach;
+  go(() => {});
+  return null;
+}
 export function ReachThroughPackage() {
   wrapped(() => {});
   return null;
@@ -109,6 +130,11 @@ export function App() {
       <ReachNew />
       <ReachTag />
       <ReachRender />
+      <ReachRenderMember />
+      <ReachRenderAlias />
+      <ReachNamespaceValue />
+      <ReachShorthand />
+      <ReachDestructured />
       <ReachValue />
       <ReachThroughPackage />
       <DynamicLoad />

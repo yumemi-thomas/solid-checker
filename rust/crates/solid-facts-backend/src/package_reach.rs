@@ -120,7 +120,7 @@ impl SolidPackages<'_> {
     }
 }
 
-/// The reach verdicts for every package (and project declaration file) that the project's facts name a declaration in.
+/// The reach verdicts for every installed package the project's facts name a declaration in.
 #[must_use]
 pub fn package_reach_index(
     facts: &solid_facts::ProjectFacts,
@@ -129,45 +129,46 @@ pub fn package_reach_index(
     let mut index = PackageReachIndex::default();
     let mut runtime = HashMap::<PathBuf, PackageReach>::new();
     for path in declaration_paths(facts) {
-        let key = package_root_of(&path).unwrap_or(&path).to_owned();
-        if index.by_root.contains_key(&key) {
+        let Some(root) = package_root_of(&path) else {
+            continue;
+        };
+        if index.by_root.contains_key(root) {
             continue;
         }
-        let reach = match package_root_of(&path) {
-            Some(root) => {
-                let root = PathBuf::from(root);
-                match runtime_root(&root) {
-                    Ok(root) => runtime
-                        .entry(root.clone())
-                        .or_insert_with(|| package_reach(&root, solid))
-                        .clone(),
-                    Err(reach) => reach,
-                }
-            }
-            None => PackageReach::Undecided {
-                blocker: ReachBlocker::AmbientDeclaration,
-                detail: short(Path::new(&path)),
-            },
+        let reach = match runtime_root(Path::new(root)) {
+            Ok(runtime_root) => runtime
+                .entry(runtime_root.clone())
+                .or_insert_with(|| package_reach(&runtime_root, solid))
+                .clone(),
+            Err(reach) => reach,
         };
-        index.by_root.insert(key, reach);
+        index.by_root.insert(root.to_owned(), reach);
     }
     index
 }
 
-/// The declaration files and installed files the project's own files name a declaration in: each call's resolved declaration (outside the
+/// The installed files (under `node_modules`) the project's own files name a declaration in: each call's resolved declaration (outside the
 /// standard library), each referenced symbol's declarations, through its alias, and each attested import's file.
 fn declaration_paths(facts: &solid_facts::ProjectFacts) -> BTreeSet<String> {
     let mut paths = BTreeSet::new();
     let mut keep = |path: &str| {
-        if !path.starts_with("bundled:") && (path.contains("/node_modules/") || is_declaration_file(path)) {
+        if !path.starts_with("bundled:") && path.contains("/node_modules/") {
             paths.insert(path.to_owned());
         }
     };
-    // The files the compiler resolved the project's imports to: a tag or a member no entity names is decided through its import.
+    // The files the compiler resolved the project's imports to: a tag or a member no entity names is decided through its import. A linked
+    // workspace package resolves to its real path; the `node_modules` spelling of the link names it.
     if let Some(imports) = &facts.resolved_imports {
         for (importer, import) in imports.iter() {
-            if !importer.contains("/node_modules/") && facts.dependency_source_root(importer).is_none() && !import.resolved_path.is_empty() {
+            if importer.contains("/node_modules/")
+                || facts.dependency_source_root(importer).is_some()
+            {
+                continue;
+            }
+            if import.symlink_path.is_empty() {
                 keep(&import.resolved_path);
+            } else {
+                keep(&import.symlink_path);
             }
         }
     }
@@ -222,6 +223,10 @@ fn runtime_root(root: &Path) -> Result<PathBuf, PackageReach> {
         Some((scope, name)) => format!("@{scope}/{name}"),
         None => described.to_owned(),
     };
+    // `@types/node` describes the host's builtins (`node:fs`, `Buffer`): the runtime, no package's code, and no Solid in it.
+    if described == "node" {
+        return Err(PackageReach::Clear);
+    }
     find_package_root(&root.join("package.json"), &described, None)
         .and_then(|root| root.canonicalize().ok())
         .ok_or_else(|| PackageReach::Undecided {
@@ -488,6 +493,12 @@ fn scanned(file: &Path) -> Result<Arc<ModuleScan>, PackageReach> {
 
 /// A path as a bundler resolves it: the file, the file with an extension, a directory's manifest `main` or its `index` file. Canonical.
 fn resolve_path(base: &Path) -> Option<PathBuf> {
+    resolve_path_following(base, true)
+}
+
+/// [`resolve_path`]; `follow_main` is whether a directory's `main` is read, which only the first directory of a resolution does (a `main` naming a
+/// directory is resolved by its `index` file, and a `main` of `""`, `"."` or the directory itself would otherwise never end).
+fn resolve_path_following(base: &Path, follow_main: bool) -> Option<PathBuf> {
     if base.is_file() {
         return base.canonicalize().ok();
     }
@@ -499,9 +510,13 @@ fn resolve_path(base: &Path) -> Option<PathBuf> {
         }
     }
     if base.is_dir() {
-        if let Ok(manifest) = manifest(base)
-            && let Some(main) = manifest.get("main").and_then(serde_json::Value::as_str)
-            && let Some(target) = resolve_path(&base.join(main))
+        if follow_main
+            && let Ok(manifest) = manifest(base)
+            && let Some(main) = manifest
+                .get("main")
+                .and_then(serde_json::Value::as_str)
+                .filter(|main| !main.is_empty())
+            && let Some(target) = resolve_path_following(&base.join(main), false)
         {
             return Some(target);
         }
@@ -547,11 +562,16 @@ fn package_entries(root: &Path) -> Result<Vec<PathBuf>, PackageReach> {
         }
         _ => {}
     }
+    targets.retain(|target| !target.is_empty());
     if targets.is_empty() {
         targets.push("./index.js".to_owned());
     }
     let mut entries = BTreeSet::new();
     for target in targets {
+        // `"main": ""` (csstype, @webgpu/types) names nothing: Node falls back to `index.js`, which `targets` already holds when none else is named.
+        if target.is_empty() {
+            continue;
+        }
         let relative = target.trim_start_matches("./");
         if target.contains('*') {
             entries.extend(expand_pattern(root, relative));
@@ -946,6 +966,43 @@ mod tests {
             .canonicalize()
             .unwrap();
         assert!(runtime_root(&gone).is_err());
+    }
+
+    /// csstype and @webgpu/types ship `"main": ""`: resolving it followed the directory's own `main` back to the directory and overflowed the stack.
+    #[test]
+    fn a_main_that_names_nothing_ends() {
+        let directory = project();
+        let root = directory.path();
+        for (name, main) in [
+            ("empty", ""),
+            ("dot", "."),
+            ("slash", "./"),
+            ("self", "../self"),
+        ] {
+            write(
+                root,
+                &format!("node_modules/{name}/package.json"),
+                &format!(r#"{{"name":"{name}","main":"{main}"}}"#),
+            );
+            write(
+                root,
+                &format!("node_modules/{name}/index.js"),
+                "export const x = 1;",
+            );
+            assert_eq!(reach(root, name), PackageReach::Clear, "{name}");
+        }
+        // A manifest naming no `main` and no `index.js` has no runtime file: nothing to reach Solid.
+        write(
+            root,
+            "node_modules/typesonly/package.json",
+            r#"{"name":"typesonly","main":"","types":"index.d.ts"}"#,
+        );
+        write(
+            root,
+            "node_modules/typesonly/index.d.ts",
+            "export declare const x: number;",
+        );
+        assert_eq!(reach(root, "typesonly"), PackageReach::Clear);
     }
 
     #[test]

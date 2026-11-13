@@ -1152,7 +1152,7 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
 /// outside dependency source.
 fn inline_action_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
     let lookup = ctx.semantic_lookup;
-    for file in crate::base::reads::file_slots(ctx.facts) {
+    for file in lookup.files() {
         if lookup.in_dependency_source(file.path.as_str()) {
             continue;
         }
@@ -1160,7 +1160,9 @@ fn inline_action_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileF
             let Some(inner) = file.ast.call_at(file.ast.peel_ts_sugar_span(call.callee)) else {
                 continue;
             };
-            if lookup.primitive_at_call(file, inner.span) == Some(solid_dialect::Primitive::Action)
+            if lookup
+                .primitive_at_call(file, inner.span)
+                .is_some_and(|primitive| ctx.dialect.returns_action(primitive))
             {
                 found.push((
                     file,

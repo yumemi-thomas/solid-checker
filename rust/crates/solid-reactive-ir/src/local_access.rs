@@ -2825,8 +2825,9 @@ impl LocalAccessContext<'_, '_> {
                 .ast
                 .call_at(file.ast.peel_ts_sugar_span(call.callee))
                 .filter(|inner| {
-                    self.lookup.primitive_at_call(file, inner.span)
-                        == Some(solid_dialect::Primitive::Action)
+                    self.lookup
+                        .primitive_at_call(file, inner.span)
+                        .is_some_and(|primitive| self.lookup.dialect.returns_action(primitive))
                 })
             {
                 self.push_inline_action_invocation(file, call, created, allowed, result);

@@ -937,6 +937,12 @@
         "why": "`rows.retain` selects the program rows located in a package for the entry table (a view, nothing removed from the program); the `dedup_by` calls remove a project site, or a claim of the same rule, equal in location to its neighbour in the table and in the handed-value claims, which keep one row per site and rule"
       }
     },
+    "rust/crates/solid-reactive-ir/src/package_action_calls.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "polarity: yes means the value may be a function, which keeps the site (an uncertifiable SC2002 row, never a silence); a symbol with no declaration the compiler resolved, or a list of none, is a value nothing says is a type, so it stays a site"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/package_boundary.rs": {
       "silent-unmatched-slot": {
         "count": 1,

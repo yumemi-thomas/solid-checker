@@ -184,6 +184,17 @@ impl SemanticLookup<'_> {
 }
 
 impl<'a> SemanticLookup<'a> {
+    /// ADR 0972: the compiler's declarations of the symbol at `span` of `file`, followed through its alias chain (an import's target, a re-export's) to the one
+    /// that is no alias: the files the value's code is declared in. `None` when nothing resolves at `span` ([`Self::alias_root_at`]'s answer, recorded reads).
+    pub(crate) fn alias_root_declarations(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<&'a [typefacts::Declaration]> {
+        self.alias_root_at(file, span)
+            .map(|symbol| symbol.declarations())
+    }
+
     /// The symbol at `span`, followed through its alias chain to the one that is no alias. Its alias target and declarations, in any file (a project script merging a
     /// declaration into a runner's global, a module augmentation, a re-export edited elsewhere), are read from the TypeScript table: a recorded read of each symbol
     /// visited, the root included, as `intrinsic_tag_prop` does. `None` when nothing resolves at `span`, a target is absent (an absent target is an answer too), the

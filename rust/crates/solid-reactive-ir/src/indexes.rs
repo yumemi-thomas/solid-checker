@@ -2810,14 +2810,6 @@ impl<'a> SemanticLookup<'a> {
             .map(|candidate| candidate.declarations())
     }
 
-    /// ADR 0972: the symbol an import alias `symbol` stands for, `None` when it is no alias or Type Facts does not know it.
-    pub(crate) fn alias_target_of(&self, symbol: &str) -> Option<&'a str> {
-        self.symbols_by_id()
-            .get(symbol)
-            .map(|candidate| candidate.alias_target())
-            .filter(|target| !target.is_empty())
-    }
-
     /// TypeScript's references to `symbol`, `None` when it has no list: a
     /// view of the table's own rows, read where they are.
     pub(super) fn symbol_references_if_present(

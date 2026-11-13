@@ -1365,6 +1365,10 @@ pub trait Dialect: Sync {
     /// this answer alone cannot distinguish a store from its setter.
     fn returns_store(&self, primitive: Primitive) -> bool;
 
+    /// Whether this primitive returns an action: a function whose call starts a write transaction, which the runtime refuses under an owner
+    /// (`ACTION_CALLED_IN_OWNED_SCOPE`). A call of what it returns, written where the primitive is called (`action(step)()`), is that call.
+    fn returns_action(&self, primitive: Primitive) -> bool;
+
     /// Whether an evaluated Get of this known string key on a runtime store
     /// can warn in this dialect's strict untracked read scope. This is not a
     /// claim about dependency tracking: protocol and symbol keys can differ.

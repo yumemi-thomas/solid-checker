@@ -24,8 +24,6 @@ pub enum ReachBlocker {
     ManifestUnread,
     /// The closure is larger than the walk follows.
     ClosureLimit,
-    /// The declaration is in a declaration file of the project itself (`declare module`, `declare function`): no package holds its code.
-    AmbientDeclaration,
     /// The adapter reads no filesystem (the WASM `analyze` entry): nothing is decided.
     NoFilesystem,
 }
@@ -44,7 +42,6 @@ impl ReachBlocker {
             Self::GlobalObjectEscape => "global-object-escape",
             Self::ManifestUnread => "manifest-unread",
             Self::ClosureLimit => "closure-limit",
-            Self::AmbientDeclaration => "ambient-declaration",
             Self::NoFilesystem => "no-filesystem",
         }
     }
@@ -93,8 +90,8 @@ impl PackageReach {
     }
 }
 
-/// The verdicts the backend decided, by package root (the directory under the last `node_modules` component of a declaration's path, see
-/// [`package_root_of`]) or, for a declaration file of the project itself, by that file's path.
+/// The verdicts the backend decided, by installed package root (the directory under the last `node_modules` component of a declaration's path, see
+/// [`package_root_of`]).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PackageReachIndex {
     pub by_root: BTreeMap<String, PackageReach>,
