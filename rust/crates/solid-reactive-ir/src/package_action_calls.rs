@@ -207,8 +207,9 @@ fn file_sites(
             return;
         }
         // A site two routes find (an identifier and the member it is the object of) stands once; a clear package's value handed to the same call never hides
-        // another's. A read where the value is already handed on as one (`const { now } = clock`, an import that may be a function) is that site's row.
-        if entry == Entry::Read && seen.contains(&(at, Entry::Value)) {
+        // another's. A read where the value is already handed on as one (`const { now } = clock`, an import that may be a function) is that site's row: the value
+        // read is the callee's span, which is the site's own for a member.
+        if entry == Entry::Read && seen.contains(&(callee, Entry::Value)) {
             return;
         }
         if !seen.insert((at, entry)) {
@@ -406,11 +407,12 @@ fn file_sites(
             slots
         });
         let mut names = Vec::<Option<&str>>::new();
+        // The getter runs where the pattern reads the key (`{ now }`: the runtime reports the pattern's start), not where the value was named.
         if pattern_keys(slots, pattern, &mut names, 0)
             && !names.is_empty()
             && accessor_facts(ctx, &origin.path).may_run(&names)
         {
-            push(at, at, Entry::Read, Some(origin));
+            push(pattern, at, Entry::Read, Some(origin));
         }
     }
     for property in &file.ast.object_properties {
