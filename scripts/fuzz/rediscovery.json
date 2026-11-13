@@ -21138,5 +21138,23 @@
    "mx-untracked-read-after-await-cs-element-effect-x-direct-none"
   ],
   "rediscovered": "main 177402dfb (release, checker sha256 51bb4a4aff15…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's uncertifiable row at the read is the only finding; 8 oracle comparisons, 0 differences). This build (release, checker sha256 17086252a38f…): recall-gap 8, 0 false clean. The 16 twins (`lg-recall`: `-never` starts nothing, `-before` reads ahead of the await) are uncertifiable on both builds (SC1001's row), 0 false positive"
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's site written in a getter that a hidden-start async function reaches through a project function (`work` calls `peek()` after its `await`, `peek` returns `holder.value`; `work` is started as a computation through a form the producers' index does not follow, so no computation is recognized and ADR 0963's member-route net, which rows a read written in a getter, is off): Chrome (rc.21) reports the code at the getter's read, and the checker had SC1001's uncertifiable row there and nothing of SC1002, so the program was certified clean for the claiming rule (a false clean). The first build of slice 9B's callee reason made it worse by ending the call that covered the read",
+  "found": "batch 11, slice 9B (mac8, 2026-11-13): the probe of the callee reason against the census hazard before it landed (the oracle case after-await-universe-census-callee); as the getter route of `cs-shapes.mjs` (`cs-<form>-<host>-getter`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0973 (batch 11, slice 9B): the callee reason requires a tracked async computation in the program (`holds_suspending`, where the member-route net runs); without one the call keeps SC1002's uncertifiable row, which covers the getter's read by a frame of its stack",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-cs-wrapper-memo-getter-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-getter-x-direct-none",
+   "mx-untracked-read-after-await-cs-call-memo-getter-x-direct-none",
+   "mx-untracked-read-after-await-cs-call-effect-getter-x-direct-none",
+   "mx-untracked-read-after-await-cs-reflect-memo-getter-x-direct-none",
+   "mx-untracked-read-after-await-cs-reflect-effect-getter-x-direct-none",
+   "mx-untracked-read-after-await-cs-element-memo-getter-x-direct-none",
+   "mx-untracked-read-after-await-cs-element-effect-getter-x-direct-none"
+  ],
+  "rediscovered": "main 177402dfb (release, checker sha256 51bb4a4aff15…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's row at the getter's read is the only finding; the 16 programs of both routes: 16 oracle comparisons, 0 differences). The slice's build before the census condition (release, sha256 17086252a38f…): false-clean 8. This build (release, sha256 88586e11a2ef…, commit 2 of the series): recall-gap 8, 0 false clean. The 16 twins (`lg-recall`: `-never`, `-before`) are uncertifiable on all three builds (SC1001's row), 0 false positive"
  }
 ]

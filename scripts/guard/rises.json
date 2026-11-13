@@ -536,6 +536,70 @@
    "to": 1,
    "adr": "ADR 0973",
    "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-cross-file-same-span",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/parameter-initializer-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-already-tracked",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/stored-function-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-role",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   }
  ]
 }

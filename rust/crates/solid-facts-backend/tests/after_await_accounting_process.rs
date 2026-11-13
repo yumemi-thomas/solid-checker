@@ -8,6 +8,7 @@
 use std::{collections::BTreeSet, env, fs, path::Path, process::Command};
 
 const BLOCKER: &str = "read-after-await-unaccounted";
+const CALLEE_READS_NOTHING: &str = "after_await_accounting.account.callee-reads-nothing";
 const NEVER_RUNS: &str = "after_await_accounting.account.never-runs";
 
 fn fixture(name: &str) -> std::path::PathBuf {
@@ -134,7 +135,7 @@ fn a_site_no_reason_ends_gets_sc1002s_uncertifiable_row() {
 }
 
 #[test]
-fn the_reason_ends_exactly_its_sites() {
+fn each_reason_ends_exactly_its_sites() {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
     let name = "after-await-universe-none";
     let source = source(name);
@@ -143,13 +144,43 @@ fn the_reason_ends_exactly_its_sites() {
         unaccounted(&named).is_empty(),
         "a site is unaccounted with every reason named"
     );
+    let callee = BTreeSet::from([at(&source, "double(2);", ""), at(&source, "quad(2);", "")]);
     let never = BTreeSet::from([
         at(&source, "stringify(1);", ""),
         at(&source, "stringify(2);", ""),
     ]);
-    // The reason by id, not `all`: `all` also drops every other pass's silences (the owner stage's, the flush accounting's), which file rows of their own.
+    let ablated = check(&typefacts, name, Some(CALLEE_READS_NOTHING));
+    only_these_moved(&named, &ablated, &callee);
     let ablated = check(&typefacts, name, Some(NEVER_RUNS));
     only_these_moved(&named, &ablated, &never);
+    // Both reasons by id, not `all`: `all` also drops every other pass's silences (the owner stage's, the flush accounting's), which file rows of their own.
+    let ablated = check(
+        &typefacts,
+        name,
+        Some(&format!("{CALLEE_READS_NOTHING},{NEVER_RUNS}")),
+    );
+    only_these_moved(&named, &ablated, &callee.union(&never).copied().collect());
+}
+
+#[test]
+fn a_chain_within_the_closure_bound_ends_and_one_beyond_it_keeps_its_row() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let name = "after-await-universe-depth";
+    let source = source(name);
+    let named = check(&typefacts, name, None);
+    let rows = unaccounted(&named);
+    // 60 pure project functions are within the bound (`MAX_CLOSURE_DEPTH`, 64): the callee summary concludes and the call has no row. 67 are beyond it: the search stops
+    // (`blocked:depth`) and the call keeps the uncertifiable row.
+    let within = at(&source, "e0();", "");
+    let beyond = at(&source, "d0();", "");
+    assert!(!rows.contains(&within), "a chain within the bound ends");
+    assert!(
+        rows.contains(&beyond),
+        "a chain beyond the bound keeps its row"
+    );
+    // The mutation of the reason: dropping it files exactly the site it ended.
+    let ablated = check(&typefacts, name, Some(CALLEE_READS_NOTHING));
+    only_these_moved(&named, &ablated, &BTreeSet::from([within]));
 }
 
 #[test]
@@ -188,11 +219,20 @@ fn a_program_without_a_recognized_computation_keeps_every_sites_row() {
             "async function work() {\n  await pause();\n  return ",
             "a read in a function declaration handed to a wrapper that gives it to `createMemo`",
         ),
+        (
+            "return peek();",
+            "return ",
+            "a call of a project function whose closure reads no listed source: the callee reason needs a recognized computation",
+        ),
     ] {
         let start = at(&source, anchor, skip);
         assert!(rows.contains(&start), "{what}: no SC1002 row at {start}");
     }
-    // No typed reason holds at any of these sites: dropping it moves nothing.
-    let ablated = check(&typefacts, name, Some(NEVER_RUNS));
+    // No typed reason holds at any of these sites: dropping both moves nothing.
+    let ablated = check(
+        &typefacts,
+        name,
+        Some(&format!("{CALLEE_READS_NOTHING},{NEVER_RUNS}")),
+    );
     only_these_moved(&named, &ablated, &BTreeSet::new());
 }

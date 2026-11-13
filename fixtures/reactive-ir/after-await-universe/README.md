@@ -7,10 +7,10 @@ This program holds a tracked async computation with something after a suspension
 | site | outcome | why no reason ends it |
 |---|---|---|
 | `count()` in an async `onClick` handler, and `count()` in the exported helper `helper` | SC1002 uncertifiable, `read-after-await-unaccounted` | the read is after an await of a function no computation runs; nothing walks it. A role silence (a handler, a deferred callback) is left out on purpose: each needs a premise and a Chrome twin of its own (open-work) |
-| `stringify(1)` | the same | a call of a project function after an await: no reason ends it |
-| `readsCount()` | the same | the same |
-| `ping(3)` | the same | the same |
+| `stringify(1)` | the same | a project function whose closure calls the standard library (`blocked:standard-library`): the callee reason needs the whole closure exactly resolved to project functions |
+| `readsCount()` | the same | its closure reads a source (`reads`) |
+| `ping(3)` | the same | its closure calls itself (`cycle`: the search is cut, nothing is concluded) |
 | `callback()` (a parameter) and `reassigned()` (a reassigned `let`) | the same | a call of a function value no exact declaration resolves (ADR 0964's shape): never summarized |
 | `count()` after `for await` | the same | an implicit suspension is a suspension |
 
-The twin `after-await-universe-none` holds the sites the typed reason ends (no row), `after-await-universe-census` a program with no recognized computation, where every site keeps its row (there is no census reason). `node_modules/solid-js/package.json` selects the dialect; `solid-js.d.ts` declares what the program calls.
+The twin `after-await-universe-none` holds the sites the typed reasons end (no row), `after-await-universe-census` a program with no recognized computation, where every site keeps its row (there is no census reason). `node_modules/solid-js/package.json` selects the dialect; `solid-js.d.ts` declares what the program calls.

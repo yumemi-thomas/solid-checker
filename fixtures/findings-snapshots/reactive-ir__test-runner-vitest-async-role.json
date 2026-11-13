@@ -19,17 +19,6 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-role/App.test.tsx",
-      "start": 726,
-      "end": 732,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-role/App.test.tsx",
       "start": 745,
       "end": 752,
       "fixes": 0

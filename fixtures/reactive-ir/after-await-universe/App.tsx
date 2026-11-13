@@ -38,7 +38,7 @@ export async function helper() {
   return count();
 }
 
-// A call of a project function after an await: it calls the standard library, reads a source, or calls itself (no reason ends it).
+// A call of a project function after an await whose closure is not silent: it calls the standard library, reads a source, or calls itself.
 function stringify(n: number) {
   return JSON.stringify({ n });
 }

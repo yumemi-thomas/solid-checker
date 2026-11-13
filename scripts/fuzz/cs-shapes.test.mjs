@@ -26,25 +26,25 @@ const run = (context) => {
 };
 
 describe("the cs contexts", () => {
-  it("are four forms on two hosts, each with its two twins, each name parsed back", () => {
+  it("are four forms on two hosts and two routes (the read in the function, or in a getter it reaches), each with its two twins, each name parsed back", () => {
     expect(CS_FORM_NAMES).toEqual(["wrapper", "call", "reflect", "element"]);
     expect(CS_HOSTS).toEqual(["memo", "effect"]);
-    expect(CS_CONTEXT_NAMES).toHaveLength(CS_FORM_NAMES.length * CS_HOSTS.length * 3);
+    expect(CS_CONTEXT_NAMES).toHaveLength(CS_FORM_NAMES.length * CS_HOSTS.length * 2 * 3);
     for (const name of CS_CONTEXT_NAMES) {
       const parts = csParts(name);
       expect(parts, name).not.toBeNull();
       expect(CS_CONTEXTS[name]).toBe(parts.never || parts.before ? "legal" : "misuse");
-      expect(name).toBe(`cs-${parts.form}-${parts.host}${parts.never ? "-never" : ""}${parts.before ? "-before" : ""}`);
+      expect(name).toBe(`cs-${parts.form}-${parts.host}${parts.getter ? "-getter" : ""}${parts.never ? "-never" : ""}${parts.before ? "-before" : ""}`);
     }
-    // an unknown form or host, a twin suffix twice, another axis's name
-    for (const other of ["cs-getter-memo", "cs-call-apply", "cs-call-memo-never-before", "cs-call-memo-after", "sf-foreach-memo-async", "memo-async"]) expect(csParts(other), other).toBeNull();
+    // an unknown form or host, a twin suffix twice, the route after a twin suffix, another axis's name
+    for (const other of ["cs-getter-memo", "cs-call-apply", "cs-call-memo-never-before", "cs-call-memo-after", "cs-call-memo-never-getter", "sf-foreach-memo-async", "memo-async"]) expect(csParts(other), other).toBeNull();
   });
   it("are placed for SC1002 and for no other code", () => {
     const placement = csPlacement();
     expect(Object.keys(placement)).toEqual(CS_CODES);
     expect(CS_CODES).toEqual([AWAIT]);
-    expect(placement[AWAIT].misuse).toHaveLength(CS_FORM_NAMES.length * CS_HOSTS.length);
-    expect(placement[AWAIT].legal).toHaveLength(CS_FORM_NAMES.length * CS_HOSTS.length * 2);
+    expect(placement[AWAIT].misuse).toHaveLength(CS_FORM_NAMES.length * CS_HOSTS.length * 2);
+    expect(placement[AWAIT].legal).toHaveLength(CS_FORM_NAMES.length * CS_HOSTS.length * 2 * 2);
   });
   it("are cells of SPEC on their side, one base shape, and not the census's", () => {
     for (const context of CS_CONTEXT_NAMES) {
@@ -112,6 +112,22 @@ describe("the cs programs", () => {
       expect(before[declared + 2], `${form}/${host}`).toBe("await Promise.resolve();");
       // the same start as the program, nothing else moves
       expect(before.filter((line) => !live.includes(line)), `${form}/${host}`).toEqual([]);
+    }
+  });
+  it("write the read in a getter the started function reaches through `peek()`, behind its await (ahead of it in the twin)", () => {
+    for (const form of CS_FORM_NAMES) for (const host of CS_HOSTS) {
+      const lines = run(`cs-${form}-${host}-getter`);
+      const awaitAt = lines.indexOf("await Promise.resolve();");
+      // the site is written in the getter of a module-level object, which a project function reads
+      expect(lines.some((line) => /^const holder1 = \{ get value\(\) \{$/.test(line)), `${form}/${host}`).toBe(true);
+      expect(lines, `${form}/${host}`).toContain("function peek1() { return holder1.value; };");
+      expect(lines[lines.indexOf("const holder1 = { get value() {") + 1], `${form}/${host}`).toBe("r1();");
+      // the started function calls it after its await, the twin before it, and the `-never` twin starts nothing
+      const call = lines.indexOf("void peek1();");
+      expect(call, `${form}/${host}`).toBeGreaterThan(awaitAt);
+      const before = run(`cs-${form}-${host}-getter-before`);
+      expect(before.indexOf("void peek1();"), `${form}/${host}`).toBeLessThan(before.indexOf("await Promise.resolve();"));
+      expect(run(`cs-${form}-${host}-getter-never`), `${form}/${host}`).toContain("void work1;");
     }
   });
   it("every cell builds a neutral, valid program of one site", () => {

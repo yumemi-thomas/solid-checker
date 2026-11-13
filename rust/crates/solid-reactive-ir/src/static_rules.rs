@@ -1764,6 +1764,12 @@ pub(crate) struct SharedAsyncComputations<'t> {
 }
 
 impl<'t> SharedAsyncComputations<'t> {
+    /// Whether the prepass found a tracked async computation with something after a suspension to walk (ADR 0963): the region of the member-route net, which files a row at a
+    /// read written in code no call edge places (a getter, a coercion, an iterator, a Proxy trap, a constructor). Slice 9B's callee reason rests on it (ADR 0973).
+    pub(crate) fn holds_suspending(&self) -> bool {
+        self.holds_suspending.get()
+    }
+
     fn get(&self, ctx: &AnalysisContext<'t>) -> &AsyncComputations<'t> {
         self.index.get_or_init(|| {
             let facts: &'t solid_facts::ProjectFacts = ctx.facts;

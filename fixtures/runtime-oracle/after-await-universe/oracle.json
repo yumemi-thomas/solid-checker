@@ -1,0 +1,1 @@
+{"note": "slice 9B (ADR 0973): the callee summary silences a call whose closure reads nothing; a getter, a coercion, an iterator or a Proxy trap the callee reaches through no call keeps the row at the read written in it (the member-route net). The twin fixtures/reactive-ir/after-await-universe-none holds the silences."}

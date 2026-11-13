@@ -1495,3 +1495,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-universe-none/node_modules/**
 !fixtures/reactive-ir/after-await-universe-census/node_modules/
 !fixtures/reactive-ir/after-await-universe-census/node_modules/**
+!fixtures/reactive-ir/after-await-universe-depth/node_modules/
+!fixtures/reactive-ir/after-await-universe-depth/node_modules/**

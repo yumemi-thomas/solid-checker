@@ -30,8 +30,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-universe/App.tsx",
-      "start": 1760,
-      "end": 1769,
+      "start": 1768,
+      "end": 1777,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-universe/App.tsx",
-      "start": 1776,
-      "end": 1786,
+      "start": 1784,
+      "end": 1794,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-universe/App.tsx",
-      "start": 1792,
-      "end": 1796,
+      "start": 1800,
+      "end": 1804,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-universe/App.tsx",
-      "start": 2016,
-      "end": 2024,
+      "start": 2024,
+      "end": 2032,
       "fixes": 0
     },
     {
@@ -74,8 +74,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-universe/App.tsx",
-      "start": 2075,
-      "end": 2082,
+      "start": 2083,
+      "end": 2090,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-universe/App.tsx",
-      "start": 2140,
-      "end": 2150,
+      "start": 2148,
+      "end": 2158,
       "fixes": 0
     },
     {
@@ -96,8 +96,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-universe/App.tsx",
-      "start": 2406,
-      "end": 2413,
+      "start": 2414,
+      "end": 2421,
       "fixes": 0
     },
     {

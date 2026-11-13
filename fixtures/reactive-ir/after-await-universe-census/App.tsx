@@ -36,3 +36,20 @@ async function work() {
 createRoot(() => {
   track(work);
 });
+
+// A call of a project function whose closure reads no source the checker lists keeps its row here too: the callee reason (ADR 0973) rests on the member-route net (ADR 0963), which runs
+// only where a tracked async computation is recognized, and none is. `peek` reaches `holder.value`, a getter that reads `count`. Where the net is off the getter's read has no row of its
+// own, and a start the producers' index does not find runs `viaCallee` as a computation (the oracle case `after-await-universe-census-callee`): Chrome reports the code at the getter's
+// read, and this call is a frame of its stack.
+const holder = {
+  get value() {
+    return count();
+  },
+};
+function peek() {
+  return holder.value;
+}
+export async function viaCallee() {
+  await pause();
+  return peek();
+}

@@ -6,6 +6,9 @@
 //   cs-<form>-<host>          misuse   the function the form starts runs as the host's compute: the read after its `await` is untracked
 //   cs-<form>-<host>-never    legal    the same text, nothing starts the function (the names stay used)
 //   cs-<form>-<host>-before   legal    the same program with the read ahead of the `await`: a dependency of the computation, Chrome reports nothing
+//   cs-<form>-<host>-getter[-never|-before]   the same three, the read written in a getter the started function reaches through a project function (`work` calls `peek()` after its
+//                             `await`, `peek` reads `holder.value`): the callee reason of slice 9B (a call whose callee reads nothing the checker lists) rests on the member-route net,
+//                             which runs only where a tracked async computation is recognized, and none is where the form hides the start (main: SC1001's row at the getter's read only)
 //
 //   forms: wrapper  `function track(compute) { return createMemo(compute); }`, `track(work)`: the producers' hand-off (ADR 0873) follows a function literal and an arrow through such a
 //                   wrapper, not a function declaration handed by identifier
@@ -16,7 +19,7 @@
 //
 // Recall contexts, one base shape (the direct binding): the question is how the computation is started, not the spelling of the site. Not crossed with other codes by the census, out of
 // api-fire's plan.
-import { awaitStmt, decl, domExpr, expr, fn, num, ret } from "./model.mjs";
+import { awaitStmt, contain, decl, domExpr, expr, fn, num, ret } from "./model.mjs";
 
 export const CS_FORM_NAMES = ["wrapper", "call", "reflect", "element"];
 export const CS_HOSTS = ["memo", "effect"];
@@ -36,15 +39,15 @@ const FORMS = {
 };
 
 /** `{ [context]: "misuse" | "legal" }`. */
-export const CS_CONTEXTS = Object.fromEntries(CS_FORM_NAMES.flatMap((form) => CS_HOSTS.flatMap((host) => [[`cs-${form}-${host}`, "misuse"], [`cs-${form}-${host}-never`, "legal"], [`cs-${form}-${host}-before`, "legal"]])));
+export const CS_CONTEXTS = Object.fromEntries(CS_FORM_NAMES.flatMap((form) => CS_HOSTS.flatMap((host) => ["", "-getter"].flatMap((route) => [[`cs-${form}-${host}${route}`, "misuse"], [`cs-${form}-${host}${route}-never`, "legal"], [`cs-${form}-${host}${route}-before`, "legal"]]))));
 export const CS_CONTEXT_NAMES = Object.keys(CS_CONTEXTS);
 export const CS_CODES = ["UNTRACKED_READ_AFTER_AWAIT"];
 
-const NAME = new RegExp(`^cs-(${[...CS_FORM_NAMES].sort((a, b) => b.length - a.length).join("|")})-(${CS_HOSTS.join("|")})(-never|-before)?$`);
-/** `{ form, host, never, before }` of a `cs-*` context name, or null. */
+const NAME = new RegExp(`^cs-(${[...CS_FORM_NAMES].sort((a, b) => b.length - a.length).join("|")})-(${CS_HOSTS.join("|")})(-getter)?(-never|-before)?$`);
+/** `{ form, host, getter, never, before }` of a `cs-*` context name, or null. */
 export const csParts = (context) => {
   const match = NAME.exec(context);
-  return match ? { form: match[1], host: match[2], never: match[3] === "-never", before: match[3] === "-before" } : null;
+  return match ? { form: match[1], host: match[2], getter: match[3] === "-getter", never: match[4] === "-never", before: match[4] === "-before" } : null;
 };
 
 /** The base shapes a `cs-*` cell takes: the direct binding, no layer. */
@@ -59,12 +62,22 @@ export function csContext(context, stmts, kit) {
   const w = kit.name("work");
   const host = HOSTS[parts.host];
   const form = FORMS[parts.form](kit.name, w, host);
-  // The started function: a declaration (`async function work() { await ...; <site>; return 1; }`), the read behind its `await`, or ahead of it in the `-before` twin.
-  const body = parts.before ? [...stmts, awaitStmt(), ret(num(1))] : [awaitStmt(), ...stmts, ret(num(1))];
-  const started = decl(w, fn(body, { form: "function", async: true }));
   // A line that names the primitive imports it from `solid-js`; one that does not (`void work`) leaves no unused import behind.
   const text = (line) => expr(line.includes(host.primitive) ? domExpr(line, undefined, [host.primitive]) : domExpr(line));
-  return { body: (parts.never ? form.idle : form.run).map(text), view: [], hoisted: [started, ...form.defs.map(text)] };
+  // The started function: a declaration (`async function work() { await ...; <site>; return 1; }`), the read behind its `await`, or ahead of it in the `-before` twin. In the
+  // `-getter` route the site is written in a getter (`holder.value`), and the function calls the project function `peek()` that reads it, behind its `await` or ahead of it.
+  let hoisted;
+  if (parts.getter) {
+    const o = kit.name("holder");
+    const peek = kit.name("peek");
+    const call = expr(domExpr(`void ${peek}()`));
+    const body = parts.before ? [call, awaitStmt(), ret(num(1))] : [awaitStmt(), call, ret(num(1))];
+    hoisted = [contain("frame", 9, stmts, { head: `const ${o} = { get value() `, close: " };", after: ["return 1;"] }), expr(domExpr(`function ${peek}() { return ${o}.value; }`)), decl(w, fn(body, { form: "function", async: true }))];
+  } else {
+    const body = parts.before ? [...stmts, awaitStmt(), ret(num(1))] : [awaitStmt(), ...stmts, ret(num(1))];
+    hoisted = [decl(w, fn(body, { form: "function", async: true }))];
+  }
+  return { body: (parts.never ? form.idle : form.run).map(text), view: [], hoisted: [...hoisted, ...form.defs.map(text)] };
 }
 
 /** `{ [code]: { misuse, legal } }` for SPEC. */
