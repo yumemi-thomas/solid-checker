@@ -49,11 +49,21 @@
 //                     `createRoot`; `For` and a provider evaluate theirs when the result is read, so `rownest` and `providernest` sit in a module-level component the host's view renders
 //             getteriife, gettermap, providernest  the same arrow stored from INSIDE an in-place getter: an immediately invoked arrow in `Show`'s children, a `.map` callback in them,
 //                     an immediately invoked arrow in a context provider's children (`<Ctx value={1}>`); the first build of the in-place getter dropped these too
+//             namedrow  the site is DIRECTLY in the body of a NAMED function expression that `For` is handed and that stores itself, `{function row() { sv = row; <site>; return <p /> }}`
+//                     (B1, the re-review of #225): the in-place rule took any function handed to a dialect element for one the element calls, but a function that hands itself on runs
+//                     where it is called
+//             whenfn  the site is in a function written in `Show`'s `when`, `<Show keyed when={() => { <site>; return 1; }}>{(view) => { sv = view; ... }}</Show>` (B2): `Show` hands the
+//                     value to its function child and never calls it; the rule took any function-valued prop for one the element calls
+//             classfield  the site is the initializer of an instance field of a class written in a function, `class H { f = <site> }`, stored (`sv = H`) and constructed by the host,
+//                     `new sv!()` (B3): the function the class is written in says nothing of the stack of a construction. In a module-level `createRoot`, as the getter routes
+//             matchout  the site is the child of a `Match` that is NOT a child of `Switch`, `<Tabs><Match when={1}>{<site>}</Match></Tabs>`, `Tabs`'s apply reading the Match's `children`
+//                     (B4): `Match` returns its props, so whoever reads them runs the getter. In module-level components the host's view renders, as `rownest` (`For` and a provider
+//                     evaluate what they hold when the result is read)
 // The twin registers nothing and calls nothing (a handler that runs an `onCleanup` is NO_OWNER_CLEANUP, a code of its own), so it is the misuse text with no site run. Recall
 // contexts, the direct binding bare (`erShape`), not crossed by the census, out of api-fire's plan.
 import { cbProp, contain, decl, domExpr, expr, fn, iife, jsx, namedButton, num, prim, propEl, ref, ret } from "./model.mjs";
 
-export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest"];
+export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"];
 export const ER_HOSTS = ["apply", "tracked", "settled"];
 /** The (route, host) pairs the grid places: every route on an apply, and the `view` route on the two leaf hosts. */
 const PLACED = [...ER_ROUTES.map((route) => [route, "apply"]), ["view", "tracked"], ["view", "settled"]];
@@ -229,6 +239,55 @@ export function erContext(context, stmts, kit) {
       const hoisted = [expr(domExpr(`let ${sv}: (() => void) | undefined`))];
       if (route === "providernest") hoisted.push(expr(domExpr(`const ${ctx} = createContext(1)`, undefined, ["createContext"])));
       return { hoisted: [...hoisted, frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: rendered ? [propEl(rn, num(1))] : [] };
+    }
+    case "namedrow": case "whenfn": case "classfield": case "matchout": {
+      // The review of #225's re-review (B1-B4). Module-level components the host's view renders (`For`, `Show` and a provider evaluate what they hold when the result is read, a class is
+      // made when a component runs), so B3's row at everything written inside an exported component stays off the site.
+      const sv = kit.name("sv");
+      const rn = kit.name("Rows");
+      const rendered = [propEl(rn, num(1))];
+      if (route === "namedrow") {
+        const row = kit.name("row");
+        const frame = contain("frame", 9, [expr(domExpr(`${sv} = ${row}`)), ...stmts], {
+          head: `function ${rn}(_props: { a?: unknown }) { return <p><For each={[1]}>{function ${row}() `,
+          close: "}</For></p>; }",
+          after: ["return <p>r</p>;"],
+          imports: ["For"],
+        });
+        return { hoisted: [expr(domExpr(`let ${sv}: (() => void) | undefined`)), frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: rendered };
+      }
+      if (route === "whenfn") {
+        const frame = contain("frame", 9, stmts, {
+          head: `function ${rn}(_props: { a?: unknown }) { return <p><Show keyed when={() => `,
+          close: `}>{(view) => { ${sv} = view; return <p>w</p>; }}</Show></p>; }`,
+          after: ["return 1;"],
+          imports: ["Show"],
+        });
+        return { hoisted: [expr(domExpr(`let ${sv}: (() => unknown) | undefined`)), frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: rendered };
+      }
+      if (route === "classfield") {
+        // In a module-level `createRoot` (the root runs at import and stores the class): a program of the grid is open, where B3 files a row at everything a component reachable from
+        // an export holds, which would hide the field's own proof (a root's callback is a function the dialect runs in place: B3 asks nothing of it).
+        const holder = kit.name("Holder");
+        const frame = contain("frame", 9, [expr(siteExpr(stmts))], {
+          mode: "expr",
+          head: `createRoot(() => { class ${holder} { f = `,
+          close: `; } ${sv} = ${holder}; });`,
+          imports: ["createRoot"],
+        });
+        return { hoisted: [expr(domExpr(`let ${sv}: (new () => unknown) | undefined`)), frame], body: [placeIn(host, runs(sv, `new ${sv}!()`))], view: [] };
+      }
+      // matchout: `Tabs` reads the Match's props in its apply (the twin's apply reads nothing).
+      const tabs = kit.name("Tabs");
+      const read = never ? "void match" : `if (match && typeof match === "object" && "children" in match) { void match.children; }`;
+      const kid = decl(tabs, domExpr(`(props: { children?: unknown }) => { createEffect(() => props.children, (match) => { ${read}; }); return <p>t</p>; }`, undefined, ["createEffect"]));
+      const frame = contain("frame", 9, [expr(siteExpr(stmts))], {
+        mode: "expr",
+        head: `function ${rn}(_props: { a?: unknown }) { return <${tabs}><Match when={1}>{`,
+        close: `}</Match></${tabs}>; }`,
+        imports: ["Match"],
+      });
+      return { hoisted: [kid, frame], body: [], view: rendered };
     }
     default: throw new Error(`no entry-by-reference route ${route}`);
   }

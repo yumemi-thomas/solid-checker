@@ -185,8 +185,10 @@ enum GetterRelation {
     Plain,
     /// Written in a prop of a component that does not render it in place, with no such function between: a getter, evaluated where the component reads the prop.
     Getter,
-    /// Written directly in a getter of a dialect control-flow element or a context provider (no function between), or in the body of a function handed to a dialect control-flow
-    /// element (the site's innermost function is that function): rendered or called in place, under the owner of the render that reads it.
+    /// Written directly in a getter of an element that renders it in place (a dialect control-flow element, `Match` only under `Switch`, a context provider: no function
+    /// between), or in the body of a function that such an element itself calls, in a position the dialect names (`For`'s row function, `Show`'s function child, `Errored`'s
+    /// fallback), unless the function can hand itself on (the site's innermost function is that function): rendered or called in place, under the owner of the render that
+    /// reads it.
     InPlace,
 }
 
@@ -195,7 +197,6 @@ fn getter_relation(
     lookup: &SemanticLookup<'_>,
     span: Span,
 ) -> GetterRelation {
-    use solid_dialect::Primitive;
     let element = file
         .ast
         .jsx_containing(span)
@@ -209,6 +210,11 @@ fn getter_relation(
     let Some(element) = element else {
         return GetterRelation::Plain;
     };
+    // The review of #225 (B3): an instance field's initializer is no part of the body of the function the class is written in, whatever element that function is the child of:
+    // it runs at each construction, which may be on any stack (the owner-call universe declines it for that).
+    if crate::local_access::in_instance_field_initializer_directly(file, span) {
+        return GetterRelation::Plain;
+    }
     // The functions written inside the element that hold the site. The outermost, handed to the component as a prop's value or as a whole child expression, runs where whoever has it
     // calls it. Any other function in the value (a `.map` callback, an immediately invoked arrow, an `untrack` callback, a branch of a conditional) is a function the getter's own
     // evaluation may call, or a value it returns to a caller no fact names: where the component reads the prop either way. The innermost is the function whose body the site is
@@ -220,40 +226,29 @@ fn getter_relation(
     };
     let outermost = holders().max_by_key(|function| function.span.end - function.span.start);
     let innermost = holders().min_by_key(|function| function.span.end - function.span.start);
-    let primitive = crate::owners::element_primitive(lookup, file, element);
-    // The primitives `stored_throw::element_prop_handled` takes to render a prop in place.
-    let in_place_primitive = matches!(
-        primitive,
-        Some(
-            Primitive::Errored
-                | Primitive::For
-                | Primitive::Index
-                | Primitive::Repeat
-                | Primitive::Show
-                | Primitive::Switch
-                | Primitive::Match
-                | Primitive::Loading,
-        )
-    );
+    // Whether the element renders what it is handed in place, under the owner of its own render: a dialect control-flow element (`stored_throw::element_prop_handled`'s list),
+    // `Match` only as `Switch`'s direct child, a context provider.
+    let in_place_element = renders_in_place(file, lookup, element);
     if let Some(function) =
         outermost.filter(|function| handed_to_component(file, element, function.span))
     {
-        // A function handed to a dialect control-flow element (`For`'s row function, `Show`'s function child, `Errored`'s fallback) is called by that element's own render, under
-        // the owner it sets: a creation written in ITS body throws nowhere, so it is no site. A function written inside it is no part of that call (it runs where it is called: stored
-        // and called by an effect's apply, it creates with no owner set), so a site in one is a site like any other, as is any site in a function handed to any other component.
-        return if in_place_primitive && innermost.is_some_and(|inner| inner.span == function.span) {
+        // A function handed to a dialect control-flow element is called by that element's own render, under the owner it sets, when the dialect says the tag calls a function
+        // in that position (`For`'s row function, `Show`'s function child, `Errored`'s fallback: not `Show`'s `when`, which it hands on): a creation written in ITS body throws
+        // nowhere, so it is no site. A function that can hand itself on (a named function expression that uses its name) runs where it is called, as a function written inside
+        // it does (stored and called by an effect's apply, it creates with no owner set): a site like any other, as is any site in a function handed to any other component.
+        return if innermost.is_some_and(|inner| inner.span == function.span)
+            && in_place_element
+            && calls_function_in_place(file, lookup, element, function)
+            && !can_hand_itself_on(file, lookup, function)
+        {
             GetterRelation::InPlace
         } else {
             GetterRelation::Plain
         };
     }
-    // The same primitives, and a context provider (which reads its children in place; a function it is handed as a value is stored, not run, which is the case above): what is
-    // written directly in the getter, with no function between, is evaluated by that read, under the owner of the render. A function written inside the getter (an immediately
-    // invoked arrow, a `.map` callback, a handler, an arrow stored for later) runs where it is called, so its sites are sites like any other.
-    if in_place_primitive
-        || (primitive.is_none()
-            && lookup.is_context_reference(file.path.as_str(), element.name.span))
-    {
+    // What is written directly in a getter of such an element, with no function between, is evaluated by that read, under the owner of the render. A function written inside the
+    // getter (an immediately invoked arrow, a `.map` callback, a handler, an arrow stored for later) runs where it is called, so its sites are sites like any other.
+    if in_place_element {
         return if outermost.is_none() {
             GetterRelation::InPlace
         } else {
@@ -261,6 +256,123 @@ fn getter_relation(
         };
     }
     GetterRelation::Getter
+}
+
+/// The review of #225 (B4): whether `element` renders what it is handed in place, under the owner of its own render: a dialect control-flow element of
+/// `stored_throw::element_prop_handled`'s list, `Match` only as `Switch`'s direct child (it returns its props, so anywhere else it is a component like any other: whoever
+/// reads them runs the getters), and a context provider (which reads its children in place; a function it is handed as a value is stored, not run).
+fn renders_in_place(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    element: &JsxElementFact,
+) -> bool {
+    use solid_dialect::Primitive;
+    match crate::owners::element_primitive(lookup, file, element) {
+        Some(Primitive::Match) => match_under_switch(file, lookup, element),
+        Some(
+            Primitive::Errored
+            | Primitive::For
+            | Primitive::Index
+            | Primitive::Repeat
+            | Primitive::Show
+            | Primitive::Switch
+            | Primitive::Loading,
+        ) => true,
+        Some(_) => false,
+        None => lookup.is_context_reference(file.path.as_str(), element.name.span),
+    }
+}
+
+/// Whether `element`, a `Match`, is a direct child of a `Switch`, which reads its props in its own memo.
+fn match_under_switch(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    element: &JsxElementFact,
+) -> bool {
+    innermost_element(file, element.span).is_some_and(|parent| {
+        crate::owners::element_primitive(lookup, file, parent)
+            == Some(solid_dialect::Primitive::Switch)
+            && parent.children.contains(&element.span)
+    })
+}
+
+/// The review of #225 (B2): whether the dialect says `element` itself calls `function`, written as the whole value of one of its props or as its function child, under the
+/// owner of its own render: the positions of [`solid_dialect::Dialect::control_flow_prop_function_run`] and the function child [`control_flow_child`] reads (`runs_as_child`:
+/// a generator's body runs where its iterator is stepped, and `Show` calls a child only with a parameter). A function in any other prop is a value the tag hands on.
+fn calls_function_in_place(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    element: &JsxElementFact,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let Some(primitive) = crate::owners::element_primitive(lookup, file, element) else {
+        return false;
+    };
+    if control_flow_child(file, element, lookup).is_some_and(|(expression, run)| {
+        file.ast.peel_ts_sugar_span(expression) == function.span && runs_as_child(function, run)
+    }) {
+        return true;
+    }
+    element.attributes.iter().any(|attribute| {
+        attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+            && attribute
+                .expression
+                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == function.span)
+            && file
+                .source_text(attribute.name)
+                .and_then(|prop| {
+                    lookup
+                        .dialect
+                        .control_flow_prop_function_run(primitive, prop)
+                })
+                .is_some_and(|run| runs_as_child(function, run))
+    })
+}
+
+/// The review of #225 (B1): whether `function`, written inline, can hand itself on, so that it runs where it is called and not only where its element calls it: a function
+/// expression that uses its own name inside (`{function row() { pick = row; ... }}`), or reads `arguments` (`arguments.callee`). An arrow has neither. A name no reference of
+/// the producer's is known for, or a reference it lists, is a use.
+fn can_hand_itself_on(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    if function.kind == solid_facts::ast::FunctionKind::Arrow {
+        return false;
+    }
+    if file
+        .source_text(function.span)
+        .is_some_and(|text| mentions_word(text, "arguments"))
+    {
+        return true;
+    }
+    let Some(own) = function.name.as_ref() else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), own.span) else {
+        return true;
+    };
+    lookup
+        .symbol_references_if_present(symbol.as_str())
+        .is_none_or(|references| {
+            references.iter().any(|reference| {
+                reference.path.as_ref() != file.path.as_str()
+                    || u32::try_from(reference.start_byte)
+                        .is_ok_and(|start| start != own.span.start)
+            })
+        })
+}
+
+/// Whether `text` holds `word` as a whole identifier.
+fn mentions_word(text: &str, word: &str) -> bool {
+    let identifier = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+    text.match_indices(word).any(|(at, _)| {
+        !text[..at].chars().next_back().is_some_and(identifier)
+            && !text[at + word.len()..]
+                .chars()
+                .next()
+                .is_some_and(identifier)
+    })
 }
 
 /// Whether code written at `span` (a creating call, a call of a function, a callee's name) is a component element's getter (the review of #225, F2, found while fixing
@@ -400,13 +512,8 @@ pub(crate) fn control_flow_child(
     };
     let primitive = primitive_of(element)?;
     let run = lookup.dialect.control_flow_child_run(primitive)?;
-    if primitive == solid_dialect::Primitive::Match {
-        let parent = innermost_element(file, element.span)?;
-        if primitive_of(parent) != Some(solid_dialect::Primitive::Switch)
-            || !parent.children.contains(&element.span)
-        {
-            return None;
-        }
+    if primitive == solid_dialect::Primitive::Match && !match_under_switch(file, lookup, element) {
+        return None;
     }
     let mut children = element.children.iter().filter(|child| {
         file.source_text(**child)

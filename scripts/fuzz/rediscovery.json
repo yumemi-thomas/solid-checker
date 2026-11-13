@@ -21042,5 +21042,47 @@
    "mx-primitive-in-effect-callback-er-providernest-apply-jsx-component-direct-none"
   ],
   "rediscovered": "the in-place rule as first built (g3, release build): 25 false-clean programs (the five JSX variants of five routes), Chrome confirming (same); the fix: none (40 recall-gap programs, an uncertifiable row stands; the call variants createMemo, createRoot and createEffect are recall-gaps on both builds). The legal twins (the stored arrow is never called) are clean (10) or uncertifiable (30) on g3 and uncertifiable on the fix (40 of 40, 0 false positives: the named cost)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a JSX creation (the five JSX variants) written DIRECTLY in a function a dialect control-flow element is handed, was certified with no row where the function is not one the element calls in place and runs where it is called, stored and called by an effect's apply with no owner set: a NAMED function expression handed to `For` that stores itself (`{function row() { sv = row; <site>; return <p /> }}`, B1), a function written in `Show`'s `when` (`<Show keyed when={() => { <site>; return 1; }}>{(view) => { sv = view; ... }}</Show>`, which `Show` hands to its function child and never calls, B2), and the child of a `Match` that is not a child of `Switch` (`<Tabs><Match when={1}>{<site>}</Match></Tabs>`, `Tabs`'s apply reading the Match's `children`: `Match` returns its props, B4). The in-place rule took every function written in a prop or the children of a dialect element, and every `Match`, for one run in place under the element's own owner. Chrome rc.21 reports PRIMITIVE_IN_EFFECT_CALLBACK at the tag",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #225 at a8a6bd69c (rereview.md, B1, B2, B4), probes2/inplace; Chrome-confirmed here (oracle case owner-call-inplace-escapes); the coordinator ruled them in #225",
+  "fixed": "ADR 0971 (the re-review of #225): `jsx_sites::getter_relation` gives InPlace only to a site written in the body of a function the DIALECT says the element itself calls (`Dialect::control_flow_prop_function_run`: `For`'s and `Repeat`'s row function, `Show`'s and `Match`'s (under `Switch`) function child with a parameter, `Errored`'s `fallback`), unless the function can hand itself on (a function expression that uses its own name, or reads `arguments`), and `Match` renders in place only as `Switch`'s direct child. Fixture owner-call-inplace-escapes; cells er-namedrow-apply, er-whenfn-apply and er-matchout-apply",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-namedrow-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-namedrow-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-namedrow-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-namedrow-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-namedrow-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-whenfn-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-whenfn-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-whenfn-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-whenfn-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-whenfn-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-matchout-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-matchout-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-matchout-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-matchout-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-matchout-apply-jsx-component-direct-none"
+  ],
+  "rediscovered": "the head of #225 (a8a6bd69c, release build): 15 false-clean programs (the five JSX variants of three routes), Chrome confirming (same); the fix: none (24 recall-gap programs, an uncertifiable row stands; the call variants createMemo, createRoot and createEffect are recall-gaps on both builds; one matchout program is typed away). The legal twins are clean (some) or uncertifiable on the head and uncertifiable on the fix (the named cost; 0 false positives)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation (the five JSX variants and the call variants) written DIRECTLY in the initializer of an instance field of a class written in a function (`createRoot(() => { class H { f = <site> } sv = H })`, a component, a function a dialect element calls), was certified with no row where the class is constructed by an effect's apply (`new sv!()`): the owner-call universe placed the initializer as the body of the function around the class, and asked the field only when no function stood there, but an initializer runs at each construction, which may be on any stack. Chrome rc.21 reports PRIMITIVE_IN_EFFECT_CALLBACK at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable re-review of #225 at a8a6bd69c (rereview.md, B3, probes2/classfield and probes2/inplace), wider than the in-place rule (a class in a plain component certified); Chrome-confirmed here (oracle case owner-call-inplace-escapes); the coordinator ruled it in #225",
+  "fixed": "ADR 0971 (the re-review of #225): `local_access::in_instance_field_initializer_directly` (no function between the site and the field): `leaf_universe` declines such a site for both groups (decline instance-field-initializer) whatever function the class is written in, and `getter_relation` never takes it for in place. Fixture owner-call-inplace-escapes; cell er-classfield-apply (a module-level createRoot, so B3's row for a component reachable from an export does not hide it)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-classfield-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-classfield-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-er-classfield-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-classfield-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-classfield-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-classfield-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-classfield-apply-jsx-component-direct-none"
+  ],
+  "rediscovered": "the head of #225 (a8a6bd69c, release build): 7 false-clean programs (the five JSX variants and two call variants), Chrome confirming (same); the fix: none (8 recall-gap programs, an uncertifiable row stands). The legal twins (the stored class is never constructed) are clean (some) or uncertifiable on the head and uncertifiable on the fix (the named cost; 0 false positives)"
  }
 ]

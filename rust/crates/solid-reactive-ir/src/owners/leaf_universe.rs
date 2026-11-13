@@ -240,9 +240,11 @@ pub(super) fn silences(
                 }
                 continue;
             }
-            // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere).
-            let Some(function) = ast.innermost_function_owning(span) else {
-                if crate::local_access::in_instance_field_initializer(file, span) {
+            // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere: written directly in one it is
+            // no part of the function the class is written in, which says nothing of the stack of a construction, the review of #225, B3).
+            let in_field = crate::local_access::in_instance_field_initializer_directly(file, span);
+            let Some(function) = ast.innermost_function_owning(span).filter(|_| !in_field) else {
+                if in_field {
                     for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
                         if open {
                             decline(group, Decline::InstanceFieldInitializer);

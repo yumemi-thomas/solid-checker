@@ -22,10 +22,10 @@ const textOf = (code, context, variant) => {
 };
 
 describe("the er contexts (a function reached by a reference)", () => {
-  it("are twenty-two routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest"]);
+  it("are twenty-six routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"]);
     expect(ER_HOSTS).toEqual(["apply", "tracked", "settled"]);
-    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (22 + 2));
+    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (26 + 2));
     for (const name of ER_CONTEXT_NAMES) {
       const parts = erParts(name);
       expect(parts, name).not.toBeNull();
@@ -216,9 +216,37 @@ describe("the er contexts (a function reached by a reference)", () => {
       expect(twin, route).toContain("sv1 = () => {");
     }
   });
+  it("print the escape routes (B1-B4 of the re-review of #225): a named function expression that stores itself, a function in Show's when, a class field, a Match outside a Switch", () => {
+    const named = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-namedrow-apply", "jsx-insert");
+    expect(named).toContain("let sv1: (() => void) | undefined;");
+    const at = named.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><For each={[1]}>{function row1() {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(named.slice(at, at + 5).join(" ")).toContain("sv1 = row1;");
+    expect(named.slice(at, at + 6).join(" ")).toContain("return <p>r</p>; }}</For></p>; }");
+    expect(named).toContain("sv1!();");
+    expect(named.join("\n")).toContain("<Rows1 a={1} />");
+    const when = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-whenfn-apply", "memo");
+    expect(when.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><Show keyed when={() => {"))).toBeGreaterThan(-1);
+    expect(when.join(" ")).toContain("return 1; }}>{(view) => { sv1 = view; return <p>w</p>; }}</Show></p>; }");
+    const field = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-classfield-apply", "jsx-component");
+    expect(field.findIndex((line) => line.startsWith("createRoot(() => { class Holder1 { f = <JsxComp1 />"))).toBeGreaterThan(-1);
+    expect(field.join(" ")).toContain("; } sv1 = Holder1; });");
+    expect(field).toContain("new sv1!();");
+    const loose = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-matchout-apply", "jsx-insert");
+    expect(loose.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <Tabs1><Match when={1}>{"))).toBeGreaterThan(-1);
+    expect(loose.join("\n")).toContain('if (match && typeof match === "object" && "children" in match) { void match.children; }');
+    expect(loose.join("\n")).toContain("<Rows1 a={1} />");
+    for (const route of ["namedrow", "whenfn", "classfield", "matchout"]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert").join("\n");
+      expect(twin, route).not.toContain("sv1!()");
+      expect(twin, route).not.toContain("new sv1!()");
+      if (route === "matchout") expect(twin, route).not.toContain("void match.children");
+      else expect(twin, route).toContain("void sv1;");
+    }
+  });
   it("take the JSX variants of PRIMITIVE_IN_EFFECT_CALLBACK in the view, prop, slot, children, slotcall, childcall, slothelper, childhelper and nested in-place cells only (a JSX creation is a site of the universe, ADR 0971)", () => {
     const jsx = ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"];
-    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest"]) {
+    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"]) {
       const variants = recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply`).map((shape) => shape.variant);
       for (const variant of jsx) expect(variants, `${route} ${variant}`).toContain(variant);
       expect(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`).map((shape) => shape.variant), route).toEqual(expect.arrayContaining(jsx));

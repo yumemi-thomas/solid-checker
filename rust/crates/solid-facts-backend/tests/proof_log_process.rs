@@ -362,6 +362,94 @@ fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons()
             "{what} is silenced for the effect code"
         );
     }
+    // The re-review of #225 (B1-B4): a dialect element calls in place only the function in a position the dialect names, written directly in its body; a function that hands
+    // itself on, a function in `Show`'s `when`, an instance field's initializer and a `Match` outside a `Switch` are sites, declined for the effect code and never silent.
+    let name = "owner-call-inplace-escapes";
+    let log = directory.join("inplace.escapes");
+    check(&typefacts, name, Some(&log));
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let lines_of = lines(&log);
+    for (anchor, skip, what) in [
+        (
+            "{function row() {\n        return <Inner />",
+            "{function row() {\n        return ",
+            "a named function expression that never uses its name",
+        ),
+        (
+            "<Switch>\n      <Match when={1}>\n        <Inner />",
+            "<Switch>\n      <Match when={1}>\n        ",
+            "a Match under a Switch",
+        ),
+        (
+            "{(_value) => <Inner />}",
+            "{(_value) => ",
+            "Show's function child with its parameter",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(!is_site(&lines_of, start), "{what} is no site");
+    }
+    for (anchor, skip, what) in [
+        (
+            "pickNamed = row;\n        return <Inner />",
+            "pickNamed = row;\n        return ",
+            "B1: a named function expression that stores itself",
+        ),
+        (
+            "pickFallback = fb;\n        return <Inner />",
+            "pickFallback = fb;\n        return ",
+            "B1: a named fallback that stores itself",
+        ),
+        (
+            "keyed\n      when={() => (\n        <Inner />",
+            "keyed\n      when={() => (\n        ",
+            "B2: a function in Show's when, keyed",
+        ),
+        (
+            "<Show\n      when={() => (\n        <Inner />",
+            "<Show\n      when={() => (\n        ",
+            "B2: a function in Show's when",
+        ),
+        (
+            "class Holder {\n    view = (\n      <Inner />",
+            "class Holder {\n    view = (\n      ",
+            "B3: an instance field's initializer in a component",
+        ),
+        (
+            "class Holder {\n          view = (\n            <Inner />",
+            "class Holder {\n          view = (\n            ",
+            "B3: an instance field's initializer in a function a dialect element calls",
+        ),
+        (
+            "<Tabs>\n      <Match when={1}>\n        <Inner />",
+            "<Tabs>\n      <Match when={1}>\n        ",
+            "B4: a Match outside a Switch",
+        ),
+    ] {
+        let start = at(&source, anchor, skip);
+        assert!(is_site(&lines_of, start), "{what} is a site");
+        let declined = reasons(&lines_of, start);
+        assert!(
+            !declined.is_empty()
+                && declined.iter().all(|reason| matches!(
+                    reason.as_str(),
+                    "entry-by-reference"
+                        | "no-edge-into-function"
+                        | "instance-field-initializer"
+                        | "getter-runs-where-read"
+                        | "unread-package-may-run"
+                )),
+            "{what}: declined {declined:?}"
+        );
+        assert!(
+            !lines_of.iter().any(|line| line["k"] == "silent"
+                && line["s"] == start
+                && line["codes"].as_array().is_some_and(|codes| codes
+                    .iter()
+                    .any(|code| code == "PRIMITIVE_IN_EFFECT_CALLBACK"))),
+            "{what} is silenced for the effect code"
+        );
+    }
     // The helper in a getter.
     let name = "owner-call-getter-helper";
     let log = directory.join("getter.helper");
