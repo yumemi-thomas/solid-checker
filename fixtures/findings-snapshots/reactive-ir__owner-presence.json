@@ -128,6 +128,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 978,
+      "end": 1029,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -213,6 +224,28 @@
       "path": "fixtures/reactive-ir/owner-presence/App.tsx",
       "start": 1336,
       "end": 1345,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1366,
+      "end": 1416,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1366,
+      "end": 1416,
       "fixes": 0
     },
     {
@@ -375,6 +408,28 @@
       "path": "fixtures/reactive-ir/owner-presence/App.tsx",
       "start": 1676,
       "end": 1688,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1724,
+      "end": 1878,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1724,
+      "end": 1878,
       "fixes": 0
     },
     {

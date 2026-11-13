@@ -1,0 +1,14 @@
+# owner-call-jsx-prop-arrow
+
+**Claim (batch 11, B2 of the re-review of #220; the review of #225, F2; ADR 0971).** The body of an arrow written in a component element's prop is run by whoever calls it, not where a getter is read, so a JSX creation written there is a site of the owner-call universe like any other. A component the project writes can call the arrow on an effect's apply (the tag it creates has no owner there: rc.21 PRIMITIVE_IN_EFFECT_CALLBACK, SC6002) or in a leaf owner's callback (PRIMITIVE_IN_FORBIDDEN_SCOPE, SC3001). The first build of ADR 0971 left out every JSX written inside a component element's span, the arrow's body included (`in_getter` was "inside any non-intrinsic element"), so both programs certified; main and the head of #220 certified them too. A function written inside a component element (`functions_owning(span)` has a function inside the element's span) is a plain site: the getter question is for JSX no function of the element's own surrounds.
+
+| site | outcome | why |
+|---|---|---|
+| `<Inner />` in the arrow `Outer`'s apply calls through `props.view()` (line 36) | SC6002 `effect-creation-unaccounted` and SC3001 `leaf-operation-unaccounted` (uncertifiable) | the arrow's role and owned context prove no run: the call reaches it through a prop (Chrome rc.21: PRIMITIVE_IN_EFFECT_CALLBACK at the tag). **The false clean this fixes** |
+| `<Inner />` in the arrow `Leaf`'s `createTrackedEffect` callback calls (line 41) | the same rows | the leaf owner's callback reaches the tag the same way (Chrome: PRIMITIVE_IN_FORBIDDEN_SCOPE). The SC9012 at line 26 is the leaf call's own row (an opaque callback) |
+| `<Inner />` in a block arrow's `return` (line 53) | the same rows | a function body is a function body whatever it returns |
+| `createMemo(() => 1)` in the same arrow, `Outer` calling it (line 65) | SC6002 violation (and the SC3001 row) | unchanged by this change: the effect-phase walk follows `props.view()` from the apply into the arrow (ADR 0883); a JSX creation there is accounted for, never proven |
+| `<Inner />` in the arrow of `InBody`, which calls `props.view()` in its body (line 80) | the same rows | the call runs under the owner the component's render sets, but nothing the checker reads proves it is the only caller: a named cost, the same for a creating call there (probes: `createMemo` in this arrow has the rows on the base too) |
+| `<Inner />` in the arrow of `Ignores`, which never reads the prop (line 94) | the same rows | the arrow never runs, which is not proved for a prop's arrow: a named cost, the same for a creating call |
+
+The Chrome oracle case is `fixtures/runtime-oracle/owner-call-jsx-prop-arrow`: the head of #220 and the first build of B2 are `unproven-clean` at the tags `Outer` and `Leaf` run, the fix is `covered-uncertifiable`. The fuzz cells are `er-prop-apply` and its never-run twin (`er-prop-apply-never`: the child component never calls the arrow) with the JSX variants.

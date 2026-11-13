@@ -9,9 +9,10 @@ import { ER_CODES, ER_CONTEXTS, ER_CONTEXT_NAMES, ER_HOSTS, ER_ROUTES, erParts, 
 
 // Batch 11, slice 6 (the review of #220, F1-F3): a function the host's callback reaches by a reference, as generator cells with their twins.
 
-const textOf = (code, context) => {
+const textOf = (code, context, variant) => {
   const side = ER_CONTEXTS[context];
-  const shape = (side === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none");
+  const shape = (side === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none" && (variant === undefined || one.variant === variant));
+  expect(shape, `${context} ${variant}`).toBeDefined();
   const program = generateProgram(7, { profile: "misuse", misusePlan: { code, context, variant: shape.variant, binding: "direct", layer: "none", legal: side === "legal" } });
   const built = buildCase(program, { id: `er-${context}` });
   expect(isValid(program), context).toBe(true);
@@ -21,10 +22,10 @@ const textOf = (code, context) => {
 };
 
 describe("the er contexts (a function reached by a reference)", () => {
-  it("are ten routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself"]);
+  it("are twenty-six routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"]);
     expect(ER_HOSTS).toEqual(["apply", "tracked", "settled"]);
-    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (10 + 2));
+    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (26 + 2));
     for (const name of ER_CONTEXT_NAMES) {
       const parts = erParts(name);
       expect(parts, name).not.toBeNull();
@@ -122,6 +123,138 @@ describe("the er contexts (a function reached by a reference)", () => {
     const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-rootself-apply-never");
     expect(twin).toContain("void sv1;");
     expect(twin).not.toContain("sv1!();");
+  });
+  it("print the prop route: an arrow written in a component element's prop that the child's apply calls (the twin's child never calls it)", () => {
+    const lead = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-prop-apply", "jsx-insert");
+    const at = lead.findIndex((line) => line.startsWith("<Kid1 run={() => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(lead.slice(at, at + 3).join(" ")).toContain("<p>{String(Math.random())}</p>;");
+    expect(lead).toContain("function Kid1(props: { run: () => void }) {");
+    expect(lead).toContain("createEffect(() => 1, () => { props.run(); });");
+    const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-prop-apply-never", "jsx-insert");
+    expect(twin.some((line) => line.startsWith("<Kid1 run={() => {"))).toBe(true);
+    expect(twin.join("\n")).not.toContain("props.run()");
+  });
+  it("print the slot and children routes: a getter the child's apply reads, a prop's value or the element's children (the twin's child reads nothing)", () => {
+    const kid = (read) => `const KidG1 = (props: { slot?: unknown; children?: unknown }) => { createEffect(() => 1, () => { ${read}; }); return <p>k</p>; };`;
+    const slot = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-slot-apply", "jsx-insert");
+    expect(slot).toContain(kid("void props.slot"));
+    expect(slot).toContain("<KidG1 slot={<p>{String(Math.random())}</p>} />");
+    const children = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-children-apply", "jsx-component");
+    expect(children).toContain(kid("void props.children"));
+    expect(children).toContain("<KidG1>{<JsxComp1 />}</KidG1>");
+    for (const [route, element] of [["slot", "<KidG1 slot={<p>{String(Math.random())}</p>} />"], ["children", "<KidG1>{<p>{String(Math.random())}</p>}</KidG1>"]]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert");
+      expect(twin, route).toContain(kid("void props"));
+      expect(twin, route).toContain(element);
+    }
+    // A creating call is a getter's expression the same way.
+    expect(textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-slot-apply", "memo").join("\n")).toMatch(/<KidG1 slot=\{createMemo\(\(\) => 1\)\} \/>/);
+  });
+  it("print the slotcall and childcall routes: the site in an arrow the getter's own evaluation calls, at module scope in a root (the twin's child reads nothing)", () => {
+    const slot = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-slotcall-apply", "jsx-insert");
+    const at = slot.findIndex((line) => line.startsWith("createRoot(() => { void (<KidG1 slot={(() => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(slot.slice(at, at + 4).join(" ")).toContain("<p>{String(Math.random())}</p>; return 1; })()} />); });");
+    expect(slot.join("\n")).toContain("void props.slot;");
+    // Module scope: no function of the component around the creation (B3 files a row at every site written inside an exported component).
+    expect(slot.findIndex((line) => line.startsWith("export function C1"))).toBeGreaterThan(at);
+    const children = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-childcall-apply", "memo");
+    expect(children.findIndex((line) => line.startsWith("createRoot(() => { void (<KidG1>{(() => {"))).toBeGreaterThan(-1);
+    expect(children.join("\n")).toContain("void props.children;");
+    expect(children.join("\n")).toContain("createMemo(() => 1);");
+    for (const route of ["slotcall", "childcall"]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert").join("\n");
+      expect(twin, route).toContain("{ void props; }");
+      expect(twin, route).toContain("})()");
+    }
+  });
+  it("print the slothelper and childhelper routes: a function at module scope holds the site and the getter calls it, in a module-level root (the twin's child reads nothing)", () => {
+    const slot = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-slothelper-apply", "jsx-insert");
+    const at = slot.findIndex((line) => /^function h\d+\(\) \{$/.test(line));
+    expect(at).toBeGreaterThan(-1);
+    expect(slot.slice(at, at + 4).join(" ")).toContain("<p>{String(Math.random())}</p>; return 1; }");
+    expect(slot.some((line) => /^createRoot\(\(\) => \{ void \(<KidG1 slot=\{h\d+\(\)\} \/>\); \}\);$/.test(line))).toBe(true);
+    expect(slot.join("\n")).toContain("void props.slot;");
+    const children = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-childhelper-apply", "memo");
+    expect(children.some((line) => /^createRoot\(\(\) => \{ void \(<KidG1>\{h\d+\(\)\}<\/KidG1>\); \}\);$/.test(line))).toBe(true);
+    expect(children.join("\n")).toContain("void props.children;");
+    for (const route of ["slothelper", "childhelper"]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "memo").join("\n");
+      expect(twin, route).toContain("{ void props; }");
+      expect(twin, route).toMatch(/h\d+\(\)/);
+    }
+  });
+  it("print the nested in-place routes: an arrow stored by code written inside the function a dialect element is handed, or inside its in-place getter, at module scope in a root (the twin keeps the holder only)", () => {
+    const row = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-rownest-apply", "jsx-insert");
+    expect(row).toContain("let sv1: (() => void) | undefined;");
+    const at = row.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><For each={[1]}>{() => { sv1 = () => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(row.slice(at, at + 4).join(" ")).toContain("<p>{String(Math.random())}</p>; }; return <p>r</p>; }}</For></p>; }");
+    expect(row).toContain("sv1!();");
+    expect(row.join("\n")).toContain("<Rows1 a={1} />");
+    // Module code: no function of the exported component around the creation (B3 files a row at every site written inside an exported component).
+    expect(row.findIndex((line) => line.startsWith("export function C1"))).toBeGreaterThan(at);
+    const show = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-shownest-apply", "memo");
+    expect(show.findIndex((line) => line.startsWith("createRoot(() => { void (<Show when={1}>{(v) => { void v; sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(show.join(" ")).toContain("createMemo(() => 1); }; return <p>s</p>; }}</Show>); });");
+    const iife = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-getteriife-apply", "jsx-component");
+    expect(iife.findIndex((line) => line.startsWith("createRoot(() => { void (<Show when={1}>{(() => { sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(iife.join(" ")).toContain("<JsxComp1 />; }; return <p>i</p>; })()}</Show>); });");
+    const map = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-gettermap-apply", "jsx-attr");
+    expect(map.findIndex((line) => line.startsWith("createRoot(() => { void (<Show when={1}>{[1].map(() => { sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(map.join(" ")).toContain("}; return <p>m</p>; })}</Show>); });");
+    const provider = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-providernest-apply", "jsx-insert");
+    expect(provider).toContain("const Ctx1 = createContext(1);");
+    expect(provider.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><Ctx1 value={1}>{(() => { sv1 = () => {"))).toBeGreaterThan(-1);
+    expect(provider.join(" ")).toContain("}; return <p>c</p>; })()}</Ctx1></p>; }");
+    expect(provider.join("\n")).toContain("<Rows1 a={1} />");
+    for (const route of ["rownest", "shownest", "getteriife", "gettermap", "providernest"]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert").join("\n");
+      expect(twin, route).toContain("void sv1;");
+      expect(twin, route).not.toContain("sv1!()");
+      expect(twin, route).toContain("sv1 = () => {");
+    }
+  });
+  it("print the escape routes (B1-B4 of the re-review of #225): a named function expression that stores itself, a function in Show's when, a class field, a Match outside a Switch", () => {
+    const named = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-namedrow-apply", "jsx-insert");
+    expect(named).toContain("let sv1: (() => void) | undefined;");
+    const at = named.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><For each={[1]}>{function row1() {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(named.slice(at, at + 5).join(" ")).toContain("sv1 = row1;");
+    expect(named.slice(at, at + 6).join(" ")).toContain("return <p>r</p>; }}</For></p>; }");
+    expect(named).toContain("sv1!();");
+    expect(named.join("\n")).toContain("<Rows1 a={1} />");
+    const when = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-whenfn-apply", "memo");
+    expect(when.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><Show keyed when={() => {"))).toBeGreaterThan(-1);
+    expect(when.join(" ")).toContain("return 1; }}>{(view) => { sv1 = view; return <p>w</p>; }}</Show></p>; }");
+    const field = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-classfield-apply", "jsx-component");
+    expect(field.findIndex((line) => line.startsWith("createRoot(() => { class Holder1 { f = <JsxComp1 />"))).toBeGreaterThan(-1);
+    expect(field.join(" ")).toContain("; } sv1 = Holder1; });");
+    expect(field).toContain("new sv1!();");
+    const loose = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-matchout-apply", "jsx-insert");
+    expect(loose.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <Tabs1><Match when={1}>{"))).toBeGreaterThan(-1);
+    expect(loose.join("\n")).toContain('if (match && typeof match === "object" && "children" in match) { void match.children; }');
+    expect(loose.join("\n")).toContain("<Rows1 a={1} />");
+    for (const route of ["namedrow", "whenfn", "classfield", "matchout"]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert").join("\n");
+      expect(twin, route).not.toContain("sv1!()");
+      expect(twin, route).not.toContain("new sv1!()");
+      if (route === "matchout") expect(twin, route).not.toContain("void match.children");
+      else expect(twin, route).toContain("void sv1;");
+    }
+  });
+  it("take the JSX variants of PRIMITIVE_IN_EFFECT_CALLBACK in the view, prop, slot, children, slotcall, childcall, slothelper, childhelper and nested in-place cells only (a JSX creation is a site of the universe, ADR 0971)", () => {
+    const jsx = ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"];
+    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"]) {
+      const variants = recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply`).map((shape) => shape.variant);
+      for (const variant of jsx) expect(variants, `${route} ${variant}`).toContain(variant);
+      expect(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`).map((shape) => shape.variant), route).toEqual(expect.arrayContaining(jsx));
+    }
+    for (const route of ["array", "saved", "timer", "generator", "root"]) {
+      const variants = recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply`).map((shape) => shape.variant);
+      for (const variant of jsx) expect(variants, `${route} ${variant}`).not.toContain(variant);
+    }
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(erShape("er-view-apply", { binding: "alias", layer: "none" })).toBe(false);

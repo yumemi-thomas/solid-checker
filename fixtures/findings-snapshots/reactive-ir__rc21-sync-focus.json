@@ -33,6 +33,28 @@
       "start": 375,
       "end": 386,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-sync-focus/App.tsx",
+      "start": 406,
+      "end": 456,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-sync-focus/App.tsx",
+      "start": 406,
+      "end": 456,
+      "fixes": 0
     }
   ]
 }

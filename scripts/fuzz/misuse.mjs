@@ -495,6 +495,8 @@ const ITER_SWAP_LINES = [
   "patchIteration(Array.prototype, Symbol.iterator);",
 ];
 
+/** Batch 11, B2 (the re-review of #220): the JSX variants join the entry-by-reference cell of a function a reference makes the apply run (er-shapes.mjs `view`): a JSX creation is a site of the owner-call universe as a creating call is. The review of #225 adds the cells of a JSX creation written inside a component element, which the apply reaches by a prop arrow it calls (`prop`) or by a getter it reads (`slot`, `children`, and, at module scope where B3 files no row, `slotcall` and `childcall` for an arrow the getter calls in place and `slothelper` and `childhelper` for a function it calls). */
+const JSX_ER = ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"].flatMap((route) => [`er-${route}-apply`, `er-${route}-apply-never`]);
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
@@ -702,8 +704,9 @@ export const SPEC = {
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
   PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun", "effect-apply-guard-open"],
     // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
+    erVariants: ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"],
     recallVariants: ["signal-fn", "projection", "render", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"], recallLegalVariants: ["signal-fn", "projection", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component", "jsx-static"],
-    legalVariantContexts: { "jsx-static": ["effect-apply"] }, contextLine: jsxLine, bindingsFor: (variant) => jsxBindings(variant, BINDINGS), variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"], render: ["effect-apply"], "jsx-insert": ["effect-apply", "body", "root"], "jsx-spread": ["effect-apply", "body", "root"], "jsx-fragment": ["effect-apply", "body", "root"], "jsx-attr": ["effect-apply", "body", "root"], "jsx-component": ["effect-apply", "body", "root"] },
+    legalVariantContexts: { "jsx-static": ["effect-apply"] }, contextLine: jsxLine, bindingsFor: (variant) => jsxBindings(variant, BINDINGS), variantContexts: { "signal-fn": ["effect-apply", "body", "root"], projection: ["effect-apply", "body", "root"], render: ["effect-apply"], "jsx-insert": ["effect-apply", "body", "root", ...JSX_ER], "jsx-spread": ["effect-apply", "body", "root", ...JSX_ER], "jsx-fragment": ["effect-apply", "body", "root", ...JSX_ER], "jsx-attr": ["effect-apply", "body", "root", ...JSX_ER], "jsx-component": ["effect-apply", "body", "root", ...JSX_ER] },
     variants: ["memo", "root", "effect"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [],
     call: (node) => jsxSite(node.variant) ?? API_PRIMITIVES[node.variant] ?? (node.variant === "root" ? api("createRoot", "() => 1") : node.variant === "effect" ? api("createEffect", "() => 1, () => {}") : api("createMemo", "() => 1")),
   },

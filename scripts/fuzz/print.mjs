@@ -602,7 +602,7 @@ function render(program, instrument) {
       case "hbutton": return [`${ind(depth)}<button data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
       case "child": return [`${ind(depth)}<p data-view="${item.id}">{${expr(item.e, depth)}}</p>`];
       case "mounted": return [`${ind(depth)}<p data-view="${item.id}">${expr(item.e, depth)}</p>`];
-      case "propEl": return [`${ind(depth)}<${item.tag} ${item.prop ?? "a"}={${expr(item.e, depth)}} />`];
+      case "propEl": return [item.child ? `${ind(depth)}<${item.tag}>{${expr(item.e, depth)}}</${item.tag}>` : `${ind(depth)}<${item.tag} ${item.prop ?? "a"}={${expr(item.e, depth)}} />`];
       case "attr": return [`${ind(depth)}<p data-attr={${expr(item.e, depth)}} data-view="${item.id}">x</p>`];
       case "handler-expr": return [`${ind(depth)}<p onClick={(${expr(item.e, depth)}, () => {})} data-view="${item.id}">x</p>`];
       case "flow": {

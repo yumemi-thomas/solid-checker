@@ -25,7 +25,9 @@
 //
 // An owner-call site (SC3001, SC6002; batch 11, slice 6) that no proof ends gets the code's home uncertifiable row, which is the ruled ending for a function no package the build does not
 // read is known not to run, a layer entered by reference and the like. The gate accepts that ending only when it is named: the row stands at the site and a typed `declined` line (why no
-// silence applies, `owners/leaf_universe.rs`) lists the code; a decline ends nothing and is read by nothing else. Either alone, or a decline on another table's site, is a hit.
+// silence applies, `owners/leaf_universe.rs`) lists the code; a decline ends nothing and is read by nothing else. Either alone, or a decline on another table's site, is a hit. A home row
+// the projection removed stands no more: it ends the site only where the log shows a `drop` of the ExecutionPaths pass for that row (its code, its `uncertifiable` kind, its blocker) with its
+// typed `ClientRuntimeReach` premise (gate change, batch 11, B2: the arm of an `isServer` ternary a browser build never runs); an untyped drop or another pass ends nothing.
 //
 // C2, a label-only end and an unconfirmed premise are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a
 // stated reason.
@@ -51,10 +53,17 @@ export const SITE_CODE = {
  * carries as the finding's context.
  */
 export const OWNER_CALL_HOME = {
-  CLEANUP_IN_FORBIDDEN_SCOPE: { rule: "leaf-owner-forbidden-call", blocker: "leaf-operation-unaccounted" },
-  PRIMITIVE_IN_FORBIDDEN_SCOPE: { rule: "leaf-owner-forbidden-call", blocker: "leaf-operation-unaccounted" },
-  PRIMITIVE_IN_EFFECT_CALLBACK: { rule: "primitive-in-effect-callback", blocker: "effect-creation-unaccounted" },
+  CLEANUP_IN_FORBIDDEN_SCOPE: { id: "SC3001", rule: "leaf-owner-forbidden-call", blocker: "leaf-operation-unaccounted" },
+  PRIMITIVE_IN_FORBIDDEN_SCOPE: { id: "SC3001", rule: "leaf-owner-forbidden-call", blocker: "leaf-operation-unaccounted" },
+  PRIMITIVE_IN_EFFECT_CALLBACK: { id: "SC6002", rule: "primitive-in-effect-callback", blocker: "effect-creation-unaccounted" },
 };
+
+/**
+ * The one projection pass whose drop of an owner-call site's home row is an ending, and the one typed premise it must carry (gate change, batch 11, B2; coordinator-approved): the pass
+ * that removes a client claim on code a client build never runs (`proof_log.rs` `Pass::ExecutionPaths`, whose only premise kind is `ClientRuntimeReach`). A drop of another pass, or one
+ * that names no such premise, is no ending.
+ */
+export const OWNER_CALL_DROP = { pass: "ExecutionPaths", premise: "ClientRuntimeReach" };
 
 /**
  * The premise kinds whose claim the log itself confirms, each `(premise, verdicts by span) => boolean`. A setter whose write guard
@@ -180,6 +189,7 @@ export function proofHits(lines) {
     const drops = groupBy([...t.drop, ...t.reclass], spanKey);
     const silents = groupBy(t.silent, spanKey);
     const declines = groupBy(t.declined, spanKey);
+    const projectionDrops = groupBy(t.drop, spanKey);
     const decisionsAt = groupBy(t.decision, (decision) => `${decision.t}@${decision.s}`);
     // A row may sit at any alternate span of its site (a composite callee, a chain link): find the site by each.
     const siteAt = new Map();
@@ -229,7 +239,7 @@ export function proofHits(lines) {
       // An owner-call site (batch 11, slice 6; coordinator-approved, owner delegated) whose proofs are not all in reach ends in the code's home uncertifiable row. That fail-closed ending is
       // accepted only where it is named: the row stands at one of the site's spans AND a typed `declined` line at one of them lists the code (why no silence applies). Either alone is a
       // hit, a decline ends no other table's site, and a line that lists no code names none.
-      if (site.t === "owner-call" && ownerCallDeclined(site, spans, verdicts, declines)) continue;
+      if (site.t === "owner-call" && ownerCallDeclined(site, spans, verdicts, declines, projectionDrops)) continue;
       // The classifier's decisions are about the table's first code: another code of the site has none.
       const kind = DECISION_KIND[site.t];
       const decisions = kind && (site.code === undefined || site.code === SITE_CODE[site.t]) ? decisionsFor(kind, site) : [];
@@ -286,13 +296,27 @@ export function proofHits(lines) {
   return hits;
 }
 
-/** Whether an owner-call site's fail-closed ending is named: the home row of its code stands at one of `spans` and a `declined` line at one of them lists the code. */
-function ownerCallDeclined(site, spans, verdicts, declines) {
+/**
+ * Whether an owner-call site's fail-closed ending is named: a `declined` line at one of `spans` lists the code, and the home row of the code either stands at one of them or was dropped
+ * there by the ExecutionPaths pass with its typed `ClientRuntimeReach` premise (`OWNER_CALL_DROP`). The drop must be the home row's own: its code, its `uncertifiable` kind and its blocker.
+ */
+function ownerCallDeclined(site, spans, verdicts, declines, drops) {
   const home = OWNER_CALL_HOME[site.code];
   if (home === undefined) return false;
-  const rowStands = spans.some((key) => (verdicts.get(key) ?? []).some((verdict) => verdict.rule === home.rule && verdict.kind === "uncertifiable" && verdict.ctx === home.blocker));
   const named = spans.some((key) => (declines.get(key) ?? []).some((line) => line.rule === "owner-call" && Array.isArray(line.codes) && line.codes.includes(site.code)));
-  return rowStands && named;
+  if (!named) return false;
+  const rowStands = spans.some((key) => (verdicts.get(key) ?? []).some((verdict) => verdict.rule === home.rule && verdict.kind === "uncertifiable" && verdict.ctx === home.blocker));
+  if (rowStands) return true;
+  return spans.some((key) =>
+    (drops.get(key) ?? []).some(
+      (drop) =>
+        drop.pass === OWNER_CALL_DROP.pass &&
+        drop.code === home.id &&
+        drop.from === "uncertifiable" &&
+        drop.ctx === home.blocker &&
+        (drop.premises ?? []).some((premise) => premise.kind === OWNER_CALL_DROP.premise && Array.isArray(premise.at)),
+    ),
+  );
 }
 
 /** Counts of what the log holds, for the gate's summary line. */

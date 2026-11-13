@@ -90,6 +90,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-five.tsx",
+      "start": 329,
+      "end": 373,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-five.tsx",
+      "start": 329,
+      "end": 373,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -197,6 +219,28 @@
       "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
       "start": 339,
       "end": 343,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
+      "start": 380,
+      "end": 424,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
+      "start": 380,
+      "end": 424,
       "fixes": 0
     },
     {
@@ -9693,6 +9737,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
+      "start": 8692,
+      "end": 8736,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
+      "start": 8692,
+      "end": 8736,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -12902,6 +12968,28 @@
       "path": "fixtures/reactive-ir/value-walk-chain/settled-past-budget.tsx",
       "start": 8644,
       "end": 8650,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/settled-past-budget.tsx",
+      "start": 8687,
+      "end": 8731,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-chain/settled-past-budget.tsx",
+      "start": 8687,
+      "end": 8731,
       "fixes": 0
     },
     {

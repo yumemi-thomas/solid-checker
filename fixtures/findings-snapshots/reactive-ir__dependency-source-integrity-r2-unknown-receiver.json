@@ -88,6 +88,28 @@
       "start": 579,
       "end": 587,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-unknown-receiver/App.tsx",
+      "start": 587,
+      "end": 595,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-unknown-receiver/App.tsx",
+      "start": 587,
+      "end": 595,
+      "fixes": 0
     }
   ]
 }
