@@ -21,6 +21,39 @@
       "start": 260,
       "end": 275,
       "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params-stock-history/App.tsx",
+      "start": 360,
+      "end": 395,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params-stock-history/router.ts",
+      "start": 327,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params-stock-history/router.ts",
+      "start": 368,
+      "end": 396,
+      "fixes": 0
     }
   ]
 }

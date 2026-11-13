@@ -56,6 +56,7 @@ import { EM_CONTEXT_NAMES, emShape } from "./em-shapes.mjs";
 import { FC_CONTEXT_NAMES, fcShape } from "./fc-shapes.mjs";
 import { PH_CONTEXT_NAMES, phShape } from "./ph-shapes.mjs";
 import { CS_CONTEXT_NAMES, csShape } from "./cs-shapes.mjs";
+import { PA_CONTEXT_NAMES, paShape } from "./pa-shapes.mjs";
 import { HANDOFF_FORMS, isSite, walk } from "./model.mjs";
 import { evaluate, finishEntries, formatPhaseTimings, phaseTimings, preparedAhead, prepareEntries, runtimeCached } from "./pipeline.mjs";
 import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
@@ -400,7 +401,7 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
 // await); `no-owner-context-aw-shared-*` keeps the shape.
 // ADR 0940: the `pl-*` contexts are the ten codes' cells, each measured (primitive-layer-shapes.mjs `PL_MEASURED`); a pair left out of them reports another code first,
 // never runs its site, or has a throw hidden by a later one, which the generic judge cannot score, so the census leaves them out for every code.
-const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...CS_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...CS_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
@@ -498,6 +499,8 @@ function recallAxesOf(code, context, base, variants, options = {}) {
   if (PH_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => phShape(context, shape));
   // Batch 11, slice 9B (ADR 0973): a `cs-*` cell takes one base shape (cs-shapes.mjs `csShape`): its question is how the computation is started, not the spelling of the site.
   if (CS_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => csShape(context, shape));
+  // ADR 0972: a `pa-*` cell takes one base shape (pa-shapes.mjs `paShape`): its question is what the call enters, not the spelling of the site.
+  if (PA_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => paShape(context, shape));
   if (context.startsWith("aw-then-computed")) return shapes.filter((shape) => (shape.binding === "direct" && /^(none|closure.*|helper.*)$/.test(shape.layer ?? "none")) || (shape.binding === "alias" && shape.layer === "none"));
   return shapes;
 }

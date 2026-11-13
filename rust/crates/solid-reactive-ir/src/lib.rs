@@ -82,6 +82,7 @@ pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
 mod after_await_accounting;
 mod flush_accounting;
+mod package_action_calls;
 pub mod package_boundary;
 mod package_hand_off;
 mod pending_accounting;

@@ -34,6 +34,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-apply/App.tsx",
+      "start": 371,
+      "end": 406,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -42,6 +53,17 @@
       "path": "fixtures/reactive-ir/router-params/variants/use-action-apply/App.tsx",
       "start": 1073,
       "end": 1116,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-apply/App.tsx",
+      "start": 1262,
+      "end": 1305,
       "fixes": 0
     }
   ]

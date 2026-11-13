@@ -325,6 +325,8 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) source_owned_write: &'a HashMap<SymbolId, crate::OwnedWriteOption>,
     pub(crate) value_form_stores: &'a HashSet<SymbolId>,
     pub(crate) reachable_calls: &'a HashMap<Location, u64>,
+    /// ADR 0972: the backend's reach verdicts per package, `None` when the adapter reads no filesystem.
+    pub(crate) package_reach: Option<&'a solid_facts::package_reach::PackageReachIndex>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) rule_options: &'a RuleOptions,
     /// The files whose source and TypeFacts rows are the last build's
@@ -337,6 +339,10 @@ pub(crate) struct AnalysisContext<'a> {
     /// the compatibility pass).
     pub(crate) source_reference_locations:
         std::sync::OnceLock<std::sync::Arc<crate::cache::SourceReferenceLocations>>,
+    /// ADR 0972: the sites that enter code of a package the build does not read ([`crate::package_action_calls::sites`]): found once per
+    /// build, for both the row pass and the proof universe.
+    pub(crate) package_sites:
+        std::sync::OnceLock<Vec<Vec<crate::package_action_calls::PackageSite>>>,
 }
 
 /// What one analysis is given about the code it cannot read: the package
@@ -762,10 +768,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         source_owned_write: &source_discovery.source_owned_write,
         value_form_stores: &source_discovery.value_form_stores,
         reachable_calls,
+        package_reach: inputs.boundary.package_reach(),
         symbols_by_root: &typescript_indexes.symbols_by_root,
         rule_options,
         unchanged_paths: &source_discovery.unchanged_paths,
         source_reference_locations: std::sync::OnceLock::new(),
+        package_sites: std::sync::OnceLock::new(),
     };
     // The two after-await rules, the prepass's and the one over calls the
     // interprocedural pass attributed, ask the same project-wide index: it is
@@ -881,6 +889,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     for defect in std::mem::take(&mut draft.deferred_defects) {
         draft.push_defect(defect);
     }
+    // ADR 0972: calls into code of packages the build does not read, before the compiler's discard.
+    crate::package_action_calls::package_action_calls(
+        &analysis,
+        &mut draft.static_violations,
+        &mut draft.site_ends,
+    );
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(

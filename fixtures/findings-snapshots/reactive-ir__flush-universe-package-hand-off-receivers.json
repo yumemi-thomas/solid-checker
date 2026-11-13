@@ -35,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 1019,
+      "end": 1070,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -68,6 +79,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 1295,
+      "end": 1345,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -98,6 +120,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
       "start": 1536,
       "end": 1543,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 1619,
+      "end": 1670,
       "fixes": 0
     },
     {
@@ -145,6 +178,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 2134,
+      "end": 2185,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -186,6 +230,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
       "start": 2340,
       "end": 2347,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 2454,
+      "end": 2505,
       "fixes": 0
     },
     {
@@ -244,6 +299,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 2804,
+      "end": 2855,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -288,6 +354,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 3137,
+      "end": 3184,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -318,6 +395,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
       "start": 3433,
       "end": 3440,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 3472,
+      "end": 3510,
       "fixes": 0
     },
     {
@@ -354,6 +442,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 3697,
+      "end": 3712,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -384,6 +483,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
       "start": 3872,
       "end": 3879,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 3911,
+      "end": 3970,
       "fixes": 0
     },
     {
@@ -420,6 +530,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 4229,
+      "end": 4267,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -450,6 +571,28 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
       "start": 4444,
       "end": 4451,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 4524,
+      "end": 4562,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 4790,
+      "end": 4824,
       "fixes": 0
     },
     {
@@ -618,6 +761,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 5985,
+      "end": 6023,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -651,6 +805,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 6222,
+      "end": 6260,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -681,6 +846,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
       "start": 6363,
       "end": 6370,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 6518,
+      "end": 6556,
       "fixes": 0
     },
     {
@@ -747,6 +923,72 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
       "start": 6830,
       "end": 6837,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 6911,
+      "end": 6961,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 7725,
+      "end": 7761,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 8123,
+      "end": 8173,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 8518,
+      "end": 8568,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx",
+      "start": 8855,
+      "end": 8891,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receivers/foreign.ts",
+      "start": 204,
+      "end": 238,
       "fixes": 0
     }
   ]

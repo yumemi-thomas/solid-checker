@@ -32,6 +32,17 @@
       "start": 578,
       "end": 593,
       "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params-replaced-integration/App.tsx",
+      "start": 678,
+      "end": 713,
+      "fixes": 0
     }
   ]
 }

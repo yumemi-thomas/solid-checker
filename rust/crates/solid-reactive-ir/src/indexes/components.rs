@@ -846,6 +846,26 @@ impl<'a> SemanticLookup<'a> {
         self.alias_rendered_function(file, name)
     }
 
+    /// ADR 0972: the initializer of the project binding the reference at `span` of `file` resolves to, when the binding is one plain name bound by
+    /// `const` (or by a `let` nothing writes) to a single initializer (`const C = Pkg.Comp`, `const run = pkgFn`): its file and span, so that an alias
+    /// of a package's function is followed to what it names. The binder resolves the reference (no TypeScript entity is asked for), across files.
+    /// `None` for a destructured or written binding, and for a reference that names no binding.
+    pub(crate) fn exact_initializer_at_reference(
+        &self,
+        file: &FileFacts,
+        span: Span,
+    ) -> Option<(&'a FileFacts, Span)> {
+        let (binding_file, binding, _) = self.binding_at_reference(file.path.as_str(), span)?;
+        let [name] = binding.names.as_slice() else {
+            return None;
+        };
+        let initializer = binding.initializer?;
+        (binding.shape == solid_facts::ast::BindingShape::Identifier
+            && (binding.immutable
+                || binding.runtime_let && !binding_written(binding_file, name.span)))
+        .then_some((binding_file, initializer))
+    }
+
     /// The project function a tag name holds through exact aliases: the tag
     /// names a binding [`exact_alias_initializer`] accepts, whose initializer
     /// names a project function or, transitively, another such binding.
