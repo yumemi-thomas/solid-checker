@@ -31,7 +31,7 @@ use crate::proof_log::{Premise, PremiseKind};
 use crate::site_accounting::{SiteEnds, SiteSilence};
 
 /// How the project enters the package's code at a site.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum Entry {
     /// A call or `new`.
     Call,
@@ -39,6 +39,9 @@ pub(crate) enum Entry {
     Tag,
     /// A JSX element whose tag is the package's component.
     Render,
+    /// A reference to the package's function handed on as a value (`createMemo(pkgFn)`, `[1].forEach(pkgFn)`): where it runs is not
+    /// followed, so it has no legal role.
+    Value,
 }
 
 impl Entry {
@@ -47,6 +50,7 @@ impl Entry {
             Self::Call => "call",
             Self::Tag => "tag",
             Self::Render => "render",
+            Self::Value => "value",
         }
     }
 }
@@ -115,6 +119,10 @@ pub(crate) fn file_sites(ctx: &AnalysisContext<'_>, file: &FileFacts) -> Vec<Pac
         );
     }
     for element in &file.ast.jsx_elements {
+        // An intrinsic element (`<button>`) is the DOM's; its tag names no code.
+        if crate::object_members::intrinsic_element(file, element) {
+            continue;
+        }
         let opening = if element.opening.end > element.opening.start {
             element.opening
         } else {
@@ -127,8 +135,119 @@ pub(crate) fn file_sites(ctx: &AnalysisContext<'_>, file: &FileFacts) -> Vec<Pac
             package_declaration(ctx, file, element.name.span, false),
         );
     }
+    for identifier in &file.ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+            || !handed_as_value(ctx, file, identifier.span)
+        {
+            continue;
+        }
+        let declaration = package_declaration(ctx, file, identifier.span, false);
+        if declaration.is_some() && callable(ctx, file, identifier.span) {
+            push(identifier.span, identifier.span, Entry::Value, declaration);
+        }
+    }
+    // A member of a namespace import handed on (`run(Pkg.runStep)`), and a shorthand property (`{ runStep }`), whose value is the binding's.
+    let namespace_member = |member: &solid_facts::ast::MemberFact| {
+        let object = file.ast.peel_ts_sugar_span(member.object);
+        file.ast.reference_declaration(object).is_some_and(|declaration| {
+            file.ast.imports.iter().any(|import| {
+                import.bindings.iter().any(|binding| {
+                    binding.local.span == declaration && binding.kind == solid_facts::ast::ImportKind::Namespace
+                })
+            })
+        })
+    };
+    for member in &file.ast.members {
+        if !namespace_member(member) || !handed_as_value(ctx, file, member.span) {
+            continue;
+        }
+        let declaration = package_declaration(ctx, file, member.span, false);
+        if declaration.is_some() && callable(ctx, file, member.span) {
+            push(member.span, member.span, Entry::Value, declaration);
+        }
+    }
+    for property in &file.ast.object_properties {
+        // The facts answer the property's symbol at a shorthand's span, never the binding's: the binding is read through its import.
+        let Some(binding) = property.shorthand_binding else {
+            continue;
+        };
+        let declaration = file
+            .ast
+            .imports
+            .iter()
+            .find(|import| import.bindings.iter().any(|candidate| candidate.local.span == binding))
+            .and_then(|import| import_declaration(ctx, file, import.module.as_str(), import.span));
+        if declaration.is_some() && callable(ctx, file, property.value) {
+            push(property.value, property.value, Entry::Value, declaration);
+        }
+    }
     sites.sort_by_key(|site| (site.at.start, site.at.end));
+    sites.dedup_by_key(|site| (site.at.start, site.at.end, site.entry));
     sites
+}
+
+/// Whether a reference's value may be a function: the compiler types it callable or constructable, or demanded no type there.
+fn callable(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> bool {
+    use typefacts::{Callability, Constructability};
+    let Some(entity) = ctx.semantic_lookup.entity_at(file.path.as_str(), span) else {
+        return true;
+    };
+    !matches!(entity.callability, Some(Callability::NonCallable))
+        || matches!(entity.constructability, Some(Constructability::Constructable))
+}
+
+/// Whether the reference at `span` hands its value on: not a callee, a tag, the object of a member (`pkg.run`, decided as that member's
+/// call; `.call`, `.apply` and `.bind` hand it), an import, export or type position, an element's tag, the value of an intrinsic element's
+/// event attribute (the browser's listener) or a direct argument of a standard-library scheduler that runs it on a fresh stack.
+fn handed_as_value(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let lookup = ctx.semantic_lookup;
+    if ast.calls_with_peeled_callee(span).next().is_some()
+        || ast.tagged_templates.iter().any(|template| ast.peel_ts_sugar_span(template.tag) == span)
+    {
+        return false;
+    }
+    if let Some(member) = ast.members_with_peeled_object(span).next() {
+        let property = file.source_text(member.property).unwrap_or_default();
+        return matches!(property, "call" | "apply" | "bind");
+    }
+    if ast.imports.iter().any(|import| import.span.contains(span))
+        || ast.exports.iter().any(|export| export.span.contains(span))
+        || ast.type_names.iter().any(|name| name.contains(span))
+        || ast.type_queries.iter().any(|query| query.contains(span))
+        || ast.type_imports.iter().any(|import| import.span.contains(span))
+    {
+        return false;
+    }
+    for element in &ast.jsx_elements {
+        if element.name.span.contains(span) || element.closing_name.is_some_and(|closing| closing.contains(span)) {
+            return false;
+        }
+        if crate::object_members::intrinsic_element(file, element)
+            && element.attributes.iter().any(|attribute| {
+                attribute.expression.is_some_and(|value| ast.peel_ts_sugar_span(value) == span)
+                    && file.source_text(attribute.name).is_some_and(|name| name.starts_with("on"))
+            })
+        {
+            return false;
+        }
+    }
+    for (call, index) in ast.arguments_containing(span) {
+        if ast.peel_ts_sugar_span(call.arguments[index].span) != span {
+            continue;
+        }
+        let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+            continue;
+        };
+        let callability = lookup.entity_at(file.path.as_str(), span).and_then(|entity| entity.callability);
+        if matches!(
+            crate::runtime_semantics::argument_behavior(resolved, callability, index),
+            Some(crate::runtime_semantics::RuntimeArgumentBehavior::FreshStackCallback)
+        ) {
+            return false;
+        }
+    }
+    true
 }
 
 struct DeclarationAt {
@@ -150,15 +269,25 @@ fn package_declaration(
         let name = package_name(module);
         runtime.contains(&name) || ctx.dialect.modules().contains(&module)
     };
+    // `action(step)()`, `createMemo(f)()`: the inner call is the dialect's, whose catalog answers for what it returns.
+    if let Some(inner) = file.ast.call_at(file.ast.peel_ts_sugar_span(callee))
+        && lookup.primitive_at_call(file, inner.span).is_some()
+    {
+        return None;
+    }
     // The callee's root names an import of the dialect's runtime (`import { Show } from "solid-js"`): its catalog answers.
-    if let Some(module) = imported_module(file, callee)
+    let import = imported_module(file, callee);
+    if let Some((module, _)) = import
         && is_runtime_module(module)
     {
         return None;
     }
     let mut paths = Vec::<String>::new();
-    if call && let Some(resolved) = lookup.resolved_callee_call(file, callee) {
-        let declaration = resolved.declaration.as_ref()?;
+    if call
+        && let Some(declaration) = lookup
+            .resolved_callee_call(file, callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+    {
         if declaration.standard_library {
             return None;
         }
@@ -166,16 +295,17 @@ fn package_declaration(
             return None;
         }
         paths.push(declaration.location.path.to_string());
-    } else {
-        let symbol = lookup
-            .entities()
-            .at(file.path.as_str(), file.ast.peel_ts_sugar_span(callee))?;
-        let declarations = lookup.symbol_declarations(symbol.as_str())?;
-        paths.extend(
-            declarations
-                .iter()
-                .map(|declaration| declaration.location.path.to_string()),
-        );
+    } else if let Some(symbol) = lookup
+        .entities()
+        .at(file.path.as_str(), file.ast.peel_ts_sugar_span(callee))
+    {
+        if let Some(declarations) = lookup.symbol_declarations(symbol.as_str()) {
+            paths.extend(
+                declarations
+                    .iter()
+                    .map(|declaration| declaration.location.path.to_string()),
+            );
+        }
         if let Some(target) = lookup.alias_target_of(symbol.as_str())
             && let Some(declarations) = lookup.symbol_declarations(target)
         {
@@ -186,9 +316,19 @@ fn package_declaration(
             );
         }
     }
+    // The file the compiler resolved the root's import to (a tag or a member no entity names), when it attested one.
+    if let Some((module, declaration)) = import
+        && let Some(imports) = lookup.resolved_imports()
+        && let solid_facts::SpecifierAttestation::Attested(row) = imports.specifier(file.path.as_str(), declaration, module)
+        && !row.resolved_path.is_empty()
+    {
+        paths.push(row.resolved_path.to_string());
+    }
     // Project code (a body the analysis reads) decides nothing here; a package's or a declaration file's declaration does.
     let path = paths.into_iter().find(|path| {
-        (path.contains("/node_modules/") || is_declaration_file(path))
+        // The standard library's files are the producer's `bundled:` ones.
+        !path.starts_with("bundled:")
+            && (path.contains("/node_modules/") || is_declaration_file(path))
             && !lookup.in_dependency_source(path)
     })?;
     if let Some(root) = package_root_of(&path)
@@ -198,6 +338,26 @@ fn package_declaration(
         return None;
     }
     Some(DeclarationAt { path })
+}
+
+/// The package declaration an import of `module` (the declaration at `span`) loads, as the compiler attested it: `None` for the dialect's
+/// runtime, project code and the standard library; an import nothing attests is undecided ([`solid_facts::package_reach::PackageReachIndex::for_declaration`] answers
+/// no verdict for its key).
+fn import_declaration(ctx: &AnalysisContext<'_>, file: &FileFacts, module: &str, span: Span) -> Option<DeclarationAt> {
+    let lookup = ctx.semantic_lookup;
+    let runtime = ctx.dialect.primitive_defining_packages();
+    if module.starts_with('.') || runtime.contains(&package_name(module)) || ctx.dialect.modules().contains(&module) {
+        return None;
+    }
+    let path = match lookup.resolved_imports().map(|imports| imports.specifier(file.path.as_str(), span, module)) {
+        Some(solid_facts::SpecifierAttestation::Attested(row)) if !row.resolved_path.is_empty() => row.resolved_path.to_string(),
+        _ => format!("unattested:{module}"),
+    };
+    let package = path.starts_with("unattested:")
+        || (!path.starts_with("bundled:")
+            && (path.contains("/node_modules/") || is_declaration_file(&path))
+            && !lookup.in_dependency_source(&path));
+    package.then_some(DeclarationAt { path })
 }
 
 /// The package name of a module specifier (`@solidjs/web/storage` is `@solidjs/web`).
@@ -212,8 +372,9 @@ fn package_name(module: &str) -> &str {
     }
 }
 
-/// The module the import that binds `callee`'s root identifier names (`pkg` in `pkg.run()` of `import * as pkg from "m"`).
-fn imported_module<'f>(file: &'f FileFacts, callee: Span) -> Option<&'f str> {
+/// The module the import that binds `callee`'s root identifier names (`pkg` in `pkg.run()` of `import * as pkg from "m"`), and the import
+/// declaration's span.
+fn imported_module<'f>(file: &'f FileFacts, callee: Span) -> Option<(&'f str, Span)> {
     let ast = &file.ast;
     let mut at = ast.peel_ts_sugar_span(callee);
     for _ in 0..32 {
@@ -231,7 +392,7 @@ fn imported_module<'f>(file: &'f FileFacts, callee: Span) -> Option<&'f str> {
                 .iter()
                 .any(|binding| binding.local.span == declaration)
         })
-        .map(|import| import.module.as_str())
+        .map(|import| (import.module.as_str(), import.span))
 }
 
 /// The rows and silences of the sites ([`file_sites`]) of every analyzed file: an uncertifiable SC2002 row where the call may run under an
@@ -249,7 +410,7 @@ pub(crate) fn package_action_calls(
         }
         let allowed = crate::execution_role::allowed_callback_spans(file, lookup);
         for site in sites {
-            if site.entry != Entry::Render {
+            if matches!(site.entry, Entry::Call | Entry::Tag) {
                 let reached = ctx
                     .reachable_calls
                     .contains_key(&crate::location(file.path.shared(), site.callee));
@@ -304,6 +465,7 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         Entry::Call => "this call runs code of",
         Entry::Tag => "this tagged template runs code of",
         Entry::Render => "this element renders a component of",
+        Entry::Value => "this hands on a function of",
     };
     crate::StaticViolation {
         id: "SC2002".into(),

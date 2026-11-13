@@ -155,14 +155,22 @@ pub fn package_reach_index(
 }
 
 /// The declaration files and installed files the project's own files name a declaration in: each call's resolved declaration (outside the
-/// standard library) and each referenced symbol's declarations, through its alias.
+/// standard library), each referenced symbol's declarations, through its alias, and each attested import's file.
 fn declaration_paths(facts: &solid_facts::ProjectFacts) -> BTreeSet<String> {
     let mut paths = BTreeSet::new();
     let mut keep = |path: &str| {
-        if path.contains("/node_modules/") || is_declaration_file(path) {
+        if !path.starts_with("bundled:") && (path.contains("/node_modules/") || is_declaration_file(path)) {
             paths.insert(path.to_owned());
         }
     };
+    // The files the compiler resolved the project's imports to: a tag or a member no entity names is decided through its import.
+    if let Some(imports) = &facts.resolved_imports {
+        for (importer, import) in imports.iter() {
+            if !importer.contains("/node_modules/") && facts.dependency_source_root(importer).is_none() && !import.resolved_path.is_empty() {
+                keep(&import.resolved_path);
+            }
+        }
+    }
     for file in &facts.files {
         let path = file.path.as_str();
         if path.contains("/node_modules/") || facts.dependency_source_root(path).is_some() {

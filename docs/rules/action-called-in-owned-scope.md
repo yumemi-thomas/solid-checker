@@ -48,6 +48,18 @@ or `flush(() => ...)` within a memo, component body or root body still throws
 
 An action call that no row, discard or named silence ends is uncertifiable: `action-unaccounted` (ADR 0936).
 
+An action called where it is created, with no binding (`action(function* () {})()`), is that action's call
+and is placed as a bound one is (ADR 0972).
+
+A call into code of an installed package the build does not read as source may call `action` inside the
+package, where the program shows none (ADR 0972). Each such call, `new`, tagged template and render of the
+package's component is a site: where its role may run under an owner or nothing places it, it is
+**uncertifiable** (`package-may-call-action:<why>`), unless the package's source, walked from every entry
+through every import, `require` and literal `import()`, names no Solid package and loads nothing by a
+computed name, generates no code (`eval`, `Function`) and reads no global the pinned TypeScript's
+`lib.es*`/`lib.dom*` files do not declare. Missing source, a native module, an unparseable file and the WASM
+`analyze` entry (no filesystem) stay uncertifiable. A package the build reads as source is analyzed (ADR 0949).
+
 ## Why is this bad?
 
 Invoking an action starts a write transaction: optimistic writes apply, async work
