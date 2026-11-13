@@ -28,6 +28,9 @@ pub enum ReachBlocker {
     NoFilesystem,
     /// A declaration file of the project with runtime JavaScript beside it that the program does not analyze (`allowJs` is off): nobody reads that code.
     UnanalyzedProjectJs,
+    /// The walk that finds where a value came from stopped at a limit (an array of more elements than it reads, a chain of more hops than it follows): what runs
+    /// for the value is not decided, so the call of it is a site rather than a silence (ADR 0973).
+    OriginLimit,
 }
 
 impl ReachBlocker {
@@ -46,6 +49,7 @@ impl ReachBlocker {
             Self::ClosureLimit => "closure-limit",
             Self::NoFilesystem => "no-filesystem",
             Self::UnanalyzedProjectJs => "unanalyzed-project-js",
+            Self::OriginLimit => "origin-limit",
         }
     }
 }
@@ -53,6 +57,10 @@ impl ReachBlocker {
 /// The prefix of a site's pseudo-path for a callee that is a global declared by no installed package and no standard-library file (a project declaration
 /// file: `declare function gtag(…)`), whose provider the declaration does not say: the host, a script or a package may write it (ADR 0973).
 pub const AMBIENT_PREFIX: &str = "ambient:";
+
+/// The prefix of a site's pseudo-path for a value whose origin the walk could not follow to its end: it stopped at a limit (`origin-limit:array of more than 256 elements`),
+/// so what runs for the value is not decided (ADR 0973).
+pub const LIMIT_PREFIX: &str = "origin-limit:";
 
 /// The prefix of a site's pseudo-path for a module loaded by a name the syntax does not fix (`lazy(() => import(name))`): any module may be the component.
 pub const COMPUTED_LOAD_PREFIX: &str = "computed-load:";
@@ -197,6 +205,7 @@ impl PackageReachIndex {
     pub fn accessors_for_declaration(&self, path: &str) -> AccessorFacts {
         if path.starts_with(AMBIENT_PREFIX)
             || path.starts_with(COMPUTED_LOAD_PREFIX)
+            || path.starts_with(LIMIT_PREFIX)
             || self.project_js.contains(path)
         {
             return AccessorFacts::open();
@@ -213,6 +222,14 @@ impl PackageReachIndex {
                 blocker: ReachBlocker::UnknownGlobal,
                 detail: format!(
                     "{declared} declares a global, and the host, a script or an installed package may provide it"
+                ),
+            };
+        }
+        if let Some(what) = path.strip_prefix(LIMIT_PREFIX) {
+            return PackageReach::Undecided {
+                blocker: ReachBlocker::OriginLimit,
+                detail: format!(
+                    "{what}: the walk that finds where the value came from stopped at its limit"
                 ),
             };
         }
@@ -246,6 +263,8 @@ impl PackageReachIndex {
 pub fn join_relative(importer: &str, specifier: &str) -> String {
     let mut parts = importer.split('/').collect::<Vec<_>>();
     parts.pop();
+    // A query or a fragment (`./step.vendor.js?fz`) is the bundler's: the file is the one the path names.
+    let specifier = specifier.split(['?', '#']).next().unwrap_or(specifier);
     for part in specifier.split('/') {
         match part {
             "" | "." => {}
@@ -423,6 +442,9 @@ mod tests {
         let computed = index.for_declaration("computed-load:import()");
         assert_eq!(computed.word(), "dynamic-load");
         assert!(!computed.is_clear());
+        let limit = index.for_declaration("origin-limit:an array of more than 256 elements");
+        assert_eq!(limit.word(), "origin-limit");
+        assert!(!limit.is_clear());
     }
 
     #[test]
@@ -459,6 +481,12 @@ mod tests {
             "/p/src/vendor/step.js"
         );
         assert_eq!(join_relative("/p/src/a/App.tsx", "../x/./y"), "/p/src/x/y");
+        // A query or a fragment is no part of the path.
+        assert_eq!(
+            join_relative("/p/src/App.tsx", "./step.vendor.js?fz"),
+            "/p/src/step.vendor.js"
+        );
+        assert_eq!(join_relative("/p/src/App.tsx", "./a.js#x"), "/p/src/a.js");
         assert_eq!(
             script_candidates("/p/src/step").first().map(String::as_str),
             Some("/p/src/step.js")

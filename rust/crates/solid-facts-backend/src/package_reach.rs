@@ -414,7 +414,14 @@ fn imports_of_unread_js(
                     .as_deref()
                     .map(|text| (load.specifier_span.unwrap_or(load.span), text))
             });
-        for (at, text) in imports.chain(loads) {
+        // `export { vendorStep } from "./step.vendor.js"`: a barrel loads the file as an import does.
+        let reexports = file
+            .ast
+            .exports
+            .iter()
+            .filter(|export| !export.type_only)
+            .filter_map(|export| export.module.as_deref().map(|text| (export.span, text)));
+        for (at, text) in imports.chain(loads).chain(reexports) {
             if !(text.starts_with("./") || text.starts_with("../")) {
                 continue;
             }

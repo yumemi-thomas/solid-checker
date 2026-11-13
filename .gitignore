@@ -1429,6 +1429,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/action-in-owned-scope-globals/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-lazy/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-lazy/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-walk/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-walk/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-getters/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-getters/node_modules/**
 !fixtures/reactive-ir/reviewed-vitest-4-1/node_modules/
