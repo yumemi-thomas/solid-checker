@@ -308,9 +308,24 @@ fn calls_function_in_place(
     let Some(primitive) = crate::owners::element_primitive(lookup, file, element) else {
         return false;
     };
-    if control_flow_child(file, element, lookup).is_some_and(|(expression, run)| {
-        file.ast.peel_ts_sugar_span(expression) == function.span && runs_as_child(function, run)
-    }) {
+    // Its function child: the only child the element has at run time (whitespace and a comment, `{/* .. */}`, are no child: the compiler drops them), an expression container
+    // holding the function, which the tag calls as the dialect says.
+    if lookup
+        .dialect
+        .control_flow_child_run(primitive)
+        .is_some_and(|run| {
+            let mut children = element.children.iter().filter(|child| {
+                file.source_text(**child)
+                    .is_some_and(|text| !blank_or_comment(text))
+            });
+            matches!(
+                (children.next(), children.next()),
+                (Some(child), None)
+                    if crate::execution_role::jsx_child_expression(file, *child)
+                        .is_some_and(|expression| file.ast.peel_ts_sugar_span(expression) == function.span)
+            ) && runs_as_child(function, run)
+        })
+    {
         return true;
     }
     element.attributes.iter().any(|attribute| {
@@ -361,6 +376,30 @@ fn can_hand_itself_on(
                         .is_ok_and(|start| start != own.span.start)
             })
         })
+}
+
+/// Whether a JSX child's source is whitespace, or an expression container that holds only comments (`{/* .. */}`): the compiler drops it, so it is no child at run time.
+fn blank_or_comment(text: &str) -> bool {
+    let mut rest = text.trim();
+    if let Some(inner) = rest
+        .strip_prefix('{')
+        .and_then(|inner| inner.strip_suffix('}'))
+    {
+        rest = inner.trim();
+        loop {
+            if let Some(after) = rest.strip_prefix("/*") {
+                let Some(end) = after.find("*/") else {
+                    return false;
+                };
+                rest = after[end + 2..].trim_start();
+            } else if let Some(after) = rest.strip_prefix("//") {
+                rest = after.find('\n').map_or("", |end| after[end..].trim_start());
+            } else {
+                break;
+            }
+        }
+    }
+    rest.is_empty()
 }
 
 /// Whether `text` holds `word` as a whole identifier.

@@ -385,6 +385,11 @@ fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons()
             "{(_value) => ",
             "Show's function child with its parameter",
         ),
+        (
+            "{/* a note */}\n      {(_value) => <Inner />}",
+            "{/* a note */}\n      {(_value) => ",
+            "Show's function child after a comment",
+        ),
     ] {
         let start = at(&source, anchor, skip);
         assert!(!is_site(&lines_of, start), "{what} is no site");

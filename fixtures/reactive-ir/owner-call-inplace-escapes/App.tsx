@@ -143,6 +143,15 @@ function SwitchQuiet() {
 function ShowQuiet() {
   return <Show when={1}>{(_value) => <Inner />}</Show>;
 }
+// A comment between the tags is no child at run time (the compiler drops it): the function is still the only child `Show` calls.
+function ShowWithComment() {
+  return (
+    <Show when={1}>
+      {/* a note */}
+      {(_value) => <Inner />}
+    </Show>
+  );
+}
 
 function Host() {
   createEffect(
@@ -172,6 +181,7 @@ function App() {
       <NamedQuiet />
       <SwitchQuiet />
       <ShowQuiet />
+      <ShowWithComment />
       <Host />
     </p>
   );
