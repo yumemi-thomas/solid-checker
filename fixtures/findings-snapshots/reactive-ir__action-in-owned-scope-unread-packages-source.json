@@ -22,6 +22,50 @@
       "start": 296,
       "end": 300,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-unread-packages/variants/source/App.tsx",
+      "start": 374,
+      "end": 388,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-unread-packages/variants/source/App.tsx",
+      "start": 374,
+      "end": 388,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-unread-packages/variants/source/App.tsx",
+      "start": 395,
+      "end": 410,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-unread-packages/variants/source/App.tsx",
+      "start": 395,
+      "end": 410,
+      "fixes": 0
     }
   ]
 }
