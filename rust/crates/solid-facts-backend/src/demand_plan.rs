@@ -719,9 +719,11 @@ fn collect_return_spans(
     }
 }
 
-/// Whether the callee (through its members and the calls it is a member of) roots in an import of a bare specifier: a package's binding, not the project's own
-/// module or a Node builtin. A demand only: what the fact decides is asked of the resolved declaration.
-fn callee_roots_at_package_import(file: &FileFacts, callee: Span) -> bool {
+/// Whether the callee (through its members and the calls it is a member of) roots in a binding imported from a package some reviewed premise starts from
+/// (`vitest`: [`crate::reviewed_packages::PREMISES`]). A demand only, so that the facts a reviewed reading asks of the arguments are produced where it can use them
+/// and nowhere else; what they decide is asked of the compiler's resolved declaration. A call it misses (a re-export through a project module, a global `expect`) has
+/// no fact, and a reading never clears without one.
+fn callee_roots_at_reviewed_package_import(file: &FileFacts, callee: Span) -> bool {
     let ast = &file.ast;
     let mut at = ast.peel_ts_sugar_span(callee);
     for _ in 0..32 {
@@ -738,9 +740,9 @@ fn callee_roots_at_package_import(file: &FileFacts, callee: Span) -> bool {
     };
     ast.imports.iter().any(|import| {
         !import.type_only
-            && !import.module.starts_with('.')
-            && !import.module.starts_with('/')
-            && !import.module.starts_with("node:")
+            && crate::reviewed_packages::PREMISES
+                .iter()
+                .any(|premise| premise.entry == &*import.module)
             && import
                 .bindings
                 .iter()
@@ -794,8 +796,8 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
             library_type_spans.insert(value);
         }
         // ADR 0974: a reviewed reading of a package's API (a matcher handed a value) is judged by whether each value it is handed is a primitive, which is
-        // stable for every inhabitant of a type. Asked at the arguments of a call into an installed package's function, a member of it, or a result of one.
-        if callee_roots_at_package_import(file, call.callee) {
+        // stable for every inhabitant of a type. Asked at the arguments of a call rooted at a binding of a reviewed package (`expect(a).toBe(b)`, `vi.fn(f)`).
+        if callee_roots_at_reviewed_package_import(file, call.callee) {
             for argument in call.arguments.iter().filter(|argument| !argument.spread) {
                 let span = argument.value_span.unwrap_or(argument.span);
                 add_symbol(span, false);
