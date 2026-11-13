@@ -1980,6 +1980,10 @@ fn solid2_precision_corrections_are_end_to_end() {
     // nothing follows them), and the call of the parameter `callback` in the
     // shadowed project `filter`, an unresolved invocation after the await
     // (ADR 0964), uncertifiable beside the violation proved at the handed arrow.
+    // ADR 0973: one more, `App.tsx:78`, the call of that project `filter`
+    // through the object literal's member after the await: its callee calls a
+    // function value, so no callee summary ends the site, and no row stands at
+    // the call's own span: the uncertifiable row `read-after-await-unaccounted`.
     // The cleanup-return *value* rules are gone (every illegal return is a
     // TypeScript error against the real `EffectFunction` signature), so the
     // contextual, explicit, parenthesized, `as`-cast, member, and returned-call
@@ -1998,7 +2002,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
-        ("reactive-read-after-await", 7),
+        ("reactive-read-after-await", 8),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and

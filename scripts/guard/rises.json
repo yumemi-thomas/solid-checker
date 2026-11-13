@@ -600,6 +600,46 @@
    "to": 4,
    "adr": "ADR 0973",
    "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-carrier-runs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-import",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/solid2-precision",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call of a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   }
  ]
 }

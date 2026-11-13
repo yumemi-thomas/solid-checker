@@ -5,9 +5,11 @@
 //! never reach had no row and no record of why, a clean nobody accounted for. This pass lists the sites of the claim from facts alone:
 //!
 //! - every read of [`crate::proof_universe`]'s `read` table (an accessor call, a store's or props' first `Get`), and
-//! - every call of a project function by an identifier: one the walk's own resolver ([`crate::execution_role::project_callee_at_parameter`]) resolves exactly (`call`: an
-//!   identifier whose name still holds the function) and one it resolves without being exact (`inexact`: a `let` the program reassigns, a `function` written again), and
-//!   every call of a function value the walk cannot resolve (`invocation`: a parameter, a variable, a call's result, a member slot no function body defines; ADR 0964's shape),
+//! - every call that runs a project function: one the walk's own resolver ([`crate::execution_role::project_callee_at_parameter`]) resolves exactly (`call`: an
+//!   identifier whose name still holds it; `member`: a module namespace's member, or a method of a `const` object literal or of an instance of the exact class,
+//!   ADR 0279) and one it resolves without being exact (`inexact` and `inexact-member`: a `let` the program reassigns, `this.helper()`, a parameter typed as a class,
+//!   an override or a replacement may run), and every call of a function value the walk cannot resolve (`invocation`: a parameter, a variable, a call's result,
+//!   a member slot no function body defines; ADR 0964's shape),
 //!
 //! written directly in a function that is `async`, after one of that function's own suspensions ([`crate::execution_role::may_follow_suspension`]: an `await`, an
 //! implicit suspension, a loop that repeats it), outside dependency source. Not sites: a `.then` continuation or a callback a later microtask runs (the reads in
@@ -44,7 +46,7 @@
 //!
 //! `SOLID_CHECKER_IR_ABLATE_SILENCE=<id>[,<id>...]` (or `all`) drops a reason, so the sites it ends get their row: the mutation test of each. With the proof log
 //! on, each reason is a `silent` line of SC1002 (`AfterAwaitSafe::<reason>`) at the site. With `SOLID_CHECKER_IR_PROOF_CANDIDATES` the pass also writes one `candidate`
-//! line per site (`read-after-await-universe`) with how the site ends and the facts that tell the sites apart: `via` (`read`, `call`, `invocation`, `inexact`), `overlap` (a row
+//! line per site (`read-after-await-universe`) with how the site ends and the facts that tell the sites apart: `via` (`read`, `call`, `member`, `invocation`, `inexact`, `inexact-member`), `overlap` (a row
 //! of the family overlaps the site without standing at one of its spans), `test` (the function is a literal a reviewed runner schedules), `tracked` (the census above), `never` (`SiteReach`), `callee`, `closure` and
 //! `blocker` (the callee summary and the first call that stops it), `host` (the callee that takes the function as an argument), `reason` (the typed reason that ended
 //! the site) and `filed` (whether the site got its row).
@@ -192,14 +194,15 @@ fn end_of(rows: &RowIndex, site: &AwaitSite<'_>) -> (&'static str, bool) {
 }
 
 /// The project function a call's callee names, and whether the call exactly runs it: the walk's own resolver ([`crate::execution_role::project_callee_at_parameter`],
-/// ADRs 0278, 0279, 0299, 0314).
+/// ADRs 0278, 0279, 0299, 0314), for an identifier and for a member alike.
 enum Callee<'a> {
-    /// A project function the call exactly runs: an identifier whose name still holds it (`function_value_is_current`).
+    /// A project function the call exactly runs: an identifier whose name still holds it (`function_value_is_current`), a module namespace's member, a member of a `const`
+    /// object literal or of a `new C()` of the exact class that declares the method, no write of a member of that name anywhere, the receiver not escaping (ADR 0279).
     Current(&'a FileFacts, &'a solid_facts::ast::FunctionFact),
-    /// A project function resolves and the call may not run it: a name the program rewrote (a `let` it reassigns), `f.call(..)`, a spread in the first argument. What runs
-    /// is not decided.
+    /// A project function resolves and the call may not run it: a name the program rewrote (a `let` it reassigns), a method an override or a replacement may stand in for
+    /// (`this.helper()`, a parameter typed as a class, an instance not exactly the class), `f.call(..)`, a spread in the first argument. What runs is not decided.
     Replaced,
-    /// No project function: a standard-library or package declaration, a function value.
+    /// No project function: a standard-library or package declaration, a function value, a member the lookup resolves to nothing.
     Unknown,
 }
 
@@ -461,14 +464,16 @@ fn sites<'a>(
             // unresolved invocation is one whatever the lookup resolves (a `let` the program reassigns names its initializer, which is not the value), never summarized.
             let named = callee_of(lookup, file, call);
             let invoked = crate::static_rules::unresolved_invocation_shaped(ctx, file, call);
+            let member = is_member_call(file, call);
             let (via, target) = match (named, invoked) {
                 (_, true) => ("invocation", None),
-                // A call through a member is no site.
-                (_, false) if is_member_call(file, call) => continue,
-                (Callee::Current(callee_file, function), false) => {
-                    ("call", Some((callee_file, function)))
+                (Callee::Current(callee_file, function), false) => (
+                    if member { "member" } else { "call" },
+                    Some((callee_file, function)),
+                ),
+                (Callee::Replaced, false) => {
+                    (if member { "inexact-member" } else { "inexact" }, None)
                 }
-                (Callee::Replaced, false) => ("inexact", None),
                 (Callee::Unknown, false) => continue,
             };
             let (test, host) = classify(file, call.span);

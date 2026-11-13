@@ -125,6 +125,27 @@ fn a_site_no_reason_ends_gets_sc1002s_uncertifiable_row() {
         ),
         ("readsCount();\n  ping", "", "a callee that reads a source"),
         ("ping(3);\n}", "", "a callee that calls itself"),
+        (
+            "helpers.format(1);",
+            "",
+            "a namespace member whose closure calls the standard library",
+        ),
+        (
+            "codec.encode(1);",
+            "",
+            "an exact member whose closure calls the standard library",
+        ),
+        (
+            "meter.read();",
+            "",
+            "an exact member whose closure reads a source",
+        ),
+        ("this.helper();", "", "an inexact member: `this`"),
+        (
+            "loader.helper();",
+            "",
+            "an inexact member: a parameter typed as the class",
+        ),
         ("callback();\n}", "", "a function value"),
         ("reassigned();\n}", "", "a reassigned `let`"),
         ("count();\n    void item", "", "a read after a `for await`"),
@@ -144,7 +165,12 @@ fn each_reason_ends_exactly_its_sites() {
         unaccounted(&named).is_empty(),
         "a site is unaccounted with every reason named"
     );
-    let callee = BTreeSet::from([at(&source, "double(2);", ""), at(&source, "quad(2);", "")]);
+    let callee = BTreeSet::from([
+        at(&source, "double(2);", ""),
+        at(&source, "quad(2);", ""),
+        at(&source, "helpers.triple(2);", ""),
+        at(&source, "calc.halve(4);", ""),
+    ]);
     let never = BTreeSet::from([
         at(&source, "stringify(1);", ""),
         at(&source, "stringify(2);", ""),

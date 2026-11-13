@@ -1,4 +1,5 @@
 import { createEffect, createMemo } from "solid-js";
+import * as helpers from "./helpers";
 
 const pause = () => Promise.resolve();
 
@@ -24,10 +25,18 @@ function double(n: number) {
 function quad(n: number) {
   return double(double(n));
 }
+// A method of a `const` object literal nothing writes a member of is exact (ADR 0279): the call is a site, and its closure reads nothing.
+const calc = {
+  halve(n: number) {
+    return n / 2;
+  },
+};
 export async function Pure() {
   await pause();
   double(2);
   quad(2);
+  helpers.triple(2);
+  calc.halve(4);
 }
 
 // The site never runs: it follows an unconditional exit, and sits in an arm a literal test rules out. The callee is a project function that calls the standard library, so

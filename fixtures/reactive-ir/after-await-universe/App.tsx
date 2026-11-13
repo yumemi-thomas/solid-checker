@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal } from "solid-js";
+import * as helpers from "./helpers";
 
 const [count] = createSignal(0);
 const pause = () => Promise.resolve();
@@ -58,6 +59,12 @@ export async function Calls() {
   ping(3);
 }
 
+// The same through a namespace import: the callee is another module's function, resolved exactly, whose closure calls the standard library.
+export async function Namespaced() {
+  await pause();
+  helpers.format(1);
+}
+
 // A call of a function value after an await (a parameter), and a call of a function that is not exactly resolved (a reassigned `let`).
 export async function Invokes(callback: () => unknown) {
   await pause();
@@ -77,3 +84,38 @@ export async function Loop(items: number[]) {
     void item;
   }
 }
+
+// A call of a project method after an await (owner ruling, slice 9B decision on members). A method of a `const` object literal nothing writes a member of is exact (ADR 0279):
+// the call is a site and the callee summary applies; here the closure calls the standard library or reads a source, so the row stays.
+const codec = {
+  encode(n: number) {
+    return JSON.stringify({ n });
+  },
+};
+const meter = {
+  read() {
+    return count();
+  },
+};
+export async function ByExactMember() {
+  await pause();
+  codec.encode(1);
+  meter.read();
+}
+
+// A method an override or a replacement may stand in for is no exact callee: `this.helper()` in a class's own async method, and a receiver that is a parameter typed as the
+// class. The call is a site whose row nothing ends, and no summary is asked of it.
+class Loader {
+  helper() {
+    return 1;
+  }
+  async load() {
+    await pause();
+    return this.helper();
+  }
+}
+export async function ByParameterReceiver(loader: Loader) {
+  await pause();
+  loader.helper();
+}
+

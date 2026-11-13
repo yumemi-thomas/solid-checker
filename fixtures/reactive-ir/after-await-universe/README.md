@@ -10,6 +10,9 @@ This program holds a tracked async computation with something after a suspension
 | `stringify(1)` | the same | a project function whose closure calls the standard library (`blocked:standard-library`): the callee reason needs the whole closure exactly resolved to project functions |
 | `readsCount()` | the same | its closure reads a source (`reads`) |
 | `ping(3)` | the same | its closure calls itself (`cycle`: the search is cut, nothing is concluded) |
+| `helpers.format(1)` (a namespace import: another module's function, resolved exactly) | the same | its closure calls the standard library |
+| `codec.encode(1)` and `meter.read()` (methods of `const` object literals: exact members, ADR 0279) | the same | the call is a site and the callee summary is asked: the closure of the first calls the standard library, the second reads a source |
+| `this.helper()` (in `Loader`'s own async method) and `loader.helper()` (a receiver typed as the class) | the same | the walk's resolver finds the method and cannot say it is the one that runs (a subclass may override it, a replacement may stand in): an inexact member, a site no summary is asked of |
 | `callback()` (a parameter) and `reassigned()` (a reassigned `let`) | the same | a call of a function value no exact declaration resolves (ADR 0964's shape): never summarized |
 | `count()` after `for await` | the same | an implicit suspension is a suspension |
 
