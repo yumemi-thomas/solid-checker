@@ -121,28 +121,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
-      "start": 1317,
-      "end": 1464,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/fp-exec-true-defects/App.tsx",
-      "start": 1317,
-      "end": 1464,
-      "fixes": 0
-    },
-    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

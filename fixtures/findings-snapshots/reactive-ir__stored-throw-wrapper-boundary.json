@@ -160,32 +160,10 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 1373,
-      "end": 1384,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 1666,
-      "end": 1677,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
       "start": 1666,
@@ -204,32 +182,10 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 1906,
-      "end": 1917,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 2042,
-      "end": 2053,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
       "start": 2042,
@@ -248,32 +204,10 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 2355,
-      "end": 2366,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 2595,
-      "end": 2606,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
       "start": 2595,
@@ -303,17 +237,6 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 2782,
-      "end": 2793,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -336,32 +259,10 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 2944,
-      "end": 2955,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 3106,
-      "end": 3117,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
       "start": 3106,
@@ -494,17 +395,6 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
-      "start": 4106,
-      "end": 4117,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-wrapper-boundary/App.tsx",
       "start": 4106,

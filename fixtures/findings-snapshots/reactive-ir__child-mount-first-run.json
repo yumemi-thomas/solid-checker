@@ -548,28 +548,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 3119,
-      "end": 3134,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 3119,
-      "end": 3134,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -724,28 +702,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 3885,
-      "end": 3900,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 3885,
-      "end": 3900,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -820,28 +776,6 @@
       "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
       "start": 4207,
       "end": 4210,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 4233,
-      "end": 4248,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/child-mount-first-run/App.tsx",
-      "start": 4233,
-      "end": 4248,
       "fixes": 0
     },
     {

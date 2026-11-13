@@ -68,28 +68,6 @@
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
-      "path": "fixtures/uncertifiable-repro/other-rules/src/clean-errored-reset.tsx",
-      "start": 525,
-      "end": 567,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/other-rules/src/clean-errored-reset.tsx",
-      "start": 525,
-      "end": 567,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
       "path": "fixtures/uncertifiable-repro/other-rules/src/clean-lazy-route.tsx",
       "start": 309,
       "end": 320,
