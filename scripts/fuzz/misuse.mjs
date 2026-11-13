@@ -38,6 +38,7 @@ import { ER_CONTEXT_NAMES, erContext, erPlacement } from "./er-shapes.mjs";
 import { EM_CONTEXT_NAMES, emContext, emPlacement } from "./em-shapes.mjs";
 import { FC_CONTEXT_NAMES, fcContext, fcPlacement } from "./fc-shapes.mjs";
 import { PH_CONTEXT_NAMES, phContext, phPlacement } from "./ph-shapes.mjs";
+import { PA_CONTEXT_NAMES, paContext, paPlacement, paUse } from "./pa-shapes.mjs";
 import { CONTEXT_PACKAGE } from "./package.mjs";
 import { PKG_ENTRIES, packageSite, parsePkg } from "./package-site.mjs";
 
@@ -1116,6 +1117,8 @@ const EM_PLACEMENT = emPlacement();
 const FC_PLACEMENT = fcPlacement();
 /** Batch 11 (ph-shapes.mjs, the B3 PR after #213): a flush in a function a package the build does not read as source may run as a step, an apply or a leaf callback, by every route a function reaches the package, with the twins that never run it; recall contexts, one base shape. */
 const PH_PLACEMENT = phPlacement();
+/** ADR 0972 (pa-shapes.mjs): a call into code of a package the build does not read, or an action called where it is created, on an owned host and a legal one; recall contexts, one base shape, ACTION_CALLED_IN_OWNED_SCOPE only (not mirrored to `onFlush`). */
+const PA_PLACEMENT = paPlacement();
 /**
  * ADR 0934 (Chrome rc.21). `evt-body-dispatch-helper`: the site in a helper an element's inline `onScroll` handler calls, the element made
  * in the body and dispatched its event there, so the handler and the helper run in the body's window and owner; `evt-body-dispatch-named`:
@@ -1141,7 +1144,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
 const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
   ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
@@ -1259,7 +1262,7 @@ for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACE
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, EM_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT, RV_PLACEMENT, NM_PLACEMENT, LA_PLACEMENT, ER_PLACEMENT, EM_PLACEMENT, FC_PLACEMENT, PH_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, EM_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT, RV_PLACEMENT, NM_PLACEMENT, LA_PLACEMENT, ER_PLACEMENT, EM_PLACEMENT, FC_PLACEMENT, PH_PLACEMENT, PA_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1351,6 +1354,8 @@ export const AUX = "@@AUX@@";
  *   the imports; `preludeLines` go at the top of the component body; AUX in a line marks the call the runtime frame sits in.
  */
 export function describeUse(node, signals) {
+  // ADR 0972 (pa-shapes.mjs): the site is a call into a package the build does not read, or an action called where it is created.
+  if (node.pa) return paUse(node.pa);
   const base = describeProjectUse(node, signals);
   return node.pkg ? describePackageUse(node, base, (node.sigs ?? []).map((name) => signals.get(name))) : base;
 }
@@ -1755,7 +1760,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit) ?? obContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? sfContext(context, stmts, kit) ?? rsContext(context, stmts, kit) ?? rmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? nmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? laContext(context, stmts, kit) ?? erContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? fcContext(context, stmts, kit) ?? phContext(context, stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit) ?? obContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? sfContext(context, stmts, kit) ?? rsContext(context, stmts, kit) ?? rmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? nmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? laContext(context, stmts, kit) ?? erContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? fcContext(context, stmts, kit) ?? phContext(context, stmts, kit) ?? paContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);

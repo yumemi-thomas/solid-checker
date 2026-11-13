@@ -81,6 +81,7 @@ pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHash
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 
 mod flush_accounting;
+mod package_action_calls;
 pub mod package_boundary;
 mod package_hand_off;
 mod pending_accounting;

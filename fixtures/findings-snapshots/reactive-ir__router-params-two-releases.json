@@ -34,6 +34,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params-two-releases/packages/a/App.tsx",
+      "start": 361,
+      "end": 396,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
@@ -63,6 +74,17 @@
       "path": "fixtures/reactive-ir/router-params-two-releases/packages/b/App.tsx",
       "start": 260,
       "end": 275,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params-two-releases/packages/b/App.tsx",
+      "start": 361,
+      "end": 396,
       "fixes": 0
     }
   ]

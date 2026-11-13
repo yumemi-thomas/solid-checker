@@ -315,6 +315,9 @@ impl Dialect for Silent {
     fn returns_store(&self, _primitive: Primitive) -> bool {
         false
     }
+    fn returns_action(&self, _primitive: Primitive) -> bool {
+        false
+    }
     fn options_argument(&self, _primitive: Primitive) -> Option<usize> {
         None
     }

@@ -1616,6 +1616,11 @@ impl Dialect for Solid2 {
     /// `createStore` and `createOptimisticStore` return `[store, setStore]`;
     /// `createProjection` returns the store itself, which the result-slot
     /// table also describes.
+    /// `action(fn)` returns the function whose call is an action invocation; no other Solid 2 primitive does.
+    fn returns_action(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Action
+    }
+
     fn returns_store(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
