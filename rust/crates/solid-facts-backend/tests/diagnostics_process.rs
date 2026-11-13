@@ -3276,6 +3276,73 @@ fn searches_past_their_budget_are_uncertifiable() {
     assert!(within.is_empty(), "{within:?}");
 }
 
+/// The check of #227 (G1) and its neighbours: `this` and `super` name an object no reference of it shows, so a member a receiver reaches (a prototype's getter or method, a
+/// method of the literal, a function placed in it) keeps its three uncertifiable rows when a package may run the closure that reads it; the twins stay silent.
+#[test]
+fn receiver_reads_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receivers") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receivers/App.tsx"
+    );
+    let line_of = |needle: &str| {
+        let at = source
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} in the fixture"));
+        source[..at].lines().count() as u64 + 1
+    };
+    let rows_at = |line: u64, id: &str| {
+        findings
+            .iter()
+            .filter(|row| row["id"] == id && row["primaryLocation"]["line"].as_u64() == Some(line))
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        findings.iter().all(|row| row["kind"] != "violation"),
+        "{findings:#?}"
+    );
+    for site in [
+        "const protoSuperBase = {\n  get g(): number {\n    flush();",
+        "const protoThisBase = {\n  get g(): number {\n    flush();",
+        "const protoWrittenBase = {\n  get g(): number {\n    flush();",
+        "const protoDeepBase = {\n  get g(): number {\n    flush();",
+        "const protoSetterBase = {\n  get g(): number {\n    flush();",
+        "const protoPickedBase = {\n  get g(): number {\n    flush();",
+        "const protoMethodBase = {\n  m(): void {\n    flush();",
+        "const ownMethod = {\n  m(): void {\n    flush();",
+        "const ownValue = {\n  m(): void {\n    flush();",
+        "const ownArrow = {\n  m: (): void => {\n    flush();",
+        "function placedHelper(): void {\n  flush();",
+        "const spreadBase = {\n  m(): void {\n    flush();",
+        "const foreign = {\n  m(): void {\n    flush();",
+        "const foreignBase = {\n  m(): void {\n    flush();",
+        "const foreignImported = {\n  m(): void {\n    flush();",
+        "const foreignShort = {\n  m(): void {\n    flush();",
+        "const keyedBase = {\n  get g(): number {\n    flush();",
+    ] {
+        let flush = line_of(site) + site.lines().count() as u64 - 1;
+        for id in ["SC2006", "SC2008", "SC3001"] {
+            let rows = rows_at(flush, id);
+            assert_eq!(rows.len(), 1, "{site}: {id}: {rows:#?}");
+            assert_eq!(rows[0]["kind"], "uncertifiable", "{site}: {id}");
+        }
+    }
+    // The twins: nothing reads the flushing member through a receiver, or the read runs where no package runs it.
+    for twin in [
+        "const twinProtoBase = {\n  get g(): number {\n    flush();",
+        "const twinWrittenBase = {\n  get g(): number {\n    flush();",
+        "const twinNullBase = {\n  get g(): number {\n    flush();",
+        "const twinUnrelatedFlush = {\n  get g(): number {\n    flush();",
+        "const twinOwn = {\n  m(): void {\n    flush();",
+    ] {
+        let flush = line_of(twin) + twin.lines().count() as u64 - 1;
+        for id in ["SC2006", "SC2008", "SC3001"] {
+            assert!(rows_at(flush, id).is_empty(), "{twin}: {id}");
+        }
+    }
+}
+
 /// The review of #226, B1: a getter that names its own object, and a component that renders itself passing a prop on in a nested arrow, walked the accessor
 /// question anew each time and overflowed the stack (exit 134, no report). The run ends, and the flushes of B1's getter, B2's reads in a JSX expression or a
 /// class field initializer and B3's `this` read keep their uncertifiable rows (never silence, never a violation), as do the re-check's N1 and N2 shapes.

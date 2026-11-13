@@ -380,12 +380,14 @@ pub(super) fn mutation_holder_closed(
     if let Some(literal) = binding.initializer.map(|s| file.ast.peel_ts_sugar_span(s))
         && file.ast.object_get_shapes.iter().any(|s| s.span == literal)
     {
-        let Some(this_uses) =
-            ast::this_expression_spans(std::path::Path::new(file.path.as_str()), &file.source)
+        // `super.key = v` writes the own slot `key` of the receiver (the Set runs on the prototype with the object as the receiver), and `super.m = other` replaces a
+        // method: `super` is a receiver beside `this` (the check of #227, G2).
+        let Some(receiver_uses) =
+            ast::receiver_expression_spans(std::path::Path::new(file.path.as_str()), &file.source)
         else {
             return false;
         };
-        if !this_uses
+        if !receiver_uses
             .into_iter()
             .filter(|s| literal.contains(*s))
             .all(|s| {

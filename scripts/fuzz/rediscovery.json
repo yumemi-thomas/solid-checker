@@ -20951,5 +20951,62 @@
    "mx-flush-in-tracked-queue-callback-ph-methodsuper-leaf-x-direct-none"
   ],
   "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 12 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle agrees on every compared program): main's code (c103552c4, #226) fails `make fuzz-focus` on `gettersuper` (3 false clean, the 3 twins clean) and passes `methodsuper` (U through the text rule); #222's build (777299896) fails both (6 false clean); the fix exits 0, \"nothing needs a look\" (6 recall-gap, the 6 twins uncertifiable). Pattern lane: `getter-super-step` false clean on main, `method-super-step` false clean on #222's build, both fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` held by a member an object's receiver reaches (a getter or a method on a prototype literal read through `super.g` or `this.m()` in the derived object's accessor, a method of the literal run through `this` in a closure, `runStep(this.m)`, a function written outside and placed in the literal, a method written outside that names `this` and is called on the literal), in a closure an installed package the build does not read as source runs as an action's step, was certified with no row: `this` and `super` name an object no reference of it shows, so the walk that asks whether a package may run the member followed references of the object and never reached it. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Mac 7, 2026-11-13: the coordinator's check of #227 (G1: the getter on a prototype literal, probes Y04b, Y04d, Y20, Y21, Y22, Y25, Y26 silent on main), and Mac 7's probes of its neighbours (a method called through `this.m()` in a closure, with no prototype: silent since #222; B01-B05, C02, E02, E04, E06-E08, E10, F01-F07, F11, G01), each confirmed in Chrome by the pattern lane (`pkghand/proto-*-step`, `method-this-arrow-step`)",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`): a value placed directly in an object literal that writes `this` or `super` (a property's value, a spread's argument, a `__proto__:` value) is handed (`placed_in_receiver_literal`); a write of `prototype`, or of `__proto__` into anything but a `const` literal that writes no receiver, is handed, and so is a write through a key the program does not name where a file spells `__proto__` (`installs_prototype`); a project-declared member call hands its holder when the callee names a receiver or resolves to no single function (`method_call_may_read_receiver`, now also in function mode)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-protogetter-step-x-direct-none",
+   "mx-flush-in-action-ph-protogetterthis-step-x-direct-none",
+   "mx-flush-in-action-ph-protoassign-step-x-direct-none",
+   "mx-flush-in-action-ph-protomethod-step-x-direct-none",
+   "mx-flush-in-action-ph-ownmethod-step-x-direct-none",
+   "mx-flush-in-action-ph-ownvalue-step-x-direct-none",
+   "mx-flush-in-action-ph-foreignthis-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 7 (2026-11-13, release builds, `--contexts` the 42 new `ph-*` cells (seven routes on three hosts, each with its `-never` twin), mx-recall and lg-recall, the three flush codes; the Chrome oracle agrees on every compared program, 21 of 21 and 21 of 21): main's code (c103552c4, #226) fails `make fuzz-focus` (21 false clean, each certified with no finding at all; the 21 twins clean); the fix passes (21 recall-gap, the 21 twins uncertifiable: the named cost). The six default grids on the fix: nothing needs a look. Pattern lane: `pkghand/proto-getter-super-step`, `proto-getter-this-step`, `proto-assign-super-step`, `proto-two-level-super-step`, `proto-method-this-step` and `method-this-arrow-step` are false clean on main (Chrome: FLUSH_IN_ACTION) and fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` held by a member an object's receiver reaches (a getter or a method on a prototype literal read through `super.g` or `this.m()` in the derived object's accessor, a method of the literal run through `this` in a closure, `runStep(this.m)`, a function written outside and placed in the literal, a method written outside that names `this` and is called on the literal), in a closure an installed package the build does not read as source runs as an effect's apply, was certified with no row: `this` and `super` name an object no reference of it shows, so the walk that asks whether a package may run the member followed references of the object and never reached it. Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "Mac 7, 2026-11-13: the coordinator's check of #227 (G1: the getter on a prototype literal, probes Y04b, Y04d, Y20, Y21, Y22, Y25, Y26 silent on main), and Mac 7's probes of its neighbours (a method called through `this.m()` in a closure, with no prototype: silent since #222; B01-B05, C02, E02, E04, E06-E08, E10, F01-F07, F11, G01), each confirmed in Chrome by the pattern lane (`pkghand/proto-*-step`, `method-this-arrow-step`)",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`): a value placed directly in an object literal that writes `this` or `super` (a property's value, a spread's argument, a `__proto__:` value) is handed (`placed_in_receiver_literal`); a write of `prototype`, or of `__proto__` into anything but a `const` literal that writes no receiver, is handed, and so is a write through a key the program does not name where a file spells `__proto__` (`installs_prototype`); a project-declared member call hands its holder when the callee names a receiver or resolves to no single function (`method_call_may_read_receiver`, now also in function mode)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-protogetter-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-protogetterthis-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-protoassign-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-protomethod-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-ownmethod-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-ownvalue-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-foreignthis-apply-x-direct-none"
+  ],
+  "rediscovered": "Mac 7 (2026-11-13, release builds, `--contexts` the 42 new `ph-*` cells (seven routes on three hosts, each with its `-never` twin), mx-recall and lg-recall, the three flush codes; the Chrome oracle agrees on every compared program, 21 of 21 and 21 of 21): main's code (c103552c4, #226) fails `make fuzz-focus` (21 false clean, each certified with no finding at all; the 21 twins clean); the fix passes (21 recall-gap, the 21 twins uncertifiable: the named cost). The six default grids on the fix: nothing needs a look. Pattern lane: `pkghand/proto-getter-super-step`, `proto-getter-this-step`, `proto-assign-super-step`, `proto-two-level-super-step`, `proto-method-this-step` and `method-this-arrow-step` are false clean on main (Chrome: FLUSH_IN_ACTION) and fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` held by a member an object's receiver reaches (a getter or a method on a prototype literal read through `super.g` or `this.m()` in the derived object's accessor, a method of the literal run through `this` in a closure, `runStep(this.m)`, a function written outside and placed in the literal, a method written outside that names `this` and is called on the literal), in a closure an installed package the build does not read as source runs as a leaf owner's callback (`createTrackedEffect`), was certified with no row: `this` and `super` name an object no reference of it shows, so the walk that asks whether a package may run the member followed references of the object and never reached it. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "Mac 7, 2026-11-13: the coordinator's check of #227 (G1: the getter on a prototype literal, probes Y04b, Y04d, Y20, Y21, Y22, Y25, Y26 silent on main), and Mac 7's probes of its neighbours (a method called through `this.m()` in a closure, with no prototype: silent since #222; B01-B05, C02, E02, E04, E06-E08, E10, F01-F07, F11, G01), each confirmed in Chrome by the pattern lane (`pkghand/proto-*-step`, `method-this-arrow-step`)",
+  "fixed": "ADR 0967 amended (`package_hand_off.rs`): a value placed directly in an object literal that writes `this` or `super` (a property's value, a spread's argument, a `__proto__:` value) is handed (`placed_in_receiver_literal`); a write of `prototype`, or of `__proto__` into anything but a `const` literal that writes no receiver, is handed, and so is a write through a key the program does not name where a file spells `__proto__` (`installs_prototype`); a project-declared member call hands its holder when the callee names a receiver or resolves to no single function (`method_call_may_read_receiver`, now also in function mode)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-protogetter-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-protogetterthis-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-protoassign-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-protomethod-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-ownmethod-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-ownvalue-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-foreignthis-leaf-x-direct-none"
+  ],
+  "rediscovered": "Mac 7 (2026-11-13, release builds, `--contexts` the 42 new `ph-*` cells (seven routes on three hosts, each with its `-never` twin), mx-recall and lg-recall, the three flush codes; the Chrome oracle agrees on every compared program, 21 of 21 and 21 of 21): main's code (c103552c4, #226) fails `make fuzz-focus` (21 false clean, each certified with no finding at all; the 21 twins clean); the fix passes (21 recall-gap, the 21 twins uncertifiable: the named cost). The six default grids on the fix: nothing needs a look. Pattern lane: `pkghand/proto-getter-super-step`, `proto-getter-this-step`, `proto-assign-super-step`, `proto-two-level-super-step`, `proto-method-this-step` and `method-this-arrow-step` are false clean on main (Chrome: FLUSH_IN_ACTION) and fine on the fix"
+ },
+ {
+  "finding": "ADR 0300's package integrity proof judged a wildcard target disjoint from a package's getter literal when it was not: `mutation_holder_closed` counted `this` and not `super` as the receiver of a holder literal's methods, so `super.slot = location` in a method (the Set runs on the prototype with the object as the receiver: it writes the holder's own slot) was invisible, a holder with no `this` was closed by an empty census, and `Object.defineProperty(holder.slot, key, …)` (a key the program does not name) was taken for a write to a fresh object while `holder.slot` was the package's `location`. The read `createSignal(location.search)` was an SC1001 violation (a false positive: Chrome rc.21 is quiet, the write turns `search` into the data property `\"inert\"`)",
+  "found": "Mac 7, 2026-11-13: the coordinator's check of #227 (check 3, by reading) and Mac 7's end-to-end probe on the router fixture (`dependency-source-integrity-r2-super-write`: a violation on main, an SC9012 obligation with the `this` twin), judged in Chrome by the runtime oracle (quiet)",
+  "fixed": "ADR 0300 (`accessor_provenance/projection_helpers.rs`): `mutation_holder_closed` reads `solid_facts::ast::receiver_expression_spans`, so a `super` write or method replacement counts as a write to the holder; unit rows in `wildcard_target_requires_every_local_identity_input_to_be_distinct` (main returns `distinct` for the holder with no `this`), fixtures `dependency-source-integrity-r2-super-write` and `-super-twins`",
+  "outside": "the grids' packages are the synthetic `fz-step` and the known libraries; the integrity proof needs a package analyzed as source whose exported object literal has a getter, a wildcard write through a holder the program writes, and a project read of that getter in an untracked role (the `dependency-source-integrity-*` fixtures, with `dep-router`): no generator writes a package's source or a wildcard target, so the fixture pair, the unit rows and the Chrome oracle case (`g2-holder-super`: quiet; `g2-holder-none`, `g2-holder-super-read`: STRICT_READ_UNTRACKED) hold it"
  }
 ]

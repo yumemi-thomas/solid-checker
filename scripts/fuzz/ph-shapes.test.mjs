@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are seventy-six routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper"]);
+  it("are eighty-three routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(404);
+    expect(PH_CONTEXT_NAMES).toHaveLength(446);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -224,5 +224,23 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     const method = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-methodsuper-apply");
     expect(method).toContain("runIt() {");
     expect(method.some((line) => /^o\d+\.runIt\(\);$/.test(line))).toBe(true);
+  });
+  it("print the check of #227's routes: a getter and a method on a prototype read through a receiver, a method of the literal run through `this`", () => {
+    const proto = textOf("FLUSH_IN_ACTION", "ph-protogetter-step");
+    expect(proto.some((line) => /^__proto__: base\d+,$/.test(line))).toBe(true);
+    expect(proto).toContain("void (super.g as any);");
+    expect(proto.some((line) => /^void o\d+\.h;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-protogetterthis-step")).toContain("void (this as any).g;");
+    const assigned = textOf("FLUSH_IN_ACTION", "ph-protoassign-step");
+    expect(assigned.some((line) => /^\(o\d+ as any\)\.__proto__ = base\d+;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-protomethod-apply")).toContain("(this as any).m();");
+    const own = textOf("FLUSH_IN_ACTION", "ph-ownmethod-step");
+    expect(own).toContain("this.m();");
+    expect(own.some((line) => /^o\d+\.run\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-ownvalue-leaf")).toContain("runLeaf(this.m);");
+    const foreign = textOf("FLUSH_IN_ACTION", "ph-foreignthis-step");
+    expect(foreign.some((line) => /^function g\d+\(this: any\) \{$/.test(line))).toBe(true);
+    expect(foreign.some((line) => /^g: g\d+,$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-ownmethod-step-never")).toContain("skipRun(() => {");
   });
 });

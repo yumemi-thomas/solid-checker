@@ -17,6 +17,10 @@
 //!   accessors, so a reference of them in code a package may run hands what the accessor runs (`runStep(() => { void props.children; })`); a method call on them
 //!   (`o.m()`, `props.pick()`) binds `this` to the object, and the method may read an accessor through `this` or `super` (which reads the prototype's member with the
 //!   same `this`): it is handed unless the member resolves to exactly one function that never names either;
+//! - a receiver reaches members through no reference of their object (the check of #227, G1): a value placed directly in an object literal that writes `this` or `super` (a
+//!   property's value, a spread's argument, a `__proto__:` value) is handed, as is a prototype installed by a write of `prototype` or `__proto__` (a `const` literal that writes
+//!   no receiver takes the write as a `__proto__:` key, and the value goes on in the reads of the object), and a call of a member the project declares hands its holder when the
+//!   callee names `this` or `super`, resolved exactly or by the key a function that names one is stored under anywhere in the project;
 //! - an argument of a call: the receiver decides ([`Receiver`]): a dialect primitive and the standard library's inline callbacks run it before they return, on the stack
 //!   of the function the call is written in; a reviewed fresh-stack scheduler, a DOM listener registration and a reviewed test runner's registration run it elsewhere and
 //!   keep nothing; a project function the call graph resolves exactly goes on in its parameter (a component's props are its first parameter, a reflective call's forwarded
@@ -89,6 +93,29 @@ type Key = (Arc<str>, Span);
 /// The spans of the `this` and `super` expressions of one file, shared; `None` when the file does not parse.
 type ReceiverSpans = Option<Arc<Vec<Span>>>;
 
+/// The spans of the object literals of one file that write a receiver, shared; `None` when the file's receivers cannot be read.
+type ReceiverLiterals = Option<Arc<Vec<Span>>>;
+
+/// The member keys under which the project stores a function that names `this` or `super`: a property of an object literal, a member written by an assignment.
+#[derive(Default)]
+struct ReceiverKeys {
+    named: HashSet<Arc<str>>,
+    /// Such a function is stored under a key the program does not name (a computed key), or a file's receivers cannot be read.
+    unnamed: bool,
+}
+
+impl ReceiverKeys {
+    /// Records a key (`None`: the program does not name it).
+    fn note(&mut self, key: Option<&str>) {
+        match key {
+            Some(key) => {
+                self.named.insert(Arc::from(key));
+            }
+            None => self.unnamed = true,
+        }
+    }
+}
+
 /// What one question has visited, so that a cycle of copies or calls ends.
 #[derive(Default)]
 struct Walk {
@@ -150,6 +177,12 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     asked: RefCell<HashMap<Key, bool>>,
     /// The spans of every `this` and `super` expression of a file, parsed once (`None`: the file does not parse, so nothing is known of its receiver).
     receiver_spans: RefCell<HashMap<Arc<str>, ReceiverSpans>>,
+    /// The object literals of a file that write `this` or `super` anywhere in their text (`None`: the file's receivers cannot be read, so every literal may).
+    receiver_literals: RefCell<HashMap<Arc<str>, ReceiverLiterals>>,
+    /// Whether a file of the project spells the `__proto__` key anywhere: what makes a write through a key the program does not name a possible prototype install.
+    proto_key_spelled: std::cell::OnceCell<bool>,
+    /// The keys a function that names a receiver is stored under, read once from every file ([`Self::receiver_keys`]).
+    receiver_keys: std::cell::OnceCell<ReceiverKeys>,
 }
 
 impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
@@ -162,6 +195,9 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             files,
             asked: RefCell::new(HashMap::new()),
             receiver_spans: RefCell::new(HashMap::new()),
+            receiver_literals: RefCell::new(HashMap::new()),
+            proto_key_spelled: std::cell::OnceCell::new(),
+            receiver_keys: std::cell::OnceCell::new(),
         }
     }
 
@@ -339,6 +375,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         if ast.type_queries.iter().any(|query| query.contains(at)) {
             return false;
         }
+        // A value placed directly in an object literal that writes `this` or `super` may be run, or read, through that receiver, which no reference of the object shows:
+        // a method called by `this.m()` in a closure a package runs, a prototype's getter read by `super.g` (the review of #227's check, G1).
+        if self.placed_in_receiver_literal(file, at) {
+            return true;
+        }
         // The value is called, not handed: `f()`, `new C()`, `(() => …)()`, a tag. It runs on the stack of the function the call is written in; an instance a constructor
         // builds is a value of its own.
         if let Some(call) = ast.calls_with_peeled_callee(at).next() {
@@ -431,7 +472,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 continue;
             }
             placed = true;
-            if self.assignment_hands(file, assignment.target, walk) {
+            // A write of `__proto__` or `prototype` installs the value as the prototype of objects nothing here follows: their members are read through receivers, not
+            // through the value's references (the review of #227's check, G1).
+            if self.installs_prototype(file, assignment.target)
+                || self.assignment_hands(file, assignment.target, walk)
+            {
                 return true;
             }
             // The assignment expression's own value is the value it writes (a plain `=`; a logical one's value is the target's or this one): `const first = (last = cb)`,
@@ -611,21 +656,115 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         spans.iter().any(|span| function.span.contains(*span))
     }
 
-    /// Whether the member at `member`, read from an object of accessors, is called as a method (`o.m(…)`, `o.m\`…\``, `o.m?.()`), which makes the object the callee's `this`,
-    /// and the callee is not proved to be a function that never names `this` or `super`: a method written outside the literal (`{ m }`, `m: m`, an import), one the program
-    /// replaces, a prop of a component, anything the call graph does not resolve to exactly one function. `this.g` in such a method reads an accessor through no reference
-    /// of the object (the review of #226's re-check, N1).
-    fn method_call_may_read_receiver(&self, file: &'a FileFacts, member: Span) -> bool {
+    /// The object literals of the file that write `this` or `super` anywhere in their text (an accessor's, a method's, an arrow's, a nested literal's: which can only add),
+    /// kept per file. `None` when the file's receivers cannot be read.
+    fn receiver_literals(&self, file: &FileFacts) -> ReceiverLiterals {
+        let path = file.path.shared();
+        if let Some(known) = self.receiver_literals.borrow().get(&path) {
+            return known.clone();
+        }
+        let literals = self.receiver_spans(file).map(|spans| {
+            Arc::new(
+                file.ast
+                    .object_get_shapes
+                    .iter()
+                    .map(|shape| shape.span)
+                    .filter(|literal| spans.iter().any(|span| literal.contains(*span)))
+                    .collect::<Vec<_>>(),
+            )
+        });
+        self.receiver_literals
+            .borrow_mut()
+            .insert(path, literals.clone());
+        literals
+    }
+
+    /// Whether the value written (or named) at `at` is placed directly in an object literal that writes a receiver: a property's value, a spread's argument, a `__proto__:`
+    /// value (the contexts an object literal carries, [`Self::carries`]). A literal whose file's receivers cannot be read is one.
+    fn placed_in_receiver_literal(&self, file: &'a FileFacts, at: Span) -> bool {
         let ast = &file.ast;
-        let called = ast
-            .calls_with_peeled_callee(member)
+        let placed = |literal: Span| {
+            literal != at
+                && literal.contains(at)
+                && !crosses(ast, literal, at)
+                && self.carries(file, literal, at)
+        };
+        match self.receiver_literals(file) {
+            Some(literals) => literals.iter().any(|literal| placed(*literal)),
+            None => ast.object_get_shapes.iter().any(|shape| placed(shape.span)),
+        }
+    }
+
+    /// Whether an assignment to `target` installs a prototype that nothing here follows: a write of `prototype` (`F.prototype = p`), of `__proto__` into anything but a `const` that
+    /// holds one object literal writing no receiver (`o.__proto__ = p`, `o["__proto__"] = p`: that one is a `__proto__:` key written late, and the value goes on in the reads of
+    /// the object as it does there), or a write through a key the program does not name where a file of the project spells `__proto__` (the key may be that one: ADR 0643's
+    /// net for a handed key).
+    fn installs_prototype(&self, file: &FileFacts, target: Span) -> bool {
+        let ast = &file.ast;
+        let Some(member) = ast.member_at(ast.peel_ts_sugar_span(target)) else {
+            return false;
+        };
+        match crate::installed_members::member_name(file, member) {
+            Some("__proto__") => !self.receiverless_literal_binding(file, member.object),
+            Some("prototype") => true,
+            Some(_) => false,
+            None => {
+                *self.proto_key_spelled.get_or_init(|| {
+                    self.files.iter().any(|(path, file)| {
+                        !self.lookup.in_dependency_source(path) && file.source.contains("__proto__")
+                    })
+                }) && ast.computed_members.binary_search(&member.span).is_ok()
+            }
+        }
+    }
+
+    /// Whether the expression at `object` is a reference to a `const` whose initializer is one object literal that writes no `this` and no `super`, so that nothing reaches
+    /// the literal's members through a receiver (a method written elsewhere that names one is the call's question: [`Self::method_call_may_read_receiver`]).
+    fn receiverless_literal_binding(&self, file: &FileFacts, object: Span) -> bool {
+        let ast = &file.ast;
+        let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(object)) else {
+            return false;
+        };
+        let Some(literal) = ast
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == declaration)
+            })
+            .and_then(|binding| binding.initializer)
+            .map(|initializer| ast.peel_ts_sugar_span(initializer))
+            .filter(|initializer| {
+                ast.object_get_shapes
+                    .iter()
+                    .any(|shape| shape.span == *initializer)
+            })
+        else {
+            return false;
+        };
+        self.receiver_literals(file)
+            .is_some_and(|literals| !literals.contains(&literal))
+    }
+
+    /// Whether the member at `member` is called as a method (`o.m(…)`, `o.m\`…\``, `o.m?.()`; not `new o.m()`): the call binds `this` to the object.
+    fn called_as_method(&self, file: &FileFacts, member: Span) -> bool {
+        let ast = &file.ast;
+        ast.calls_with_peeled_callee(member)
             .next()
             .is_some_and(|call| !call.construct)
             || ast
                 .tagged_templates
                 .iter()
-                .any(|template| ast.peel_ts_sugar_span(template.tag) == member);
-        if !called {
+                .any(|template| ast.peel_ts_sugar_span(template.tag) == member)
+    }
+
+    /// Whether the member at `member`, read from an object of accessors, is called as a method (`o.m(…)`, `o.m\`…\``, `o.m?.()`), which makes the object the callee's `this`,
+    /// and the callee is not proved to be a function that never names `this` or `super`: a method written outside the literal (`{ m }`, `m: m`, an import), one the program
+    /// replaces, a prop of a component, anything the call graph does not resolve to exactly one function. `this.g` in such a method reads an accessor through no reference
+    /// of the object (the review of #226's re-check, N1).
+    fn method_call_may_read_receiver(&self, file: &'a FileFacts, member: Span) -> bool {
+        if !self.called_as_method(file, member) {
             return false;
         }
         // A callee no fact resolves to exactly one function is handed.
@@ -633,6 +772,116 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             return true;
         };
         self.function_names_receiver(callee_file, callee)
+    }
+
+    /// [`Self::method_call_may_read_receiver`] for a holder of functions (the call of a member the project declares, on an object that holds the function the walk follows): the
+    /// callee is handed when it resolves to exactly one function that names `this` or `super`, and, when nothing resolves it (a prop, an interface's member, one the program
+    /// replaces), when the project stores a function that names one under that key ([`Self::receiver_keys`]). A callee that resolves to nothing, under a key no such function
+    /// is stored under, runs where the call is written, as before: asking every callback prop would hand every component that calls one.
+    fn method_call_may_name_receiver(&self, file: &'a FileFacts, member: Span) -> bool {
+        if !self.called_as_method(file, member) {
+            return false;
+        }
+        if let Some((callee_file, callee)) = self.callback_target(file, member) {
+            return self.function_names_receiver(callee_file, callee);
+        }
+        let keys = self.receiver_keys();
+        match file
+            .ast
+            .member_at(member)
+            .and_then(|fact| crate::installed_members::member_name(file, fact))
+        {
+            Some(key) => keys.unnamed || keys.named.contains(key),
+            None => keys.unnamed || !keys.named.is_empty(),
+        }
+    }
+
+    /// The keys a function that names `this` or `super` is stored under anywhere in the project: the key of an object literal's property whose value is one written there, of a
+    /// member an assignment writes one to, and of the property or member a reference of one is placed at (a function declaration, a binding of a function, an import: the references
+    /// `function_in` follows). Read once, from every file. A function written in a class is not asked: a class's functions are handed whole.
+    fn receiver_keys(&self) -> &ReceiverKeys {
+        self.receiver_keys.get_or_init(|| {
+            let mut keys = ReceiverKeys::default();
+            for file in self.files.values().copied() {
+                let Some(spans) = self.receiver_spans(file) else {
+                    keys.unnamed = true;
+                    continue;
+                };
+                let ast = &file.ast;
+                let names_receiver = |function: &FunctionFact| {
+                    spans.iter().any(|span| function.span.contains(*span))
+                };
+                // Written where it is stored: a property's value, an assignment's value.
+                for property in &ast.object_properties {
+                    if ast
+                        .function_at(ast.peel_ts_sugar_span(property.value))
+                        .is_some_and(names_receiver)
+                    {
+                        keys.note(
+                            file.source_text(property.key)
+                                .filter(|_| !property.computed)
+                                .map(|key| key.trim_matches(['\'', '"'])),
+                        );
+                    }
+                }
+                for assignment in &ast.assignments {
+                    if let Some(member) = ast.member_at(ast.peel_ts_sugar_span(assignment.target))
+                        && ast
+                            .function_at(ast.peel_ts_sugar_span(assignment.value_span))
+                            .is_some_and(names_receiver)
+                    {
+                        keys.note(crate::installed_members::member_name(file, member));
+                    }
+                }
+                // Named where it is stored: every reference of a function that names a receiver, placed as a property's value or an assignment's.
+                for function in &ast.functions {
+                    if !names_receiver(function)
+                        || ast
+                            .classes
+                            .iter()
+                            .any(|class| class.span.contains(function.span))
+                    {
+                        continue;
+                    }
+                    let local = crate::local_access::function_reference_hand_offs(
+                        file,
+                        function,
+                        self.lookup,
+                    )
+                    .into_iter()
+                    .flatten()
+                    .map(|(at, hand_off)| (file, at, hand_off));
+                    let foreign = crate::local_access::foreign_reference_hand_offs(
+                        file,
+                        function,
+                        self.lookup,
+                    );
+                    for (holder, at, _) in local.chain(foreign) {
+                        let holder_ast = &holder.ast;
+                        let at = holder_ast.peel_ts_sugar_span(at);
+                        for property in &holder_ast.object_properties {
+                            if holder_ast.peel_ts_sugar_span(property.value) == at {
+                                keys.note(
+                                    holder
+                                        .source_text(property.key)
+                                        .filter(|_| !property.computed)
+                                        .map(|key| key.trim_matches(['\'', '"'])),
+                                );
+                            }
+                        }
+                        for assignment in &holder_ast.assignments {
+                            if holder_ast.peel_ts_sugar_span(assignment.value_span) == at
+                                && let Some(member) = holder_ast
+                                    .member_at(holder_ast.peel_ts_sugar_span(assignment.target))
+                            {
+                                keys.note(crate::installed_members::member_name(holder, member));
+                            }
+                        }
+                    }
+                }
+            }
+            keys
+        })
     }
 
     /// `question` asked of an object of accessors (the props of `owner`, or an object literal), on the walk that asks: its visited positions and functions are
@@ -769,7 +1018,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                     !declaration.standard_library && analyzed(declaration.location.path.as_ref())
                 });
         if declared_in_project {
+            // The call binds `this` to the holder, and a callee that names `this` or `super` may run its members through no reference of the holder (the review of
+            // #226's re-check, N1, for a holder of accessors, here for a holder of functions).
             self.runs_where_written(file, call.span, walk)
+                || self
+                    .method_call_may_name_receiver(file, file.ast.peel_ts_sugar_span(call.callee))
         } else {
             true
         }
