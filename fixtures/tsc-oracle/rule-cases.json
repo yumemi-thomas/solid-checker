@@ -270,6 +270,14 @@
         {
           "rule": "reactive-dispatch-unresolved",
           "why": "The census row is an internal uncertifiable naming where `label` goes (a computed key); TS2538 concerns its type as an index."
+        },
+        {
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The universe row (ADR 0971, a JSX creation site) says the JSX `Computed` and `Attr` make may run under a leaf owner (policy A: an export of an open program is handed out, ADR 0967); TS2538 concerns `label` as an index."
+        },
+        {
+          "rule": "primitive-in-effect-callback",
+          "why": "The universe row (ADR 0971, a JSX creation site) says the JSX `Computed` and `Attr` make may run on an effect apply's stack with no owner set (policy A: an export of an open program is handed out, ADR 0967); TS2538 concerns `label` as an index."
         }
       ],
       "why": "SC1005's three typed value positions, narrowed 2026-08-17: a native JSX attribute (TS2322 -- an accessor is never assignable to a DOM attribute's type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), and a computed property access (TS2538, \"cannot be used as an index type\"). All three hold in both dialects. The rule SURVIVES on the positions TypeScript permits -- see the sibling `silent` case.",

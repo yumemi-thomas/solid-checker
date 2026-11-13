@@ -961,28 +961,55 @@ fn rust_cli_emits_snapshot_text_and_certification_exit_codes() {
     assert_eq!(output.status.code(), Some(1));
     let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(snapshot["status"], "violation");
-    // ADR 0970: the exported components of the fixture no tag renders also hold owner obligations (SC4001), which sort first and are not this test's subject.
-    let findings = snapshot["findings"]
-        .as_array()
-        .unwrap()
+    // ADR 0970 and 0971 (batch 11, B2): in this open program the exported components hold owner obligations (SC4001) and JSX creation rows (SC3001, SC6002), all
+    // uncertifiable and sorting around the violation (the one at line 4 sorts before it): the violation is asserted, not the first row.
+    let findings = snapshot["findings"].as_array().unwrap();
+    let violations = findings
         .iter()
-        .filter(|finding| !crate::process_support::owner_entry_row(finding))
+        .filter(|finding| finding["kind"] == "violation")
         .collect::<Vec<_>>();
-    assert_eq!(findings[0]["primaryLocation"]["line"], 8);
+    assert_eq!(violations.len(), 1, "{findings:#?}");
+    assert_eq!(violations[0]["primaryLocation"]["line"], 8);
     assert!(
-        findings[0]["primaryLocation"]["column"]
+        violations[0]["primaryLocation"]["column"]
             .as_u64()
             .is_some_and(|column| column > 0)
     );
     assert_eq!(snapshot["metrics"]["filesAnalyzed"], 1);
 
     let corrected = root.join("fixtures/reactive-ir/tracer-corrected/tsconfig.json");
+    // ADR 0971: the corrected program certifies where nothing outside it can call its exports (a closed program); opened, the same program keeps its JSX creation
+    // sites as uncertifiable rows (SC3001 and SC6002, two sites each), no violation, and `--certify` still passes.
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args([
+            "--format",
+            "json",
+            "--certify",
+            "--program-boundary",
+            "closed",
+            "--project",
+            &corrected.to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(snapshot["status"], "certified");
+    assert_eq!(snapshot["findings"].as_array().unwrap().len(), 0);
+
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", typefacts)
         .args([
             "--format",
             "json",
             "--certify",
+            "--program-boundary",
+            "open",
             "--project",
             &corrected.to_string_lossy(),
         ])
@@ -995,13 +1022,24 @@ fn rust_cli_emits_snapshot_text_and_certification_exit_codes() {
     );
     let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     // ADR 0970: the corrected source holds no violation, but its exported components no tag renders keep owner obligations (SC4001), so it is uncertifiable, not certified.
+    // ADR 0971 (batch 11, B2): and the JSX creation sites of its exported components keep an SC3001 and an SC6002 uncertifiable row each (two sites).
     assert_eq!(snapshot["status"], "uncertifiable");
+    let findings = snapshot["findings"].as_array().unwrap();
     assert!(
-        snapshot["findings"]
-            .as_array()
-            .unwrap()
+        findings
             .iter()
-            .all(crate::process_support::owner_entry_row)
+            .all(|finding| crate::process_support::owner_entry_row(finding)
+                || (finding["kind"] == "uncertifiable"
+                    && matches!(finding["id"].as_str(), Some("SC3001" | "SC6002")))),
+        "{findings:#?}"
+    );
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|finding| matches!(finding["id"].as_str(), Some("SC3001" | "SC6002")))
+            .count(),
+        4,
+        "{findings:#?}"
     );
 }
 
@@ -1131,15 +1169,30 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
             !(finding.rule.ends_with("missing-owner") && finding.kind == "uncertifiable")
         })
         .collect::<Vec<_>>();
-    assert_eq!(findings.len(), 1, "findings = {findings:#?}");
+    // ADR 0971 (batch 11, B2): the strict read's violation, and the two uncertifiable rows (SC3001 and SC6002) of the JSX creation `{count()}` in the
+    // open program's exported `Good`.
+    assert_eq!(findings.len(), 3, "findings = {findings:#?}");
+    let violations = findings
+        .iter()
+        .filter(|finding| finding.kind == "violation")
+        .collect::<Vec<_>>();
+    assert_eq!(violations.len(), 1, "findings = {findings:#?}");
     // Catalog-relative name: unprefixed in 2.0, `v1/`-prefixed in a
     // dialect-v1-only build.
     assert!(
-        findings[0].rule.ends_with("strict-read-untracked"),
+        violations[0].rule.ends_with("strict-read-untracked"),
         "rule = {}",
-        findings[0].rule
+        violations[0].rule
     );
-    assert!(findings[0].primary_location.path.ends_with("App.tsx"));
+    assert!(violations[0].primary_location.path.ends_with("App.tsx"));
+    assert!(
+        findings
+            .iter()
+            .filter(|finding| finding.kind != "violation")
+            .all(|finding| finding.kind == "uncertifiable"
+                && matches!(finding.id.as_str(), "SC3001" | "SC6002")),
+        "findings = {findings:#?}"
+    );
 }
 /// Opens the producer, absorbing the Linux `ETXTBSY` race: exec'ing a
 /// just-written wrapper script can collide with another test thread's fork

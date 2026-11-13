@@ -2022,6 +2022,18 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// The review of #225 (B2): whether `primitive`, a tag that renders what it is handed in place, itself calls a function written as the whole value of its prop `prop`
+    /// (`children`, which is [`Dialect::control_flow_child_run`]'s, and the named positions such as the error boundary's `fallback`), under the owner of its own render,
+    /// and on what condition. A function in any other prop (`Show`'s `when`, `For`'s `each`) is a value the tag hands on, never called by it.
+    fn control_flow_prop_function_run(
+        &self,
+        primitive: Primitive,
+        prop: &str,
+    ) -> Option<crate::FunctionChildRun> {
+        let _ = (primitive, prop);
+        None
+    }
+
     /// Whether a tag opens the async boundary specifically.
     /// ADR 0892: whether this component reads this prop only inside a
     /// computation of its own, so a tracked getter there suspends it.

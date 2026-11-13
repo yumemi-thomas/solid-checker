@@ -13,11 +13,33 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 154,
+      "end": 161,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 154,
+      "end": 161,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
       "start": 154,
       "end": 161,
@@ -46,11 +68,33 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 270,
+      "end": 277,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
       "blocker": "pending-read-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 270,
+      "end": 277,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
       "start": 270,
       "end": 277,
@@ -65,6 +109,28 @@
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
       "start": 270,
       "end": 275,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 419,
+      "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 419,
+      "end": 443,
       "fixes": 0
     },
     {
@@ -87,6 +153,28 @@
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
       "start": 432,
       "end": 437,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 450,
+      "end": 474,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-written-slots/variants/prop-value/body-write.tsx",
+      "start": 450,
+      "end": 474,
       "fixes": 0
     },
     {

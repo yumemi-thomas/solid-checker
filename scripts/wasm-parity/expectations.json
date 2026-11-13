@@ -618,8 +618,24 @@
           "endByte": 464
         },
         {
+          "id": "SC3001",
+          "rule": "leaf-owner-forbidden-call",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 505,
+          "endByte": 516
+        },
+        {
           "id": "SC4001",
           "rule": "missing-owner",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 505,
+          "endByte": 516
+        },
+        {
+          "id": "SC6002",
+          "rule": "primitive-in-effect-callback",
           "kind": "uncertifiable",
           "path": "<root>/App.tsx",
           "startByte": 505,
@@ -629,7 +645,7 @@
       "metrics": {
         "filesAnalyzed": 1,
         "functionsAnalyzed": 1,
-        "proofObligations": 2,
+        "proofObligations": 4,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
@@ -797,6 +813,38 @@
           "endByte": 300
         },
         {
+          "id": "SC3001",
+          "rule": "leaf-owner-forbidden-call",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 371,
+          "endByte": 404
+        },
+        {
+          "id": "SC6002",
+          "rule": "primitive-in-effect-callback",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 371,
+          "endByte": 404
+        },
+        {
+          "id": "SC3001",
+          "rule": "leaf-owner-forbidden-call",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 383,
+          "endByte": 391
+        },
+        {
+          "id": "SC6002",
+          "rule": "primitive-in-effect-callback",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 383,
+          "endByte": 391
+        },
+        {
           "id": "SC4002",
           "rule": "missing-context-provider",
           "kind": "uncertifiable",
@@ -840,7 +888,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 12,
+        "proofObligations": 16,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },
@@ -912,12 +960,28 @@
           "path": "<root>/Row.tsx",
           "startByte": 88,
           "endByte": 92
+        },
+        {
+          "id": "SC3001",
+          "rule": "leaf-owner-forbidden-call",
+          "kind": "uncertifiable",
+          "path": "<root>/Use.tsx",
+          "startByte": 64,
+          "endByte": 72
+        },
+        {
+          "id": "SC6002",
+          "rule": "primitive-in-effect-callback",
+          "kind": "uncertifiable",
+          "path": "<root>/Use.tsx",
+          "startByte": 64,
+          "endByte": 72
         }
       ],
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 4,
-        "proofObligations": 4,
+        "proofObligations": 6,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },
@@ -1050,6 +1114,22 @@
       },
       "findings": [
         {
+          "id": "SC3001",
+          "rule": "leaf-owner-forbidden-call",
+          "kind": "uncertifiable",
+          "path": "<root>/Gate.tsx",
+          "startByte": 118,
+          "endByte": 187
+        },
+        {
+          "id": "SC6002",
+          "rule": "primitive-in-effect-callback",
+          "kind": "uncertifiable",
+          "path": "<root>/Gate.tsx",
+          "startByte": 118,
+          "endByte": 187
+        },
+        {
           "id": "SC1003",
           "rule": "no-destructure",
           "kind": "uncertifiable",
@@ -1069,7 +1149,7 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 3,
-        "proofObligations": 3,
+        "proofObligations": 5,
         "cachedSummaries": 0,
         "unresolvedObligations": 0
       },

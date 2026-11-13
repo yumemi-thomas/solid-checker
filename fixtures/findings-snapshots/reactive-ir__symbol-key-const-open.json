@@ -90,6 +90,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/symbol-key-const-open/App.tsx",
+      "start": 707,
+      "end": 722,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -109,6 +120,17 @@
       "path": "fixtures/reactive-ir/symbol-key-const-open/App.tsx",
       "start": 707,
       "end": 715,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/symbol-key-const-open/App.tsx",
+      "start": 707,
+      "end": 722,
       "fixes": 0
     },
     {

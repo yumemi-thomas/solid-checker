@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/veto-test-file/src/carousel.tsx",
+      "start": 906,
+      "end": 925,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -87,6 +98,17 @@
       "path": "fixtures/uncertifiable-repro/veto-test-file/src/carousel.tsx",
       "start": 1045,
       "end": 1057,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/veto-test-file/src/carousel.tsx",
+      "start": 1084,
+      "end": 1109,
       "fixes": 0
     }
   ]

@@ -521,6 +521,9 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   if ((STORED_CONTEXTS.includes(context) || STORED_ASYNC_CONTEXTS.includes(context)) && context !== "st-unread") return shapes.filter((shape) => shape.binding === "direct" && shape.layer === "none");
   // ADR 0940: a `pl-*` cell takes its base shapes and, beside them, the plain shape of each of the code's `plVariants` (the site spelled another way the layers decide).
   if (PL_CONTEXT_NAMES.includes(context)) return recallCell ? [...shapes, ...(SPEC[code].plVariants ?? []).filter(takes).map((variant) => ({ variant, binding: "direct", layer: "none" }))] : shapes;
+  // Batch 11, B2 (the re-review of #220): an `er-*` cell also takes the plain shape of each of the code's `erVariants` the cell fits (a JSX creation, a site of the owner-call
+  // universe as a creating call is): its question is how the function is entered, not the spelling of the site.
+  if (ER_CONTEXT_NAMES.includes(context)) return recallCell ? [...shapes, ...(SPEC[code].erVariants ?? []).filter(variantFits(code, context)).filter(takes).map((variant) => ({ variant, binding: "direct", layer: "none" }))] : shapes;
   if (CBP_CONTEXTS.includes(context) || BASE_ONLY_CONTEXTS().includes(context)) return shapes;
   for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall

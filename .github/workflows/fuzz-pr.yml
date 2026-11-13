@@ -38,9 +38,13 @@ on:
 permissions:
   contents: read
 
+# A newer push cancels the run of a pull request's branch. On main it never does: merges come about hourly and a full run of the smoke takes 20 to 95 minutes, so every run
+# was cancelled by the next merge ("Canceling since a higher priority waiting request for fuzz-pr-refs/heads/main exists") and the push, which records the runtime cache a pull
+# request reads, almost never finished. On main a run now waits behind the one running (GitHub keeps one pending run per group, the newest). The event is in the key so the
+# nightly and a manual run on main do not replace a push's pending run, nor the other way round.
 concurrency:
-  group: fuzz-pr-${{ github.ref }}
-  cancel-in-progress: true
+  group: fuzz-pr-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   NODE_VERSION: 26.13.0

@@ -55,6 +55,28 @@
       "start": 637,
       "end": 650,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/variants/patched-assign/App.tsx",
+      "start": 704,
+      "end": 716,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compound-components-escapes/variants/patched-assign/App.tsx",
+      "start": 704,
+      "end": 716,
+      "fixes": 0
     }
   ]
 }

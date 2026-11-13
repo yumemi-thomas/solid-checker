@@ -13,6 +13,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/sync-dispatch/App.tsx",
+      "start": 639,
+      "end": 673,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/sync-dispatch/App.tsx",
+      "start": 639,
+      "end": 673,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -21,6 +43,28 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/variants/sync-dispatch/App.tsx",
       "start": 662,
       "end": 669,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/sync-dispatch/App.tsx",
+      "start": 757,
+      "end": 794,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/variants/sync-dispatch/App.tsx",
+      "start": 757,
+      "end": 794,
       "fixes": 0
     },
     {

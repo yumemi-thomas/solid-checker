@@ -1340,6 +1340,22 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// The review of #225 (B2), read on rc.21 (`solid-js` `dist/solid.dev.js`): `Errored` calls its `fallback` function as `f(err, reset)` at any arity in the error
+    /// boundary's fallback computation (`typeof f === "function" ? f(err, reset) : f`); `For`, `Repeat`, `Show` and `Match` in `Switch` call their `children` as
+    /// [`Self::control_flow_child_run`] says. `Show`'s `when`, `For`'s `each` and every `fallback` but `Errored`'s are values the tag reads or returns: a function written
+    /// there is handed on, never called by the tag (`Show` passes the `when` value to its function child).
+    fn control_flow_prop_function_run(
+        &self,
+        primitive: Primitive,
+        prop: &str,
+    ) -> Option<crate::FunctionChildRun> {
+        match (primitive, prop) {
+            (Primitive::Errored, "fallback") => Some(crate::FunctionChildRun::Always),
+            (_, "children") => self.control_flow_child_run(primitive),
+            _ => None,
+        }
+    }
+
     fn boundary_kind(&self, tag: &str) -> Option<Boundary> {
         match tag {
             "Loading" => Some(Boundary::Async),

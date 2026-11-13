@@ -13,6 +13,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 783,
+      "end": 791,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
@@ -24,6 +35,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 942,
+      "end": 953,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 996,
+      "end": 1003,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
@@ -32,6 +65,17 @@
       "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
       "start": 1158,
       "end": 1168,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1216,
+      "end": 1273,
       "fixes": 0
     },
     {
@@ -57,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1234,
+      "end": 1266,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
@@ -68,6 +123,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1517,
+      "end": 1530,
+      "fixes": 0
+    },
+    {
       "rule": "http-response-after-flush",
       "code": "SC7005",
       "kind": "uncertifiable",
@@ -76,6 +142,50 @@
       "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
       "start": 1705,
       "end": 1715,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1818,
+      "end": 1834,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1898,
+      "end": 1913,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 1920,
+      "end": 2035,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-nested/App.tsx",
+      "start": 2112,
+      "end": 2120,
       "fixes": 0
     }
   ]

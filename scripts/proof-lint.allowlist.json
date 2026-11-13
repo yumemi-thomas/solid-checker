@@ -855,8 +855,8 @@
     },
     "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs": {
       "default-on-missing": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 2,
+        "why": "pending-review for `fragment_child`'s; the other is `can_hand_itself_on`'s (ADR 0971, the re-review of #225, B1): no list of the producer's references of a function expression's own name answers yes, the function may hand itself on, which keeps the site's row: the answer that fails closed, never a silence"
       },
       "name-only-match": {
         "count": 1,

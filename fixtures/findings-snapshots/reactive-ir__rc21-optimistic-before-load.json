@@ -66,6 +66,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 413,
+      "end": 420,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -85,6 +96,28 @@
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 413,
       "end": 420,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 413,
+      "end": 420,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 422,
+      "end": 429,
       "fixes": 0
     },
     {
@@ -104,6 +137,17 @@
       "kind": "uncertifiable",
       "blocker": "mount-unresolved",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 422,
+      "end": 429,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 422,
       "end": 429,
@@ -120,10 +164,10 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "uncertifiable",
-      "blocker": "owner-callers-unenumerated",
+      "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 738,
@@ -135,6 +179,50 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 738,
+      "end": 745,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 738,
+      "end": 745,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 747,
+      "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
+      "start": 747,
+      "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx",
       "start": 747,
