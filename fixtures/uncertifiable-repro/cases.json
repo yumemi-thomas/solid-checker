@@ -16828,7 +16828,24 @@
     "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58"
    },
    "weight": 5,
-   "status": "certified"
+   "status": "certified",
+   "held": {
+    "adr": "0971",
+    "restoredBy": "Prove a package renders a component under an owner, from its dependency source (ADR 0970)",
+    "why": "certified clean before the review of #225 (F2): the children of `<Portal>` are a getter that runs where `Portal` reads `props.children`, which the checker does not prove for a component whose source it has not read for the question; `@solidjs/web`'s `Portal` reads them in a `createMemo` (`dist/web.js`, `portalImpl`), under an owner, so the tracked `{text()}` of the tip's panel keeps an uncertifiable SC3001 and SC6002 row (decline `getter-runs-where-read`); the proof from the component's dependency source, that every read of the prop is in a render or tracked position, restores the expectation",
+    "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC3001",
+      "context": "leaf-operation-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC6002",
+      "context": "effect-creation-unaccounted"
+     }
+    ]
+   }
   },
   {
    "id": "clean-switch-match",

@@ -110,6 +110,28 @@
       "start": 432,
       "end": 440,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-descriptor-map/App.tsx",
+      "start": 440,
+      "end": 448,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-descriptor-map/App.tsx",
+      "start": 440,
+      "end": 448,
+      "fixes": 0
     }
   ]
 }

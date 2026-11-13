@@ -182,7 +182,8 @@ enum GetterRelation {
     Plain,
     /// Written in a prop of a component that does not render it in place, with no such function between: a getter, evaluated where the component reads the prop.
     Getter,
-    /// A getter of a dialect control-flow element or a context provider: rendered in place, under the owner of the render that reads it.
+    /// A getter of a dialect control-flow element or a context provider, or a function handed to a dialect control-flow element: rendered or called in place, under the owner of
+    /// the render that reads it.
     InPlace,
 }
 
@@ -213,24 +214,33 @@ fn getter_relation(
         .functions_owning(span)
         .filter(|function| element.span.contains(function.span))
         .max_by_key(|function| function.span.end - function.span.start);
-    if outermost.is_some_and(|function| handed_to_component(file, element, function.span)) {
-        return GetterRelation::Plain;
-    }
-    // The primitives `stored_throw::element_prop_handled` takes to render a prop in place, and a context provider.
-    let in_place = match crate::owners::element_primitive(lookup, file, element) {
+    // The primitives `stored_throw::element_prop_handled` takes to render a prop in place.
+    let in_place_primitive = matches!(
+        crate::owners::element_primitive(lookup, file, element),
         Some(
             Primitive::Errored
-            | Primitive::For
-            | Primitive::Index
-            | Primitive::Repeat
-            | Primitive::Show
-            | Primitive::Switch
-            | Primitive::Match
-            | Primitive::Loading,
-        ) => true,
-        Some(_) => false,
-        None => lookup.is_context_reference(file.path.as_str(), element.name.span),
-    };
+                | Primitive::For
+                | Primitive::Index
+                | Primitive::Repeat
+                | Primitive::Show
+                | Primitive::Switch
+                | Primitive::Match
+                | Primitive::Loading,
+        )
+    );
+    if outermost.is_some_and(|function| handed_to_component(file, element, function.span)) {
+        // A function handed to a dialect control-flow element (`For`'s row function, `Show`'s function child, `Errored`'s fallback) is called by that element's own render, under
+        // the owner it sets: a creation in it throws nowhere, so it is no site. A function handed to any other component is run by whoever that component gives it to.
+        return if in_place_primitive {
+            GetterRelation::InPlace
+        } else {
+            GetterRelation::Plain
+        };
+    }
+    // The same primitives, and a context provider (which reads its children in place; a function it is handed as a value is stored, not run, which is the case above).
+    let in_place = in_place_primitive
+        || (crate::owners::element_primitive(lookup, file, element).is_none()
+            && lookup.is_context_reference(file.path.as_str(), element.name.span));
     if in_place {
         GetterRelation::InPlace
     } else {

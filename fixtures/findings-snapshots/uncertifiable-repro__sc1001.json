@@ -134,6 +134,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/clean-context-provider.tsx",
+      "start": 522,
+      "end": 532,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/clean-context-provider.tsx",
+      "start": 522,
+      "end": 532,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -151,8 +173,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc1001/src/clean-context-provider.tsx",
-      "start": 613,
-      "end": 675,
+      "start": 770,
+      "end": 779,
       "fixes": 0
     },
     {
@@ -162,8 +184,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc1001/src/clean-context-provider.tsx",
-      "start": 613,
-      "end": 675,
+      "start": 770,
+      "end": 779,
       "fixes": 0
     },
     {
@@ -605,28 +627,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-presence-in-show-read.tsx",
-      "start": 501,
-      "end": 699,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/prop-presence-in-show-read.tsx",
-      "start": 501,
-      "end": 699,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1009,6 +1009,28 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/props-other.tsx",
       "start": 235,
       "end": 248,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/props-other.tsx",
+      "start": 352,
+      "end": 389,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001/src/props-other.tsx",
+      "start": 352,
+      "end": 389,
       "fixes": 0
     },
     {

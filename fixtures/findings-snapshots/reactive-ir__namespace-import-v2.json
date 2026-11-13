@@ -98,10 +98,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
+      "start": 1679,
+      "end": 1686,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
+      "start": 1679,
+      "end": 1686,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
       "start": 1679,
@@ -205,10 +227,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
+      "start": 762,
+      "end": 769,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
+      "start": 762,
+      "end": 769,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
       "start": 762,

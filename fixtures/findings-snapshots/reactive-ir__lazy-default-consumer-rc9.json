@@ -57,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
+      "start": 623,
+      "end": 640,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -109,6 +120,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
       "start": 1051,
       "end": 1056,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
+      "start": 1089,
+      "end": 1106,
       "fixes": 0
     },
     {

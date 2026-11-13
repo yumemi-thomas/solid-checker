@@ -173,6 +173,28 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 1754,
+      "end": 1765,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
+      "start": 1754,
+      "end": 1765,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/http-response-flush-unplaced/App.tsx",
       "start": 1860,
       "end": 1868,
       "fixes": 0

@@ -393,6 +393,17 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
+      "start": 3374,
+      "end": 3381,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
       "start": 3451,
       "end": 3463,
       "fixes": 0
@@ -417,6 +428,17 @@
       "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
       "start": 3597,
       "end": 3665,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
+      "start": 3641,
+      "end": 3648,
       "fixes": 0
     },
     {
@@ -459,6 +481,17 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
+      "start": 3960,
+      "end": 3967,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
       "start": 4043,
       "end": 4055,
       "fixes": 0
@@ -492,6 +525,17 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
+      "start": 4316,
+      "end": 4323,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
       "start": 4493,
       "end": 4557,
       "fixes": 0
@@ -505,6 +549,17 @@
       "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
       "start": 4493,
       "end": 4557,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/phase-handed-by-name/App.tsx",
+      "start": 4533,
+      "end": 4540,
       "fixes": 0
     },
     {

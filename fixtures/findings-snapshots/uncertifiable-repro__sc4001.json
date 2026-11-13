@@ -1032,28 +1032,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-props.tsx",
-      "start": 227,
-      "end": 237,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-props.tsx",
-      "start": 227,
-      "end": 237,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -1073,28 +1051,6 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-rest.tsx",
       "start": 413,
       "end": 524,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-rest.tsx",
-      "start": 510,
-      "end": 521,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-rest.tsx",
-      "start": 510,
-      "end": 521,
       "fixes": 0
     },
     {
@@ -1648,6 +1604,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
+      "start": 420,
+      "end": 457,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
+      "start": 420,
+      "end": 457,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1865,6 +1843,28 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
       "start": 379,
       "end": 391,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
+      "start": 424,
+      "end": 461,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
+      "start": 424,
+      "end": 461,
       "fixes": 0
     },
     {
@@ -2099,6 +2099,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 766,
+      "end": 832,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 766,
+      "end": 832,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2209,6 +2231,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 839,
+      "end": 981,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 839,
+      "end": 981,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2297,6 +2341,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 863,
+      "end": 958,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 863,
+      "end": 958,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2382,6 +2448,28 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 864,
       "end": 870,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 890,
+      "end": 932,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 890,
+      "end": 932,
       "fixes": 0
     },
     {

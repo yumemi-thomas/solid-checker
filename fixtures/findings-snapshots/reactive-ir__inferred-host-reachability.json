@@ -22,6 +22,17 @@
       "start": 943,
       "end": 1105,
       "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/inferred-host-reachability/src/main.tsx",
+      "start": 1015,
+      "end": 1090,
+      "fixes": 0
     }
   ]
 }

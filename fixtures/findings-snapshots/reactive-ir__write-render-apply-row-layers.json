@@ -321,6 +321,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 2137,
+      "end": 2213,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 2137,
+      "end": 2213,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -361,6 +383,28 @@
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 2366,
       "end": 2587,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 2428,
+      "end": 2546,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 2428,
+      "end": 2546,
       "fixes": 0
     },
     {
@@ -415,6 +459,28 @@
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 2699,
       "end": 2880,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 2761,
+      "end": 2839,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 2761,
+      "end": 2839,
       "fixes": 0
     },
     {
@@ -483,6 +549,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 3057,
+      "end": 3134,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 3057,
+      "end": 3134,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -526,6 +614,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 3357,
+      "end": 3489,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 3357,
+      "end": 3489,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",
@@ -555,6 +665,28 @@
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 3694,
       "end": 3885,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 3756,
+      "end": 3844,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 3756,
+      "end": 3844,
       "fixes": 0
     },
     {
@@ -650,6 +782,28 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 4801,
+      "end": 4895,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 4801,
+      "end": 4895,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 5048,
       "end": 5261,
       "fixes": 0
@@ -727,6 +881,28 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 5781,
+      "end": 5784,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 5781,
+      "end": 5784,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 5822,
       "end": 6007,
       "fixes": 0
@@ -740,6 +916,28 @@
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 5822,
       "end": 6007,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 5884,
+      "end": 5966,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 5884,
+      "end": 5966,
       "fixes": 0
     },
     {
@@ -773,6 +971,28 @@
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 6014,
       "end": 6285,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 6076,
+      "end": 6244,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
+      "start": 6076,
+      "end": 6244,
       "fixes": 0
     },
     {

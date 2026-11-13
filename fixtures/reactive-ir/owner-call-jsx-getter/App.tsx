@@ -111,6 +111,11 @@ function InShow() {
     </Show>
   );
 }
+// A function handed to a dialect control-flow element (`Show`'s function child, `For`'s row function, `Errored`'s fallback) is called by that element's render under the owner it
+// sets: a creation in it throws nowhere, so the tag is no site.
+function InShowFunction() {
+  return <Show when={1}>{(_value) => <Inner />}</Show>;
+}
 const Ctx = createContext(1);
 function InProvider() {
   return (
@@ -142,6 +147,7 @@ function App() {
       <Rendered />
       <Unread />
       <InShow />
+      <InShowFunction />
       <InProvider />
       <InIntrinsic />
     </p>

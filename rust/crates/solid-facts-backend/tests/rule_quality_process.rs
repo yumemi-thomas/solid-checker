@@ -44,9 +44,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // `effect-apply-invalid.tsx`, `effect-apply-extended-invalid.tsx` and `props-valid.tsx`, pinned below. No violation moved.
         // ADR 0971 (batch 11, B2): 21 more, the uncertifiable `leaf-operation-unaccounted` rows at the JSX creation sites (a component element, an
         // expression container's insert) of the corpus's exported functions, in seven files, pinned per file below. No violation moved.
-        // ADR 0971 (the review of #225, F2): four more, the same rows at the JSX creation inside the function child of a `For` or a `Show` (`control-flow-invalid.tsx`
-        // lines 29 and 52, `control-flow-valid.tsx` lines 14 and 40), a function written inside a component element, no longer skipped as a getter's. No violation moved.
-        ("leaf-owner-forbidden-call", 40),
+        ("leaf-owner-forbidden-call", 36),
     ] {
         assert_rule_findings(&findings, rule, count);
     }
@@ -106,7 +104,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             "control-flow-invalid.tsx",
             [
                 ("strict-read-untracked", 5),
-                ("leaf-owner-forbidden-call", 8),
+                ("leaf-owner-forbidden-call", 6),
             ]
             .as_slice(),
         ),
@@ -237,11 +235,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             .as_slice(),
         ),
         // ADR 0971: the JSX creation sites of these files (`leaf-operation-unaccounted`, uncertifiable; checked below). The match is a suffix:
-        // `control-flow-valid.tsx` is nine rows of its own (two of them the review of #225's, F2: the function children of a `For` and a `Show`) and the one of
-        // `await-control-flow-valid.tsx` (ADR 0969).
+        // `control-flow-valid.tsx` is seven rows of its own and the one of `await-control-flow-valid.tsx` (ADR 0969).
         (
             "control-flow-valid.tsx",
-            [("leaf-owner-forbidden-call", 10)].as_slice(),
+            [("leaf-owner-forbidden-call", 8)].as_slice(),
         ),
         (
             "props-extended-valid.tsx",

@@ -544,6 +544,28 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
+      "start": 634,
+      "end": 643,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
+      "start": 634,
+      "end": 643,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
       "start": 736,
       "end": 857,
       "fixes": 0
@@ -634,10 +656,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
+      "start": 1303,
+      "end": 1310,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
+      "start": 1303,
+      "end": 1310,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
       "start": 1303,
@@ -667,10 +711,32 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-valid.tsx",
+      "start": 224,
+      "end": 234,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-valid.tsx",
+      "start": 224,
+      "end": 234,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-valid.tsx",
       "start": 224,
@@ -763,6 +829,28 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-valid.tsx",
       "start": 846,
       "end": 997,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-valid.tsx",
+      "start": 966,
+      "end": 977,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-valid.tsx",
+      "start": 966,
+      "end": 977,
       "fixes": 0
     },
     {

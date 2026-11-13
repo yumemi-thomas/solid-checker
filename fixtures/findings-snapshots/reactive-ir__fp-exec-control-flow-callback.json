@@ -195,6 +195,28 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 1795,
+      "end": 1801,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 1795,
+      "end": 1801,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
       "start": 1894,
       "end": 1982,
       "fixes": 0
@@ -261,6 +283,50 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2399,
+      "end": 2405,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2399,
+      "end": 2405,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2411,
+      "end": 2424,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2411,
+      "end": 2424,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
       "start": 2510,
       "end": 2598,
       "fixes": 0
@@ -274,6 +340,28 @@
       "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
       "start": 2510,
       "end": 2598,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2561,
+      "end": 2586,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 2561,
+      "end": 2586,
       "fixes": 0
     },
     {
@@ -370,6 +458,28 @@
       "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
       "start": 3232,
       "end": 3235,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 3256,
+      "end": 3273,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-control-flow-callback/App.tsx",
+      "start": 3256,
+      "end": 3273,
       "fixes": 0
     },
     {
