@@ -128,6 +128,11 @@ impl GlobalWrites {
     }
 
     fn name(&mut self, name: &str) {
+        // `globalThis.__proto__ = p` makes the members of `p` globals (an unbound name is looked up through the global object's prototype chain): any name.
+        if name == "__proto__" {
+            self.any_name = true;
+            return;
+        }
         self.names.push(name.to_owned());
     }
 
@@ -1639,6 +1644,8 @@ mod tests {
             "Object.defineProperties(window, props);",
             "Reflect.set(globalThis, k, v);",
             "Object.setPrototypeOf(window, p);",
+            "globalThis.__proto__ = p;",
+            "Object.defineProperty(window, '__proto__', { value: p });",
         ] {
             assert!(writes(source).any_name, "{source}");
         }
