@@ -345,8 +345,10 @@ fn calls_function_in_place(
 }
 
 /// The review of #225 (B1): whether `function`, written inline, can hand itself on, so that it runs where it is called and not only where its element calls it: a function
-/// expression that uses its own name inside (`{function row() { pick = row; ... }}`), or reads `arguments` (`arguments.callee`). An arrow has neither. A name no reference of
-/// the producer's is known for, or a reference it lists, is a use.
+/// expression that uses its own name inside (`{function row() { pick = row; ... }}`). An arrow has no name to use. A name no reference of the producer's is known for, or a
+/// reference it lists, is a use. A function expression that reads `arguments` answers yes as well, as a precaution and no proof of a hand-on: `arguments.callee` throws in module
+/// code and nothing else of `arguments` is the function. It sends the function to the entry walk, which closes the function child of `For`, `Repeat`, `Show` and `Match` (a
+/// control-flow child no reference names: no row, as in place) and not `Errored`'s `fallback` (the site keeps its uncertifiable row). The re-check of #225, N1.
 fn can_hand_itself_on(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
