@@ -184,6 +184,10 @@ site_silences! {
     /// `onFlush` where the write role allows it (an effect's apply, a leaf, a
     /// handler): no owner rejects the call.
     OnFlushRoleAllows => "static_api.on-flush.role-allows",
+    /// ADR 0972: a call into a package the build does not read, whose role allows an action (a handler, a timer, an effect's apply).
+    PackageCallRoleAllows => "package_action_calls.package_action_calls.role-allows",
+    /// ADR 0972: a call into a package the build does not read that cannot run (module initialization, a function nothing reaches).
+    PackageCallCannotRun => "package_action_calls.package_action_calls.cannot-run",
     /// An owner-call site (`onCleanup`, a creation) that ADR 0458's query proves no execution runs (batch 11, slice 6).
     OwnerCallNeverRuns => "leaf_universe.account.never-runs",
     /// An owner-call site outside every function (and no instance field's initializer): module evaluation runs it on a stack of its own, in no leaf
@@ -247,6 +251,8 @@ impl SiteSilence {
             // A setter or action call outside every function (module initialization has no owner) or in a function nothing reaches: the codes that
             // need an owner. An optimistic write before the load needs none, so a call at module scope keeps that code.
             Self::UnreachedWriteCannotRun => &[ReactiveWrite, ActionCall],
+            // ADR 0972: a package call's own code.
+            Self::PackageCallRoleAllows | Self::PackageCallCannotRun => &[ActionCall],
             // The store writes: an assignment, a `delete`, an in-place array method, through a store or props root.
             Self::DirectCreateMutable
             | Self::DirectDestructuredPropValue
@@ -773,7 +779,7 @@ mod tests {
     }
 
     /// The sources that name silences, by the module a silence's id begins with.
-    const PRODUCERS: [(&str, &str); 6] = [
+    const PRODUCERS: [(&str, &str); 7] = [
         ("local_access", include_str!("local_access.rs")),
         (
             "shared_reactivity",
@@ -782,6 +788,10 @@ mod tests {
         ("static_api", include_str!("static_api.rs")),
         ("effect_execution", include_str!("effect_execution.rs")),
         ("attribution", include_str!("attribution.rs")),
+        (
+            "package_action_calls",
+            include_str!("package_action_calls.rs"),
+        ),
         ("leaf_universe", include_str!("owners/leaf_universe.rs")),
     ];
 

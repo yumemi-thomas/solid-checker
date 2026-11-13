@@ -200,6 +200,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-flip/App.tsx",
+      "start": 2949,
+      "end": 2978,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -296,6 +307,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-flip/App.tsx",
       "start": 3485,
       "end": 3492,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-flip/App.tsx",
+      "start": 3651,
+      "end": 3663,
       "fixes": 0
     },
     {
@@ -428,6 +450,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-flip/App.tsx",
       "start": 4475,
       "end": 4482,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-flip/App.tsx",
+      "start": 5611,
+      "end": 5614,
       "fixes": 0
     },
     {

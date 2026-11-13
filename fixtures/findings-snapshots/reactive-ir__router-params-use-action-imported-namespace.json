@@ -34,6 +34,39 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 459,
+      "end": 494,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 761,
+      "end": 776,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 761,
+      "end": 776,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -42,6 +75,17 @@
       "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
       "start": 771,
       "end": 775,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-imported-namespace/App.tsx",
+      "start": 796,
+      "end": 824,
       "fixes": 0
     },
     {

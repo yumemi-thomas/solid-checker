@@ -258,12 +258,26 @@ pub struct PackageBoundary {
     imports: BTreeMap<ImportKey, UnanalyzableImport>,
     /// The exact requirement keys that raise a boundary defect.
     legacy_markers: BTreeSet<ImportKey>,
+    /// ADR 0972: whether each installed package a project call may enter can reach a Solid action, decided from its source. `None` when
+    /// the adapter reads no filesystem: every such call is then undecided.
+    package_reach: Option<solid_facts::package_reach::PackageReachIndex>,
 }
 
 impl PackageBoundary {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.imports.is_empty() && self.legacy_markers.is_empty()
+        self.imports.is_empty() && self.legacy_markers.is_empty() && self.package_reach.is_none()
+    }
+
+    /// ADR 0972: the reach verdicts the backend decided, `None` when it read no filesystem.
+    #[must_use]
+    pub fn package_reach(&self) -> Option<&solid_facts::package_reach::PackageReachIndex> {
+        self.package_reach.as_ref()
+    }
+
+    /// ADR 0972: records the reach verdicts.
+    pub fn set_package_reach(&mut self, index: solid_facts::package_reach::PackageReachIndex) {
+        self.package_reach = Some(index);
     }
 
     /// Records one import-wide cause, with the identity the producer resolved.
@@ -312,6 +326,13 @@ impl PackageBoundary {
             }
         }
         self.legacy_markers.extend(other.legacy_markers);
+        if let Some(index) = other.package_reach {
+            let folded = self.package_reach.get_or_insert_with(Default::default);
+            folded.by_root.extend(index.by_root);
+            folded.names.extend(index.names);
+            folded.linked.extend(index.linked);
+            folded.project_js.extend(index.project_js);
+        }
     }
 
     /// Everything a finding or cache entry can depend on, causes included: a
@@ -362,6 +383,26 @@ impl PackageBoundary {
         for key in &self.legacy_markers {
             text(hash, &key.importer);
             text(hash, &key.specifier);
+        }
+        // ADR 0972: an absent index adds nothing, so the digest of a boundary without one is unchanged.
+        if let Some(index) = &self.package_reach {
+            hash.update(b"package-reach-v1");
+            hash.update((index.by_root.len() as u64).to_be_bytes());
+            for (root, reach) in &index.by_root {
+                text(hash, root);
+                text(hash, reach.word());
+                text(hash, &reach.describe());
+                text(hash, index.name_of(root).unwrap_or(""));
+            }
+            hash.update((index.linked.len() as u64).to_be_bytes());
+            for (real, link) in &index.linked {
+                text(hash, real);
+                text(hash, link);
+            }
+            hash.update((index.project_js.len() as u64).to_be_bytes());
+            for path in &index.project_js {
+                text(hash, path);
+            }
         }
     }
 

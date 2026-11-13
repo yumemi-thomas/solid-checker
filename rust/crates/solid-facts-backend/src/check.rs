@@ -353,7 +353,15 @@ pub fn package_inputs(
     ),
     Box<dyn Error>,
 > {
-    let boundary = crate::external_package_boundary(facts, source_refusals);
+    let mut boundary = crate::external_package_boundary(facts, source_refusals);
+    // ADR 0972: whether each installed package a project call may enter can reach a Solid action, from its source.
+    boundary.set_package_reach(crate::package_reach::package_reach_index(
+        facts,
+        &crate::package_reach::SolidPackages {
+            names: dialect.vocabulary.primitive_defining_packages(),
+            scopes: dialect.vocabulary.ecosystem_scopes(),
+        },
+    ));
     let inferred =
         crate::inferred_project_host_with_note(directory, runtime, dialect.vocabulary, facts)?;
     Ok((boundary, inferred))

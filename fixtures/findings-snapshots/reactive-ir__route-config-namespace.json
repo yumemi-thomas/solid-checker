@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/namespace/Read.tsx",
+      "start": 137,
+      "end": 144,
+      "fixes": 0
+    },
+    {
       "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",

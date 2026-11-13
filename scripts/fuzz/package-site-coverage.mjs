@@ -8,6 +8,7 @@ import { cellList, gridShapes, plainShape, recallShapes } from "./matrix.mjs";
 import { legalCells, legalShapes, recallLegalShapes } from "./legal.mjs";
 import { SPEC, gridVariantsOf, sourcesOf } from "./misuse.mjs";
 import { validate, walk } from "./model.mjs";
+import { PA_CONTEXT_NAMES, paParts } from "./pa-shapes.mjs";
 
 /**
  * Sources with no package variant, each with its reason. None now: `package-export` and `package-hook`, which looked like candidates (the site already reads a
@@ -19,7 +20,9 @@ export const PACKAGE_SITE_EXEMPT_SOURCES = {
   "package-component": "the site is already in a package: the project renders the dependency's component (ADR 0949); the generic twin crosses the same entries",
 };
 /** Contexts with no package variant, each with its reason (filled from what building them showed). */
-export const PACKAGE_SITE_EXEMPT_CONTEXTS = {};
+export const PACKAGE_SITE_EXEMPT_CONTEXTS = Object.fromEntries(PA_CONTEXT_NAMES.map((context) => [context, paParts(context).kind === "inline"
+  ? "ADR 0972: the cell's site is the program's own inline action (`action(function* () {})()`), written where it is created; the generic twin moves a site into `fz-site`, which is not this question (the pattern lane's `pkgaction/src-inline-body` holds the same form inside a package)"
+  : "ADR 0972: the cell's site is already a call into a package the program names (`fz-act`, `fz-calm`, `fz-load`: pa-shapes.mjs `paUse`); the generic twin would move it into `fz-site` a second time, and the package-site grids already cross every entry"]));
 
 const plain = { binding: "direct", layer: "none" };
 const programOf = (plan) => generateProgram(7, { profile: "misuse", misusePlan: { ...plain, pkg: "call", ...plan } });

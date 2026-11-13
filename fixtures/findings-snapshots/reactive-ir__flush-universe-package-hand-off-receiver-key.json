@@ -33,6 +33,17 @@
       "start": 790,
       "end": 797,
       "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/App.tsx",
+      "start": 874,
+      "end": 915,
+      "fixes": 0
     }
   ]
 }

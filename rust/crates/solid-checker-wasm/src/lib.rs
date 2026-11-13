@@ -285,6 +285,30 @@ mod tests {
         assert!(snapshot.contains("SC9005"), "{snapshot}");
     }
 
+    /// ADR 0972: the adapter reads no installed package, so no verdict decides what a package's code reaches (`no-filesystem`): a call into a package in a
+    /// component body is an uncertifiable `package-may-call-action` row, never certified. A package the build could read as source decides it natively; here
+    /// the answer stays closed, whatever the package is.
+    #[test]
+    fn a_package_call_in_an_owned_scope_is_never_certified_without_a_filesystem() {
+        let source = "import { runStep } from \"reactive-package\";\nexport function App() {\n  runStep(() => {});\n  return null;\n}\n";
+        let request = serde_json::json!({
+            "projectId": "/p/tsconfig.json",
+            "generation": 1,
+            "sources": [{ "path": "/p/App.tsx", "source": source }],
+            "typeFacts": {
+                "schema": 3, "generation": 1, "projectId": "/p/tsconfig.json",
+                "sources": [{
+                    "path": "/p/App.tsx",
+                    "sha256": "sha256:06ea03f5868d3a604ca94a6bfa0d8542fe81e547dfca7b00706b5a0d03c0e743"
+                }],
+                "entities": [], "symbols": [], "files": []
+            }
+        });
+        let snapshot = super::check(&request.to_string()).expect("checks");
+        assert!(snapshot.contains("package-may-call-action"), "{snapshot}");
+        assert!(!snapshot.contains("\"status\":\"certified\""), "{snapshot}");
+    }
+
     /// A request from a host written for the retired compiled-in tier still
     /// decodes: its fields are accepted and have no effect (ADR 0228).
     #[test]

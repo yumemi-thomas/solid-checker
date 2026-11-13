@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 1068,
+      "end": 1125,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 1223,
       "end": 1230,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 1380,
+      "end": 1437,
       "fixes": 0
     },
     {
@@ -90,6 +112,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 1697,
+      "end": 1758,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -120,6 +153,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 1864,
       "end": 1871,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 2020,
+      "end": 2074,
       "fixes": 0
     },
     {
@@ -156,6 +200,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 2421,
+      "end": 2454,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -186,6 +241,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 2549,
       "end": 2556,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 2714,
+      "end": 2798,
       "fixes": 0
     },
     {
@@ -222,6 +288,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 3039,
+      "end": 3099,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -252,6 +329,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 3200,
       "end": 3207,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 3389,
+      "end": 3447,
       "fixes": 0
     },
     {
@@ -288,6 +376,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 3918,
+      "end": 3978,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -318,6 +417,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 4089,
       "end": 4096,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 4269,
+      "end": 4327,
       "fixes": 0
     },
     {
@@ -354,6 +464,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 4635,
+      "end": 4683,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -384,6 +505,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 4783,
       "end": 4790,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 4983,
+      "end": 5038,
       "fixes": 0
     }
   ]

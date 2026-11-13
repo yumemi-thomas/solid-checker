@@ -127,6 +127,9 @@ pub(crate) const STRICT_READ_UNACCOUNTED: &str = "strict-read-unaccounted";
 pub(crate) const WRITE_UNACCOUNTED: &str = "write-unaccounted";
 /// ADR 0936: a call of an action.
 pub(crate) const ACTION_UNACCOUNTED: &str = "action-unaccounted";
+/// ADR 0972: a call into code of a package the build does not read, in an owned scope or where nothing places it, whose source does not
+/// prove that it cannot reach a Solid action. The detail names why (`reaches-solid`, `unknown-global`, `missing-source`, …).
+pub(crate) const PACKAGE_MAY_CALL_ACTION: &str = "package-may-call-action";
 /// ADR 0936: an assignment, `delete` or in-place array method through a store
 /// or props root.
 pub(crate) const STORE_WRITE_UNACCOUNTED: &str = "store-write-unaccounted";

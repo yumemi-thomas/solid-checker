@@ -1046,6 +1046,21 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
         }
     }
     primitive_call_sites(ctx, &mut found);
+    inline_action_sites(ctx, &mut found);
+    // ADR 0972: a call into code of a package the build does not read, whose closure is not clear.
+    for (file, at, callee, via) in crate::package_action_calls::universe_sites(ctx) {
+        found.push((
+            file,
+            Site {
+                table: "action",
+                source: "package",
+                via,
+                at,
+                alternates: vec![callee],
+                codes: ACTION_CODES,
+            },
+        ));
+    }
     found
 }
 
@@ -1159,6 +1174,38 @@ pub(crate) const fn jsx_site_codes(client_build: bool) -> &'static [SiteCode] {
         CREATION_AND_EFFECT_CODES
     } else {
         CREATION_CODES
+    }
+}
+
+/// ADR 0972: SC2002's sites with no action binding: each call of what an `action(…)` call returns, written as one (`action(step)(…)`),
+/// outside dependency source.
+fn inline_action_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
+    let lookup = ctx.semantic_lookup;
+    for file in lookup.files() {
+        if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        for call in &file.ast.calls {
+            let Some(inner) = file.ast.call_at(file.ast.peel_ts_sugar_span(call.callee)) else {
+                continue;
+            };
+            if lookup
+                .primitive_at_call(file, inner.span)
+                .is_some_and(|primitive| ctx.dialect.returns_action(primitive))
+            {
+                found.push((
+                    file,
+                    Site {
+                        table: "action",
+                        source: "primitive",
+                        via: "call",
+                        at: call.span,
+                        alternates: vec![call.callee],
+                        codes: ACTION_CODES,
+                    },
+                ));
+            }
+        }
     }
 }
 
