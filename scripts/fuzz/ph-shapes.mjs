@@ -88,6 +88,11 @@
 //             propsjsx   `function Wrap1(props) { return <StepView>{typeof props.children as never}</StepView>; }`, `<Wrap1>{h1()}</Wrap1>`
 //             propsclass `function Wrap1(props) { class K { v = props.children === undefined; } setTimeout(() => runStep(() => { void new K(); })); }`
 //             getterthis `const o1 = { get g() { cb1(); return 1; }, m() { runStep(() => { void this.g; }); } }`, `o1.m()`
+//           and the re-check of #226 (N1: a method call on an object of accessors binds `this` to it; N2: one callback returns the flushing function or the object):
+//             getterouter `function m1(this) { runStep(() => { void this.g; }); }`, `const o1 = { get g() { cb1(); return 1; }, m: m1 }`, `o1.m()`: a method written outside the literal
+//             getterassign the same, `m() {}` in the literal and `o1.m = m1` after
+//             propsmethod `function Wrap1(props) { setTimeout(() => { props.pick(); }); }`, `pick={m1}`, `m1` reading `this.children` in the step: a prop that is a method
+//             getterpick `const pick1 = () => (flag1 ? helper1 : o1)`, `const got1 = [0].map(pick1)`, `runStep(() => { void got1[0].g; })`
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -100,7 +105,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -442,10 +447,36 @@ const ROUTE_FRAMES = {
     const object = n("o");
     return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n  m() {\n    ${f}(() => {\n      void this.g;\n    });\n  },\n};\nsetTimeout(() => {\n  ${object}.m();\n});` };
   },
+  getterouter: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const method = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${method}(this: { g: number }) {\n  ${f}(() => {\n    void this.g;\n  });\n}\nconst ${object} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n  m: ${method},\n};\nsetTimeout(() => {\n  ${object}.m();\n});` };
+  },
+  getterassign: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const method = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${method}(this: { g: number }) {\n  ${f}(() => {\n    void this.g;\n  });\n}\nconst ${object} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n  m() {},\n};\n${object}.m = ${method};\nsetTimeout(() => {\n  ${object}.m();\n});` };
+  },
+  propsmethod: (f, n) => {
+    const helper = n("helper");
+    const method = n("m");
+    const wrap = n("Wrap");
+    return { head: `function ${helper}() `, close: `\nfunction ${method}(this: { children?: unknown }) {\n  ${f}(() => {\n    void this.children;\n  });\n}\nfunction ${wrap}(props: { children?: unknown; pick: (this: { children?: unknown }) => void }) {\n  setTimeout(() => {\n    props.pick();\n  });\n  return null;\n}\nsetTimeout(() => {\n  document.body.append((<${wrap} pick={${method}}>{${helper}()}</${wrap}>) as unknown as Node);\n});` };
+  },
+  getterpick: (f, n) => {
+    const helper = n("helper");
+    const object = n("o");
+    const pick = n("pick");
+    const got = n("got");
+    const flag = n("flag");
+    return { head: `const ${flag} = Math.random() > 2;\nfunction ${helper}() `, close: `\nconst ${object} = {\n  get g(): number {\n    ${helper}();\n    return 1;\n  },\n};\nconst ${pick} = (): any => (${flag} ? ${helper} : ${object});\nconst ${got} = [0].map(${pick});\nsetTimeout(() => {\n  ${f}(() => {\n    void ${got}[0].g;\n  });\n});` };
+  },
 };
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };

@@ -212,3 +212,120 @@ const thisReader = {
 setTimeout(() => {
   thisReader.m();
 });
+
+// ---- the re-check of #226. N1: a method call on an object of accessors binds `this` to it. A method written outside the literal (`{ m }`, `m: fn`, one assigned later) or
+// a prop of a component reads a getter through `this` in a step, through no reference of the object
+function outerShorthandMethod(this: { g: number }) {
+  void runStep(() => {
+    void this.g;
+  });
+}
+const outerShorthand = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  m: outerShorthandMethod,
+};
+setTimeout(() => {
+  outerShorthand.m();
+});
+const outerPropertyMethod = function (this: { g: number }) {
+  void runStep(() => {
+    void this.g;
+  });
+};
+const outerProperty = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  m: outerPropertyMethod,
+};
+setTimeout(() => {
+  outerProperty.m();
+});
+function assignedMethodFn(this: { g: number }) {
+  void runStep(() => {
+    void this.g;
+  });
+}
+const assignedMethod = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  m() {},
+};
+assignedMethod.m = assignedMethodFn;
+setTimeout(() => {
+  assignedMethod.m();
+});
+function propsMethodChild() {
+  flush();
+  return "x";
+}
+function propsMethodFn(this: { children?: unknown }) {
+  void runStep(() => {
+    void this.children;
+  });
+}
+function PropsMethodReader(props: { children?: unknown; pick: (this: { children?: unknown }) => void }) {
+  setTimeout(() => {
+    props.pick();
+  });
+  return null;
+}
+setTimeout(() => {
+  void (<PropsMethodReader pick={propsMethodFn}>{propsMethodChild()}</PropsMethodReader>);
+});
+// twins: an inline method that never names `this`, and a data member: the getter is read in a timer, where no package runs it
+const inlineFree = {
+  get g(): number {
+    flush();
+    return 1;
+  },
+  neverReads() {
+    return 1;
+  },
+  n: 1,
+};
+setTimeout(() => {
+  void inlineFree.neverReads();
+  void inlineFree.n;
+  void inlineFree.g;
+});
+
+// N2: one callback returns the flushing function or the object of accessors; the object is read in a step (the function's flow, visited first, had cut the object's)
+const pickFlag = Math.random() > 2;
+function pickHelper(): number {
+  flush();
+  return 1;
+}
+const pickGetter = {
+  get g(): number {
+    return pickHelper();
+  },
+};
+const pick = (): any => (pickFlag ? pickHelper : pickGetter);
+const picked = [0].map(pick);
+setTimeout(() => {
+  void runStep(() => {
+    void picked[0].g;
+  });
+});
+// twin: the same read in a timer
+function twinPickHelper(): number {
+  flush();
+  return 1;
+}
+const twinPickGetter = {
+  get g(): number {
+    return twinPickHelper();
+  },
+};
+const twinPick = (): any => (pickFlag ? twinPickHelper : twinPickGetter);
+const twinPicked = [0].map(twinPick);
+setTimeout(() => {
+  void twinPicked[0].g;
+});

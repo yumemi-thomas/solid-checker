@@ -14,7 +14,9 @@
 //!   props, read when the component reads the prop, so under a component nothing here reads (`<Pkg>{helper()}</Pkg>`, `<Pkg>{list.map(() => <Own />)}</Pkg>`) it is
 //!   handed;
 //!   An accessor runs where it is read: a project component's props (whose expressions are getters) and an object literal with a getter are followed as objects of
-//!   accessors, so a reference of them in code a package may run hands what the accessor runs (`runStep(() => { void props.children; })`);
+//!   accessors, so a reference of them in code a package may run hands what the accessor runs (`runStep(() => { void props.children; })`); a method call on them
+//!   (`o.m()`, `props.pick()`) binds `this` to the object, and the method may read an accessor through `this`: it is handed unless the member resolves to exactly one
+//!   function that never names `this`;
 //! - an argument of a call: the receiver decides ([`Receiver`]): a dialect primitive and the standard library's inline callbacks run it before they return, on the stack
 //!   of the function the call is written in; a reviewed fresh-stack scheduler, a DOM listener registration and a reviewed test runner's registration run it elsewhere and
 //!   keep nothing; a project function the call graph resolves exactly goes on in its parameter (a component's props are its first parameter, a reflective call's forwarded
@@ -96,9 +98,20 @@ struct Walk {
     /// component runs, which is where its element is created (already asked).
     accessor_owner: Option<Key>,
     positions: HashSet<(Key, bool, Option<Key>)>,
+    /// A function's own question ("may a package run it") is the same in every mode: `function_in` sets the mode off while it asks, so one visit serves all.
     functions: HashSet<Key>,
-    returned_positions: HashSet<(Key, Key)>,
-    returned_bindings: HashSet<(Key, Key)>,
+    /// What a callback's return reaches follows the value in the mode the walk is in (it asks `position` of each place the return is at), so these are visited
+    /// per mode and owner as `positions` is: a place visited following a function value is not visited following an accessor object (the review of #226's
+    /// re-check, N2: `[0].map(() => (c ? helper : o))` cut the object's flow after the function's).
+    returned_positions: HashSet<((Key, Key), bool, Option<Key>)>,
+    returned_bindings: HashSet<((Key, Key), bool, Option<Key>)>,
+}
+
+impl Walk {
+    /// The mode the walk is in: whether it follows an object of accessors, and the component whose props it is.
+    fn mode(&self) -> (bool, Option<Key>) {
+        (self.accessor, self.accessor_owner.clone())
+    }
 }
 
 /// Whether the function is the value of an accessor property of an object literal (`get g() { … }`, `set g(v) { … }`: neither a data property nor a method),
@@ -132,6 +145,8 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     /// The files of the program by path (`SemanticLookup::files`, read once by the pass).
     files: &'l HashMap<&'l str, &'a FileFacts>,
     asked: RefCell<HashMap<Key, bool>>,
+    /// The spans of every `this` expression of a file, parsed once (`None`: the file does not parse, so nothing is known of its `this`).
+    this_spans: RefCell<HashMap<Arc<str>, Option<Arc<Vec<Span>>>>>,
 }
 
 impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
@@ -143,6 +158,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             lookup,
             files,
             asked: RefCell::new(HashMap::new()),
+            this_spans: RefCell::new(HashMap::new()),
         }
     }
 
@@ -220,10 +236,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             };
             // `this` in the literal's own functions reads its members through no reference of the object (the review of #226, B3): handed, as is a file whose `this`
             // uses cannot be read.
-            let Some(this_spans) = solid_facts::ast::this_expression_spans(
-                std::path::Path::new(file.path.as_str()),
-                &file.source,
-            ) else {
+            let Some(this_spans) = self.this_spans(file) else {
                 return true;
             };
             let this_in_literal = this_spans.iter().any(|span| object.contains(*span));
@@ -288,11 +301,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     fn position(&self, file: &'a FileFacts, at: Span, walk: &mut Walk) -> bool {
         let ast = &file.ast;
         let at = ast.peel_ts_sugar_span(at);
-        if !walk.positions.insert((
-            (file.path.shared(), at),
-            walk.accessor,
-            walk.accessor_owner.clone(),
-        )) {
+        let (accessor, owner) = walk.mode();
+        if !walk
+            .positions
+            .insert(((file.path.shared(), at), accessor, owner))
+        {
             return false;
         }
         // A reference of an object whose members are accessors may read one where it is written: a member read, a destructuring, a spread, an iteration.
@@ -450,6 +463,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             {
                 continue;
             }
+            // A method call on an object of accessors binds `this` to it: the method may read an accessor through `this`, which no reference of the object shows.
+            if walk.accessor && self.method_call_may_read_receiver(file, member.span) {
+                return true;
+            }
             let handed = match ast.calls_with_peeled_callee(member.span).next() {
                 Some(call) => self.member_call_hands(file, call, walk),
                 None => self.position(file, member.span, walk),
@@ -565,6 +582,54 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                     .any(|function| outer.span.contains(function.span))
         });
         nested && self.position(file, span, walk)
+    }
+
+    /// The spans of every `this` expression of the file: syntax only, from a parse of the file's own text, kept per file. `None` when the file does not parse.
+    fn this_spans(&self, file: &FileFacts) -> Option<Arc<Vec<Span>>> {
+        let path = file.path.shared();
+        if let Some(known) = self.this_spans.borrow().get(&path) {
+            return known.clone();
+        }
+        let spans = solid_facts::ast::this_expression_spans(
+            std::path::Path::new(file.path.as_str()),
+            &file.source,
+        )
+        .map(Arc::new);
+        self.this_spans.borrow_mut().insert(path, spans.clone());
+        spans
+    }
+
+    /// Whether `function` names `this` anywhere in its text (an arrow's is its enclosing function's, a nested function's its own: both count, which can only add).
+    /// A file that does not parse names it.
+    fn function_names_this(&self, file: &FileFacts, function: &FunctionFact) -> bool {
+        let Some(spans) = self.this_spans(file) else {
+            return true;
+        };
+        spans.iter().any(|span| function.span.contains(*span))
+    }
+
+    /// Whether the member at `member`, read from an object of accessors, is called as a method (`o.m(…)`, `o.m\`…\``, `o.m?.()`), which makes the object the callee's `this`,
+    /// and the callee is not proved to be a function that never names `this`: a method written outside the literal (`{ m }`, `m: m`, an import), one the program
+    /// replaces, a prop of a component, anything the call graph does not resolve to exactly one function. `this.g` in such a method reads an accessor through no reference
+    /// of the object (the review of #226's re-check, N1).
+    fn method_call_may_read_receiver(&self, file: &'a FileFacts, member: Span) -> bool {
+        let ast = &file.ast;
+        let called = ast
+            .calls_with_peeled_callee(member)
+            .next()
+            .is_some_and(|call| !call.construct)
+            || ast
+                .tagged_templates
+                .iter()
+                .any(|template| ast.peel_ts_sugar_span(template.tag) == member);
+        if !called {
+            return false;
+        }
+        // A callee no fact resolves to exactly one function is handed.
+        let Some((callee_file, callee)) = self.callback_target(file, member) else {
+            return true;
+        };
+        self.function_names_this(callee_file, callee)
     }
 
     /// `question` asked of an object of accessors (the props of `owner`, or an object literal), on the walk that asks: its visited positions and functions are
@@ -849,10 +914,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     ) -> bool {
         let ast = &file.ast;
         let at = ast.peel_ts_sugar_span(at);
-        if !walk
-            .returned_positions
-            .insert((target.clone(), (file.path.shared(), at)))
-            || ast.type_queries.iter().any(|query| query.contains(at))
+        let (accessor, owner) = walk.mode();
+        if !walk.returned_positions.insert((
+            (target.clone(), (file.path.shared(), at)),
+            accessor,
+            owner,
+        )) || ast.type_queries.iter().any(|query| query.contains(at))
         {
             return false;
         }
@@ -921,10 +988,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         target: &Key,
         walk: &mut Walk,
     ) -> bool {
-        if !walk
-            .returned_bindings
-            .insert((target.clone(), (file.path.shared(), name)))
-        {
+        let (accessor, owner) = walk.mode();
+        if !walk.returned_bindings.insert((
+            (target.clone(), (file.path.shared(), name)),
+            accessor,
+            owner,
+        )) {
             return false;
         }
         if self

@@ -3245,7 +3245,7 @@ fn searches_past_their_budget_are_uncertifiable() {
 
 /// The review of #226, B1: a getter that names its own object, and a component that renders itself passing a prop on in a nested arrow, walked the accessor
 /// question anew each time and overflowed the stack (exit 134, no report). The run ends, and the flushes of B1's getter, B2's reads in a JSX expression or a
-/// class field initializer and B3's `this` read keep their uncertifiable rows (never silence, never a violation).
+/// class field initializer and B3's `this` read keep their uncertifiable rows (never silence, never a violation), as do the re-check's N1 and N2 shapes.
 #[test]
 fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
     let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-accessors") else {
@@ -3269,6 +3269,13 @@ fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
         "function typeofChild() {\n  flush();",
         "function classFieldChild() {\n  flush();",
         "const thisReader = {\n  get g(): number {\n    flush();",
+        // The re-check's N1 (a method call on an object of accessors binds `this`: a method written outside the literal, one assigned later, a prop of a
+        // component) and N2 (one callback returns the flushing function or the object: the function's flow, visited first, had cut the object's).
+        "const outerShorthand = {\n  get g(): number {\n    flush();",
+        "const outerProperty = {\n  get g(): number {\n    flush();",
+        "const assignedMethod = {\n  get g(): number {\n    flush();",
+        "function propsMethodChild() {\n  flush();",
+        "function pickHelper(): number {\n  flush();",
     ] {
         let flush = line_of(site) + site.lines().count() as u64 - 1;
         let rows = findings
@@ -3279,5 +3286,19 @@ fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
             .collect::<Vec<_>>();
         assert_eq!(rows.len(), 1, "{site}: {rows:#?}");
         assert_eq!(rows[0]["kind"], "uncertifiable", "{site}");
+    }
+    // The twins, read where no package runs them, stay silent.
+    for twin in [
+        "const inlineFree = {\n  get g(): number {\n    flush();",
+        "function twinPickHelper(): number {\n  flush();",
+    ] {
+        let flush = line_of(twin) + twin.lines().count() as u64 - 1;
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["id"] == "SC2006" && row["primaryLocation"]["line"].as_u64() == Some(flush)
+            })
+            .count();
+        assert_eq!(rows, 0, "{twin}");
     }
 }

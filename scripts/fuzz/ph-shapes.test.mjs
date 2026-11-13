@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are seventy routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis"]);
+  it("are seventy-four routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(368);
+    expect(PH_CONTEXT_NAMES).toHaveLength(392);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -200,5 +200,20 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-propsjsx-apply")).toContain("return <ApplyView>{typeof props.children as never}</ApplyView>;");
     expect(textOf("FLUSH_IN_ACTION", "ph-propsclass-step")).toContain("v = props.children === undefined;");
     expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-getterthis-leaf")).toContain("void this.g;");
+  });
+  it("print the re-check of #226's routes: a method written outside the literal, one assigned later, a prop that is a method, a callback that returns the function or the object", () => {
+    const outer = textOf("FLUSH_IN_ACTION", "ph-getterouter-step");
+    expect(outer.some((line) => /^function m\d+\(this: \{ g: number \}\) \{$/.test(line))).toBe(true);
+    expect(outer.some((line) => /^m: m\d+,$/.test(line))).toBe(true);
+    expect(outer.some((line) => /^o\d+\.m\(\);$/.test(line))).toBe(true);
+    const assigned = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-getterassign-apply");
+    expect(assigned).toContain("m() {},");
+    expect(assigned.some((line) => /^o\d+\.m = m\d+;$/.test(line))).toBe(true);
+    const method = textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-propsmethod-leaf");
+    expect(method).toContain("props.pick();");
+    expect(method.some((line) => /^document\.body\.append\(\(<Wrap\d+ pick=\{m\d+\}>\{helper\d+\(\)\}<\/Wrap\d+>\) as unknown as Node\);$/.test(line))).toBe(true);
+    const pick = textOf("FLUSH_IN_ACTION", "ph-getterpick-step");
+    expect(pick.some((line) => /^const pick\d+ = \(\): any => \(flag\d+ \? helper\d+ : o\d+\);$/.test(line))).toBe(true);
+    expect(pick.some((line) => /^const got\d+ = \[0\]\.map\(pick\d+\);$/.test(line))).toBe(true);
   });
 });
