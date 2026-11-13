@@ -20563,5 +20563,196 @@
    "mx-no-owner-context-em-nsg-apply-x-direct-none"
   ],
   "rediscovered": "03bfe0630 (release build): 3 false-clean programs, Chrome confirming; the fix: none (3 recall-gap programs, an uncertifiable SC4001 row stands). The legal twins (em-nsg-*-never, which call nothing) are clean on 03bfe0630 and uncertifiable on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as an action's step), was certified with no row by routes the flip (ADR 0967) still answered \"not handed\": a context that only CONTAINED the function, not carried it (`[cb].map(…)` as a binding's initializer, an assignment's value, a call's argument or a tagged template's substitution, an array literal read through a destructuring, a parameter, `.flat()` or a logical `&&`, `[cb].map(…)` under `yield`, `for…of` or `await`, and the step calling `[cb].map((f) => f())` or `{ run: cb }.run()`); a project function that names `arguments` (`runStep(arguments[0])`, `takesRest.apply(null, arguments)`); a callback that returns the function to the call it is an argument of (`Promise.resolve().then(() => cb).then((f) => runStep(f))`); and an intrinsic element's `ref={cb}` (or `<Dynamic component=\"div\" ref={cb} />`), which the element's creation applies on the stack of the step. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "batch 11 (w-b10-3, 2026-11-12): the Fable review of #217 (the flip, ADR 0967), causes A to D (A fourteen programs, B two, C one; D the intrinsic `ref`, confirmed against rc.21's `@solidjs/web`): all certified clean on main 1d0c25ec2; confirmed in Chrome with the real oracle on main's release build (`rel-b3o`: the seventeen new `ph-*` routes) and in the pattern lane (`pkghand`, eighteen programs)",
+  "fixed": "ADR 0967 amended (causes A to D of the review of #217, `package_hand_off.rs`): a context places a value only when it carries it (`carries`: parentheses and TypeScript's wrappers, a conditional's arms, a logical expression's operands, a comma's last operand, an array literal's elements, an object literal's property values, a spread's argument), so a literal that is a call's receiver, a callee's object, an iterable, a `yield` or `await` operand or a template's part hands the value; a non-arrow project function that names `arguments` hands every argument; a function written as an argument returns its value to the receiving call too; an intrinsic element's (and `Dynamic` with a string tag's) `ref` is applied where the element is created",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-mapinit-step-x-direct-none",
+   "mx-flush-in-action-ph-mapdestr-step-x-direct-none",
+   "mx-flush-in-action-ph-mapparam-step-x-direct-none",
+   "mx-flush-in-action-ph-mapflat-step-x-direct-none",
+   "mx-flush-in-action-ph-maptemplate-step-x-direct-none",
+   "mx-flush-in-action-ph-maplogical-step-x-direct-none",
+   "mx-flush-in-action-ph-mapassign-step-x-direct-none",
+   "mx-flush-in-action-ph-maparg-step-x-direct-none",
+   "mx-flush-in-action-ph-yieldof-step-x-direct-none",
+   "mx-flush-in-action-ph-nbmap-step-x-direct-none",
+   "mx-flush-in-action-ph-nbobj-step-x-direct-none",
+   "mx-flush-in-action-ph-argsindex-step-x-direct-none",
+   "mx-flush-in-action-ph-argsapply-step-x-direct-none",
+   "mx-flush-in-action-ph-thenreturn-step-x-direct-none",
+   "mx-flush-in-action-ph-refprop-step-x-direct-none",
+   "mx-flush-in-action-ph-dynref-step-x-direct-none"
+  ],
+  "rediscovered": "`rel-b3o` (release, main 1d0c25ec2; Chrome host and the real oracle, `--runtime-diff all`): 16 programs false-clean (mapinit, mapdestr, mapparam, mapflat, maptemplate, maplogical, mapassign, maparg, yieldof, nbmap, nbobj, argsindex, argsapply, thenreturn, refprop, dynref); `mapawait` is a recall gap on both builds (the `await` keeps its own row: a guard). `make fuzz-focus` over mx-recall and lg-recall for the three flush codes: exit 1 on that build (mx-recall 46 false clean of 14,406 programs, the three codes together), exit 0, \"nothing needs a look\", on the fix (`rel-b3n`: recall-gap 46 more, the twins' 46 clean now uncertifiable, 0 false positive; the oracle compared 1,618 programs, 0 behaviour differences). The pattern lane on main: 17 of the 18 `pkghand` programs of the review false clean, 31 of 31 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as an effect's apply), was certified with no row by routes the flip (ADR 0967) still answered \"not handed\": a context that only CONTAINED the function, not carried it (`[cb].map(…)` as a binding's initializer, an assignment's value, a call's argument or a tagged template's substitution, an array literal read through a destructuring, a parameter, `.flat()` or a logical `&&`, `[cb].map(…)` under `yield`, `for…of` or `await`, and the step calling `[cb].map((f) => f())` or `{ run: cb }.run()`); a project function that names `arguments` (`runStep(arguments[0])`, `takesRest.apply(null, arguments)`); a callback that returns the function to the call it is an argument of (`Promise.resolve().then(() => cb).then((f) => runStep(f))`); and an intrinsic element's `ref={cb}`, which the element's creation applies on the stack of the step. Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "batch 11 (w-b10-3, 2026-11-12): the Fable review of #217 (the flip, ADR 0967), causes A to D (A fourteen programs, B two, C one; D the intrinsic `ref`, confirmed against rc.21's `@solidjs/web`): all certified clean on main 1d0c25ec2; confirmed in Chrome with the real oracle on main's release build (`rel-b3o`: the seventeen new `ph-*` routes) and in the pattern lane (`pkghand`, eighteen programs)",
+  "fixed": "ADR 0967 amended (causes A to D of the review of #217, `package_hand_off.rs`): a context places a value only when it carries it (`carries`: parentheses and TypeScript's wrappers, a conditional's arms, a logical expression's operands, a comma's last operand, an array literal's elements, an object literal's property values, a spread's argument), so a literal that is a call's receiver, a callee's object, an iterable, a `yield` or `await` operand or a template's part hands the value; a non-arrow project function that names `arguments` hands every argument; a function written as an argument returns its value to the receiving call too; an intrinsic element's (and `Dynamic` with a string tag's) `ref` is applied where the element is created",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-mapinit-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-mapdestr-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-mapparam-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-mapflat-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-maptemplate-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-maplogical-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-mapassign-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-maparg-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-yieldof-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-nbmap-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-nbobj-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-argsindex-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-argsapply-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-thenreturn-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-refprop-apply-x-direct-none"
+  ],
+  "rediscovered": "`rel-b3o` (release, main 1d0c25ec2; Chrome host and the real oracle, `--runtime-diff all`): 15 programs false-clean (mapinit, mapdestr, mapparam, mapflat, maptemplate, maplogical, mapassign, maparg, yieldof, nbmap, nbobj, argsindex, argsapply, thenreturn, refprop); `mapawait` is a recall gap on both builds (the `await` keeps its own row: a guard). `make fuzz-focus` over mx-recall and lg-recall for the three flush codes: exit 1 on that build (mx-recall 46 false clean of 14,406 programs, the three codes together), exit 0, \"nothing needs a look\", on the fix (`rel-b3n`: recall-gap 46 more, the twins' 46 clean now uncertifiable, 0 false positive; the oracle compared 1,618 programs, 0 behaviour differences). The pattern lane on main: 17 of the 18 `pkghand` programs of the review false clean, 31 of 31 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as a leaf owner's callback (`createTrackedEffect`)), was certified with no row by routes the flip (ADR 0967) still answered \"not handed\": a context that only CONTAINED the function, not carried it (`[cb].map(…)` as a binding's initializer, an assignment's value, a call's argument or a tagged template's substitution, an array literal read through a destructuring, a parameter, `.flat()` or a logical `&&`, `[cb].map(…)` under `yield`, `for…of` or `await`, and the step calling `[cb].map((f) => f())` or `{ run: cb }.run()`); a project function that names `arguments` (`runStep(arguments[0])`, `takesRest.apply(null, arguments)`); a callback that returns the function to the call it is an argument of (`Promise.resolve().then(() => cb).then((f) => runStep(f))`); and an intrinsic element's `ref={cb}`, which the element's creation applies on the stack of the step. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "batch 11 (w-b10-3, 2026-11-12): the Fable review of #217 (the flip, ADR 0967), causes A to D (A fourteen programs, B two, C one; D the intrinsic `ref`, confirmed against rc.21's `@solidjs/web`): all certified clean on main 1d0c25ec2; confirmed in Chrome with the real oracle on main's release build (`rel-b3o`: the seventeen new `ph-*` routes) and in the pattern lane (`pkghand`, eighteen programs)",
+  "fixed": "ADR 0967 amended (causes A to D of the review of #217, `package_hand_off.rs`): a context places a value only when it carries it (`carries`: parentheses and TypeScript's wrappers, a conditional's arms, a logical expression's operands, a comma's last operand, an array literal's elements, an object literal's property values, a spread's argument), so a literal that is a call's receiver, a callee's object, an iterable, a `yield` or `await` operand or a template's part hands the value; a non-arrow project function that names `arguments` hands every argument; a function written as an argument returns its value to the receiving call too; an intrinsic element's (and `Dynamic` with a string tag's) `ref` is applied where the element is created",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-mapinit-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-mapdestr-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-mapparam-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-mapflat-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-maptemplate-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-maplogical-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-mapassign-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-maparg-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-yieldof-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-nbmap-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-nbobj-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-argsindex-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-argsapply-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-thenreturn-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-refprop-leaf-x-direct-none"
+  ],
+  "rediscovered": "`rel-b3o` (release, main 1d0c25ec2; Chrome host and the real oracle, `--runtime-diff all`): 15 programs false-clean (mapinit, mapdestr, mapparam, mapflat, maptemplate, maplogical, mapassign, maparg, yieldof, nbmap, nbobj, argsindex, argsapply, thenreturn, refprop); `mapawait` is a recall gap on both builds (the `await` keeps its own row: a guard). `make fuzz-focus` over mx-recall and lg-recall for the three flush codes: exit 1 on that build (mx-recall 46 false clean of 14,406 programs, the three codes together), exit 0, \"nothing needs a look\", on the fix (`rel-b3n`: recall-gap 46 more, the twins' 46 clean now uncertifiable, 0 false positive; the oracle compared 1,618 programs, 0 behaviour differences). The pattern lane on main: 17 of the 18 `pkghand` programs of the review false clean, 31 of 31 fine on the fix"
+ },
+ {
+  "finding": "ADR 0967 amended, cause E (Mac 4's finding on the review of #217): `position` answered a component named as a JSX tag at the OPENING tag's name only; the closing tag's name (`JsxElementFact::closing_name`, a reference of the same component) fell through to \"anything else: handed\", so `<Card>body</Card>` handed Card to an unread package while `<Card />` did not, and every proof gated on that answer (the three flush codes' accounting) was withheld for a component written with children (the repro cases `clean-children-helper` and `clean-loading-boundary`)",
+  "found": "batch 11 (Mac 4, 2026-11-12): the review of #217, relayed by the coordinator; the fixture pair `WithChildren`/`Bare` (silent) and `HandedChildren`/`HandedBare` (handed, three rows each) in flush-universe-package-hand-off-causes",
+  "fixed": "ADR 0967 amended (cause E, `package_hand_off.rs`): the closing name is answered like the opening one, by the render site's owner",
+  "outside": "an over-refusal, not a false positive or a false clean: a legal cell's `uncertifiable` is no failure outcome (legal.mjs), so no cell of any grid fails on the build that had it, and every grid runs with an open program boundary, where a component rendered inside an exported function is handed whichever way its tag is written (the 47,054 programs of mx-recall and lg-recall for the three flush codes are identical on the builds with and without E: 0 differences, outcome and detail). The fixture pair and the repro cases hold both sides"
+ },
+ {
+  "finding": "C by reference: a callback returning cb is passed as a const, an unwritten let, a function declaration or a closed-object member to Promise.then, whose result then hands cb to an unread package. The literal spelling retained a row, but all four named spellings certified the flush clean.",
+  "found": "W4, 2026-11-13: Chrome confirms the named callback counterexample on the A-E build b635745c2939; coordinator ruling: extend C in this PR, exact callback references follow the literal, anything unresolved stays handed.",
+  "fixed": "C extension in package_hand_off.rs: separate callback return positions and binding traversal; exact current function targets and closed-object member selection; unresolved targets retain U. Final release a2529de9413e passes the full recall grids.",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-thenconst-step-x-direct-none",
+   "mx-flush-in-action-ph-thenlet-step-x-direct-none",
+   "mx-flush-in-action-ph-thenfn-step-x-direct-none",
+   "mx-flush-in-action-ph-thenmember-step-x-direct-none"
+  ],
+  "rediscovered": "Pre-extension b635745c2939: make fuzz-focus on the four added ph routes fails (make exit 2, focus exit 1): 12 false cleans across three codes, 12 legal twins clean; Chrome all 24 agrees. Final a2529de9413e: full mx-recall 14,418 and lg-recall 32,660, exit 0, 0 false clean/positive; 1,642 Chrome comparisons, 0 behaviour/attribution differences or inconclusive runs. Exactly these 12 misuse programs gain the three U rows, and their 12 twins become U; all other rows identical to the pre-extension build."
+ },
+ {
+  "finding": "C by reference: a callback returning cb is passed as a const, an unwritten let, a function declaration or a closed-object member to Promise.then, whose result then hands cb to an unread package. The literal spelling retained a row, but all four named spellings certified the flush clean.",
+  "found": "W4, 2026-11-13: Chrome confirms the named callback counterexample on the A-E build b635745c2939; coordinator ruling: extend C in this PR, exact callback references follow the literal, anything unresolved stays handed.",
+  "fixed": "C extension in package_hand_off.rs: separate callback return positions and binding traversal; exact current function targets and closed-object member selection; unresolved targets retain U. Final release a2529de9413e passes the full recall grids.",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-thenconst-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-thenlet-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-thenfn-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-thenmember-apply-x-direct-none"
+  ],
+  "rediscovered": "Pre-extension b635745c2939: make fuzz-focus on the four added ph routes fails (make exit 2, focus exit 1): 12 false cleans across three codes, 12 legal twins clean; Chrome all 24 agrees. Final a2529de9413e: full mx-recall 14,418 and lg-recall 32,660, exit 0, 0 false clean/positive; 1,642 Chrome comparisons, 0 behaviour/attribution differences or inconclusive runs. Exactly these 12 misuse programs gain the three U rows, and their 12 twins become U; all other rows identical to the pre-extension build."
+ },
+ {
+  "finding": "C by reference: a callback returning cb is passed as a const, an unwritten let, a function declaration or a closed-object member to Promise.then, whose result then hands cb to an unread package. The literal spelling retained a row, but all four named spellings certified the flush clean.",
+  "found": "W4, 2026-11-13: Chrome confirms the named callback counterexample on the A-E build b635745c2939; coordinator ruling: extend C in this PR, exact callback references follow the literal, anything unresolved stays handed.",
+  "fixed": "C extension in package_hand_off.rs: separate callback return positions and binding traversal; exact current function targets and closed-object member selection; unresolved targets retain U. Final release a2529de9413e passes the full recall grids.",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-thenconst-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-thenlet-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-thenfn-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-thenmember-leaf-x-direct-none"
+  ],
+  "rediscovered": "Pre-extension b635745c2939: make fuzz-focus on the four added ph routes fails (make exit 2, focus exit 1): 12 false cleans across three codes, 12 legal twins clean; Chrome all 24 agrees. Final a2529de9413e: full mx-recall 14,418 and lg-recall 32,660, exit 0, 0 false clean/positive; 1,642 Chrome comparisons, 0 behaviour/attribution differences or inconclusive runs. Exactly these 12 misuse programs gain the three U rows, and their 12 twins become U; all other rows identical to the pre-extension build."
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as an action's step), was certified with no row by routes #222's build answered \"not handed\": an assignment expression's own value (`const first = (last = cb); runStep(first)`, `first = last = cb`, `[(last = cb)].map((f) => runStep(f))`: the inner assignment placed the value and only its target was followed); a `ref` reaching an intrinsic element through a spread (`<div {...{ ref: cb }} />`, `<div {...props} />`) and a function child of an intrinsic element (`<div>{cb}</div>`, called as an accessor where the element is created), in a step the package runs; and a component written as a child of the package's component (`<StepView><Own>x</Own></StepView>`, `<StepView><Own /></StepView>`), created when that component reads its children. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Mac 5, 2026-11-13: the review of #222 (B1 by reading; D residual and E by reading), confirmed by probes on main 56aa6c126, on #222's head 9b8fc91b1 and in Chrome (the pattern lane, `pkghand/chain-*`, `spread-ref*`, `child-*`, `frame-*`); `first = last = cb` and `const first = (last = cb)` kept their rows on main and lost them with cause A, the closing-name change (E) silenced `<Pkg><Own>x</Own></Pkg>`, the rest were silent on main too",
+  "fixed": "ADR 0967 amended (the review of #222, `package_hand_off.rs`): after an assignment's target is followed, a plain or logical assignment expression is asked as any value is; an intrinsic element's (and `Dynamic` with a string tag's) children, spreads (their keys are not read) and every attribute the compiler does not record as an event handler are applied where the element is created; an element written as a child or a prop of another element, with no function between, is created where that element evaluates it (`element_created_in`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-chainconst-step-x-direct-none",
+   "mx-flush-in-action-ph-chainassign-step-x-direct-none",
+   "mx-flush-in-action-ph-chainrecv-step-x-direct-none",
+   "mx-flush-in-action-ph-spreadref-step-x-direct-none",
+   "mx-flush-in-action-ph-spreadvar-step-x-direct-none",
+   "mx-flush-in-action-ph-childfn-step-x-direct-none",
+   "mx-flush-in-action-ph-framechild-step-x-direct-none",
+   "mx-flush-in-action-ph-framebare-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 28 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 28 of 28 agree on each build): #222's head 9b8fc91b1 fails `make fuzz-focus` (focus exit 1, 14 false clean, the 14 twins clean); main 56aa6c126 fails it too (7 false clean: chainrecv on three hosts, spreadref, spreadvar, childfn, framebare; chainconst, chainassign and framechild keep their rows there); the fix exits 0, \"nothing needs a look\" (14 recall-gap, the 14 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the ten new `pkghand` programs false clean on #222's head, 41 of 41 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_EFFECT_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as an effect's apply), was certified with no row by routes #222's build answered \"not handed\": an assignment expression's own value (`const first = (last = cb); runStep(first)`, `first = last = cb`, `[(last = cb)].map((f) => runStep(f))`: the inner assignment placed the value and only its target was followed). Chrome reports FLUSH_IN_EFFECT_CALLBACK at the flush",
+  "found": "Mac 5, 2026-11-13: the review of #222 (B1 by reading; D residual and E by reading), confirmed by probes on main 56aa6c126, on #222's head 9b8fc91b1 and in Chrome (the pattern lane, `pkghand/chain-*`, `spread-ref*`, `child-*`, `frame-*`); `first = last = cb` and `const first = (last = cb)` kept their rows on main and lost them with cause A, the closing-name change (E) silenced `<Pkg><Own>x</Own></Pkg>`, the rest were silent on main too",
+  "fixed": "ADR 0967 amended (the review of #222, `package_hand_off.rs`): after an assignment's target is followed, a plain or logical assignment expression is asked as any value is; an intrinsic element's (and `Dynamic` with a string tag's) children, spreads (their keys are not read) and every attribute the compiler does not record as an event handler are applied where the element is created; an element written as a child or a prop of another element, with no function between, is created where that element evaluates it (`element_created_in`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-ph-chainconst-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-chainassign-apply-x-direct-none",
+   "mx-flush-in-effect-callback-ph-chainrecv-apply-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 28 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 28 of 28 agree on each build): #222's head 9b8fc91b1 fails `make fuzz-focus` (focus exit 1, 14 false clean, the 14 twins clean); main 56aa6c126 fails it too (7 false clean: chainrecv on three hosts, spreadref, spreadvar, childfn, framebare; chainconst, chainassign and framechild keep their rows there); the fix exits 0, \"nothing needs a look\" (14 recall-gap, the 14 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the ten new `pkghand` programs false clean on #222's head, 41 of 41 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` written in a function the project hands to an installed package the build does not read as source (a package that runs it as a leaf owner's callback (`createTrackedEffect`)), was certified with no row by routes #222's build answered \"not handed\": an assignment expression's own value (`const first = (last = cb); runStep(first)`, `first = last = cb`, `[(last = cb)].map((f) => runStep(f))`: the inner assignment placed the value and only its target was followed). Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "Mac 5, 2026-11-13: the review of #222 (B1 by reading; D residual and E by reading), confirmed by probes on main 56aa6c126, on #222's head 9b8fc91b1 and in Chrome (the pattern lane, `pkghand/chain-*`, `spread-ref*`, `child-*`, `frame-*`); `first = last = cb` and `const first = (last = cb)` kept their rows on main and lost them with cause A, the closing-name change (E) silenced `<Pkg><Own>x</Own></Pkg>`, the rest were silent on main too",
+  "fixed": "ADR 0967 amended (the review of #222, `package_hand_off.rs`): after an assignment's target is followed, a plain or logical assignment expression is asked as any value is; an intrinsic element's (and `Dynamic` with a string tag's) children, spreads (their keys are not read) and every attribute the compiler does not record as an event handler are applied where the element is created; an element written as a child or a prop of another element, with no function between, is created where that element evaluates it (`element_created_in`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-ph-chainconst-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-chainassign-leaf-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-ph-chainrecv-leaf-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 28 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 28 of 28 agree on each build): #222's head 9b8fc91b1 fails `make fuzz-focus` (focus exit 1, 14 false clean, the 14 twins clean); main 56aa6c126 fails it too (7 false clean: chainrecv on three hosts, spreadref, spreadvar, childfn, framebare; chainconst, chainassign and framechild keep their rows there); the fix exits 0, \"nothing needs a look\" (14 recall-gap, the 14 twins uncertifiable: `skipRun` is in a package nothing reads). Pattern lane: the ten new `pkghand` programs false clean on #222's head, 41 of 41 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site, a `flush()` that an installed package the build does not read runs as an action's step, was certified with no row when the function that flushes is reached from an expression in that package's component's children or props: the compiler makes the expression a getter the component reads inside its step, but `runs_where_written` placed it on the stack of the function the JSX is written in (a timer's callback): `<StepView>{[1].map(() => <Own />)}</StepView>`, `{helper()}`, `render={make()}`, `{(() => <Own />)()}`, `{[1].map(() => <div ref={cb} />)}`, `{void (<Own />)}`, `{typeof (<Own />)}`. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Fable re-review of #222 at 5e6efd4f5 (N1 and its table, probes P50/P52/P53/P54/P62/P83/P97/P99 by reading); confirmed by Mac 5 in Chrome (rc.21 oracle, pattern lane `pkghand/frame-map-step`, `frame-call-step`, `render-call-step`, `frame-iife-step`, `frame-map-ref-step`, `frame-flush-step`, `frame-void-step`, `frame-typeof-step`: FLUSH_IN_ACTION in all eight) on main 56aa6c126, #222's 9b8fc91b1 and 5e6efd4f5: the `map` form kept its rows on main and lost them with cause A (9b8fc91b1), the other seven were false clean on all three builds",
+  "fixed": "ADR 0967 amended (the re-review of #222, N1, `package_hand_off.rs`): code in an element's prop, spread or child expression with no function between runs where that element evaluates it (`evaluated_by_element`, asked by `runs_where_written`, by a declared function's call sites and by `may_run` for the flush itself): the innermost such element's creation, and for a component its receiver (a component nothing here reads hands it; a project component follows its first parameter)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_ACTION",
+  "ids": [
+   "mx-flush-in-action-ph-framemap-step-x-direct-none",
+   "mx-flush-in-action-ph-framecall-step-x-direct-none",
+   "mx-flush-in-action-ph-framerender-step-x-direct-none",
+   "mx-flush-in-action-ph-frameiife-step-x-direct-none",
+   "mx-flush-in-action-ph-framemapref-step-x-direct-none",
+   "mx-flush-in-action-ph-framevoid-step-x-direct-none",
+   "mx-flush-in-action-ph-frametypeof-step-x-direct-none"
+  ],
+  "rediscovered": "Mac 5 (2026-11-13, release builds, `--contexts` the 14 new `ph-*` cells, mx-recall and lg-recall for the three flush codes; Chrome oracle 7 of 7 agree on each build): main 56aa6c126 fails `make fuzz-focus` (focus exit 1, 6 false clean; `framemap` keeps its rows there), #222's 9b8fc91b1 and 5e6efd4f5 fail it (7 false clean each, the 7 twins clean), the fix exits 0, \"nothing needs a look\" (7 recall-gap, the 7 twins uncertifiable). Per-program diff of the flush codes' six default grids and full recall grids against 5e6efd4f5: no shared program moved, the 14 new ones added. Pattern lane: the eight `frame-*`/`render-call` programs false clean on 5e6efd4f5, 49 of 49 fine on the fix"
+ },
+ {
+  "finding": "FLUSH_IN_ACTION's site written in the child expression of an unread package's component itself (`<StepView>{(flush(), null)}</StepView>` in a timer's callback): the flush's own function is the timer's callback, so the census reason stood, but the component reads the getter, and runs the flush, inside its step. Chrome reports FLUSH_IN_ACTION at the flush",
+  "found": "Fable re-review of #222 at 5e6efd4f5 (N1 and its table, probes P50/P52/P53/P54/P62/P83/P97/P99 by reading); confirmed by Mac 5 in Chrome (rc.21 oracle, pattern lane `pkghand/frame-map-step`, `frame-call-step`, `render-call-step`, `frame-iife-step`, `frame-map-ref-step`, `frame-flush-step`, `frame-void-step`, `frame-typeof-step`: FLUSH_IN_ACTION in all eight) on main 56aa6c126, #222's 9b8fc91b1 and 5e6efd4f5: the `map` form kept its rows on main and lost them with cause A (9b8fc91b1), the other seven were false clean on all three builds",
+  "fixed": "ADR 0967 amended (the re-review of #222, N1, `package_hand_off.rs`): code in an element's prop, spread or child expression with no function between runs where that element evaluates it (`evaluated_by_element`, asked by `runs_where_written`, by a declared function's call sites and by `may_run` for the flush itself): the innermost such element's creation, and for a component its receiver (a component nothing here reads hands it; a project component follows its first parameter); `may_run` asks it of the flush's own span",
+  "outside": "a route's site is the statements of a function the frame writes (ph-shapes.mjs `head`/`close` around a block), so no generated program writes a site as an expression in a JSX child; the fixture flush-universe-package-hand-off-causes (the line after `directFlushInChild`, three rows) and the pattern `pkghand/frame-flush-step` (false clean on main, 9b8fc91b1 and 5e6efd4f5; fine on the fix) hold it"
  }
 ]

@@ -32,6 +32,52 @@
 //             param      `call1(cb1)` in a step the package runs, `function call1(g) { g() }`: run inline by a project function's parameter
 //             untrack    `untrack(cb1)` in a step the package runs: run inline by a dialect primitive
 //             dynamic    `<Dynamic component={StepView} render={() => { <site> }} />`: the component its `component` prop names
+//           and the review of #217 (a context places a value only when it carries it: the path from the context's expression to the function is transparent; the value inside
+//           a receiver, a template part, an `await` or a `yield` is handed; a function that names `arguments` hands every argument; the call a returning function is an
+//           argument of is a position):
+//             mapinit    `const r1 = [cb1].map((f) => runStep(f))`: an array literal that is a method's receiver, inside a binding's initializer
+//             mapdestr   `const fs1 = [cb1]; const [first1] = fs1; const r1 = [first1].map((f) => runStep(f))`: an element read back through a destructuring
+//             mapparam   `function w1(g) { const r1 = [g].map((f) => runStep(f)) }`, `w1(cb1)`: the same behind a project function's parameter
+//             mapflat    `const r1 = [[cb1]].flat().map((f) => runStep(f))`: a nested literal
+//             maptemplate  a template literal's part: `${[cb1].map((f) => runStep(f)).length}`
+//             maplogical `{ a: cb1 }.a.name.length > 0 && [cb1].some((f) => { runStep(f); return true; })`: an object literal read through a member, a logical expression
+//             mapawait   `await [cb1].map((f) => runStep(f))[0]`: an `await` operand
+//             mapassign  `kept1 = [cb1].map((f) => runStep(f))`: an assignment's value
+//             maparg     `use1([cb1].map((f) => runStep(f)))`: an argument of another call
+//             yieldof    `function* gen1(): Generator<() => void, void, undefined> { const x = yield cb1; }`, `for (const f of gen1()) runStep(f)`: a `yield` operand
+//             nbmap      `function step1() { const rs = [cb1].map((f) => f()); }`, `runStep(step1)`: the literal's elements are called in the step the package runs
+//             nbobj      `function step1() { const r = { run: cb1 }.run(); }`, `runStep(step1)`: a member of an object literal is called in the step
+//             argsindex  `function w1(f) { runStep(arguments[0]); }`, `w1(cb1)`: a function that reads its argument through `arguments`
+//             argsapply  `function w3(...fs) { runStep(fs[0]); } function w4(f) { w3.apply(null, arguments); }`, `w4(cb1)`: `arguments` handed whole to a reflective call
+//             thenreturn `Promise.resolve().then(() => cb1).then((f) => runStep(f))`: a function written as an argument returns it to the call
+//             refprop    `function step1() { void (<div ref={cb1} />); }`, `runStep(step1)`: an intrinsic element's `ref` callback is applied where the element is created
+//             dynref     `function step1() { void (<Dynamic component="div" ref={cb1} />); }`, `runStep(step1)`: the same through `Dynamic` with a string tag (the step host only: `Dynamic`
+//                        creates a memo, which an effect's apply and a leaf owner's callback refuse before the `ref` is applied)
+//           and the review of #222 (an assignment expression's own value is the value it writes; an intrinsic element applies its `ref`, its children and its spreads where
+//           it is created):
+//             chainconst `let last1: unknown; const first1 = (last1 = cb1); runStep(first1)`: the value of an assignment expression, a binding's initializer
+//             chainassign `first1 = last1 = cb1; runStep(first1)`: a chained assignment
+//             chainrecv  `const r1 = [(last1 = cb1)].map((f) => runStep(f))`: an assignment expression that is an element of a receiver
+//             spreadref  `function step1() { void (<div {...{ ref: cb1 }} />); }`, `runStep(step1)`: a `ref` reaching an intrinsic element through a spread (step host only: the
+//                        spread creates an effect, which an effect's apply and a leaf owner's callback refuse)
+//             spreadvar  `const p1 = { ref: cb1 }; function step1() { void (<div {...p1} />); }`: the same through a binding, whose keys are not read (step host only)
+//             childfn    `function step1() { void (<div>{cb1 as never}</div>); }`, `runStep(step1)`: a function child of an intrinsic element, called as an accessor where the
+//                        element is created (step host only: the insertion creates an effect)
+//             framechild `const Own1 = ((_props) => { <site> }) as unknown as …; <StepView>{(<Own1>x</Own1>) as never}</StepView>`: a component written as a child of the
+//                        package's component, created when that component reads its children (both tag names; step host only: Chrome never runs the component
+//                        when the view reads its children in an effect's apply or a tracked compute)
+//             framebare  the same with `<Own1 />`
+//           and the re-review of #222 (N1: an expression in an unread component's children or props runs when the component reads it, so what it calls or creates is
+//           handed; step host only, as framechild):
+//             framemap   `<StepView>{[1].map(() => <Own1 />) as never}</StepView>`: an element in a callback of an inline call
+//             framecall  `function h1() { <site> }`, `<StepView>{h1() as never}</StepView>`: a call
+//             framerender `function m1() { <site> }`, `<StepView render={m1() as never} />`: a call in a prop
+//             frameiife  `<StepView>{(() => <Own1 />)() as never}</StepView>`: an immediately called function
+//             framemapref `<StepView>{[1].map(() => <div ref={cb1} />) as never}</StepView>`: an intrinsic `ref` in a callback of an inline call
+//             framevoid, frametypeof  `{void (<Own1 />)}`, `{typeof (<Own1 />) as never}`: an element created under an operand nothing takes
+//           A flush written in the child expression itself (`{(flush(), null)}`) is not a route: a site is a function's statements (fixture and `pkghand/frame-flush-step`).
+//           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
+//           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
 //           FLUSH_IN_TRACKED_QUEUE_CALLBACK)
 //
@@ -42,7 +88,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -51,7 +97,9 @@ export const PH_CODES = {
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
-export const PH_CONTEXTS = Object.fromEntries(PH_ROUTES.flatMap((route) => PH_HOSTS.flatMap((host) => [[`ph-${route}-${host}`, "misuse"], [`ph-${route}-${host}-never`, "legal"]])));
+/** The routes that exist on some hosts only: `Dynamic` creates a memo, and a spread or an inserted child an effect, which an effect's apply and a leaf owner's callback refuse (PRIMITIVE_IN_EFFECT_CALLBACK, before the callback is applied); the frame routes' component, read from the view's children there, never runs in Chrome. */
+const ROUTE_HOSTS = { dynref: ["step"], spreadref: ["step"], spreadvar: ["step"], childfn: ["step"], framechild: ["step"], framebare: ["step"], framemap: ["step"], framecall: ["step"], framerender: ["step"], frameiife: ["step"], framemapref: ["step"], framevoid: ["step"], frametypeof: ["step"] };
+export const PH_CONTEXTS = Object.fromEntries(PH_ROUTES.flatMap((route) => PH_HOSTS.filter((host) => (ROUTE_HOSTS[route] ?? PH_HOSTS).includes(host)).flatMap((host) => [[`ph-${route}-${host}`, "misuse"], [`ph-${route}-${host}-never`, "legal"]])));
 export const PH_CONTEXT_NAMES = Object.keys(PH_CONTEXTS);
 
 const NAME = new RegExp(`^ph-(${PH_ROUTES.join("|")})-(${PH_HOSTS.join("|")})(-never)?$`);
@@ -69,7 +117,7 @@ export function phShape(context, shape) {
 const UPPER = { step: "Step", apply: "Apply", leaf: "Leaf" };
 /** The package function a route calls for a host: its name, the import it needs. */
 const callee = (route, host, never) => {
-  if (["jsx", "children", "props", "dynamic"].includes(route)) return never ? "SkipView" : `${UPPER[host]}View`;
+  if (["jsx", "children", "props", "dynamic", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof"].includes(route)) return never ? "SkipView" : `${UPPER[host]}View`;
   if (route === "getter") return never ? "skipRunGet" : `run${UPPER[host]}Get`;
   if (route === "assign") return never ? "skipRunConfig" : `run${UPPER[host]}Config`;
   const kind = ["member", "method", "holder", "class"].includes(route) ? "With" : route === "array" ? "All" : "";
@@ -161,11 +209,194 @@ const ROUTE_FRAMES = {
     return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  untrack(${cb});\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
   },
   dynamic: (f) => ({ head: `setTimeout(() => {\n  document.body.append((<Dynamic component={${f}} render={() => `, close: `} />) as unknown as Node);\n});` }),
+  mapinit: (f, n) => {
+    const cb = n("cb");
+    const rs = n("rs");
+    return { head: `const ${cb} = () => `, close: `;\nsetTimeout(() => {\n  const ${rs} = [${cb}].map((each) => ${f}(each));\n});` };
+  },
+  mapdestr: (f, n) => {
+    const cb = n("cb");
+    const fs = n("fs");
+    const first = n("first");
+    const rs = n("rs");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${fs} = [${cb}];\nconst [${first}] = ${fs};\nsetTimeout(() => {\n  const ${rs} = [${first}].map((each) => ${f}(each));\n});` };
+  },
+  mapparam: (f, n) => {
+    const cb = n("cb");
+    const wrap = n("wrap");
+    const rs = n("rs");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${wrap}(g: () => void) {\n  const ${rs} = [g].map((each) => ${f}(each));\n}\nsetTimeout(() => {\n  ${wrap}(${cb});\n});` };
+  },
+  mapflat: (f, n) => {
+    const cb = n("cb");
+    const rs = n("rs");
+    return { head: `const ${cb} = () => `, close: `;\nsetTimeout(() => {\n  const ${rs} = [[${cb}]].flat().map((each) => ${f}(each));\n});` };
+  },
+  maptemplate: (f, n) => {
+    const cb = n("cb");
+    const text = n("text");
+    return { head: `const ${cb} = () => `, close: `;\nsetTimeout(() => {\n  const ${text} = \`\${[${cb}].map((each) => ${f}(each)).length}\`;\n});` };
+  },
+  maplogical: (f, n) => {
+    const cb = n("cb");
+    const ok = n("ok");
+    return { head: `const ${cb} = () => `, close: `;\nsetTimeout(() => {\n  const ${ok} = { a: ${cb} }.a.name.length > 0 && [${cb}].some((each) => {\n    ${f}(each);\n    return true;\n  });\n});` };
+  },
+  mapawait: (f, n) => {
+    const cb = n("cb");
+    return { head: `const ${cb} = () => `, close: `;\nsetTimeout(async () => {\n  await [${cb}].map((each) => ${f}(each))[0];\n});` };
+  },
+  mapassign: (f, n) => {
+    const cb = n("cb");
+    const kept = n("kept");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${kept}: unknown;\nsetTimeout(() => {\n  ${kept} = [${cb}].map((each) => ${f}(each));\n});` };
+  },
+  maparg: (f, n) => {
+    const cb = n("cb");
+    const use = n("use");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${use}(value: unknown) {\n  return value;\n}\nsetTimeout(() => {\n  ${use}([${cb}].map((each) => ${f}(each)));\n});` };
+  },
+  yieldof: (f, n) => {
+    const cb = n("cb");
+    const gen = n("gen");
+    const x = n("x");
+    return { head: `const ${cb} = () => `, close: `;\nfunction* ${gen}(): Generator<() => void, void, undefined> {\n  const ${x} = yield ${cb};\n}\nsetTimeout(() => {\n  for (const each of ${gen}()) {\n    ${f}(each);\n  }\n});` };
+  },
+  nbmap: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    const rs = n("rs");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  const ${rs} = [${cb}].map((each) => each());\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  nbobj: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    const r = n("r");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  const ${r} = { run: ${cb} }.run();\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  argsindex: (f, n) => {
+    const cb = n("cb");
+    const wrap = n("wrap");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${wrap}(g: () => void) {\n  void g;\n  ${f}(arguments[0]);\n}\nsetTimeout(() => {\n  ${wrap}(${cb});\n});` };
+  },
+  argsapply: (f, n) => {
+    const cb = n("cb");
+    const rest = n("rest");
+    const wrap = n("wrap");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${rest}(...fs: Array<() => void>) {\n  ${f}(fs[0]);\n}\nfunction ${wrap}(g: () => void) {\n  void g;\n  ${rest}.apply(null, arguments as unknown as Array<() => void>);\n}\nsetTimeout(() => {\n  ${wrap}(${cb});\n});` };
+  },
+  thenreturn: (f, n) => {
+    const cb = n("cb");
+    return { head: `const ${cb} = () => `, close: `;\nsetTimeout(() => {\n  void Promise.resolve()\n    .then(() => ${cb})\n    .then((each) => {\n      ${f}(each);\n    });\n});` };
+  },
+  dynref: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  void (<Dynamic component="div" ref={${cb}} />);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  thenconst: (f, n) => {
+    const cb = n("cb");
+    const give = n("give");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${give} = () => ${cb};\nsetTimeout(() => {\n  void Promise.resolve().then(${give}).then((each) => ${f}(each));\n});` };
+  },
+  thenlet: (f, n) => {
+    const cb = n("cb");
+    const give = n("give");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${give} = () => ${cb};\nsetTimeout(() => {\n  void Promise.resolve().then(${give}).then((each) => ${f}(each));\n});` };
+  },
+  thenfn: (f, n) => {
+    const cb = n("cb");
+    const give = n("give");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${give}() { return ${cb}; }\nsetTimeout(() => {\n  void Promise.resolve().then(${give}).then((each) => ${f}(each));\n});` };
+  },
+  thenmember: (f, n) => {
+    const cb = n("cb");
+    const give = n("give");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${give} = { give: () => ${cb} };\nsetTimeout(() => {\n  void Promise.resolve().then(${give}.give).then((each) => ${f}(each));\n});` };
+  },
+  refprop: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  void (<div ref={${cb}} />);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  chainconst: (f, n) => {
+    const cb = n("cb");
+    const last = n("last");
+    const first = n("first");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${last}: unknown;\nsetTimeout(() => {\n  const ${first} = (${last} = ${cb});\n  ${f}(${first});\n});` };
+  },
+  chainassign: (f, n) => {
+    const cb = n("cb");
+    const last = n("last");
+    const first = n("first");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${first}: () => void = () => {};\nlet ${last}: unknown;\nsetTimeout(() => {\n  ${first} = ${last} = ${cb};\n  ${f}(${first});\n});` };
+  },
+  chainrecv: (f, n) => {
+    const cb = n("cb");
+    const last = n("last");
+    const rs = n("rs");
+    return { head: `const ${cb} = () => `, close: `;\nlet ${last}: unknown;\nsetTimeout(() => {\n  const ${rs} = [(${last} = ${cb})].map((each) => ${f}(each));\n});` };
+  },
+  spreadref: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  void (<div {...{ ref: ${cb} }} />);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  spreadvar: (f, n) => {
+    const cb = n("cb");
+    const props = n("props");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${props} = { ref: ${cb} };\nfunction ${step}() {\n  void (<div {...${props}} />);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  childfn: (f, n) => {
+    const cb = n("cb");
+    const step = n("step");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${step}() {\n  void (<div>{${cb} as never}</div>);\n}\nsetTimeout(() => {\n  ${f}(${step});\n});` };
+  },
+  framechild: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{(<${own}>x</${own}>) as never}</${f}>) as unknown as Node);\n});` };
+  },
+  framebare: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{(<${own} />) as never}</${f}>) as unknown as Node);\n});` };
+  },
+  framemap: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{[1].map(() => <${own} />) as never}</${f}>) as unknown as Node);\n});` };
+  },
+  framecall: (f, n) => {
+    const helper = n("helper");
+    return { head: `function ${helper}() `, close: `\nsetTimeout(() => {\n  document.body.append((<${f}>{${helper}() as never}</${f}>) as unknown as Node);\n});` };
+  },
+  framerender: (f, n) => {
+    const make = n("make");
+    return { head: `function ${make}() `, close: `\nsetTimeout(() => {\n  document.body.append((<${f} render={${make}() as never} />) as unknown as Node);\n});` };
+  },
+  frameiife: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{(() => <${own} />)() as never}</${f}>) as unknown as Node);\n});` };
+  },
+  framemapref: (f, n) => {
+    const cb = n("cb");
+    return { head: `const ${cb} = () => `, close: `;\nsetTimeout(() => {\n  document.body.append((<${f}>{[1].map(() => <div ref={${cb}} />) as never}</${f}>) as unknown as Node);\n});` };
+  },
+  framevoid: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{void (<${own} />)}</${f}>) as unknown as Node);\n});` };
+  },
+  frametypeof: (f, n) => {
+    const own = n("Own");
+    return { head: `const ${own} = ((_props: { children?: unknown }) => `, close: `) as unknown as (props: { children?: unknown }) => null;\nsetTimeout(() => {\n  document.body.append((<${f}>{typeof (<${own} />) as never}</${f}>) as unknown as Node);\n});` };
+  },
 };
+
+/** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };
-const ROUTE_LINES = { untrack: ['import { untrack } from "solid-js";'], dynamic: ['import { Dynamic } from "@solidjs/web";'] };
+const ROUTE_LINES = { untrack: ['import { untrack } from "solid-js";'], dynamic: ['import { Dynamic } from "@solidjs/web";'], dynref: ['import { Dynamic } from "@solidjs/web";'] };
 
 /** The files of `fz-step`: a manifest naming no Solid package, so the checker does not read its source. */
 export function phPackageFiles() {
@@ -209,8 +440,11 @@ export function phContext(context, stmts, kit) {
   if (!parts) return undefined;
   const name = callee(parts.route, parts.host, parts.never);
   const frame = ROUTE_FRAMES[parts.route](name, kit.name);
+  const framed = contain("frame", 9, stmts, frame);
+  const atTop = TOP_ROUTES.has(parts.route);
   return {
-    body: [contain("frame", 9, stmts, frame)],
+    body: atTop ? [] : [framed],
+    ...(atTop ? { top: [framed] } : {}),
     view: [],
     packages: { [PH_PACKAGE]: phPackageFiles() },
     importLines: [`import { ${[name, ...(ROUTE_NAMES[parts.route] ?? [])].join(", ")} } from "${PH_PACKAGE}";`, ...(ROUTE_LINES[parts.route] ?? [])],
