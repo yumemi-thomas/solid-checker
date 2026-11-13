@@ -1,4 +1,5 @@
 import "fz-pub";
+import "fz-over";
 import { clearStep } from "fz-win-clear";
 import { docViewStep, twiceStep, winDirectStep, winSelfStep } from "fz-win";
 
@@ -56,6 +57,16 @@ export function HostMembers() {
   window.matchMedia("(min-width: 1px)");
   document.body.append("x");
   window.setTimeout(() => {}, 0);
+  return null;
+}
+// A package adds an overload to a member the library declares too (`Uint8Array.from`): what runs for the overload is the package's.
+export function OverloadByPackage() {
+  Uint8Array.from(() => {});
+  return null;
+}
+// Silent: a project's own overload of a member the library declares too (`window.addEventListener`): the host implements the member.
+export function OverloadByProject() {
+  window.addEventListener("fz-ready", () => {});
   return null;
 }
 // Silent: a handler and a timer callback are legal action sites.
