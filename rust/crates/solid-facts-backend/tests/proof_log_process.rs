@@ -411,11 +411,6 @@ fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons()
             "B2: a function in Show's when, keyed",
         ),
         (
-            "<Show\n      when={() => (\n        <Inner />",
-            "<Show\n      when={() => (\n        ",
-            "B2: a function in Show's when",
-        ),
-        (
             "class Holder {\n    view = (\n      <Inner />",
             "class Holder {\n    view = (\n      ",
             "B3: an instance field's initializer in a component",

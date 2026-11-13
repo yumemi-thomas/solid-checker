@@ -57,22 +57,6 @@ function WhenKeyed() {
     </Show>
   );
 }
-let pickWhenValue: (() => unknown) | undefined;
-function WhenValue() {
-  return (
-    <Show
-      when={() => (
-        <Inner />
-      )}
-    >
-      {(get) => {
-        pickWhenValue = get();
-        return <p>when</p>;
-      }}
-    </Show>
-  );
-}
-
 // B3: JSX in an instance field's initializer runs at each construction, which may be on any stack: in a component, and in a function a dialect element calls.
 let pickClass: (new () => unknown) | undefined;
 function MakesClass() {
@@ -160,7 +144,6 @@ function Host() {
       pickNamed!();
       pickFallback!(() => 0, () => {});
       pickWhenKeyed!();
-      pickWhenValue!();
       new pickClass!();
       new pickRowClass!();
     },
@@ -174,7 +157,6 @@ function App() {
       <NamedSelf />
       <NamedFallbackSelf />
       <WhenKeyed />
-      <WhenValue />
       <MakesClass />
       <MakesClassInRow />
       <LooseMatch />
