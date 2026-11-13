@@ -793,7 +793,7 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
             add_symbol(value, false);
             library_type_spans.insert(value);
         }
-        // ADR 0973: a reviewed reading of a package's API (a matcher handed a value) is judged by whether each value it is handed is a primitive, which is
+        // ADR 0974: a reviewed reading of a package's API (a matcher handed a value) is judged by whether each value it is handed is a primitive, which is
         // stable for every inhabitant of a type. Asked at the arguments of a call into an installed package's function, a member of it, or a result of one.
         if callee_roots_at_package_import(file, call.callee) {
             for argument in call.arguments.iter().filter(|argument| !argument.spread) {

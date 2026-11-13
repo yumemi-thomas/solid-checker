@@ -1,4 +1,4 @@
-//! ADR 0973: reviewed package behavior, pinned to the bytes that were read.
+//! ADR 0974: reviewed package behavior, pinned to the bytes that were read.
 //!
 //! A package the build does not read as source may call a Solid action, so each call into it is a site (ADR 0972). Where the source of a package was *read*
 //! for one API (what `expect(value).toBe(1)` calls, on a value no foreign accessor can run in), that reading is a premise: recorded in the ADR, named by an id
@@ -39,7 +39,7 @@ pub struct ReviewedPremise {
 
 /// Every premise. A premise is added only with its reading written in `docs/decisions.md`.
 ///
-/// `vitest-4.1` (ADR 0973): `expect(value).matcher(arguments)` for the matchers and values `solid_reactive_ir::reviewed_api` names, and `vi.fn` and `vi.stubGlobal`
+/// `vitest-4.1` (ADR 0974): `expect(value).matcher(arguments)` for the matchers and values `solid_reactive_ir::reviewed_api` names, and `vi.fn` and `vi.stubGlobal`
 /// registrations. Read on vitest 4.1.11, whose files are, byte for byte, 4.1.6's and 4.1.7's but for the runner's chunk (the reading rests on its `getCurrentTest`, the same
 /// three lines in each of the three).
 pub const PREMISES: &[ReviewedPremise] = &[ReviewedPremise {

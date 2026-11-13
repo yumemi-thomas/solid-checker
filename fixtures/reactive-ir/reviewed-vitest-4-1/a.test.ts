@@ -1,3 +1,4 @@
+import { step } from "fz-step";
 import { expect, vi } from "vitest";
 
 // Module scope has no owner: nothing here is a site.
@@ -48,6 +49,11 @@ export function Registrations() {
   const anonymous = vi.fn(function () {});
   vi.stubGlobal("stubbed", box);
   return [mock, mocked, anonymous];
+}
+
+// The registration clears the call, not the value: a package function it stores runs wherever the global is called, so handing one to it is a site as before.
+export function StoredPackageFunction() {
+  vi.stubGlobal("stepped", step);
 }
 
 // Everything else keeps its site: an object, an array, an unconstrained type parameter's value, a union with an object, an `any` or an `unknown`, a literal that holds another

@@ -1,8 +1,8 @@
-//! ADR 0973: a reviewed reading of a package's source, applied at a site.
+//! ADR 0974: a reviewed reading of a package's source, applied at a site.
 //!
 //! A call into a package the build does not read as source is a site (ADR 0972). Where the source of one API was *read* (the backend pins the reading to digests
 //! of the files it rests on: `solid-facts-backend/src/reviewed_packages.rs`), the call is no site for what the reading shows it calls. The reading of vitest 4.1's
-//! `expect` and `vi` is in ADR 0973: a matcher that is handed a value no foreign accessor can run in calls only vitest's and chai's code, the functions the program
+//! `expect` and `vi` is in ADR 0974: a matcher that is handed a value no foreign accessor can run in calls only vitest's and chai's code, the functions the program
 //! registered (`expect.addEqualityTesters`, which are handed to a package and are the hand-off's), and the standard library.
 //!
 //! Everything is identified by the declaration the compiler resolves (its name, and the installed declaration file it is in), never by the spelling at the call, and
@@ -86,11 +86,14 @@ pub(crate) fn clears_call(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &Ca
     clears_registration(ctx, file, call) || clears_assertion(ctx, file, call)
 }
 
-/// [`clears_call`] for the call that spans exactly `span` (the call a value is handed to).
-pub(crate) fn clears_call_at(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> bool {
+/// Whether the call that spans exactly `span` is an assertion the reading covers, so a value of a package handed to it (a constant typed as a primitive) is no hand-off
+/// site: an assertion's value and arguments are primitives, flat literals or spies, never a function that is called later. A registration that only stores what it is
+/// given (`vi.stubGlobal(name, value)`) clears the call but not the value: the stored function runs wherever the global is called, so a package function handed to it is
+/// a site as before.
+pub(crate) fn clears_value_at(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> bool {
     file.ast
         .call_at(span)
-        .is_some_and(|call| clears_call(ctx, file, call))
+        .is_some_and(|call| !call.construct && clears_assertion(ctx, file, call))
 }
 
 /// Whether every declaration of the symbol at `span` is `name` in a declaration file with the path components `run`, of a package the premise holds for.
