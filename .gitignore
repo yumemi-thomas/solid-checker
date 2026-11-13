@@ -1471,3 +1471,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/exported-specifier-open-read/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-causes/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-causes/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-accessors/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-accessors/node_modules/**
