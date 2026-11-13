@@ -93,6 +93,10 @@
 //             getterassign the same, `m() {}` in the literal and `o1.m = m1` after
 //             propsmethod `function Wrap1(props) { setTimeout(() => { props.pick(); }); }`, `pick={m1}`, `m1` reading `this.children` in the step: a prop that is a method
 //             getterpick `const pick1 = () => (flag1 ? helper1 : o1)`, `const got1 = [0].map(pick1)`, `runStep(() => { void got1[0].g; })`
+//           and the re-check 2 of #226 (`super.x` reads the prototype's member with the object as `this`):
+//             gettersuper `const base1 = { get x() { return this.g; } }`, `const o1 = { get g() { cb1(); return 1; }, get h() { runStep(() => { void super.x; }); return 1; } }`,
+//                         `o1.__proto__ = base1`, `void o1.h` in a timer: an accessor that holds `super`, no member call
+//             methodsuper the same with `runIt() { runStep(() => { void super.x; }); }` and `o1.runIt()`: P570
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -105,7 +109,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -473,10 +477,22 @@ const ROUTE_FRAMES = {
     const flag = n("flag");
     return { head: `const ${flag} = Math.random() > 2;\nfunction ${helper}() `, close: `\nconst ${object} = {\n  get g(): number {\n    ${helper}();\n    return 1;\n  },\n};\nconst ${pick} = (): any => (${flag} ? ${helper} : ${object});\nconst ${got} = [0].map(${pick});\nsetTimeout(() => {\n  ${f}(() => {\n    void ${got}[0].g;\n  });\n});` };
   },
+  gettersuper: (f, n) => {
+    const cb = n("cb");
+    const base = n("base");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get x(): number {\n    return (this as any).g;\n  },\n};\nconst ${object} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n  get h(): number {\n    ${f}(() => {\n      void (super.x as any);\n    });\n    return 1;\n  },\n};\n(${object} as any).__proto__ = ${base};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  methodsuper: (f, n) => {
+    const cb = n("cb");
+    const base = n("base");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get x(): number {\n    return (this as any).g;\n  },\n};\nconst ${object} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n  runIt() {\n    ${f}(() => {\n      void (super.x as any);\n    });\n  },\n};\n(${object} as any).__proto__ = ${base};\nsetTimeout(() => {\n  ${object}.runIt();\n});` };
+  },
 };
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };
