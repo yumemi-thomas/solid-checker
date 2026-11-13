@@ -927,12 +927,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     crate::flush_accounting::account(&analysis, &mut program);
     // Batch 11 (slice 9B, ADR 0973): every read and project call written after an async function's own suspension ends in a row of SC1002, an SC9012, the
     // discard or a typed reason, or gets SC1002's uncertifiable row.
-    crate::after_await_accounting::account(
-        &analysis,
-        async_computations.holds_suspending(),
-        &universe,
-        &mut program,
-    );
+    crate::after_await_accounting::account(&analysis, &universe, &mut program);
     // ADR 0458: after every producer and gate, over the rows that may be
     // reported, while the lookup's memos are still open.
     program.unreached_sites = crate::execution_role::unreached_report_sites(

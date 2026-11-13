@@ -74,8 +74,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-universe-census/App.tsx",
-      "start": 2188,
-      "end": 2195,
+      "start": 2038,
+      "end": 2045,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-universe-census/App.tsx",
-      "start": 2310,
-      "end": 2314,
+      "start": 2160,
+      "end": 2164,
       "fixes": 0
     },
     {

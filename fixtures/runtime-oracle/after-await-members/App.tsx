@@ -3,8 +3,8 @@ import { Loading, createMemo, createSignal } from "solid-js";
 const pause = () => new Promise<void>((done) => setTimeout(done, 20));
 
 // Batch 11, slice 9B (ADR 0973), members: a call of a project method written after the await of a tracked async computation runs that method on the continuation, with no
-// observer: a read in it is untracked and Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read. The universe lists a call of a project method as a site (an exact
-// member through the callee summary, an inexact one with its row), so a clean here is a false clean. Each export reads its own signal.
+// observer: a read in it is untracked and Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read. The universe lists a call of a project method as a site (exact or not,
+// with its row), so a clean here is a false clean. Each export reads its own signal.
 
 // A method of a `const` object literal (exact, ADR 0279).
 const [viaObject] = createSignal(1);

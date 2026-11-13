@@ -591,6 +591,49 @@ pub(super) fn unresolved_invocation_shaped(
     unresolved_invocation_known(ctx, file, call) || unresolved_invocation(ctx, file, call)
 }
 
+/// Whether `call` is a call of Solid's own: an accessor (a read of the universe), a setter, an action, or a typed candidate whose implementation is not visible (its
+/// own row, SC9012 `type-only-source`). The calls the SC1002 universe leaves to those rules (slice 9B's accounting, `after_await_accounting.rs`).
+pub(super) fn solid_owned_call(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> bool {
+    call_accessor_symbol(ctx, file, call).is_some_and(|symbol| {
+        ctx.accessors.contains_key(symbol)
+            || ctx.setters.contains_key(symbol)
+            || ctx.actions.contains_key(symbol)
+            || typed_unknown(ctx, symbol)
+    })
+}
+
+/// Whether the symbol of `call`'s callee is declared only outside the project, by the compiler's own declarations of it: a package (a path under `node_modules`) or a default library
+/// file (`lib.*.d.ts`). `Some(false)` when one declaration lies in the project, `None` when the callee names no symbol or the symbol has no declaration (no fact: nothing is
+/// concluded). The facts are the ones demanded for every call's callee, so this asks for none of its own. Slice 9B's accounting uses it for a call whose resolved-call fact is missing
+/// (an argumentless call demands none): `expect(x).toBeNull()` names a matcher an installed package declares, which runs project code only through what it is handed.
+pub(super) fn callee_declared_outside_project(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> Option<bool> {
+    let declarations = ctx
+        .semantic_lookup
+        .symbol_declarations(call_accessor_symbol(ctx, file, call)?)?;
+    (!declarations.is_empty()).then(|| {
+        declarations
+            .iter()
+            .all(|declaration| outside_project(declaration.location.path.as_ref()))
+    })
+}
+
+/// Whether a declaration file is no project source: an installed package's, or one of the compiler's default libraries (`lib.dom.d.ts`, `lib.es2015.core.d.ts`).
+fn outside_project(path: &str) -> bool {
+    crate::effect_phase::package_root(path).is_some()
+        || std::path::Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("lib.") && name.ends_with(".d.ts"))
+}
+
 /// Batch 10c (B1): the invocations [`unresolved_invocation`] takes beyond [`unresolved_invocation_known`]: a slot, `.call` and `.apply`, a
 /// reassigned `let`, a `new`. Added rows only: they are filed after the rows the net filed before ([`Walk::invoked`]), claim no callee
 /// another row stands at, and stand only where no other row does.

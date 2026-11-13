@@ -896,6 +896,24 @@ pub(crate) fn unresolved_invocation_shaped(
     after_await::unresolved_invocation_shaped(ctx, file, call)
 }
 
+/// See [`after_await::callee_declared_outside_project`].
+pub(crate) fn callee_declared_outside_project(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<bool> {
+    after_await::callee_declared_outside_project(ctx, file, call)
+}
+
+/// See [`after_await::solid_owned_call`].
+pub(crate) fn solid_owned_call(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    after_await::solid_owned_call(ctx, file, call)
+}
+
 /// SC1002 through a call: a call after the first await of a tracked async
 /// computation whose callee reads an accessor in its own body (`await load();
 /// return byUser(posts)`). The prepass above proves only a read written in the
@@ -1764,12 +1782,6 @@ pub(crate) struct SharedAsyncComputations<'t> {
 }
 
 impl<'t> SharedAsyncComputations<'t> {
-    /// Whether the prepass found a tracked async computation with something after a suspension to walk (ADR 0963): the region of the member-route net, which files a row at a
-    /// read written in code no call edge places (a getter, a coercion, an iterator, a Proxy trap, a constructor). Slice 9B's callee reason rests on it (ADR 0973).
-    pub(crate) fn holds_suspending(&self) -> bool {
-        self.holds_suspending.get()
-    }
-
     fn get(&self, ctx: &AnalysisContext<'t>) -> &AsyncComputations<'t> {
         self.index.get_or_init(|| {
             let facts: &'t solid_facts::ProjectFacts = ctx.facts;

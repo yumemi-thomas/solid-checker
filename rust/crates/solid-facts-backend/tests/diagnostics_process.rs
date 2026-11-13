@@ -2002,7 +2002,9 @@ fn solid2_precision_corrections_are_end_to_end() {
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
-        ("reactive-read-after-await", 8),
+        // ADR 0973: the accounting's uncertifiable rows, `read-after-await-unaccounted`: one at a method of a `const` object literal called after the await (`App.tsx:78`) and two at
+        // calls of project functions (`result.filter(makePredicate(…))`, `invoke(result, …)`: no callee reason ends a call, the review of #233's B1).
+        ("reactive-read-after-await", 10),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and
@@ -2135,7 +2137,9 @@ fn solid2_precision_corrections_are_end_to_end() {
             .iter()
             .filter(|start| **start > wrapped_callback)
             .count(),
-        2,
+        // ADR 0973: the walk's two (the wrapper-built callback's read and the unresolved callback's), and the accounting's uncertifiable row at the call `invoke(result, …)`,
+        // a project function called after the await (the row at `makePredicate(…)` starts at the landmark and is not counted).
+        3,
         "the wrapper-built and unresolved callbacks are obligations, never silent (ADR 0565)"
     );
     // ADR 0566: the reads in the `filter` callbacks over the awaited array.

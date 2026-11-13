@@ -2,11 +2,11 @@ import { Loading, createMemo, createSignal } from "solid-js";
 
 const pause = () => new Promise<void>((done) => setTimeout(done, 20));
 
-// Batch 11, slice 9B (ADR 0973): the callee summary ends a call written after an await when the callee's whole transitive closure (every call exactly resolved to a project
-// function again, no read of the universe, no generator, no JSX, no tagged template, no construct, no primitive) reads no reactive source. A run no call shows (a getter, a
-// coercion, an iterator, a Proxy trap) is not a call the closure follows: the read written in such code has a row of its own (ADR 0963's member-route net), which these cases
-// pin. Each export is the continuation of a tracked async computation calling a project function whose closure is `nothing` and whose body reaches the read through a property
-// access, a template literal, a spread or a Proxy: Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read in that code, and the checker must have a row there.
+// Batch 11, slice 9B (ADR 0973): a call written after an await keeps SC1002's uncertifiable row whatever its callee does (there is no callee reason: the review of #233's B1).
+// A run no call shows (a getter, a coercion, an iterator, a Proxy trap) is not a call a closure follows, and the read written in such code has a row of its own where a
+// computation is recognized (ADR 0963's member-route net), which these cases pin. Each export is the continuation of a tracked async computation calling a project function
+// whose body reaches the read through a property access, a template literal, a spread or a Proxy: Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read in that code, and the
+// checker must have a row there.
 
 const [viaGetter] = createSignal(1);
 const holder = {

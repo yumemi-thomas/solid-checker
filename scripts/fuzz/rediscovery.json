@@ -21206,12 +21206,12 @@
    "mx-untracked-read-after-await-cs-element-memo-x-direct-none",
    "mx-untracked-read-after-await-cs-element-effect-x-direct-none"
   ],
-  "rediscovered": "main 177402dfb (release, checker sha256 51bb4a4aff15…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's uncertifiable row at the read is the only finding; 8 oracle comparisons, 0 differences). This build (release, checker sha256 17086252a38f…): recall-gap 8, 0 false clean. The 16 twins (`lg-recall`: `-never` starts nothing, `-before` reads ahead of the await) are uncertifiable on both builds (SC1001's row), 0 false positive"
+  "rediscovered": "main 45c56c08d (release, checker sha256 1e5b4aa586ee…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's uncertifiable row at the read is the only finding; all 42 cs misuse programs: 42 oracle comparisons, 0 differences). The build under review, e241aa9bd (release, sha256 67f479787d89…) and this build (release, sha256 4d3da3bddf38…): recall-gap 8, 0 false clean. The 16 twins (`lg-recall`: `-never` starts nothing, `-before` reads ahead of the await) are uncertifiable on every build (SC1001's row), 0 false positive"
  },
  {
   "finding": "UNTRACKED_READ_AFTER_AWAIT's site written in a getter that a hidden-start async function reaches through a project function (`work` calls `peek()` after its `await`, `peek` returns `holder.value`; `work` is started as a computation through a form the producers' index does not follow, so no computation is recognized and ADR 0963's member-route net, which rows a read written in a getter, is off): Chrome (rc.21) reports the code at the getter's read, and the checker had SC1001's uncertifiable row there and nothing of SC1002, so the program was certified clean for the claiming rule (a false clean). The first build of slice 9B's callee reason made it worse by ending the call that covered the read",
   "found": "batch 11, slice 9B (mac8, 2026-11-13): the probe of the callee reason against the census hazard before it landed (the oracle case after-await-universe-census-callee); as the getter route of `cs-shapes.mjs` (`cs-<form>-<host>-getter`), each program through the Chrome host and the real oracle",
-  "fixed": "ADR 0973 (batch 11, slice 9B): the callee reason requires a tracked async computation in the program (`holds_suspending`, where the member-route net runs); without one the call keeps SC1002's uncertifiable row, which covers the getter's read by a frame of its stack",
+  "fixed": "ADR 0973 (batch 11, slice 9B): there is no callee reason, so `peek()` keeps SC1002's uncertifiable row, which covers the getter's read by a frame of its stack",
   "grid": "mx-recall",
   "code": "UNTRACKED_READ_AFTER_AWAIT",
   "ids": [
@@ -21224,7 +21224,7 @@
    "mx-untracked-read-after-await-cs-element-memo-getter-x-direct-none",
    "mx-untracked-read-after-await-cs-element-effect-getter-x-direct-none"
   ],
-  "rediscovered": "main 177402dfb (release, checker sha256 51bb4a4aff15…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's row at the getter's read is the only finding; the 16 programs of both routes: 16 oracle comparisons, 0 differences). The slice's build before the census condition (release, sha256 17086252a38f…): false-clean 8. This build (release, sha256 88586e11a2ef…, commit 2 of the series): recall-gap 8, 0 false clean. The 16 twins (`lg-recall`: `-never`, `-before`) are uncertifiable on all three builds (SC1001's row), 0 false positive"
+  "rediscovered": "main 45c56c08d (release, checker sha256 1e5b4aa586ee…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's row at the getter's read is the only finding; all 42 cs misuse programs: 42 oracle comparisons, 0 differences). The slice's build before the census condition (release, sha256 17086252a38f…): false-clean 8. The build under review, e241aa9bd (release, sha256 67f479787d89…): recall-gap 8. This build (release, sha256 4d3da3bddf38…): recall-gap 8, 0 false clean. The 16 twins (`lg-recall`: `-never`, `-before`) are uncertifiable on every build (SC1001's row), 0 false positive"
  },
  {
   "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, a call into an installed package the build does not read as source whose code calls Solid's `action` itself (`runStep(cb)` is `action(function* () { cb(); })()` in a package whose manifest names no Solid package), written in a component body, a memo's compute or a `createRoot` body, was certified with no row: SC2002 placed only the actions the program creates. Chrome reports ACTION_CALLED_IN_OWNED_SCOPE at the package's call; a timer's call is quiet",
@@ -21305,5 +21305,67 @@
   "found": "the Fable re-check of #231 (head 97272e937), Chrome-confirmed: rc231/shim-wildcard false clean on that head and on origin/main",
   "fixed": "ADR 0972 (`package_reach.rs` `imports_of_unread_js`, `solid_facts::package_reach::join_relative`/`script_candidates`): a relative import the compiler resolved to no analyzed source names a runtime file the bundler loads; when it exists and the program does not analyze it, the import is undecided (`unanalyzed-project-js`)",
   "outside": "the `pa-*` cells write no project JavaScript file; the pattern lane holds the program verbatim in Chrome (`pkgaction/shim-wildcard`: origin/main fails it, this head passes), and the fixture `action-in-owned-scope-origins` (`WildcardShim`)"
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's site written in code a call's callee runs through a value no call shows, in a tracked async computation the producers' index recognizes (`createMemo(async () => { await pause(); void peek(); })`, where `peek` returns `[...stored]` over a generator object, `proxy.x` over a Proxy whose handler `{ get: reader }` is declared apart, or `installed.value` over a getter installed with `Object.defineProperty(installed, \"value\", desc)`): no call edge reaches the read and the member-route net rows only the inline spellings, so the read had no SC1002 row, and the program was certified clean for the claiming rule (a false clean; SC1001's row at the read claims another code). Chrome (rc.21) reports the code at the read. The first build of slice 9B's callee reason made it worse: a typed reason (\"the callee reads nothing\") ended the call that covers the read, and its proof line was false",
+  "found": "batch 11, slice 9B (the Fable review of #233, 2026-11-13, B1: the oracle programs c-gen-stored-rec, c-gen-stored-forof-rec, c-gen-stored-next-rec, c-gen-factory-rec, c-proxy-ref-rec and c-defprop-desc-rec, Chrome-confirmed on main and on the build under review); as the `-gen`, `-proxy-ref` and `-defprop-ref` routes over a recognized start of `cs-shapes.mjs` (`cs-rec-<host>-<route>`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0973 (batch 11, slice 9B): there is no callee reason; a call written after an await keeps SC1002's uncertifiable row (`read-after-await-unaccounted`) whatever its callee's closure reads",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-cs-rec-memo-gen-x-direct-none",
+   "mx-untracked-read-after-await-cs-rec-effect-gen-x-direct-none",
+   "mx-untracked-read-after-await-cs-rec-memo-proxy-ref-x-direct-none",
+   "mx-untracked-read-after-await-cs-rec-effect-proxy-ref-x-direct-none",
+   "mx-untracked-read-after-await-cs-rec-memo-defprop-ref-x-direct-none",
+   "mx-untracked-read-after-await-cs-rec-effect-defprop-ref-x-direct-none"
+  ],
+  "rediscovered": "main 45c56c08d (release, checker sha256 1e5b4aa586ee…; Chrome host and the real oracle): the 6 programs are false-clean (SC1001's uncertifiable row is the only finding at the read; 42 oracle comparisons over the cs cells, 0 differences). The build under review, e241aa9bd (release, sha256 67f479787d89…): false-clean 6. This build (release, sha256 4d3da3bddf38…): recall-gap 6, 0 false clean. The twins (`lg-recall`: `-never` starts nothing, `-before` calls ahead of the await) are uncertifiable or clean on every build, 0 false positive"
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's site written in a method of a module-scope `const` object literal (`ns.run()`, `ns[\"run\"]()`, `ns?.run()`, an arrow property `run: () => …`) called after the `await` of an async function declaration the program starts through a project wrapper (a start the producers' index does not follow): the lookup names no project function for the call (ADR 0299's receiver census withholds a module-scope literal's method), the accounting's pass skipped the call through a `continue`, and no SC1002 row stood at the read, so the program was certified clean for the claiming rule (a false clean). Chrome (rc.21) reports the code at the read",
+  "found": "batch 11, slice 9B (the Fable review of #233, 2026-11-13, B2: the oracle programs m-obj-method-read-hid, m-optional-hid, m-computed-hid, m-arrow-prop-hid, m-obj-method-getter-hid and c-namespace-obj-hid, Chrome-confirmed on main and on the build under review); as the `-ns-method`, `-ns-arrow`, `-ns-computed` and `-ns-optional` routes of `cs-shapes.mjs` (`cs-wrapper-<host>-<route>`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0973 (batch 11, slice 9B, `after_await_accounting.rs` `unnamed_call`): a call the resolver names no project function for, and that is no stored function value, is a site unless its callee is shown to be outside the project or Solid's own; `project` and `unresolved` sites keep SC1002's uncertifiable row",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-cs-wrapper-memo-ns-method-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-ns-method-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-ns-arrow-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-ns-arrow-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-ns-computed-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-ns-computed-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-ns-optional-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-ns-optional-x-direct-none"
+  ],
+  "rediscovered": "main 45c56c08d (release, checker sha256 1e5b4aa586ee…; Chrome host and the real oracle): the 8 programs are false-clean (SC1001's uncertifiable row at the read is the only finding; 42 oracle comparisons over the cs cells, 0 differences). The build under review, e241aa9bd (release, sha256 67f479787d89…): false-clean 8. This build (release, sha256 4d3da3bddf38…): recall-gap 8, 0 false clean. The twins (`lg-recall`: `-never` starts nothing, `-before` calls ahead of the await) are uncertifiable or clean on every build, 0 false positive"
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's site written in a function a call runs through `f.call(…)`, `f.apply(…)`, `Reflect.apply(f, …)` or a function literal called where it is written (`(() => …)()`, `(function () { … })()`, `await (async () => …)()`), after the `await` of an async function declaration the program starts through a project wrapper: the standard call and the literal name no project function to the resolver, the accounting's pass skipped them through a `continue`, and no SC1002 row stood at the read, so the program was certified clean for the claiming rule (a false clean). Chrome (rc.21) reports the code at the read",
+  "found": "batch 11, slice 9B (the Fable review of #233, 2026-11-13, B3: the oracle programs d-dotcall-hid, d-apply-hid, d-reflect-hid, d-iife-hid, d-iife-fn-hid and d-iife-async-hid, Chrome-confirmed on main and on the build under review); as the `-dotcall`, `-apply`, `-reflect`, `-iife`, `-iife-fn` and `-iife-async` routes of `cs-shapes.mjs` (`cs-wrapper-<host>-<route>`), each program through the Chrome host and the real oracle",
+  "fixed": "ADR 0973 (batch 11, slice 9B, `after_await_accounting.rs` `unnamed_call`): a function literal called in place (`iife`) and a standard call that runs a function value (`apply`: `Function.call`, `Function.apply`, `Reflect.apply`, `Reflect.construct`, by the declaration's name) are sites; each keeps SC1002's uncertifiable row",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-cs-wrapper-memo-dotcall-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-dotcall-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-apply-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-apply-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-reflect-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-reflect-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-iife-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-iife-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-iife-fn-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-iife-fn-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-memo-iife-async-x-direct-none",
+   "mx-untracked-read-after-await-cs-wrapper-effect-iife-async-x-direct-none"
+  ],
+  "rediscovered": "main 45c56c08d (release, checker sha256 1e5b4aa586ee…; Chrome host and the real oracle): the 12 programs are false-clean (SC1001's uncertifiable row at the read is the only finding; 42 oracle comparisons over the cs cells, 0 differences). The build under review, e241aa9bd (release, sha256 67f479787d89…): false-clean 12. This build (release, sha256 4d3da3bddf38…): recall-gap 12, 0 false clean. The twins (`lg-recall`: `-never` starts nothing, `-before` calls ahead of the await) are uncertifiable or clean on every build, 0 false positive"
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT's site written in a store or props read through an alias binding, under a call written after an await (`const inner = store.n; function peek() { return inner.x; }`, `const { n } = store`, a cell `{ v: store.n }`, a default parameter, a props alias `const nested = props.n` in a child component): the closure of `peek` lists no read, the first build's callee reason ended the call silently, and Chrome (rc.21) reports the code at the aliased read. The universe lists no read there either (S4 of the review: a store or props read through an alias is no read of the checker's table, silent on main in a recognized computation too)",
+  "found": "batch 11, slice 9B (the Fable review of #233, 2026-11-13, B1 and S4: the oracle programs c-alias-store-rec, c-alias-destructured-rec, c-alias-cell-rec, c-alias-default-param-rec, c-alias-chain-rec, p-props-callee-x and d-store-*, Chrome-confirmed)",
+  "fixed": "ADR 0973 (batch 11, slice 9B): there is no callee reason, so the call keeps SC1002's uncertifiable row (the aliased read itself stays unlisted: docs/open-work.md, S4)",
+  "outside": "the generator's site is a reactive read the checker lists, and a store or props read through an alias binding is listed as none (S4), so a cell would have no marked site to place; the oracle case `after-await-closure` (a store alias and a props alias, covered-uncertifiable through the call's row) and the fixture `after-await-universe` (`ByClosure`) hold the programs. A cell for S4 comes with the alias census"
  }
 ]

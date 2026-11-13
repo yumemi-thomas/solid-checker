@@ -8,7 +8,6 @@
 use std::{collections::BTreeSet, env, fs, path::Path, process::Command};
 
 const BLOCKER: &str = "read-after-await-unaccounted";
-const CALLEE_READS_NOTHING: &str = "after_await_accounting.account.callee-reads-nothing";
 const NEVER_RUNS: &str = "after_await_accounting.account.never-runs";
 
 fn fixture(name: &str) -> std::path::PathBuf {
@@ -149,6 +148,71 @@ fn a_site_no_reason_ends_gets_sc1002s_uncertifiable_row() {
         ("callback();\n}", "", "a function value"),
         ("reassigned();\n}", "", "a reassigned `let`"),
         ("count();\n    void item", "", "a read after a `for await`"),
+        // The review of #233, B1: a call keeps its row whatever its callee's closure reads (there is no callee reason).
+        (
+            "peekAlias();",
+            "",
+            "a callee that reads a store through an alias",
+        ),
+        (
+            "peekStored();",
+            "",
+            "a callee that steps a stored generator with a spread",
+        ),
+        (
+            "peekProxy();",
+            "",
+            "a callee that reaches a trap installed by reference",
+        ),
+        (
+            "peekDescriptor();",
+            "",
+            "a callee that reaches a getter installed by reference",
+        ),
+        // B2: a method of a module-scope literal the receiver census withholds, its computed and optional members, an arrow property.
+        (
+            "registry.run();",
+            "",
+            "a method of a module-scope object literal",
+        ),
+        (
+            "registry[\"run\"]();",
+            "",
+            "a computed member of a module-scope literal",
+        ),
+        (
+            "registry?.run();",
+            "",
+            "an optional member of a module-scope literal",
+        ),
+        (
+            "registry.tick();",
+            "",
+            "an arrow property of a module-scope literal",
+        ),
+        // B3: a standard call that runs a function value, and a function literal called where it is written.
+        ("reader.call(undefined);", "", "`f.call(…)`"),
+        ("reader.apply(undefined, []);", "", "`f.apply(…)`"),
+        (
+            "Reflect.apply(reader, undefined, []);",
+            "",
+            "`Reflect.apply(f, …)`",
+        ),
+        (
+            "(() => count())();",
+            "(",
+            "an arrow called where it is written",
+        ),
+        (
+            "(function () {\n    return count();",
+            "(",
+            "a function expression called where it is written",
+        ),
+        (
+            "await (async () => count())();",
+            "await (",
+            "an async arrow called where it is written",
+        ),
     ] {
         let start = at(&source, anchor, skip);
         assert!(rows.contains(&start), "{what}: no SC1002 row at {start}");
@@ -156,57 +220,31 @@ fn a_site_no_reason_ends_gets_sc1002s_uncertifiable_row() {
 }
 
 #[test]
-fn each_reason_ends_exactly_its_sites() {
+fn the_one_reason_ends_exactly_its_sites_and_no_callee_reason_ends_a_call() {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
     let name = "after-await-universe-none";
     let source = source(name);
     let named = check(&typefacts, name, None);
-    assert!(
-        unaccounted(&named).is_empty(),
-        "a site is unaccounted with every reason named"
-    );
-    let callee = BTreeSet::from([
+    // The calls of pure project functions (the whole closure resolves exactly and reads no source) keep their row: there is no callee reason (the review of #233, B1: the
+    // closure is a list of reads and calls, and a read reaches a continuation through values no call shows). They are the only rows of the program.
+    let pure = BTreeSet::from([
         at(&source, "double(2);", ""),
         at(&source, "quad(2);", ""),
         at(&source, "helpers.triple(2);", ""),
         at(&source, "calc.halve(4);", ""),
     ]);
+    assert_eq!(
+        unaccounted(&named),
+        pure,
+        "the pure callees keep their row, and nothing else is unaccounted"
+    );
+    // The reason: no execution of the program runs the site. Dropping it files exactly those sites.
     let never = BTreeSet::from([
         at(&source, "stringify(1);", ""),
         at(&source, "stringify(2);", ""),
     ]);
-    let ablated = check(&typefacts, name, Some(CALLEE_READS_NOTHING));
-    only_these_moved(&named, &ablated, &callee);
     let ablated = check(&typefacts, name, Some(NEVER_RUNS));
     only_these_moved(&named, &ablated, &never);
-    // Both reasons by id, not `all`: `all` also drops every other pass's silences (the owner stage's, the flush accounting's), which file rows of their own.
-    let ablated = check(
-        &typefacts,
-        name,
-        Some(&format!("{CALLEE_READS_NOTHING},{NEVER_RUNS}")),
-    );
-    only_these_moved(&named, &ablated, &callee.union(&never).copied().collect());
-}
-
-#[test]
-fn a_chain_within_the_closure_bound_ends_and_one_beyond_it_keeps_its_row() {
-    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
-    let name = "after-await-universe-depth";
-    let source = source(name);
-    let named = check(&typefacts, name, None);
-    let rows = unaccounted(&named);
-    // 60 pure project functions are within the bound (`MAX_CLOSURE_DEPTH`, 64): the callee summary concludes and the call has no row. 67 are beyond it: the search stops
-    // (`blocked:depth`) and the call keeps the uncertifiable row.
-    let within = at(&source, "e0();", "");
-    let beyond = at(&source, "d0();", "");
-    assert!(!rows.contains(&within), "a chain within the bound ends");
-    assert!(
-        rows.contains(&beyond),
-        "a chain beyond the bound keeps its row"
-    );
-    // The mutation of the reason: dropping it files exactly the site it ended.
-    let ablated = check(&typefacts, name, Some(CALLEE_READS_NOTHING));
-    only_these_moved(&named, &ablated, &BTreeSet::from([within]));
 }
 
 #[test]
@@ -248,17 +286,40 @@ fn a_program_without_a_recognized_computation_keeps_every_sites_row() {
         (
             "return peek();",
             "return ",
-            "a call of a project function whose closure reads no listed source: the callee reason needs a recognized computation",
+            "a call of a project function whose closure reads no listed source (there is no callee reason, with or without a recognized computation)",
         ),
     ] {
         let start = at(&source, anchor, skip);
         assert!(rows.contains(&start), "{what}: no SC1002 row at {start}");
     }
-    // No typed reason holds at any of these sites: dropping both moves nothing.
-    let ablated = check(
-        &typefacts,
-        name,
-        Some(&format!("{CALLEE_READS_NOTHING},{NEVER_RUNS}")),
-    );
+    // No typed reason holds at any of these sites: dropping it moves nothing.
+    let ablated = check(&typefacts, name, Some(NEVER_RUNS));
     only_these_moved(&named, &ablated, &BTreeSet::new());
+}
+
+#[test]
+fn a_call_into_the_standard_library_or_solids_own_is_no_site() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let name = "after-await-universe";
+    let source = source(name);
+    let rows = unaccounted(&check(&typefacts, name, None));
+    // Each is written after an await in an async function no computation runs, and none is a site: the callee is a standard-library declaration (it runs project code only
+    // through a callback or a protocol the project's objects implement: the review's S1 and S2, named in `docs/open-work.md`), a setter (its own rules) or a construct (a
+    // constructor runs where no call shows). The arm that skips them is the only one left in the pass; this keeps it from growing.
+    for (anchor, what) in [
+        ("JSON.stringify({ n: 1 });", "a standard-library call"),
+        ("Promise.resolve(1);", "a standard-library call"),
+        ("setCount(1);", "a setter"),
+    ] {
+        let start = at(&source, anchor, "");
+        assert!(
+            !rows.contains(&start),
+            "{what} has no row, found one at {start}"
+        );
+    }
+    let start = at(&source, "new Date();", "new ");
+    assert!(
+        !rows.contains(&start),
+        "a construct has no row, found one at {start}"
+    );
 }

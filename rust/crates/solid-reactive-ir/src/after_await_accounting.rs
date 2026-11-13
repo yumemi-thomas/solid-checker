@@ -5,16 +5,23 @@
 //! never reach had no row and no record of why, a clean nobody accounted for. This pass lists the sites of the claim from facts alone:
 //!
 //! - every read of [`crate::proof_universe`]'s `read` table (an accessor call, a store's or props' first `Get`), and
-//! - every call that runs a project function: one the walk's own resolver ([`crate::execution_role::project_callee_at_parameter`]) resolves exactly (`call`: an
-//!   identifier whose name still holds it; `member`: a module namespace's member, or a method of a `const` object literal or of an instance of the exact class,
-//!   ADR 0279) and one it resolves without being exact (`inexact` and `inexact-member`: a `let` the program reassigns, `this.helper()`, a parameter typed as a class,
-//!   an override or a replacement may run), and every call of a function value the walk cannot resolve (`invocation`: a parameter, a variable, a call's result,
-//!   a member slot no function body defines; ADR 0964's shape),
+//! - every call that may run a project function, written directly in a function that is `async`, after one of that function's own suspensions
+//!   ([`crate::execution_role::may_follow_suspension`]: an `await`, an implicit suspension, a loop that repeats it), outside dependency source:
+//!   - `call` and `member`: a project function the walk's own resolver ([`crate::execution_role::project_callee_at_parameter`]) resolves exactly (an identifier
+//!     whose name still holds it; a module namespace's member, or a method of a `const` object literal or of an instance of the exact class, ADR 0279);
+//!   - `inexact` and `inexact-member`: one it resolves without being exact (a `let` the program reassigns, `this.helper()`, a parameter typed as a class, an
+//!     override or a replacement may run) or one it withholds (a method of a literal the receiver census does not prove: ADR 0299);
+//!   - `invocation`: a function value the walk cannot resolve (a parameter, a variable, a call's result, a member slot no function body defines; ADR 0964);
+//!   - `iife`: a function literal called where it is written (`(() => …)()`, `(async () => …)()`): it runs on this stack;
+//!   - `apply`: a standard call that runs a function value its receiver or arguments name (`f.call(…)`, `f.apply(…)`, `Reflect.apply(f, …)`, `Reflect.construct`);
+//!   - `project` and `unresolved`: any other call whose callee is no declaration outside the project: a project declaration the resolver does not run exactly
+//!     (a computed or optional member of a literal, a method the receiver census withholds), or no declaration at all (no resolved-call fact, an `any`-typed value).
 //!
-//! written directly in a function that is `async`, after one of that function's own suspensions ([`crate::execution_role::may_follow_suspension`]: an `await`, an
-//! implicit suspension, a loop that repeats it), outside dependency source. Not sites: a `.then` continuation or a callback a later microtask runs (the reads in
-//! it are the function's own sites), a read in a nested function (that function's own site), a tagged template's tag. A function a reviewed test runner schedules
-//! is a function like any other (owner ruling 9b): its sites are sites.
+//! Not sites, each named in `docs/open-work.md`: a `.then` continuation or a callback a later microtask runs (the reads in it are the function's own sites), a
+//! read in a nested function (that function's own site), a tagged template's tag, a construct (a constructor runs where no call shows: ADR 0963's member route),
+//! and a call into code outside the project (a standard-library or package declaration): it runs project code only through what it is handed or a protocol the
+//! project's objects implement (a callback, a getter, a listener, a thenable), a hole of its own (the review of #233, S1 to S3). An accessor, a setter and an action
+//! have rules of their own. A function a reviewed test runner schedules is a function like any other (owner ruling 9b): its sites are sites.
 //!
 //! Like [`crate::flush_accounting`] (and ADRs 0838 and 0886) this pass keeps its own typed endings and its own universe; it names no
 //! [`crate::site_accounting::SiteSilence`] and no premise kind. A site ends in
@@ -23,17 +30,16 @@
 //!   nothing: it claims another code), never a row that covers it from another position;
 //! - an SC9012 at the site (a withholding covers any code);
 //! - the compiler's discard of the code;
-//! - a typed reason ([`AfterAwaitSafe`]): a fact of the program or of the site that rules the claim out, each asked of the facts and nothing else;
+//! - a typed reason ([`AfterAwaitSafe`]): a fact of the program or of the site that rules the claim out, asked of the facts and nothing else;
 //!
-//! or it gets an uncertifiable row of SC1002, blocker `read-after-await-unaccounted`: never a violation, and it yields to a row that stands. The reasons:
+//! or it gets an uncertifiable row of SC1002, blocker `read-after-await-unaccounted`: never a violation, and it yields to a row that stands. The one reason:
 //!
-//! - **the callee reads nothing**: a call whose callee is a project function the lookup resolves exactly, whose whole transitive closure (every call in it resolves
-//!   exactly to a project function again, with no read of the universe, no generator, no JSX, no tagged template, no construct and no primitive in it) reads no
-//!   reactive source (the callee summary, owner ruling), **in a program that holds a tracked async computation** (`holds_suspending`). A run no call shows (a getter, a
-//!   coercion, an iterator or a Proxy trap) is the member-route net's (ADR 0963): the read written in such code has a row of its own, and the net runs only where a
-//!   computation is recognized; where none is (and a start the producers' index does not find may still be there: the oracle cases `after-await-universe-census-*`) the
-//!   call keeps its row, so the getter's read is covered by a frame of its stack;
 //! - **never runs**: no execution of the program runs the site (`SiteReach`).
+//!
+//! **No callee reason.** A call of a project function whose closure reads nothing the universe lists is no ending. The first build of this pass had one, and the
+//! review of #233 found it unsound: the closure is a list of reads and calls, and a read reaches a continuation through values no call shows (a store read through
+//! an alias, a stored generator stepped by a spread, a trap or a getter installed by reference, a props alias). Making it exact asks for facts the checker does not
+//! have (which values are plain data), so the call keeps its row; `docs/open-work.md` names the cost and what a sound reason needs.
 //!
 //! Left out on purpose and named in `docs/open-work.md` (owner ruling, decision 5): a role silence (a handler, a deferred callback, a test callback), a read the
 //! walk's pre-await window already tracked, and a read inside an `untrack` callback: each needs a premise and a Chrome twin of its own.
@@ -46,10 +52,9 @@
 //!
 //! `SOLID_CHECKER_IR_ABLATE_SILENCE=<id>[,<id>...]` (or `all`) drops a reason, so the sites it ends get their row: the mutation test of each. With the proof log
 //! on, each reason is a `silent` line of SC1002 (`AfterAwaitSafe::<reason>`) at the site. With `SOLID_CHECKER_IR_PROOF_CANDIDATES` the pass also writes one `candidate`
-//! line per site (`read-after-await-universe`) with how the site ends and the facts that tell the sites apart: `via` (`read`, `call`, `member`, `invocation`, `inexact`, `inexact-member`), `overlap` (a row
-//! of the family overlaps the site without standing at one of its spans), `test` (the function is a literal a reviewed runner schedules), `tracked` (the census above), `never` (`SiteReach`), `callee`, `closure` and
-//! `blocker` (the callee summary and the first call that stops it), `host` (the callee that takes the function as an argument), `reason` (the typed reason that ended
-//! the site) and `filed` (whether the site got its row).
+//! line per site (`read-after-await-universe`) with how the site ends and the facts that tell the sites apart: `via` (the kinds above, and `read`), `overlap` (a row
+//! of the family overlaps the site without standing at one of its spans), `test` (the function is a literal a reviewed runner schedules), `never` (`SiteReach`), `host`
+//! (the callee that takes the function as an argument), `reason` (the typed reason that ended the site) and `filed` (whether the site got its row).
 
 use solid_facts::FileFacts;
 use solid_facts::ast::ArgumentValueKind;
@@ -69,44 +74,30 @@ const fn yes(flag: bool) -> &'static str {
 /// A typed reason a site written after an await needs no row. Closed: each variant is a fact the pass asks of the program or of the site and nothing else.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AfterAwaitSafe {
-    /// A call of a project function whose whole closure reads no reactive source ([`Summary::Nothing`]), in a program whose member-route net runs (it holds a tracked
-    /// async computation: `holds_suspending`): a getter, a coercion, an iterator or a Proxy trap the closure does not follow has a row of its own there.
-    CalleeReadsNothing,
     /// No execution of the program runs the site (`SiteReach`).
     NeverRuns,
 }
 
 impl AfterAwaitSafe {
     /// In the order they are asked, the cheapest first.
-    const ALL: [Self; 2] = [Self::CalleeReadsNothing, Self::NeverRuns];
+    const ALL: [Self; 1] = [Self::NeverRuns];
 
     /// The id the proof log writes, and `SOLID_CHECKER_IR_ABLATE_SILENCE` names (`<module>.<function>.<end>`).
     const fn id(self) -> &'static str {
         match self {
-            Self::CalleeReadsNothing => "after_await_accounting.account.callee-reads-nothing",
             Self::NeverRuns => "after_await_accounting.account.never-runs",
         }
     }
 
     /// Whether the reason holds at `site`.
-    fn holds<'a>(self, site: &AwaitSite<'a>, asked: &Asked<'_, 'a>) -> bool {
+    fn holds(self, site: &AwaitSite<'_>, reach: &crate::execution_role::SiteReach<'_, '_>) -> bool {
         match self {
-            Self::CalleeReadsNothing => {
-                asked.tracked_program && matches!(site.summary, Some(Summary::Nothing))
-            }
             Self::NeverRuns => matches!(
-                asked.reach.site(site.file, site.at),
+                reach.site(site.file, site.at),
                 crate::execution_role::Reach::Unreached(_)
             ),
         }
     }
-}
-
-/// What the reasons ask of the program, built once per build.
-struct Asked<'l, 'a> {
-    /// The census of ADR 0963: the program holds a tracked async computation with something after a suspension (the region of the member-route net).
-    tracked_program: bool,
-    reach: crate::execution_role::SiteReach<'l, 'a>,
 }
 
 /// `SOLID_CHECKER_IR_ABLATE_SILENCE`: whether the reason is dropped (a test and measurement hook, shared with the site accounting's silences).
@@ -114,18 +105,13 @@ fn ablated(reason: AfterAwaitSafe) -> bool {
     crate::site_accounting::ablated_id(reason.id())
 }
 
-/// One site: a read, or a call of a project function or of a function value the walk cannot resolve, written after its async function's own suspension.
+/// One site: a read, or a call that may run a project function, written after its async function's own suspension.
 struct AwaitSite<'a> {
     file: &'a FileFacts,
     at: Span,
     alternates: Vec<Span>,
-    /// `read`, `call` or `invocation`.
+    /// How the site is listed: `read`, `call`, `member`, `inexact`, `inexact-member`, `invocation`, `iife`, `apply`, `project` or `unresolved`.
     via: &'static str,
-    /// What the callee's own body holds, for a call of a project function: `leaf` (no call and no read of the universe), `calls` (calls, no read of the
-    /// universe: needs the closure over them), `reads` (a read of the universe); `unknown` for a stored function, `none` for a read.
-    callee: &'static str,
-    /// The callee summary of a call of a project function; `None` for a site that is no such call.
-    summary: Option<Summary>,
     /// The function holding the site is a literal a reviewed runner schedules.
     test: bool,
     /// The callee that takes the function holding the site as an argument, when one does.
@@ -193,26 +179,27 @@ fn end_of(rows: &RowIndex, site: &AwaitSite<'_>) -> (&'static str, bool) {
     (ends, overlap)
 }
 
-/// The project function a call's callee names, and whether the call exactly runs it: the walk's own resolver ([`crate::execution_role::project_callee_at_parameter`],
-/// ADRs 0278, 0279, 0299, 0314), for an identifier and for a member alike.
-enum Callee<'a> {
+/// What the walk's own resolver ([`crate::execution_role::project_callee_at_parameter`], ADRs 0278, 0279, 0299, 0314) makes of a call's callee, for an identifier
+/// and for a member alike.
+enum Callee {
     /// A project function the call exactly runs: an identifier whose name still holds it (`function_value_is_current`), a module namespace's member, a member of a `const`
     /// object literal or of a `new C()` of the exact class that declares the method, no write of a member of that name anywhere, the receiver not escaping (ADR 0279).
-    Current(&'a FileFacts, &'a solid_facts::ast::FunctionFact),
+    Current,
     /// A project function resolves and the call may not run it: a name the program rewrote (a `let` it reassigns), a method an override or a replacement may stand in for
-    /// (`this.helper()`, a parameter typed as a class, an instance not exactly the class), `f.call(..)`, a spread in the first argument. What runs is not decided.
+    /// (`this.helper()`, a parameter typed as a class, an instance not exactly the class), a spread in the first argument. What runs is not decided.
     Replaced,
-    /// No project function: a standard-library or package declaration, a function value, a member the lookup resolves to nothing.
+    /// No project function: a standard-library or package declaration, a function value, a member the lookup resolves to nothing, a member of a literal the receiver
+    /// census withholds ([`unnamed_call`] decides which of those is a site).
     Unknown,
 }
 
-fn callee_of<'a>(
-    lookup: &crate::indexes::SemanticLookup<'a>,
+fn callee_of(
+    lookup: &crate::indexes::SemanticLookup<'_>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
-) -> Callee<'a> {
+) -> Callee {
     match crate::execution_role::project_callee_at_parameter(file, call, 0, lookup) {
-        Some((callee_file, function, true)) => Callee::Current(callee_file, function),
+        Some((_, _, true)) => Callee::Current,
         Some((_, _, false)) => Callee::Replaced,
         None => Callee::Unknown,
     }
@@ -224,140 +211,75 @@ fn is_member_call(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
     file.ast.member_at(callee).is_some() || file.ast.computed_members.binary_search(&callee).is_ok()
 }
 
-/// What a project function does for a call written after an await (the callee summary).
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Summary {
-    /// The function and every function it calls (through calls the lookup resolves to a project function exactly) hold no read of the universe, no other call,
-    /// no JSX element and no generator: whatever the call runs reads no reactive source.
-    Nothing,
-    /// A read of the universe lies in the function, or in one it calls.
-    Reads,
-    /// A function that calls itself, through any chain of exactly resolved calls (the search is cut, nothing is concluded).
-    Cycle,
-    /// A call or construct the summary cannot follow, or a function it does not read: why, and the text of the callee that stops it.
-    Blocked(&'static str, String),
+/// The standard calls that run a function value their receiver or arguments name: `f.call(…)` and `f.apply(…)` (the receiver), `Reflect.apply(f, …)` and
+/// `Reflect.construct(f, …)` (the first argument). `Function.prototype.bind` runs nothing here: the function it returns runs where that value is called.
+const RUNS_A_FUNCTION_VALUE: [&str; 6] = [
+    "Function.call",
+    "Function.apply",
+    "CallableFunction.call",
+    "CallableFunction.apply",
+    "Reflect.apply",
+    "Reflect.construct",
+];
+
+/// What a call the lookup resolves to no project function, and that is no stored function value ([`crate::static_rules::unresolved_invocation_shaped`]), is: a site, or one
+/// of the four facts that show it is no site. This was a `continue` for every such call, and the review of #233 found what left through it (a method of a module-scope
+/// literal, `f.call(…)`, an immediately invoked function literal), so a call is a site unless the callee is shown to be outside the project or Solid's own; each way to be no
+/// site is a named fact, never a slot that matched nothing.
+enum Unnamed {
+    /// The `via` of the site: the call may run a project function.
+    Site(&'static str),
+    /// A construct: a constructor runs where no call shows (a field initializer, a base class), ADR 0963's member route, named in `docs/open-work.md` (S1 of the review of #233).
+    Construct,
+    /// Solid's own: an accessor call is a read of the universe, a setter's and an action's call have rules of their own, a typed candidate has its SC9012.
+    Solid,
+    /// The callee's resolved declaration is the standard library's or an installed package's: it runs project code only through what it is handed or a protocol the project's
+    /// objects implement (a callback, a getter, a listener, a thenable), the hole of S2 of the review, named in `docs/open-work.md`.
+    Declared,
+    /// No resolved-call fact (an argumentless call demands none), and the compiler's declarations of the callee's own symbol lie only in a package or a default library file.
+    Symbol,
 }
 
-impl Summary {
-    fn describe(&self) -> (String, String) {
-        match self {
-            Self::Nothing => ("nothing".to_owned(), String::new()),
-            Self::Reads => ("reads".to_owned(), String::new()),
-            Self::Cycle => ("cycle".to_owned(), String::new()),
-            Self::Blocked(why, callee) => (format!("blocked:{why}"), callee.clone()),
-        }
+fn unnamed_call(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    callee: Span,
+) -> Unnamed {
+    if call.construct {
+        return Unnamed::Construct;
     }
-}
-
-/// How many functions deep the closure follows a chain of exactly resolved calls before it stops with `Blocked("depth")`: a bound on the search's stack (a chain this long is not
-/// concluded about, and a stopped answer is never memoized), never a conclusion.
-const MAX_CLOSURE_DEPTH: usize = 64;
-
-/// The callee summaries of the program, memoized per function; a function met again while its own summary is open answers `Cycle`.
-struct Closure<'c, 'a> {
-    ctx: &'c AnalysisContext<'a>,
-    reads: &'c HashMap<&'a str, Vec<Span>>,
-    memo: HashMap<(&'a str, Span), Summary>,
-    active: HashSet<(&'a str, Span)>,
-}
-
-impl<'a> Closure<'_, 'a> {
-    fn of(&mut self, file: &'a FileFacts, function: &'a solid_facts::ast::FunctionFact) -> Summary {
-        let key = (file.path.as_str(), function.span);
-        if let Some(known) = self.memo.get(&key) {
-            return known.clone();
-        }
-        if !self.active.insert(key) {
-            return Summary::Cycle;
-        }
-        if self.active.len() > MAX_CLOSURE_DEPTH {
-            self.active.remove(&key);
-            return Summary::Blocked("depth", String::new());
-        }
-        let summary = self.compute(file, function);
-        self.active.remove(&key);
-        if summary != Summary::Cycle && !matches!(&summary, Summary::Blocked("depth", _)) {
-            self.memo.insert(key, summary.clone());
-        }
-        summary
+    // A function literal called where it is written runs on this stack.
+    if file.ast.function_at(callee).is_some() {
+        return Unnamed::Site("iife");
     }
-
-    fn compute(
-        &mut self,
-        file: &'a FileFacts,
-        function: &'a solid_facts::ast::FunctionFact,
-    ) -> Summary {
-        let lookup = self.ctx.semantic_lookup;
-        let blocked =
-            |why: &'static str, text: &str| Summary::Blocked(why, text.chars().take(24).collect());
-        if lookup.in_dependency_source(file.path.as_str()) {
-            return blocked("package", "");
-        }
-        if function.generator {
-            return blocked("generator", "");
-        }
-        // The whole function, nested functions and the parameter list included: what a nested function does may run when this one is called.
-        if self
-            .reads
-            .get(file.path.as_str())
-            .is_some_and(|spans| spans.iter().any(|at| function.span.contains(*at)))
-        {
-            return Summary::Reads;
-        }
-        if file
-            .ast
-            .jsx_elements
-            .iter()
-            .any(|element| function.span.contains(element.span))
-        {
-            return blocked("jsx", "");
-        }
-        if file
-            .ast
-            .tagged_templates
-            .iter()
-            .any(|template| function.span.contains(template.span))
-        {
-            return blocked("tagged-template", "");
-        }
-        for call in file
-            .ast
-            .calls
-            .iter()
-            .filter(|call| function.span.contains(call.span))
-        {
-            let callee = file.ast.peel_ts_sugar_span(call.callee);
-            let text = file.source_text(call.callee).unwrap_or_default();
-            if call.construct {
-                return blocked("construct", text);
-            }
-            if lookup.primitive_at_call(file, call.span).is_some() {
-                return blocked("primitive", text);
-            }
-            let (callee_file, callee_function) = match callee_of(lookup, file, call) {
-                Callee::Current(callee_file, callee_function) => (callee_file, callee_function),
-                Callee::Replaced => return blocked("not-exact", text),
-                Callee::Unknown => {
-                    let why = match lookup
-                        .resolved_callee_call(file, callee)
-                        .and_then(|resolved| resolved.declaration.as_ref())
-                    {
-                        Some(declaration) if declaration.standard_library => "standard-library",
-                        Some(declaration) if lookup.resolved_slot_without_body(declaration) => {
-                            "stored-function"
-                        }
-                        Some(_) => "package",
-                        None => "unresolved",
-                    };
-                    return blocked(why, text);
-                }
-            };
-            match self.of(callee_file, callee_function) {
-                Summary::Nothing => {}
-                other => return other,
+    if crate::static_rules::solid_owned_call(ctx, file, call) {
+        return Unnamed::Solid;
+    }
+    let declaration = ctx
+        .semantic_lookup
+        .resolved_callee_call(file, callee)
+        .and_then(|resolved| resolved.declaration.as_ref());
+    match declaration {
+        // `f.call(…)`, `f.apply(…)`, `Reflect.apply(f, …)`, `Reflect.construct(f, …)` run a function value their receiver or arguments name.
+        Some(declaration) if declaration.standard_library => {
+            if RUNS_A_FUNCTION_VALUE.contains(&declaration.qualified_name.as_ref()) {
+                Unnamed::Site("apply")
+            } else {
+                Unnamed::Declared
             }
         }
-        Summary::Nothing
+        Some(declaration)
+            if crate::effect_phase::package_root(declaration.location.path.as_ref()).is_some() =>
+        {
+            Unnamed::Declared
+        }
+        Some(_) => Unnamed::Site("project"),
+        None => match crate::static_rules::callee_declared_outside_project(ctx, file, call) {
+            Some(true) => Unnamed::Symbol,
+            Some(false) => Unnamed::Site("project"),
+            None => Unnamed::Site("unresolved"),
+        },
     }
 }
 
@@ -413,22 +335,6 @@ fn sites<'a>(
             .or_insert_with(|| file.ast.functions.iter().any(|function| function.r#async))
     };
     let mut found = Vec::new();
-    // The reads of the universe by file, for what a callee's body holds.
-    let mut reads_by_file: HashMap<&str, Vec<Span>> = HashMap::default();
-    for &(file, ref site) in universe {
-        if site.table == "read" {
-            reads_by_file
-                .entry(file.path.as_str())
-                .or_default()
-                .push(site.at);
-        }
-    }
-    let mut closure = Closure {
-        ctx,
-        reads: &reads_by_file,
-        memo: HashMap::default(),
-        active: HashSet::default(),
-    };
     for &(file, ref site) in universe {
         if site.table != "read"
             || lookup.in_dependency_source(file.path.as_str())
@@ -443,8 +349,6 @@ fn sites<'a>(
             at: site.at,
             alternates: site.alternates.clone(),
             via: "read",
-            callee: "none",
-            summary: None,
             test,
             host,
         });
@@ -461,51 +365,39 @@ fn sites<'a>(
                 continue;
             }
             // A project function the callee exactly names (and the name still holds), or a function value the walk cannot resolve (ADR 0964): a call the net takes for an
-            // unresolved invocation is one whatever the lookup resolves (a `let` the program reassigns names its initializer, which is not the value), never summarized.
+            // unresolved invocation is one whatever the lookup resolves (a `let` the program reassigns names its initializer, which is not the value).
             let named = callee_of(lookup, file, call);
             let invoked = crate::static_rules::unresolved_invocation_shaped(ctx, file, call);
             let member = is_member_call(file, call);
-            let (via, target) = match (named, invoked) {
-                (_, true) => ("invocation", None),
-                (Callee::Current(callee_file, function), false) => (
-                    if member { "member" } else { "call" },
-                    Some((callee_file, function)),
-                ),
-                (Callee::Replaced, false) => {
-                    (if member { "inexact-member" } else { "inexact" }, None)
+            let via = match (named, invoked) {
+                (_, true) => "invocation",
+                (Callee::Current, false) => {
+                    if member {
+                        "member"
+                    } else {
+                        "call"
+                    }
                 }
-                (Callee::Unknown, false) => continue,
+                (Callee::Replaced, false) => {
+                    if member {
+                        "inexact-member"
+                    } else {
+                        "inexact"
+                    }
+                }
+                (Callee::Unknown, false) => match unnamed_call(ctx, file, call, callee) {
+                    Unnamed::Site(via) => via,
+                    Unnamed::Construct | Unnamed::Solid | Unnamed::Declared | Unnamed::Symbol => {
+                        continue;
+                    }
+                },
             };
             let (test, host) = classify(file, call.span);
-            let held = target.map_or("unknown", |(callee_file, function)| {
-                let calls = callee_file
-                    .ast
-                    .calls
-                    .iter()
-                    .filter(|inner| function.body.contains(inner.span))
-                    .count();
-                let reads = reads_by_file
-                    .get(callee_file.path.as_str())
-                    .map_or(0, |spans| {
-                        spans
-                            .iter()
-                            .filter(|at| function.body.contains(**at))
-                            .count()
-                    });
-                match (calls, reads) {
-                    (0, 0) => "leaf",
-                    (_, 0) => "calls",
-                    _ => "reads",
-                }
-            });
-            let summary = target.map(|(callee_file, function)| closure.of(callee_file, function));
             found.push(AwaitSite {
                 file,
                 at: callee,
                 alternates: vec![call.span],
                 via,
-                callee: held,
-                summary,
                 test,
                 host,
             });
@@ -532,10 +424,9 @@ fn unaccounted_row(site: &AwaitSite<'_>) -> StaticDefect {
 }
 
 /// Ends every site written after an await, or gives it the uncertifiable row of SC1002. Run once per build, after the site accounting (whose universe it reads) and the
-/// flush accounting, over the final rows. `tracked_program` holds the census of ADR 0963 (`holds_suspending`, set by the prepass every build).
+/// flush accounting, over the final rows.
 pub(crate) fn account<'a>(
     ctx: &AnalysisContext<'a>,
-    tracked_program: bool,
     universe: &[(&'a FileFacts, UniverseSite)],
     program: &mut Program,
 ) {
@@ -544,10 +435,7 @@ pub(crate) fn account<'a>(
         return;
     }
     let rows = row_index(program);
-    let asked = Asked {
-        tracked_program,
-        reach: crate::execution_role::SiteReach::new(ctx.semantic_lookup),
-    };
+    let reach = crate::execution_role::SiteReach::new(ctx.semantic_lookup);
     let logging = proof_log::enabled();
     let candidates = crate::proof_candidates::enabled();
     let mut filed: Vec<StaticDefect> = Vec::new();
@@ -558,7 +446,7 @@ pub(crate) fn account<'a>(
             AfterAwaitSafe::ALL
                 .into_iter()
                 .filter(|reason| !ablated(*reason))
-                .find(|reason| reason.holds(site, &asked))
+                .find(|reason| reason.holds(site, &reach))
         } else {
             None
         };
@@ -580,13 +468,9 @@ pub(crate) fn account<'a>(
         }
         if candidates {
             let never = matches!(
-                asked.reach.site(site.file, site.at),
+                reach.site(site.file, site.at),
                 crate::execution_role::Reach::Unreached(_)
             );
-            let (closure, blocker) = site
-                .summary
-                .as_ref()
-                .map_or(("na".to_owned(), String::new()), Summary::describe);
             let reason_id = reason.map_or("none", AfterAwaitSafe::id);
             proof_log::candidate(&CandidateRecord {
                 rule: "SC1002",
@@ -597,13 +481,9 @@ pub(crate) fn account<'a>(
                 facts: &[
                     ("via", site.via),
                     ("test", yes(site.test)),
-                    ("tracked", yes(tracked_program)),
                     ("end", end),
                     ("overlap", yes(overlap)),
                     ("never", yes(never)),
-                    ("callee", site.callee),
-                    ("closure", closure.as_str()),
-                    ("blocker", blocker.as_str()),
                     ("host", site.host.as_str()),
                     ("reason", reason_id),
                     ("filed", yes(new_row)),
@@ -636,31 +516,30 @@ mod tests {
     }
 
     #[test]
-    fn the_reasons_are_the_two_that_remain_and_no_census_reason() {
-        assert_eq!(AfterAwaitSafe::ALL.len(), 2);
+    fn the_one_reason_that_remains_is_never_runs_and_there_is_no_callee_or_census_reason() {
         assert_eq!(
             AfterAwaitSafe::ALL.map(AfterAwaitSafe::id),
-            [
-                "after_await_accounting.account.callee-reads-nothing",
-                "after_await_accounting.account.never-runs",
-            ]
+            ["after_await_accounting.account.never-runs"]
         );
-        // ADR 0973: the absence of a recognized computation is no ending (the oracle cases `after-await-universe-census-*`).
-        assert!(
-            AfterAwaitSafe::ALL
-                .iter()
-                .all(|reason| !reason.id().contains("tracked-async-computation"))
-        );
+        // ADR 0973: a closure that reads nothing the universe lists (the review of #233: a store read through an alias, a stored generator stepped by a spread, a trap or a
+        // getter installed by reference) and the absence of a recognized computation (the oracle cases `after-await-universe-census-*`) are no endings.
+        assert!(AfterAwaitSafe::ALL.iter().all(|reason| {
+            let id = reason.id();
+            !id.contains("callee") && !id.contains("tracked-async-computation")
+        }));
     }
 
     #[test]
-    fn a_summary_describes_itself_for_the_candidate_line() {
-        assert_eq!(Summary::Nothing.describe().0, "nothing");
-        assert_eq!(Summary::Reads.describe().0, "reads");
-        assert_eq!(Summary::Cycle.describe().0, "cycle");
-        assert_eq!(
-            Summary::Blocked("package", "page.getByRole".to_owned()).describe(),
-            ("blocked:package".to_owned(), "page.getByRole".to_owned())
-        );
+    fn the_standard_calls_that_run_a_function_value_are_named_by_their_declarations() {
+        for name in [
+            "Function.call",
+            "Function.apply",
+            "Reflect.apply",
+            "Reflect.construct",
+        ] {
+            assert!(RUNS_A_FUNCTION_VALUE.contains(&name), "{name}");
+        }
+        // `bind` runs nothing where it is called.
+        assert!(!RUNS_A_FUNCTION_VALUE.contains(&"Function.bind"));
     }
 }

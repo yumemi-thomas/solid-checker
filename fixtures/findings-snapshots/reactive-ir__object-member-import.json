@@ -430,6 +430,50 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 330,
+      "end": 348,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 352,
+      "end": 370,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 374,
+      "end": 394,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 398,
+      "end": 418,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
       "start": 426,
       "end": 446,
       "fixes": 0
@@ -452,8 +496,96 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 470,
+      "end": 486,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 490,
+      "end": 508,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 516,
+      "end": 541,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 545,
+      "end": 566,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 570,
+      "end": 585,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 593,
+      "end": 618,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 622,
+      "end": 640,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
       "start": 648,
       "end": 669,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 673,
+      "end": 691,
       "fixes": 0
     },
     {
