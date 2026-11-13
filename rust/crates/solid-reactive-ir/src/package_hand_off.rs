@@ -86,6 +86,9 @@ enum Receiver<'a> {
 
 type Key = (Arc<str>, Span);
 
+/// The spans of the `this` expressions of one file, shared; `None` when the file does not parse.
+type ThisSpans = Option<Arc<Vec<Span>>>;
+
 /// What one question has visited, so that a cycle of copies or calls ends.
 #[derive(Default)]
 struct Walk {
@@ -146,7 +149,7 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     files: &'l HashMap<&'l str, &'a FileFacts>,
     asked: RefCell<HashMap<Key, bool>>,
     /// The spans of every `this` expression of a file, parsed once (`None`: the file does not parse, so nothing is known of its `this`).
-    this_spans: RefCell<HashMap<Arc<str>, Option<Arc<Vec<Span>>>>>,
+    this_spans: RefCell<HashMap<Arc<str>, ThisSpans>>,
 }
 
 impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
@@ -585,7 +588,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     }
 
     /// The spans of every `this` expression of the file: syntax only, from a parse of the file's own text, kept per file. `None` when the file does not parse.
-    fn this_spans(&self, file: &FileFacts) -> Option<Arc<Vec<Span>>> {
+    fn this_spans(&self, file: &FileFacts) -> ThisSpans {
         let path = file.path.shared();
         if let Some(known) = self.this_spans.borrow().get(&path) {
             return known.clone();
