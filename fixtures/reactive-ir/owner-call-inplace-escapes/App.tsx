@@ -105,6 +105,98 @@ function LooseMatch() {
   );
 }
 
+// The follow-ups of the re-check of #225 (N2), appended so the sites above keep their spans.
+// B3, the `accessor` form: an auto-accessor field is an own property of every instance as a plain field is, and its initializer runs at each construction.
+let pickAccessorClass: (new () => unknown) | undefined;
+function MakesAccessorClass() {
+  class Holder {
+    accessor view = (
+      <Inner />
+    );
+  }
+  pickAccessorClass = Holder;
+  return <p>accessor class</p>;
+}
+
+// B2, a default or a rest parameter: `Show` calls its function child only when the child declares a parameter it counts (`Function.length`: `child.length > 0` in rc.21's `solid.dev.js`).
+// A default parameter and a rest parameter count for none, so `Show` returns the child itself as its value, a function whoever reads the `Show` calls: `Late`, on an effect's apply, with no
+// owner set. Both forms are tsc-clean on the real typings: `(v: () => number = dflt) =>` and `(...v: (() => number)[]) =>` pass `NonZeroParams` (the length of their `Parameters` is `0 | 1`
+// and `number`, never exactly `0`) and their `Function.length` is 0; the zero-parameter form is the one tsc rejects. A site in either body is a site like any other.
+const dflt = () => 1;
+function Late(props: { children: unknown }) {
+  // The compute reads the children, so `Show` is created under the compute's owner; the apply calls what `Show` returned, and what that returns, with no owner set.
+  createEffect(
+    () => props.children,
+    (shown) => {
+      if (typeof shown === "function") {
+        const view: unknown = shown();
+        if (typeof view === "function") view();
+      }
+    },
+  );
+  return <p>late</p>;
+}
+function ShowDefaultParam() {
+  return (
+    <Late>
+      <Show when={1}>
+        {(_value: () => number = dflt) => (
+          <Inner />
+        )}
+      </Show>
+    </Late>
+  );
+}
+function ShowRestParam() {
+  return (
+    <Late>
+      <Show when={1}>
+        {(..._values: (() => number)[]) => (
+          <Inner />
+        )}
+      </Show>
+    </Late>
+  );
+}
+
+// B1, what reading `arguments` does (`can_hand_itself_on`): it sends an inline function expression to the entry walk as a site like any other instead of taking it for one the element calls in
+// place, though `arguments.callee` throws in module code and nothing else of `arguments` is the function. It moves no row where the walk closes the function: `For`'s function child is a
+// control-flow child no reference names, so it is a site that ends in a silence. `Errored`'s `fallback` is no control-flow child, so the walk does not close it and the site keeps its row.
+function ForReadsArguments() {
+  return (
+    <For each={[1]}>
+      {function () {
+        void arguments.length;
+        return <Inner />;
+      }}
+    </For>
+  );
+}
+function ErroredReadsArguments() {
+  return (
+    <Errored
+      fallback={function () {
+        void arguments.length;
+        return <Inner />;
+      }}
+    >
+      <Broken />
+    </Errored>
+  );
+}
+// The control of the two above: the same `fallback` that never reads `arguments` is called in place, and its tag is no site.
+function ErroredQuiet() {
+  return (
+    <Errored
+      fallback={function () {
+        return <Inner />;
+      }}
+    >
+      <Broken />
+    </Errored>
+  );
+}
+
 // Controls (no row): a named function expression that never uses its name, `Match` as `Switch`'s direct child, `Show`'s function child with its parameter.
 function NamedQuiet() {
   return (
@@ -136,6 +228,18 @@ function ShowWithComment() {
     </Show>
   );
 }
+// The control of `ShowDefaultParam` and `ShowRestParam`, read late by the same `Late`: with a parameter `Show` calls the child itself, in place, and `Late` finds its result, not a function.
+function ShowParamLate() {
+  return (
+    <Late>
+      <Show when={1}>
+        {(_value: () => number) => (
+          <Inner />
+        )}
+      </Show>
+    </Late>
+  );
+}
 
 function Host() {
   createEffect(
@@ -146,6 +250,7 @@ function Host() {
       pickWhenKeyed!();
       new pickClass!();
       new pickRowClass!();
+      new pickAccessorClass!();
     },
   );
   return <p>host</p>;
@@ -159,11 +264,18 @@ function App() {
       <WhenKeyed />
       <MakesClass />
       <MakesClassInRow />
+      <MakesAccessorClass />
+      <ShowDefaultParam />
+      <ShowRestParam />
+      <ForReadsArguments />
+      <ErroredReadsArguments />
+      <ErroredQuiet />
       <LooseMatch />
       <NamedQuiet />
       <SwitchQuiet />
       <ShowQuiet />
       <ShowWithComment />
+      <ShowParamLate />
       <Host />
     </p>
   );

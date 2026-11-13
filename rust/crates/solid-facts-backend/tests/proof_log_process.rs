@@ -390,10 +390,40 @@ fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons()
             "{/* a note */}\n      {(_value) => ",
             "Show's function child after a comment",
         ),
+        (
+            "{(_value: () => number) => (\n          <Inner />",
+            "{(_value: () => number) => (\n          ",
+            "Show's function child with its parameter, read late by a component",
+        ),
+        (
+            "fallback={function () {\n        return <Inner />",
+            "fallback={function () {\n        return ",
+            "an Errored fallback that never reads `arguments`",
+        ),
     ] {
         let start = at(&source, anchor, skip);
         assert!(!is_site(&lines_of, start), "{what} is no site");
     }
+    // What reading `arguments` does (the re-check of #225, N1): an inline function expression that reads it goes to the entry walk as a site like any other. `For`'s function child is
+    // closed there (a control-flow child no reference names): a site that ends in a silence and is declined for nothing.
+    let start = at(
+        &source,
+        "<For each={[1]}>\n      {function () {\n        void arguments.length;\n        return <Inner />",
+        "<For each={[1]}>\n      {function () {\n        void arguments.length;\n        return ",
+    );
+    assert!(
+        is_site(&lines_of, start),
+        "a function child that reads `arguments` is a site"
+    );
+    assert!(
+        silent(&lines_of, start),
+        "the entry walk closes it: a silence"
+    );
+    assert!(
+        reasons(&lines_of, start).is_empty(),
+        "and no decline: {:?}",
+        reasons(&lines_of, start)
+    );
     for (anchor, skip, what) in [
         (
             "pickNamed = row;\n        return <Inner />",
@@ -424,6 +454,27 @@ fn a_getter_and_the_callee_of_a_call_in_one_are_declined_for_their_own_reasons()
             "<Tabs>\n      <Match when={1}>\n        <Inner />",
             "<Tabs>\n      <Match when={1}>\n        ",
             "B4: a Match outside a Switch",
+        ),
+        // The follow-ups of the re-check of #225 (N1, N2).
+        (
+            "accessor view = (\n      <Inner />",
+            "accessor view = (\n      ",
+            "B3: an `accessor` field's initializer in a component",
+        ),
+        (
+            "{(_value: () => number = dflt) => (\n          <Inner />",
+            "{(_value: () => number = dflt) => (\n          ",
+            "B2: Show's function child with a default parameter, read late",
+        ),
+        (
+            "{(..._values: (() => number)[]) => (\n          <Inner />",
+            "{(..._values: (() => number)[]) => (\n          ",
+            "B2: Show's function child with a rest parameter, read late",
+        ),
+        (
+            "fallback={function () {\n        void arguments.length;\n        return <Inner />",
+            "fallback={function () {\n        void arguments.length;\n        return ",
+            "B1: an Errored fallback that reads `arguments`, which the entry walk does not close",
         ),
     ] {
         let start = at(&source, anchor, skip);

@@ -1,4 +1,21 @@
 {
  "about": "Per-fact rises of the uncertifiable count on existing fixtures (ADR 0955; scripts/guard/rises.mjs). A veto or a fail-closed change raises the count on purpose; a row here names the fixture, the `code blocker` key, the counts, the ADR and the typed fact (hazards, formula or missing fact) that did it. Named, never blocked: an unnamed rise is printed, not a failure. Append-only; counts.json is not rekeyed.",
- "rises": []
+ "rises": [
+  {
+   "fixture": "reactive-ir/owner-call-inplace-escapes",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 4,
+   "to": 8,
+   "adr": "ADR 0971",
+   "fact": "the follow-ups of the re-check of #225 (N1, N2) pin sites that stay uncertifiable and are never silenced: a Show function child with a default or rest parameter (Function.length 0, so Show returns it and whoever reads the Show calls it), an auto-accessor field's initializer (instance-field-initializer), an Errored fallback that reads arguments (the entry walk does not close it: entry-by-reference), and the getter rows of the component-child Show elements (getter-runs-where-read)"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-inplace-escapes",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 7,
+   "to": 14,
+   "adr": "ADR 0971",
+   "fact": "the follow-ups of the re-check of #225 (N1, N2) pin sites that stay uncertifiable and are never silenced: a Show function child with a default or rest parameter (Function.length 0, so Show returns it and whoever reads the Show calls it), an auto-accessor field's initializer (instance-field-initializer), an Errored fallback that reads arguments (the entry walk does not close it: entry-by-reference), and the getter rows of the component-child Show elements (getter-runs-where-read)"
+  }
+ ]
 }
