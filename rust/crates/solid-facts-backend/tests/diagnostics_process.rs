@@ -3309,6 +3309,10 @@ fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
         "const assignedMethod = {\n  get g(): number {\n    flush();",
         "function propsMethodChild() {\n  flush();",
         "function pickHelper(): number {\n  flush();",
+        // The re-check 2's `super` (an accessor that holds it, a called method that holds it: P570, an uncalled sibling beside a method that never names it: P593).
+        "const superAccessor = {\n  get g(): number {\n    flush();",
+        "const superMethod = {\n  get g(): number {\n    flush();",
+        "const superSibling = {\n  get g(): number {\n    flush();",
     ] {
         let flush = line_of(site) + site.lines().count() as u64 - 1;
         let rows = findings
