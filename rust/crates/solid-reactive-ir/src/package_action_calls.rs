@@ -184,7 +184,10 @@ fn file_sites(
             return;
         }
         // A site two routes find (an identifier and the member it is the object of) stands once; a clear package's value handed to the same call never hides
-        // another's.
+        // another's. A read where the value is already handed on as one (`const { now } = clock`, an import that may be a function) is that site's row.
+        if entry == Entry::Read && seen.contains(&(at, Entry::Value)) {
+            return;
+        }
         if !seen.insert((at, entry)) {
             return;
         }
@@ -328,6 +331,36 @@ fn file_sites(
             push(member.span, member.span, Entry::Read, Some(origin));
         }
     }
+    // A getter a package declares runs where an object pattern reads it too: `const { now } = clock` and `({ now } = clock)` read each key the pattern names off the
+    // value, a computed key or a rest element reads any (ADR 0973). An array pattern reads the iterator, which is not followed.
+    let mut pattern_slots = None::<HashMap<Span, Vec<&solid_facts::ast::PatternElementFact>>>;
+    for &(pattern, value) in &file.ast.pattern_values {
+        let at = file.ast.peel_ts_sugar_span(value);
+        if !followable_root(ctx, file, &bound, at) {
+            continue;
+        }
+        let Origin::Package(origin) = origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
+        else {
+            continue;
+        };
+        if origin.path.starts_with(AMBIENT_PREFIX) {
+            continue;
+        }
+        let slots = pattern_slots.get_or_insert_with(|| {
+            let mut slots = HashMap::<Span, Vec<_>>::default();
+            for element in &file.ast.pattern_elements {
+                slots.entry(element.pattern).or_default().push(element);
+            }
+            slots
+        });
+        let mut names = Vec::<Option<&str>>::new();
+        if pattern_keys(slots, pattern, &mut names, 0)
+            && !names.is_empty()
+            && accessor_facts(ctx, &origin.path).may_run(&names)
+        {
+            push(at, at, Entry::Read, Some(origin));
+        }
+    }
     for property in &file.ast.object_properties {
         // The facts answer the property's symbol at a shorthand's span, never the binding's: the binding is read through its import.
         let Some(binding) = property.shorthand_binding else {
@@ -363,6 +396,36 @@ fn file_sites(
     }
     sites.sort_by_key(|site| (site.at.start, site.at.end));
     sites
+}
+
+/// The keys an object pattern reads off the value it destructures, a nested pattern's too (`{ a: { b } }` reads `a` off the value and `b` off that): `None` in `names` for
+/// a computed key or a rest element. `false` for an array pattern, which reads the iterator.
+fn pattern_keys<'f>(
+    slots: &HashMap<Span, Vec<&'f solid_facts::ast::PatternElementFact>>,
+    pattern: Span,
+    names: &mut Vec<Option<&'f str>>,
+    depth: usize,
+) -> bool {
+    use solid_facts::ast::PatternSlot;
+    let Some(elements) = slots.get(&pattern) else {
+        return true;
+    };
+    if depth > 8 {
+        names.push(None);
+        return true;
+    }
+    for element in elements {
+        match &element.slot {
+            PatternSlot::Index(_) => return false,
+            PatternSlot::Key(name) => names.push(Some(name.as_str())),
+            PatternSlot::ComputedKey | PatternSlot::Rest => names.push(None),
+        }
+        // A slot that binds a pattern reads its own keys off the member's value.
+        if slots.contains_key(&element.target) {
+            pattern_keys(slots, element.target, names, depth + 1);
+        }
+    }
+    true
 }
 
 /// Where the closure of the package a declaration at `path` describes may define an accessor: open (any member may be one) where the adapter reads no filesystem.

@@ -1,12 +1,12 @@
 import { createMemo } from "solid-js";
-import { clock } from "fz-get";
+import { clock, makeClock } from "fz-get";
 import { clock as twinClock } from "fz-get-twin";
 import { clock as computedClock } from "fz-get-computed";
 import { clock as proxyClock } from "fz-get-proxy";
 import { ticker } from "fz-get-define";
 import { Counter } from "fz-get-class";
 import { opened } from "fz-get-open";
-import { calm } from "fz-get-clear";
+import { calm, makeCalm } from "fz-get-clear";
 
 // A module-scope read has no owner.
 export const first = clock.now;
@@ -33,9 +33,34 @@ export function NotClosed() {
   return null;
 }
 
+// S2: an object pattern reads each key it names off the value, so a getter runs there as at a member read; a rest element and a computed key read any. The call
+// that made the value is at module scope, where nothing runs under an owner: the pattern is where the getter runs.
+const made = makeClock();
+const calmMade = makeCalm();
+export function Destructured() {
+  const { now } = made; // the closure defines `get now()`
+  return null;
+}
+export function DestructuredRest() {
+  const { other, ...rest } = made; // a rest element reads every own enumerable key
+  return null;
+}
+export function DestructuredNested() {
+  const { other: renamed, now: { toFixed } } = made; // a nested pattern reads its keys off the member's value
+  return null;
+}
+export function DestructuredImport() {
+  const { now } = clock; // an import that may be a function is a hand-off site already: one row, not two
+  return null;
+}
+
 // Silent: the accessors the closure defines are under other names, or the closure is clear, or the read is a legal action site.
-export function OtherName() {
-  void clock.other;
+export function DestructuredOther() {
+  const { other } = made; // `other` is a data property
+  return null;
+}
+export function DestructuredClear() {
+  const { now } = calmMade; // the closure names no Solid package
   return null;
 }
 export function Twin() {
