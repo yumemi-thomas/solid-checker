@@ -3390,6 +3390,11 @@ fn receiver_reads_keep_their_rows() {
         "const foreignBase = {\n  m(): void {\n    flush();",
         "const foreignImported = {\n  m(): void {\n    flush();",
         "const foreignShort = {\n  m(): void {\n    flush();",
+        // The check of #229, B1: the method that names `this` reaches the literal in a way no reference resolves.
+        "function foreignParamMake(f: any) {\n  return {\n    m(): void {\n      flush();",
+        "const foreignCall = {\n  m(): void {\n    flush();",
+        "const foreignAlias = {\n  m(): void {\n    flush();",
+        "const foreignArray = {\n  m(): void {\n    flush();",
         "const keyedBase = {\n  get g(): number {\n    flush();",
     ] {
         let flush = line_of(site) + site.lines().count() as u64 - 1;

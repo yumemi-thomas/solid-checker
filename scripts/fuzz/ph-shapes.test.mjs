@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are eighty-three routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis"]);
+  it("are eighty-seven routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(446);
+    expect(PH_CONTEXT_NAMES).toHaveLength(470);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -242,5 +242,19 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(foreign.some((line) => /^function g\d+\(this: any\) \{$/.test(line))).toBe(true);
     expect(foreign.some((line) => /^g: g\d+,$/.test(line))).toBe(true);
     expect(textOf("FLUSH_IN_ACTION", "ph-ownmethod-step-never")).toContain("skipRun(() => {");
+  });
+  it("print the check of #229's routes: the method that names `this` reaches the literal through a parameter, a call's result, an alias, an array's element", () => {
+    const param = textOf("FLUSH_IN_ACTION", "ph-foreignparam-step");
+    expect(param.some((line) => /^function mk\d+\(f: any\) \{$/.test(line))).toBe(true);
+    expect(param.some((line) => /^g: f,$/.test(line))).toBe(true);
+    expect(param.some((line) => /^const o\d+ = mk\d+\(function \(this: any\) \{$/.test(line))).toBe(true);
+    const call = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-foreigncall-apply");
+    expect(call.some((line) => /^g: mk\d+\(\),$/.test(line))).toBe(true);
+    const alias = textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-foreignalias-leaf");
+    expect(alias.some((line) => /^const \{ a: h\d+ \} = src\d+;$/.test(line))).toBe(true);
+    expect(alias.some((line) => /^o\d+\.h\d+\(\);$/.test(line))).toBe(true);
+    const array = textOf("FLUSH_IN_ACTION", "ph-foreignarray-step");
+    expect(array.some((line) => /^g: fns\d+\[0\],$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-foreigncall-step-never")).toContain("skipRun(() => {");
   });
 });

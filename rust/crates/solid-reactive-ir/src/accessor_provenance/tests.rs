@@ -252,6 +252,43 @@ fn wildcard_target_requires_every_local_identity_input_to_be_distinct() {
             "const location = {}; const holder = { other: {}, change() { super.third = location; } }; holder.change(); Object.assign(holder.other, input);",
             true,
         ),
+        // A method runs with the holder as `this` where it is called, wherever it is written (the check of #229, B3): one written outside the literal, by a property or a
+        // shorthand, and one stored by a later write, replace the slot through a receiver the census of the literal's own text never read.
+        (
+            "const location = {}; function ch(this: any) { this.other = location; } const holder = { other: {}, change: ch }; holder.change(); Object.assign(holder.other, input);",
+            false,
+        ),
+        (
+            "const location = {}; function change(this: any) { this.other = location; } const holder = { other: {}, change }; holder.change(); Object.assign(holder.other, input);",
+            false,
+        ),
+        (
+            "const location = {}; function ch(this: any) { this.other = location; } const holder = { other: {}, change() {} }; holder.change = ch; holder.change(); Object.assign(holder.other, input);",
+            false,
+        ),
+        // twins: a method written in the literal (a method, an arrow, a function expression) that nothing replaces is the census of its own text; one written outside is
+        // refused whatever it does (the proof stays an obligation)
+        (
+            "const location = {}; const holder = { other: {}, change() { return 1; } }; holder.change(); Object.assign(holder.other, input);",
+            true,
+        ),
+        (
+            "const location = {}; const holder = { other: {}, change: () => 1 }; holder.change(); Object.assign(holder.other, input);",
+            true,
+        ),
+        (
+            "const location = {}; const holder = { other: {}, change: function () { return 1; } }; holder.change(); Object.assign(holder.other, input);",
+            true,
+        ),
+        (
+            "const location = {}; function ok() { return 1; } const holder = { other: {}, change: ok }; holder.change(); Object.assign(holder.other, input);",
+            false,
+        ),
+        // a member no call runs is no method: a data member and an outside function nothing calls
+        (
+            "const location = {}; function ch(this: any) { this.other = location; } const holder = { other: {}, unused: ch }; Object.assign(holder.other, input);",
+            true,
+        ),
         (
             "const location = {}; const holder = { patch() { Object.assign(this, input); } }; const borrowed = holder.patch; holder.patch();",
             false,

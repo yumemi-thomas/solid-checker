@@ -270,6 +270,73 @@ setTimeout(() => {
   foreignShort.importedReader();
 });
 
+// the method that names `this` reaches the literal in a way no reference resolves (the check of #229, B1): through a parameter, a call's result, an alias, an array's element
+function foreignParamMake(f: any) {
+  return {
+    m(): void {
+      flush();
+    },
+    viaParam: f,
+  };
+}
+const foreignParam = foreignParamMake(function (this: any) {
+  void runStep(() => {
+    this.m();
+  });
+});
+setTimeout(() => {
+  foreignParam.viaParam();
+});
+function foreignCallMake() {
+  return function (this: any) {
+    void runStep(() => {
+      this.m();
+    });
+  };
+}
+const foreignCall = {
+  m(): void {
+    flush();
+  },
+  viaCall: foreignCallMake(),
+};
+setTimeout(() => {
+  foreignCall.viaCall();
+});
+const foreignAliasSource = {
+  a(this: any) {
+    void runStep(() => {
+      this.m();
+    });
+  },
+};
+const { a: foreignAliasName } = foreignAliasSource;
+const foreignAlias = {
+  m(): void {
+    flush();
+  },
+  foreignAliasName,
+};
+setTimeout(() => {
+  foreignAlias.foreignAliasName();
+});
+const foreignArrayFns = [
+  function (this: any) {
+    void runStep(() => {
+      this.m();
+    });
+  },
+];
+const foreignArray = {
+  m(): void {
+    flush();
+  },
+  viaArray: foreignArrayFns[0],
+};
+setTimeout(() => {
+  foreignArray.viaArray();
+});
+
 // the key of the write may be `__proto__`, which a file of the program spells
 const keyedBase = {
   get g(): number {

@@ -186,14 +186,68 @@
       "fixes": 0
     },
     {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1779,
+      "end": 1792,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1808,
+      "end": 1827,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1972,
+      "end": 1985,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1991,
+      "end": 2012,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 2083,
+      "end": 2098,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1649,
-      "end": 1657,
+      "start": 2170,
+      "end": 2178,
       "fixes": 0
     },
     {
@@ -203,8 +257,8 @@
       "blocker": "package-finding-at-entry",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1649,
-      "end": 1657,
+      "start": 2170,
+      "end": 2178,
       "fixes": 0
     },
     {
@@ -214,8 +268,8 @@
       "blocker": "package-finding-at-entry",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1649,
-      "end": 1657,
+      "start": 2170,
+      "end": 2178,
       "fixes": 0
     },
     {
@@ -225,8 +279,8 @@
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1649,
-      "end": 1657,
+      "start": 2170,
+      "end": 2178,
       "fixes": 0
     },
     {
@@ -236,8 +290,8 @@
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1649,
-      "end": 1657,
+      "start": 2170,
+      "end": 2178,
       "fixes": 0
     },
     {
@@ -247,8 +301,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1664,
-      "end": 1675,
+      "start": 2185,
+      "end": 2196,
       "fixes": 0
     },
     {
@@ -258,8 +312,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1664,
-      "end": 1675,
+      "start": 2185,
+      "end": 2196,
       "fixes": 0
     },
     {
@@ -269,8 +323,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1682,
-      "end": 1695,
+      "start": 2203,
+      "end": 2216,
       "fixes": 0
     },
     {
@@ -280,8 +334,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1682,
-      "end": 1695,
+      "start": 2203,
+      "end": 2216,
       "fixes": 0
     },
     {
@@ -291,8 +345,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1702,
-      "end": 1719,
+      "start": 2223,
+      "end": 2240,
       "fixes": 0
     },
     {
@@ -302,8 +356,30 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
-      "start": 1702,
-      "end": 1719,
+      "start": 2223,
+      "end": 2240,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 2247,
+      "end": 2262,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 2247,
+      "end": 2262,
       "fixes": 0
     }
   ]

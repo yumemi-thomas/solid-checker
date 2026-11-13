@@ -49,12 +49,29 @@ function SuperOtherKey() {
   return <p>{query()}</p>;
 }
 
+// Twin: a method written in the literal as an arrow is the census of its own text (it names no receiver here): a violation.
+function ArrowMethod() {
+  const location = useLocation();
+  const key = ["sea", "rch"].join("");
+  const holder: { slot: Record<string, unknown>; change(): void } = {
+    slot: {},
+    change: () => {
+      void location;
+    },
+  };
+  holder.change();
+  Object.defineProperty(holder.slot, key, { value: "inert" });
+  const [query] = createSignal(location.search);
+  return <p>{query()}</p>;
+}
+
 export function App() {
   return (
     <Router>
       <NoWrite />
       <SuperRead />
       <SuperOtherKey />
+      <ArrowMethod />
     </Router>
   );
 }
