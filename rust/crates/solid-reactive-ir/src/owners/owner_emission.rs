@@ -1375,12 +1375,16 @@ fn layer_entry_open(
         else {
             return true;
         };
+        // A call written in a component element's getter (a prop's value, the children) runs where the component reads the prop, not where it is written (the review of
+        // #225, F2): it places no callee, so the layer it enters is entered by a run no edge shows.
         if local
             .iter()
             .any(|(at, hand_off)| escapes(hand_off) && !primitive_position(file, lookup, *at))
             || crate::local_access::foreign_reference_hand_offs(file, function, lookup)
                 .iter()
-                .any(|(_, _, hand_off)| escapes(hand_off))
+                .any(|(foreign, at, hand_off)| {
+                    escapes(hand_off) || crate::owners::written_in_getter(foreign, lookup, *at)
+                })
         {
             return true;
         }
@@ -1391,10 +1395,10 @@ fn layer_entry_open(
             HandOff::Inline(carrier) => *carrier,
             _ => *at,
         };
-        if local
-            .iter()
-            .any(|reference| caller_unplaced(file, run_at(reference)))
-        {
+        if local.iter().any(|reference| {
+            caller_unplaced(file, run_at(reference))
+                || crate::owners::written_in_getter(file, lookup, run_at(reference))
+        }) {
             return true;
         }
         let inline = local
@@ -1425,6 +1429,7 @@ fn layer_entry_open(
         {
             if caller.path != file.path
                 && (caller_unplaced(caller, callee)
+                    || crate::owners::written_in_getter(caller, lookup, callee)
                     || layer_entry_open(
                         caller,
                         callee,

@@ -180,7 +180,7 @@ pub(super) fn silences(
             let codes = owner_call_codes(dialect, file, call, primitive, client_build);
             if !codes.is_empty() {
                 // A creating call written as a component element's getter runs where the component reads the prop, as a JSX creation does (the review of #225, F2).
-                let getter = crate::owners::creation_in_getter(file, lookup, call.span);
+                let getter = crate::owners::written_in_getter(file, lookup, call.span);
                 candidates.push((call.span, call.callee, codes, getter));
             }
         }

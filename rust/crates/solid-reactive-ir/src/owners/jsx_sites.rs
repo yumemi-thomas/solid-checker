@@ -238,12 +238,14 @@ fn getter_relation(
     }
 }
 
-/// Whether a creating call at `span` is a component element's getter (the review of #225, F2, found while fixing it): written in the element's children or in a prop's value
-/// with no function between that the element hands to the component, so the getter's evaluation runs it where the component reads the prop. A creating call is a site of the
-/// owner-call universe as a JSX creation is, and ends or is filed by the same silences, which a getter's does not satisfy (the function that holds it says nothing of the
-/// stack it runs on): `<Outer slot={createMemo(() => 1)} />` with `Outer` reading `props.slot` on an effect's apply creates the memo with no owner set. A getter of a component that
-/// renders it in place is no getter here: the call keeps the silences it had.
-pub(crate) fn creation_in_getter(
+/// Whether code written at `span` (a creating call, a call of a function, a callee's name) is a component element's getter (the review of #225, F2, found while fixing
+/// it): written in the element's children or in a prop's value with no function between that the element hands to the component, so the getter's evaluation runs it where
+/// the component reads the prop. A creating call is a site of the owner-call universe as a JSX creation is, and ends or is filed by the same silences, which a getter's does
+/// not satisfy (the function that holds it says nothing of the stack it runs on): `<Outer slot={createMemo(() => 1)} />` with `Outer` reading `props.slot` on an effect's
+/// apply creates the memo with no owner set. A call of a function written there runs the callee on that stack the same way, so it places no callee: the entry walk takes
+/// the layer it enters for one entered by a run no edge shows (`<Outer slot={renderView()} />`, `renderView` returning `<Inner />`). A getter of a component that renders it
+/// in place is no getter here: the call keeps the silences it had.
+pub(crate) fn written_in_getter(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
     span: Span,

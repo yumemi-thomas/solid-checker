@@ -20820,5 +20820,31 @@
   "found": "Fable re-review of #222 at 5e6efd4f5 (N1 and its table, probes P50/P52/P53/P54/P62/P83/P97/P99 by reading); confirmed by Mac 5 in Chrome (rc.21 oracle, pattern lane `pkghand/frame-map-step`, `frame-call-step`, `render-call-step`, `frame-iife-step`, `frame-map-ref-step`, `frame-flush-step`, `frame-void-step`, `frame-typeof-step`: FLUSH_IN_ACTION in all eight) on main 56aa6c126, #222's 9b8fc91b1 and 5e6efd4f5: the `map` form kept its rows on main and lost them with cause A (9b8fc91b1), the other seven were false clean on all three builds",
   "fixed": "ADR 0967 amended (the re-review of #222, N1, `package_hand_off.rs`): code in an element's prop, spread or child expression with no function between runs where that element evaluates it (`evaluated_by_element`, asked by `runs_where_written`, by a declared function's call sites and by `may_run` for the flush itself): the innermost such element's creation, and for a component its receiver (a component nothing here reads hands it; a project component follows its first parameter); `may_run` asks it of the flush's own span",
   "outside": "a route's site is the statements of a function the frame writes (ph-shapes.mjs `head`/`close` around a block), so no generated program writes a site as an expression in a JSX child; the fixture flush-universe-package-hand-off-causes (the line after `directFlushInChild`, three rows) and the pattern `pkghand/frame-flush-step` (false clean on main, 9b8fc91b1 and 5e6efd4f5; fine on the fix) hold it"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation (the five JSX variants, `createMemo`, `createRoot`, `createEffect`) written in a FUNCTION that a component element's getter CALLS (`function h() { <site>; return 1; }` and `<Kid slot={h()} />` or `<Kid>{h()}</Kid>`, with `Kid`'s effect apply reading `props.slot` or `props.children`), was certified with no row: the call runs the callee where the component reads the prop, on the apply's stack with no owner, but the analyses that place a callee by the position of its call (the role engine, the owner graph's edge, the entry walk `owner_emission::layer_entry_open`) took the call for a run in the render that wrote it, and ended the site silently (OwnerCurrent, RoleDoesNotReport). Chrome rc.21 reports PRIMITIVE_IN_EFFECT_CALLBACK at the site",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): found while fixing F2 of the review of #225 (probe `pr225-probes/helper`: a project helper called in a getter is silent on #220's head and on the getter fix); Chrome-confirmed (oracle case owner-call-getter-helper); coordinator ruling: include it in #225, false cleans come first",
+  "fixed": "ADR 0971 (F2 of the review of #225, the helper in a getter): the entry walk takes a layer a call written in a getter position enters (`owners::written_in_getter`: a prop's value or the children of a component element that does not render them in place, no function the element hands over between) for one entered by a run no edge shows, in the local references, the other files' references and the callers it follows, so the callee's sites keep their rows (decline `entry-by-reference`) unless something else proves them. Fixture owner-call-getter-helper; the oracle case of the same name; the cells er-slothelper-apply and er-childhelper-apply (module scope, inside a module-level `createRoot`, so B3's row at every site written inside an exported component does not hide the helper's own proof)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-slothelper-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-slothelper-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-slothelper-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-slothelper-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-slothelper-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-slothelper-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-slothelper-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-slothelper-apply-effect-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-memo-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-root-direct-none",
+   "mx-primitive-in-effect-callback-er-childhelper-apply-effect-direct-none"
+  ],
+  "rediscovered": "the head of #220 (e823d5416, release build): 16 false-clean programs (8 variants x 2 routes), Chrome confirming (same); the first build of the F2 fix (getters and prop arrows filed, the entry walk unchanged): the same 16, Chrome same; the fix: none (16 recall-gap programs, an uncertifiable row stands). The legal twins (the child reads nothing) are clean on the head and on the first build and uncertifiable on the fix (the named cost; 0 false positives)"
  }
 ]
