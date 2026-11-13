@@ -1076,6 +1076,17 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// The argument of a call of `primitive` that is a **component loader** (ADR 0973): the call returns a component made of the module the loader's promise settles
+    /// to, and rendering or calling it runs that module's code, so a package the loader imports is where the component's body comes from. Unlike
+    /// [`Dialect::renders_loaded_default_argument`] it holds on every release and for every call form (the member it selects is `default`, or the one an `{ export }`
+    /// option names): which module the component comes from is the loader's, whatever member it selects. The call runs nothing of the module itself.
+    ///
+    /// Solid 2.0's `lazy(loader)` is the case. The default is `None`.
+    fn component_loader_argument(&self, primitive: Primitive) -> Option<usize> {
+        let _ = primitive;
+        None
+    }
+
     /// The part the export declared as `name` plays in this vocabulary's
     /// context mechanism (ADR 0153), or `None`.
     ///

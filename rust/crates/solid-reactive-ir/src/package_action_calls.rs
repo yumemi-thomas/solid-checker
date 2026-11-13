@@ -596,8 +596,11 @@ fn origin_of(
     let span = ast.peel_ts_sugar_span(span);
     if let Some(call) = ast.call_at(span) {
         // `lazy(() => import("pkg"))` makes a component of the module its loader imports, not of the dialect's `lazy`.
-        if lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Lazy) {
-            return lazy_origin(ctx, analyzed, file, call);
+        if let Some(index) = lookup
+            .primitive_at_call(file, call.span)
+            .and_then(|primitive| ctx.dialect.component_loader_argument(primitive))
+        {
+            return lazy_origin(ctx, analyzed, file, call, index);
         }
         return origin_of(ctx, analyzed, file, bound, call.callee, depth - 1);
     }
@@ -638,8 +641,9 @@ fn lazy_origin(
     analyzed: &HashSet<&str>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
+    loader: usize,
 ) -> Origin {
-    let Some(loader) = call.arguments.first() else {
+    let Some(loader) = call.arguments.get(loader) else {
         return Origin::NoPackage;
     };
     let loader = file.ast.peel_ts_sugar_span(loader.span);
@@ -698,18 +702,13 @@ fn global_origin(
     file: &FileFacts,
     span: Span,
 ) -> Origin {
-    let declarations = ctx
-        .semantic_lookup
-        .alias_root_declarations(file, span)
-        .unwrap_or_default();
+    // A name the compiler resolves to nothing at all is unknown; one it resolves to a symbol no file declares is the language's own (`globalThis`, `undefined`):
+    // the host's.
+    let Some(declarations) = ctx.semantic_lookup.alias_root_declarations(file, span) else {
+        return Origin::Unknown;
+    };
     if declarations.is_empty() {
-        // `globalThis` is the language's own name for the global object: no declaration file holds it (the compiler gives it a symbol with no declaration), and no
-        // binding of the file does where this branch is taken.
-        return if file.source_text(span) == Some("globalThis") {
-            Origin::Host
-        } else {
-            Origin::Unknown
-        };
+        return Origin::Host;
     }
     declarations_origin(ctx, analyzed, &declaration_paths_of(declarations))
         .unwrap_or(Origin::Unknown)

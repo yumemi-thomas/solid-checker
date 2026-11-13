@@ -1046,3 +1046,15 @@ fn only_an_on_cleanup_callback_runs_only_in_disposal() {
         }
     }
 }
+
+/// ADR 0973: the argument of a call that is a component loader, whatever release was read.
+#[test]
+fn lazy_is_the_component_loader_of_every_release() {
+    let dialect = Solid2::CONSERVATIVE;
+    assert_eq!(dialect.component_loader_argument(Primitive::Lazy), Some(0));
+    assert_eq!(
+        dialect.component_loader_argument(Primitive::CreateMemo),
+        None
+    );
+    assert_eq!(dialect.component_loader_argument(Primitive::Dynamic), None);
+}
