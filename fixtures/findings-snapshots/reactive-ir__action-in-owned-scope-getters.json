@@ -107,8 +107,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-getters/App.tsx",
-      "start": 1629,
-      "end": 1633,
+      "start": 1619,
+      "end": 1626,
       "fixes": 0
     },
     {
@@ -118,8 +118,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-getters/App.tsx",
-      "start": 1753,
-      "end": 1757,
+      "start": 1732,
+      "end": 1750,
       "fixes": 0
     },
     {
@@ -129,8 +129,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-getters/App.tsx",
-      "start": 1911,
-      "end": 1915,
+      "start": 1872,
+      "end": 1908,
       "fixes": 0
     },
     {
