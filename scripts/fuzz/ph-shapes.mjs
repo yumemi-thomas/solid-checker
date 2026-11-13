@@ -97,6 +97,19 @@
 //             gettersuper `const base1 = { get x() { return this.g; } }`, `const o1 = { get g() { cb1(); return 1; }, get h() { runStep(() => { void super.x; }); return 1; } }`,
 //                         `o1.__proto__ = base1`, `void o1.h` in a timer: an accessor that holds `super`, no member call
 //             methodsuper the same with `runIt() { runStep(() => { void super.x; }); }` and `o1.runIt()`: P570
+//           and the check of #227 (an object's members are read through `this` and `super`, which no reference of the object shows; G1 and its neighbours):
+//             protogetter  `const base1 = { get g() { cb1(); return 1; } }`, `const o1 = { __proto__: base1, get h() { runStep(() => { void super.g; }); return 1; } }`, `void o1.h` in a timer
+//             protogetterthis the same read through `this.g`
+//             protoassign the prototype written after the literal: `o1.__proto__ = base1`
+//             protomethod `const base1 = { m() { cb1(); } }`, the derived accessor runs `this.m()` in the step
+//             ownmethod   `const o1 = { m() { cb1(); }, run() { runStep(() => { this.m(); }); } }`, `o1.run()` in a timer: no prototype, no call edge reaches `m`
+//             ownvalue    the same with `runStep(this.m)`
+//             foreignthis `function g1(this: any) { runStep(() => { this.m(); }); }`, `const o1 = { m() { cb1(); }, g: g1 }`, `o1.g()`: a method written outside the literal that names `this`
+//           and the check of #229 (B1: the method that names `this` reaches the literal in a way no reference resolves, and the call is of a member nothing resolves to one function):
+//             foreignparam `function mk1(f: any) { return { m() { cb1(); }, g: f }; }`, `const o1 = mk1(function (this: any) { runStep(() => { this.m(); }); })`, `o1.g()`: through a parameter
+//             foreigncall `g: make1()`, `function make1() { return function (this: any) { … }; }`: through a call's result
+//             foreignalias `const { a: h1 } = src1; const o1 = { m() { cb1(); }, h1 }`, `o1.h1()`: an alias a destructuring makes
+//             foreignarray `const fns1 = [function (this: any) { … }]`, `g: fns1[0]`: an array's element
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -109,7 +122,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -489,10 +502,75 @@ const ROUTE_FRAMES = {
     const object = n("o");
     return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get x(): number {\n    return (this as any).g;\n  },\n};\nconst ${object} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n  runIt() {\n    ${f}(() => {\n      void (super.x as any);\n    });\n  },\n};\n(${object} as any).__proto__ = ${base};\nsetTimeout(() => {\n  ${object}.runIt();\n});` };
   },
+  protogetter: (f, n) => {
+    const cb = n("cb");
+    const base = n("base");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  get h(): number {\n    ${f}(() => {\n      void (super.g as any);\n    });\n    return 1;\n  },\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protogetterthis: (f, n) => {
+    const cb = n("cb");
+    const base = n("base");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  get h(): number {\n    ${f}(() => {\n      void (this as any).g;\n    });\n    return 1;\n  },\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protoassign: (f, n) => {
+    const cb = n("cb");
+    const base = n("base");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n};\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      void (super.g as any);\n    });\n    return 1;\n  },\n};\n(${object} as any).__proto__ = ${base};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protomethod: (f, n) => {
+    const cb = n("cb");
+    const base = n("base");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  m(): void {\n    ${cb}();\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  get h(): number {\n    ${f}(() => {\n      (this as any).m();\n    });\n    return 1;\n  },\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  ownmethod: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  run(): void {\n    ${f}(() => {\n      this.m();\n    });\n  },\n};\nsetTimeout(() => {\n  ${object}.run();\n});` };
+  },
+  ownvalue: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  run(): void {\n    ${f}(this.m);\n  },\n};\nsetTimeout(() => {\n  ${object}.run();\n});` };
+  },
+  foreignthis: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const method = n("g");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${method}(this: any) {\n  ${f}(() => {\n    this.m();\n  });\n}\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  g: ${method},\n};\nsetTimeout(() => {\n  ${object}.g();\n});` };
+  },
+  foreignparam: (f, n) => {
+    const cb = n("cb");
+    const make = n("mk");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${make}(f: any) {\n  return {\n    m(): void {\n      ${cb}();\n    },\n    g: f,\n  };\n}\nconst ${object} = ${make}(function (this: any) {\n  ${f}(() => {\n    this.m();\n  });\n});\nsetTimeout(() => {\n  ${object}.g();\n});` };
+  },
+  foreigncall: (f, n) => {
+    const cb = n("cb");
+    const make = n("mk");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${make}() {\n  return function (this: any) {\n    ${f}(() => {\n      this.m();\n    });\n  };\n}\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  g: ${make}(),\n};\nsetTimeout(() => {\n  ${object}.g();\n});` };
+  },
+  foreignalias: (f, n) => {
+    const cb = n("cb");
+    const source = n("src");
+    const alias = n("h");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${source} = {\n  a(this: any) {\n    ${f}(() => {\n      this.m();\n    });\n  },\n};\nconst { a: ${alias} } = ${source};\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  ${alias},\n};\nsetTimeout(() => {\n  ${object}.${alias}();\n});` };
+  },
+  foreignarray: (f, n) => {
+    const cb = n("cb");
+    const fns = n("fns");
+    const object = n("o");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${fns} = [\n  function (this: any) {\n    ${f}(() => {\n      this.m();\n    });\n  },\n];\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  g: ${fns}[0],\n};\nsetTimeout(() => {\n  ${object}.g();\n});` };
+  },
 };
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };

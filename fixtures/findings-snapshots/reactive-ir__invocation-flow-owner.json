@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 407,
+      "end": 419,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
@@ -9,6 +20,28 @@
       "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
       "start": 407,
       "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 407,
+      "end": 419,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 457,
+      "end": 466,
       "fixes": 0
     },
     {
@@ -30,6 +63,17 @@
       "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
       "start": 512,
       "end": 513,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 653,
+      "end": 662,
       "fixes": 0
     },
     {
@@ -160,6 +204,17 @@
       "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
       "start": 1499,
       "end": 1500,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 1698,
+      "end": 1707,
       "fixes": 0
     },
     {
