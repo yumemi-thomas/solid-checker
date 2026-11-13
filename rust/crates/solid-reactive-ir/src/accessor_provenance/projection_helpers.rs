@@ -380,12 +380,14 @@ pub(super) fn mutation_holder_closed(
     if let Some(literal) = binding.initializer.map(|s| file.ast.peel_ts_sugar_span(s))
         && file.ast.object_get_shapes.iter().any(|s| s.span == literal)
     {
-        let Some(this_uses) =
-            ast::this_expression_spans(std::path::Path::new(file.path.as_str()), &file.source)
+        // `super.key = v` writes the own slot `key` of the receiver (the Set runs on the prototype with the object as the receiver), and `super.m = other` replaces a
+        // method: `super` is a receiver beside `this` (the check of #227, G2).
+        let Some(receiver_uses) =
+            ast::receiver_expression_spans(std::path::Path::new(file.path.as_str()), &file.source)
         else {
             return false;
         };
-        if !this_uses
+        if !receiver_uses
             .into_iter()
             .filter(|s| literal.contains(*s))
             .all(|s| {
@@ -423,6 +425,12 @@ pub(super) fn mutation_holder_closed(
         {
             return false;
         }
+        // A method runs with the holder as `this` where it is called (`holder.change()`): one written outside the literal (`{ change: ch }`, `{ change }`) or stored by a
+        // later write (`holder.change = ch`) writes through a receiver the census above never read, so a member that is called must be a function written in the literal
+        // itself, and nothing writes it (the check of #229, B3).
+        if holder_calls_unaccounted_member(file, declaration, literal, &targets) {
+            return false;
+        }
     }
     file.ast
         .reference_declarations
@@ -445,6 +453,86 @@ pub(super) fn mutation_holder_closed(
                     == Some(declaration)
             })
         })
+}
+
+/// Whether some call through a reference of the holder bound at `declaration` (`holder.m(…)`, a tag `holder.m\`…\``) runs a member that is not accounted for: a function
+/// written in `literal` itself (a method, an arrow or a function expression: its receivers are the census of [`mutation_holder_closed`]) under that key alone, which no write
+/// replaces. A member the literal does not hold (inherited, spread in), one it holds as a reference, a call's result or an accessor, and one a write stores are not.
+fn holder_calls_unaccounted_member(
+    file: &FileFacts,
+    declaration: Span,
+    literal: Span,
+    targets: &HashSet<&Span>,
+) -> bool {
+    let ast = &file.ast;
+    let references = || {
+        ast.reference_declarations
+            .iter()
+            .filter(move |(_, d)| *d == declaration)
+            .map(|(reference, _)| *reference)
+    };
+    let member_of = |reference: Span| {
+        ast.members
+            .iter()
+            .find(|m| ast.peel_ts_sugar_span(m.object) == reference)
+    };
+    references().any(|reference| {
+        let Some(member) = member_of(reference) else {
+            // Another shape of reference: the reference census of `mutation_holder_closed` refuses it.
+            return false;
+        };
+        let called = ast
+            .calls_with_peeled_callee(member.span)
+            .next()
+            .is_some_and(|call| !call.construct)
+            || ast
+                .tagged_templates
+                .iter()
+                .any(|template| ast.peel_ts_sugar_span(template.tag) == member.span);
+        if !called {
+            return false;
+        }
+        let name = if ast.computed_members.contains(&member.span) {
+            None
+        } else {
+            file.source_text(member.property)
+        };
+        let Some(name) = name else {
+            return true;
+        };
+        // A write to a member of the holder under this name stores whatever function runs there.
+        let written = references().any(|other| {
+            member_of(other).is_some_and(|m| {
+                !ast.computed_members.contains(&m.span)
+                    && file.source_text(m.property) == Some(name)
+                    && targets.contains(&m.span)
+            })
+        });
+        if written {
+            return true;
+        }
+        // The properties the literal itself writes under this key (not those of a literal nested in one of them).
+        let own = ast
+            .object_properties
+            .iter()
+            .filter(|p| {
+                literal.contains(p.span)
+                    && !p.computed
+                    && file
+                        .source_text(p.key)
+                        .is_some_and(|key| key.trim_matches(['\'', '"']) == name)
+                    && !ast.object_properties.iter().any(|outer| {
+                        outer.span != p.span
+                            && outer.span.contains(p.span)
+                            && literal.contains(outer.span)
+                    })
+            })
+            .collect::<Vec<_>>();
+        own.is_empty()
+            || !own.iter().all(|p| {
+                (p.method || p.data) && ast.function_at(ast.peel_ts_sugar_span(p.value)).is_some()
+            })
+    })
 }
 
 /// Join every invocation of a private, current source-local helper. An alias,

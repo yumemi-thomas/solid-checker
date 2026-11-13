@@ -1,0 +1,236 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 77,
+      "end": 89,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 652,
+      "end": 665,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 884,
+      "end": 897,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 995,
+      "end": 1010,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 1119,
+      "end": 1132,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 1351,
+      "end": 1364,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 1462,
+      "end": 1477,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "provider-not-proven-above",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 1590,
+      "end": 1603,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 1845,
+      "end": 1858,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "dependency-source-getter",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 1956,
+      "end": 1971,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2043,
+      "end": 2051,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2043,
+      "end": 2051,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2043,
+      "end": 2051,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2043,
+      "end": 2051,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2043,
+      "end": 2051,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2058,
+      "end": 2069,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2058,
+      "end": 2069,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2076,
+      "end": 2096,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2076,
+      "end": 2096,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2103,
+      "end": 2115,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/App.tsx",
+      "start": 2103,
+      "end": 2115,
+      "fixes": 0
+    }
+  ]
+}
