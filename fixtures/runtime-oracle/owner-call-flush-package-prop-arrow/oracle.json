@@ -1,0 +1,4 @@
+{
+  "note": "B2 (the review of #225, F1): the flush's own SC3001 row. steplib runs its `render` prop in a createTrackedEffect callback.",
+  "packages": ["steplib"]
+}

@@ -28,14 +28,22 @@
 //             rootself   the site is in the callback of `createRoot` that is a NAMED function expression handing itself on, `let s; createRoot(function f() { if (!s) { s = f; return; } <site> })`
 //                     (module scope: the root runs once there and saves `f`), which the host calls, `s!()`: a run the primitive does not make has no owner, and the entry test
 //                     stopped at the owner-creating layer before it read the function's references (N2, the check of B1)
+//             prop    the site is in the body of an ARROW written in a component element's prop, `<Kid run={() => { <site> }} />`, and `Kid`'s apply calls it (`props.run()`): the arrow's
+//                     body runs on the apply's stack, and the JSX creation inside it was no site because it was written inside a component element (F2, the review of #225)
+//             slot    the site is the GETTER of a component element's prop, `<Kid slot={<site>} />`, and `Kid`'s apply reads it (`void props.slot`): the getter runs where it is read, on
+//                     the apply's stack (the getter proper of F2: a JSX creation written as a prop's value was no site either)
+//             children  the same getter written as the element's children, `<Kid>{<site>}</Kid>`, which the apply reads as `props.children`
+//             slotcall, childcall  the site is in an arrow the getter's own evaluation CALLS, `<Kid slot={(() => { <site>; return 1; })()} />` and `<Kid>{(() => { <site>; return 1; })()}</Kid>`: the
+//                     call runs where the component reads the prop, though a function is written between the element and the site (the first fix of F2 took any function for one the
+//                     element hands over)
 //   hosts   apply (an effect's apply: PRIMITIVE_IN_EFFECT_CALLBACK), every route; tracked and settled (SC3001's leaf owners: PRIMITIVE_IN_FORBIDDEN_SCOPE,
 //           CLEANUP_IN_FORBIDDEN_SCOPE), the `view` route only (the leaf codes rest on the owner graph's silence the component-render premise reached)
 //
 // The twin registers nothing and calls nothing (a handler that runs an `onCleanup` is NO_OWNER_CLEANUP, a code of its own), so it is the misuse text with no site run. Recall
 // contexts, the direct binding bare (`erShape`), not crossed by the census, out of api-fire's plan.
-import { contain, decl, domExpr, expr, fn, jsx, namedButton, num, prim, ref, ret } from "./model.mjs";
+import { cbProp, contain, decl, domExpr, expr, fn, iife, jsx, namedButton, num, prim, propEl, ref, ret } from "./model.mjs";
 
-export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself"];
+export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall"];
 export const ER_HOSTS = ["apply", "tracked", "settled"];
 /** The (route, host) pairs the grid places: every route on an apply, and the `view` route on the two leaf hosts. */
 const PLACED = [...ER_ROUTES.map((route) => [route, "apply"]), ["view", "tracked"], ["view", "settled"]];
@@ -69,6 +77,12 @@ function placeIn(host, held) {
     case "apply": return expr(prim("effect", fn([ret(num(1))]), { apply: fn(held) }));
     default: throw new Error(`no entry-by-reference host ${host}`);
   }
+}
+
+/** The expression the site's statement holds (`expr(e)`): the `slot` and `children` routes hand it to a component element as a prop's value or as its children. */
+function siteExpr(stmts) {
+  if (stmts.length !== 1 || stmts[0].k !== "expr") throw new Error("an entry-by-reference getter route takes one expression statement as its site");
+  return stmts[0].e;
 }
 
 /** The placement of `stmts` for an `er-*` context (`{ body, view }`, and `hoisted` for module code), or undefined for any other. */
@@ -145,6 +159,21 @@ export function erContext(context, stmts, kit) {
       const guard = expr(domExpr(`if (!${sv}) { ${sv} = ${f}; return; }`));
       const frame = contain("frame", 9, [guard, ...stmts], { head: `createRoot(function ${f}() `, close: ");", imports: ["createRoot"] });
       return { hoisted: [expr(domExpr(`let ${sv}: (() => void) | undefined`)), frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: [] };
+    }
+    case "prop": {
+      // The arrow is written in the element's prop and `Kid`'s apply calls it (model.mjs `cbProp`, call `apply`); the twin's `Kid` never calls it.
+      return { body: [], view: [cbProp(kit.name("v"), fn(stmts), never ? "never" : "apply", "inline")] };
+    }
+    case "slot": case "children": case "slotcall": case "childcall": {
+      // `Kid` is written at module scope, reads the getter in its apply (the twin reads nothing, so the getter never runs), and the component renders it with the site as the
+      // prop's value or as its children.
+      const kid = kit.name("KidG");
+      const inSlot = route === "slot" || route === "slotcall";
+      const read = never ? "void props" : inSlot ? "void props.slot" : "void props.children";
+      const text = `(props: { slot?: unknown; children?: unknown }) => { createEffect(() => 1, () => { ${read}; }); return <p>k</p>; }`;
+      // `slotcall` and `childcall` hold the statements in an arrow called in place; the others hand the site's own expression over.
+      const value = route === "slotcall" || route === "childcall" ? iife(fn([...stmts, ret(num(1))])) : siteExpr(stmts);
+      return { hoisted: [decl(kid, domExpr(text, undefined, ["createEffect"]))], body: [], view: [propEl(kid, value, "slot", !inSlot)] };
     }
     default: throw new Error(`no entry-by-reference route ${route}`);
   }

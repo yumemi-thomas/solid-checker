@@ -73,6 +73,9 @@ enum Decline {
     UnownedEntry,
     /// A layer around the site is entered by a route the graph has no edge for: a function stored, assigned, handed on or a method (ADR 0868).
     EntryByReference,
+    /// The site is JSX or a creating call written in a component element's children or a prop's value (a getter, no function the element hands over between): it runs where the
+    /// component reads the prop, on whatever stack that is, so nothing the function that holds it says places it (the review of #225, F2).
+    GetterRunsWhereRead,
 }
 
 impl Decline {
@@ -91,6 +94,7 @@ impl Decline {
             Self::LeafBitPresent => "leaf-bit-present",
             Self::UnownedEntry => "unowned-entry",
             Self::EntryByReference => "entry-by-reference",
+            Self::GetterRunsWhereRead => "getter-runs-where-read",
         }
     }
 }
@@ -168,21 +172,23 @@ pub(super) fn silences(
         let mut allowed: Option<Vec<Span>> = None;
         // The sites of the file this pass answers for, as (the span the role, the entry and the graph are asked about, the span the site is reported at, its codes): the
         // calls of the owner-call universe, and (B2, the re-review of #220) its JSX creation sites.
-        let mut candidates: Vec<(Span, Span, &'static [SiteCode])> = Vec::new();
+        let mut candidates: Vec<(Span, Span, &'static [SiteCode], bool)> = Vec::new();
         for call in &ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;
             };
             let codes = owner_call_codes(dialect, file, call, primitive, client_build);
             if !codes.is_empty() {
-                candidates.push((call.span, call.callee, codes));
+                // A creating call written as a component element's getter runs where the component reads the prop, as a JSX creation does (the review of #225, F2).
+                let getter = crate::owners::creation_in_getter(file, lookup, call.span);
+                candidates.push((call.span, call.callee, codes, getter));
             }
         }
         let jsx_codes = crate::proof_universe::jsx_site_codes(client_build);
-        for (span, _anchor) in crate::owners::universe_jsx_sites(file, lookup) {
-            candidates.push((span, span, jsx_codes));
+        for jsx in crate::owners::universe_jsx_sites(file, lookup) {
+            candidates.push((jsx.span, jsx.span, jsx_codes, jsx.getter));
         }
-        for (span, site, codes) in candidates {
+        for (span, site, codes, getter) in candidates {
             let leaf = codes.iter().any(|code| {
                 matches!(
                     code,
@@ -222,6 +228,16 @@ pub(super) fn silences(
                     PremiseKind::SiteReach,
                     || Some(span),
                 );
+                continue;
+            }
+            // A getter's JSX or creating call runs where the component reads the prop (the review of #225, F2): the function that holds it, module evaluation and every entry of that
+            // function say nothing of that stack, so only "never evaluated" (above) ends it.
+            if getter {
+                for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
+                    if open {
+                        decline(group, Decline::GetterRunsWhereRead);
+                    }
+                }
                 continue;
             }
             // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere).

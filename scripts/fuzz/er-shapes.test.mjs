@@ -9,9 +9,10 @@ import { ER_CODES, ER_CONTEXTS, ER_CONTEXT_NAMES, ER_HOSTS, ER_ROUTES, erParts, 
 
 // Batch 11, slice 6 (the review of #220, F1-F3): a function the host's callback reaches by a reference, as generator cells with their twins.
 
-const textOf = (code, context) => {
+const textOf = (code, context, variant) => {
   const side = ER_CONTEXTS[context];
-  const shape = (side === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none");
+  const shape = (side === "misuse" ? recallShapes : recallLegalShapes)(code, context).find((one) => one.binding === "direct" && one.layer === "none" && (variant === undefined || one.variant === variant));
+  expect(shape, `${context} ${variant}`).toBeDefined();
   const program = generateProgram(7, { profile: "misuse", misusePlan: { code, context, variant: shape.variant, binding: "direct", layer: "none", legal: side === "legal" } });
   const built = buildCase(program, { id: `er-${context}` });
   expect(isValid(program), context).toBe(true);
@@ -21,10 +22,10 @@ const textOf = (code, context) => {
 };
 
 describe("the er contexts (a function reached by a reference)", () => {
-  it("are ten routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself"]);
+  it("are fifteen routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall"]);
     expect(ER_HOSTS).toEqual(["apply", "tracked", "settled"]);
-    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (10 + 2));
+    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (15 + 2));
     for (const name of ER_CONTEXT_NAMES) {
       const parts = erParts(name);
       expect(parts, name).not.toBeNull();
@@ -122,6 +123,61 @@ describe("the er contexts (a function reached by a reference)", () => {
     const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-rootself-apply-never");
     expect(twin).toContain("void sv1;");
     expect(twin).not.toContain("sv1!();");
+  });
+  it("print the prop route: an arrow written in a component element's prop that the child's apply calls (the twin's child never calls it)", () => {
+    const lead = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-prop-apply", "jsx-insert");
+    const at = lead.findIndex((line) => line.startsWith("<Kid1 run={() => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(lead.slice(at, at + 3).join(" ")).toContain("<p>{String(Math.random())}</p>;");
+    expect(lead).toContain("function Kid1(props: { run: () => void }) {");
+    expect(lead).toContain("createEffect(() => 1, () => { props.run(); });");
+    const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-prop-apply-never", "jsx-insert");
+    expect(twin.some((line) => line.startsWith("<Kid1 run={() => {"))).toBe(true);
+    expect(twin.join("\n")).not.toContain("props.run()");
+  });
+  it("print the slot and children routes: a getter the child's apply reads, a prop's value or the element's children (the twin's child reads nothing)", () => {
+    const kid = (read) => `const KidG1 = (props: { slot?: unknown; children?: unknown }) => { createEffect(() => 1, () => { ${read}; }); return <p>k</p>; };`;
+    const slot = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-slot-apply", "jsx-insert");
+    expect(slot).toContain(kid("void props.slot"));
+    expect(slot).toContain("<KidG1 slot={<p>{String(Math.random())}</p>} />");
+    const children = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-children-apply", "jsx-component");
+    expect(children).toContain(kid("void props.children"));
+    expect(children).toContain("<KidG1>{<JsxComp1 />}</KidG1>");
+    for (const [route, element] of [["slot", "<KidG1 slot={<p>{String(Math.random())}</p>} />"], ["children", "<KidG1>{<p>{String(Math.random())}</p>}</KidG1>"]]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert");
+      expect(twin, route).toContain(kid("void props"));
+      expect(twin, route).toContain(element);
+    }
+    // A creating call is a getter's expression the same way.
+    expect(textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-slot-apply", "memo").join("\n")).toMatch(/<KidG1 slot=\{createMemo\(\(\) => 1\)\} \/>/);
+  });
+  it("print the slotcall and childcall routes: the site in an arrow the getter's own evaluation calls (the twin's child reads nothing)", () => {
+    const slot = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-slotcall-apply", "jsx-insert");
+    const at = slot.findIndex((line) => line.startsWith("<KidG1 slot={(() => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(slot.slice(at, at + 3).join(" ")).toContain("<p>{String(Math.random())}</p>; return 1; })()} />");
+    expect(slot.join("\n")).toContain("void props.slot;");
+    const children = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-childcall-apply", "memo");
+    expect(children.findIndex((line) => line.startsWith("<KidG1>{(() => {"))).toBeGreaterThan(-1);
+    expect(children.join("\n")).toContain("void props.children;");
+    expect(children.join("\n")).toContain("createMemo(() => 1);");
+    for (const route of ["slotcall", "childcall"]) {
+      const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert").join("\n");
+      expect(twin, route).toContain("{ void props; }");
+      expect(twin, route).toContain("})()");
+    }
+  });
+  it("take the JSX variants of PRIMITIVE_IN_EFFECT_CALLBACK in the view, prop, slot, children, slotcall and childcall cells only (a JSX creation is a site of the universe, ADR 0971)", () => {
+    const jsx = ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"];
+    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall"]) {
+      const variants = recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply`).map((shape) => shape.variant);
+      for (const variant of jsx) expect(variants, `${route} ${variant}`).toContain(variant);
+      expect(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`).map((shape) => shape.variant), route).toEqual(expect.arrayContaining(jsx));
+    }
+    for (const route of ["array", "saved", "timer", "generator", "root"]) {
+      const variants = recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply`).map((shape) => shape.variant);
+      for (const variant of jsx) expect(variants, `${route} ${variant}`).not.toContain(variant);
+    }
   });
   it("are cells of SPEC on their side for the codes their host reports, one base shape, not the census's, out of api-fire's plan", () => {
     expect(erShape("er-view-apply", { binding: "alias", layer: "none" })).toBe(false);

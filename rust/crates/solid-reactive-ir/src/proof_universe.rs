@@ -1135,15 +1135,15 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
         // stack, `pick = view; createEffect(() => 0, () => { pick!(); })` with `view` returning `<Inner />`, no creating call written anywhere): each site
         // [`crate::owners::universe_jsx_sites`] lists, with the codes [`jsx_site_codes`] gives it, at its own span and its anchor (the element's name). One pass over the file
         // slots with the calls.
-        for (span, anchor) in crate::owners::universe_jsx_sites(file, lookup) {
+        for site in crate::owners::universe_jsx_sites(file, lookup) {
             found.push((
                 file,
                 Site {
                     table: "owner-call",
                     source: "jsx",
-                    via: "jsx",
-                    at: span,
-                    alternates: vec![anchor],
+                    via: if site.getter { "jsx-getter" } else { "jsx" },
+                    at: site.span,
+                    alternates: vec![site.anchor],
                     codes: jsx_codes,
                 },
             ));

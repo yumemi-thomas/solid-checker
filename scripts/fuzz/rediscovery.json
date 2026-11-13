@@ -20578,5 +20578,56 @@
    "mx-primitive-in-effect-callback-er-view-apply-jsx-component-direct-none"
   ],
   "rediscovered": "the head of #220 (e823d5416, release build): 5 false-clean programs, Chrome confirming; B2: none (5 recall-gap programs, an uncertifiable row stands). The legal twins (er-view-apply-never with the JSX variants, which call nothing) are clean on the head and uncertifiable on B2 (the named cost)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a JSX creation (a component tag, an inserted expression, an attribute or spread, a fragment) written in the BODY OF AN ARROW that is a prop of a component element (`<Kid run={() => { <site> }} />`), which `Kid`'s effect apply calls (`props.run()`), was certified with no row: the first build of ADR 0971 left out every JSX written inside a component element's span (`in_getter` was \"inside any non-intrinsic element\"), the arrow's body included, though the body of an arrow runs where the arrow is called, not where a getter is read. The creating calls in the same arrow were violations already (the effect-phase walk follows `props.run()`). Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the JSX",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable review of #225 at fc8540b65 (review.md, F2, probe getter2), Chrome-confirmed on the head of #220 and on the first build of B2 (oracle case owner-call-jsx-prop-arrow); the programs certify on both and on main",
+  "fixed": "ADR 0971 (F2 of the review of #225): a JSX written in a function that is itself written inside a component element is a plain site (`jsx_sites.rs::getter_relation`: a function of the element's span surrounds it), ended or filed like any other. Fixture owner-call-jsx-prop-arrow; the oracle case of the same name; the cells er-prop-apply with the JSX variants (`erVariants`)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-prop-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-prop-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-prop-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-prop-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-prop-apply-jsx-component-direct-none"
+  ],
+  "rediscovered": "the head of #220 (e823d5416, release build): 5 false-clean programs, Chrome confirming (same); the fix: none (5 recall-gap programs, an uncertifiable row stands). The legal twins (er-prop-apply-never with the JSX variants: the child never calls the arrow) are clean on the head and uncertifiable on the fix (the named cost)"
+ },
+ {
+  "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a JSX creation written as a component element's GETTER, a prop's value (`<Kid slot={<site>} />`) or its children (`<Kid>{<site>}</Kid>`), which `Kid`'s effect apply reads (`void props.slot`, `void props.children`), (or a function the getter's own evaluation calls: `<Kid slot={(() => { <site> })()} />`, a `.map` callback, an `untrack` callback) was certified with no row: the first build of ADR 0971 skipped the tag as \"a getter's, read where the component reads it\", and no row stood at the read for the code (the SC1001 at the read does not claim it), though a getter runs where it is read, on the apply's stack with no owner. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the JSX",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable review of #225 at fc8540b65 (review.md, F2, probe getter1), Chrome-confirmed on the head of #220 and on the first build of B2 (oracle case owner-call-jsx-getter); the programs certify on both and on main",
+  "fixed": "ADR 0971 (F2 of the review of #225, the coordinator's ruling: unproven means uncertifiable, whatever the corpus cost): the JSX of a component element's getter is a site of the universe, ended only by the silences that hold for any site (the component never runs, the module has no owner) and by a dialect in-place renderer or a context provider, which read their children under their own owner; what nothing ends is the code's own uncertifiable row (decline `getter-runs-where-read`), never a violation. Fixture owner-call-jsx-getter; the oracle case of the same name; the cells er-slot-apply, er-children-apply, er-slotcall-apply and er-childcall-apply with the JSX variants (`erVariants`)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-slot-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-slot-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-slot-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-slot-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-slot-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-children-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-children-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-children-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-children-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-children-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-slotcall-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-slotcall-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-slotcall-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-slotcall-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-slotcall-apply-jsx-component-direct-none",
+   "mx-primitive-in-effect-callback-er-childcall-apply-jsx-insert-direct-none",
+   "mx-primitive-in-effect-callback-er-childcall-apply-jsx-attr-direct-none",
+   "mx-primitive-in-effect-callback-er-childcall-apply-jsx-spread-direct-none",
+   "mx-primitive-in-effect-callback-er-childcall-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-childcall-apply-jsx-component-direct-none"
+  ],
+  "rediscovered": "the head of #220 (e823d5416, release build): 20 false-clean programs (the `slot`, `children`, `slotcall` and `childcall` cells, 5 JSX variants each), Chrome confirming where sampled (same); the fix: none (20 recall-gap programs, an uncertifiable row stands). The legal twins (the child reads nothing) are clean on the head and uncertifiable on the fix (the named cost)"
+ },
+ {
+  "finding": "FLUSH_IN_TRACKED_QUEUE_CALLBACK's site, a `flush()` written in a MULTI-LINE arrow that is a prop of a component element whose component an unread package runs in a leaf owner's callback (`<Pkg render={() => {\\n flush();\\n }} />`, `Pkg` running `props.render()` in a `createTrackedEffect` callback), had no row at the flush on the first build of ADR 0971 (a regression, not a false clean of the base): the flush's SC3001 row (`leaf-operation-unaccounted`, the one that claims the code) yielded to the element's own owner-call row, which covers the flush by span but is reported at the element's start, where the judge places a multi-line finding. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush",
+  "found": "batch 11 (mac-b10-4, 2026-11-13): the Fable review of #225 at fc8540b65 (review.md, F1, probe flushpkg), Chrome-confirmed on the first build of B2 (oracle case owner-call-flush-package-prop-arrow): the base had the flush's SC3001 row at the flush",
+  "fixed": "ADR 0971 (F1 of the review of #225): `flush_accounting.rs::row_at` ends a flush's code only by a row that starts where the flush starts, never by a covering row of another site; the six SC3001 rows the first build removed from the snapshots (phase-handed-by-name x5, rc9-heldout-execution-shapes) return. Fixture flush-universe-package-prop-arrow",
+  "outside": "the grids' packages are generated (package.mjs) as functions that take a callback, which the checker reads as source; a component element of an UNREAD package that takes the arrow as a prop is no generated shape, and the regression needs one: the flush's own row is uncertifiable only for a function an unread package may run (ADR 0967), and the covering row stands only at an element (ADR 0971). With a project component as the caller the SC9012 at the opaque `props.render()` call covers the flush in the judge's placement on every build (the reviewer's probe flushproj), so no grid program separates the first build from the base. The oracle case, the fixture and the six restored snapshot rows hold it; a package component form for the generator is the way to a cell"
  }
 ]

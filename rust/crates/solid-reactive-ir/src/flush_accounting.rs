@@ -10,7 +10,7 @@
 //!   producers' own silent exit written down (`static_api.rs` returns from SC2006's arm with no row when the program steps no action callback, and so on);
 //!
 //! or it gets an uncertifiable row of the code's own rule, blocker `flush-in-action-unaccounted`, `flush-in-effect-unaccounted` or
-//! `leaf-operation-unaccounted`: never a violation, and it yields to any row that stands. A give-up is not a reason: the walks that place a flush
+//! `leaf-operation-unaccounted`: never a violation, and it yields to a row that stands at its own position (a row that covers it from another is another site's). A give-up is not a reason: the walks that place a flush
 //! (`unplaced_blocker`, the effect-phase origin) answer "placed off" for a function no call edge reaches, a body that may be a component and an owner set
 //! around the call as well as for a proof, so none of their silent exits is named here (owner ruling 5a): the site stays uncertifiable.
 //!
@@ -424,13 +424,14 @@ fn row_index(program: &Program) -> RowIndex {
     rows
 }
 
-/// A row of the code's own rule (or a leaf operation, for SC3001), or an SC9012, at the site.
+/// A row of the code's own rule (or a leaf operation, for SC3001), or an SC9012, that starts where the site starts: the site's own row. A row that covers the site from an earlier
+/// position (the JSX element a flush is written in a prop arrow of, a creation whose callback holds it) or sits inside it at a later one (a `resolve` in its argument) is another site's:
+/// the judge places a finding at its start and a multi-line finding covers nothing inside it, so such a row leaves no row at the flush (the review of #225, F1).
 fn row_at(rows: &RowIndex, path: &str, site: Span, code: FlushCode) -> bool {
-    let (start, end) = (u64::from(site.start), u64::from(site.end));
+    let start = u64::from(site.start);
     rows.get(path).is_some_and(|here| {
-        here.iter().any(|(row_start, row_end, label)| {
-            *row_start < end
-                && start < *row_end
+        here.iter().any(|(row_start, _, label)| {
+            *row_start == start
                 && (*label == code.rule()
                     || *label == "sc9012"
                     || (code == FlushCode::Leaf && *label == "leaf-op"))

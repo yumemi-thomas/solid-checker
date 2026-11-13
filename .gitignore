@@ -1471,3 +1471,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/exported-specifier-open-read/node_modules/**
 !fixtures/reactive-ir/owner-call-jsx-sites/node_modules/
 !fixtures/reactive-ir/owner-call-jsx-sites/node_modules/**
+!fixtures/reactive-ir/owner-call-jsx-prop-arrow/node_modules/
+!fixtures/reactive-ir/owner-call-jsx-prop-arrow/node_modules/**
+!fixtures/reactive-ir/owner-call-jsx-getter/node_modules/
+!fixtures/reactive-ir/owner-call-jsx-getter/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-prop-arrow/node_modules/
+!fixtures/reactive-ir/flush-universe-package-prop-arrow/node_modules/**
+!fixtures/runtime-oracle/owner-call-flush-package-prop-arrow/node_modules/
+!fixtures/runtime-oracle/owner-call-flush-package-prop-arrow/node_modules/**

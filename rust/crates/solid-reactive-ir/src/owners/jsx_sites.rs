@@ -125,24 +125,147 @@ fn literal_text(text: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
 }
 
-/// Batch 11, B2 (the re-review of #220): the JSX creation sites the owner-call universe lists, each as `(span, anchor)`: the sites [`jsx_sites`] finds minus the two
-/// kinds that prove no creation (a child the compiler left static that may hold a function, a component getter's JSX), once each by span. JSX creates a render
-/// effect, a memo or a root (a component tag runs `createComponent`, which dev builds run under `createRoot`) as a creating call does, so on an effect's apply stack
-/// with no owner set it throws like one (SC6002, ADR 0883), and under a leaf owner it is a forbidden creation (SC3001).
+/// A JSX creation site of the owner-call universe (batch 11, B2 and the review of #225).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct UniverseJsxSite {
+    pub(crate) span: Span,
+    /// The element's name (or the site's own span for a fragment's child).
+    pub(crate) anchor: Span,
+    /// Written in the children or in a prop's value of a component element that does not render them in place, with no function between that the element hands to the component
+    /// (a prop's value, a whole child expression): the getter's own evaluation runs it, where the component reads the prop (F2 of the review of #225), so the function that
+    /// holds the site says nothing of the stack it runs on.
+    pub(crate) getter: bool,
+}
+
+/// Batch 11, B2 (the re-review of #220): the JSX creation sites the owner-call universe lists. JSX creates a render effect, a memo or a root (a component tag runs `createComponent`,
+/// which dev builds run under `createRoot`) as a creating call does, so on an effect's apply stack with no owner set it throws like one (SC6002, ADR 0883), and under a leaf owner
+/// it is a forbidden creation (SC3001). They are the sites [`jsx_sites`] finds minus a child the compiler left static that may hold a function (possible only), once each by span, with
+/// what a component element around the site makes of it (the review of #225, F2): the body of a function the element hands to the component (a prop's value, a whole child
+/// expression) is run by whoever calls it, so the site is as any other; JSX written anywhere else in the element's props or children is a getter, run where the component reads the
+/// prop, a function the getter's own evaluation calls (a `.map` callback, an immediately invoked arrow, an `untrack` callback) included, and a getter of a component that renders it in
+/// place (a dialect control-flow element, a context provider) creates under the owner that render sets and is no site; any other getter is a site no fact of the function that holds
+/// it can place.
 pub(crate) fn universe_jsx_sites(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
-) -> Vec<(Span, Span)> {
+) -> Vec<UniverseJsxSite> {
     // Keyed by span, in span order: a span's first site is its entry.
     let mut by_span = std::collections::BTreeMap::new();
     for site in jsx_sites(file, lookup) {
-        if site.kind != JsxSiteKind::MaybeRenderEffect && !site.in_getter {
-            by_span
-                .entry((site.span.start, site.span.end))
-                .or_insert((site.span, site.anchor));
+        if site.kind == JsxSiteKind::MaybeRenderEffect {
+            continue;
         }
+        let getter = if site.in_getter {
+            match getter_relation(file, lookup, site.span) {
+                GetterRelation::Plain => false,
+                GetterRelation::Getter => true,
+                GetterRelation::InPlace => continue,
+            }
+        } else {
+            false
+        };
+        by_span
+            .entry((site.span.start, site.span.end))
+            .or_insert(UniverseJsxSite {
+                span: site.span,
+                anchor: site.anchor,
+                getter,
+            });
     }
     by_span.into_values().collect()
+}
+
+/// What the innermost component element around a site makes of it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GetterRelation {
+    /// The outermost function between the element and the site is handed to the component (a prop's value, a whole child expression): the body runs where the function is called.
+    Plain,
+    /// Written in a prop of a component that does not render it in place, with no such function between: a getter, evaluated where the component reads the prop.
+    Getter,
+    /// A getter of a dialect control-flow element or a context provider: rendered in place, under the owner of the render that reads it.
+    InPlace,
+}
+
+fn getter_relation(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    span: Span,
+) -> GetterRelation {
+    use solid_dialect::Primitive;
+    let element = file
+        .ast
+        .jsx_containing(span)
+        .filter(|element| {
+            element.span.contains(span)
+                && element.span != span
+                && !intrinsic_element(file, element)
+                && !element.name.span.contains(span)
+        })
+        .min_by_key(|element| element.span.end - element.span.start);
+    let Some(element) = element else {
+        return GetterRelation::Plain;
+    };
+    // The outermost function written inside the element that holds the site. Handed to the component as a prop's value or as a whole child expression, it runs where whoever has
+    // it calls it. Any other function in the value (a `.map` callback, an immediately invoked arrow, an `untrack` callback, a branch of a conditional) is a function the getter's
+    // own evaluation may call, or a value it returns to a caller no fact names: where the component reads the prop either way.
+    let outermost = file
+        .ast
+        .functions_owning(span)
+        .filter(|function| element.span.contains(function.span))
+        .max_by_key(|function| function.span.end - function.span.start);
+    if outermost.is_some_and(|function| handed_to_component(file, element, function.span)) {
+        return GetterRelation::Plain;
+    }
+    // The primitives `stored_throw::element_prop_handled` takes to render a prop in place, and a context provider.
+    let in_place = match crate::owners::element_primitive(lookup, file, element) {
+        Some(
+            Primitive::Errored
+            | Primitive::For
+            | Primitive::Index
+            | Primitive::Repeat
+            | Primitive::Show
+            | Primitive::Switch
+            | Primitive::Match
+            | Primitive::Loading,
+        ) => true,
+        Some(_) => false,
+        None => lookup.is_context_reference(file.path.as_str(), element.name.span),
+    };
+    if in_place {
+        GetterRelation::InPlace
+    } else {
+        GetterRelation::Getter
+    }
+}
+
+/// Whether a creating call at `span` is a component element's getter (the review of #225, F2, found while fixing it): written in the element's children or in a prop's value
+/// with no function between that the element hands to the component, so the getter's evaluation runs it where the component reads the prop. A creating call is a site of the
+/// owner-call universe as a JSX creation is, and ends or is filed by the same silences, which a getter's does not satisfy (the function that holds it says nothing of the
+/// stack it runs on): `<Outer slot={createMemo(() => 1)} />` with `Outer` reading `props.slot` on an effect's apply creates the memo with no owner set. A getter of a component that
+/// renders it in place is no getter here: the call keeps the silences it had.
+pub(crate) fn creation_in_getter(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    span: Span,
+) -> bool {
+    getter_relation(file, lookup, span) == GetterRelation::Getter
+}
+
+/// Whether `function` is the whole value of one of the element's attributes or the whole expression of one of its children: the component receives it and decides when it runs.
+fn handed_to_component(
+    file: &solid_facts::FileFacts,
+    element: &JsxElementFact,
+    function: Span,
+) -> bool {
+    element.attributes.iter().any(|attribute| {
+        attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+            && attribute
+                .expression
+                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == function)
+    }) || element
+        .children
+        .iter()
+        .any(|child| crate::execution_role::jsx_child_expression(file, *child) == Some(function))
 }
 
 pub(crate) fn jsx_sites(

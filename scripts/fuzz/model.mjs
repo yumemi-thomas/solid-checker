@@ -89,8 +89,8 @@ export const jsx = () => ({ k: "jsx" });
 /** `createOwner()` (the recall axes' bound owner: `const o = createOwner(); runWithOwner(o, ...)`). */
 export const createOwnerExpr = () => ({ k: "createOwner" });
 /** A DOM expression as written (`document.createElement("button")`, `el1.click()`): the event axis (misuse.mjs EVENT_CONTEXTS). */
-/** `<tag a={e} />`: an element of a component that never reads the prop (ADR 0641). */
-export const propEl = (tag, e, prop = "a") => ({ k: "propEl", tag, e, prop });
+/** `<tag a={e} />`: an element of a component that never reads the prop (ADR 0641); `child`: `<tag>{e}</tag>`, the expression as the element's children (er-shapes.mjs `children`). */
+export const propEl = (tag, e, prop = "a", child = false) => ({ k: "propEl", tag, e, prop, ...(child ? { child: true } : {}) });
 /** A JSX view item as an expression (`const Inner = () => <input … />`): a site in a tree a program mounts and disposes itself. */
 export const jsxExpr = (item) => ({ k: "jsxExpr", item });
 export const domExpr = (text, web, solid) => ({ k: "dom", text, ...(web ? { webNames: web } : {}), ...(solid ? { solidNames: solid } : {}) });

@@ -348,7 +348,7 @@ pub(crate) fn function_keeps_caller_context(
 /// The expression an expression-container child (`{expression}`) holds, with
 /// transparent TypeScript wrappers peeled. `None` for a text, element or
 /// fragment child, which holds no expression of its own.
-pub(super) fn jsx_child_expression(file: &solid_facts::FileFacts, child: Span) -> Option<Span> {
+pub(crate) fn jsx_child_expression(file: &solid_facts::FileFacts, child: Span) -> Option<Span> {
     let text = file.source_text(child)?;
     let inner = text.strip_prefix('{')?.strip_suffix('}')?;
     let leading = u32::try_from(inner.len() - inner.trim_start().len()).ok()?;
