@@ -391,6 +391,7 @@ impl PackageBoundary {
                 text(hash, root);
                 text(hash, reach.word());
                 text(hash, &reach.describe());
+                text(hash, index.name_of(root).unwrap_or(""));
             }
         }
     }

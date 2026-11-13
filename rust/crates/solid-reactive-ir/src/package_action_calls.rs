@@ -181,7 +181,7 @@ fn file_sites(
             return;
         }
         let package = package_root_of(&declaration.path)
-            .map(package_label)
+            .map(|root| installed_name(ctx, root))
             .unwrap_or_else(|| declaration.path.clone());
         sites.push(PackageSite {
             at,
@@ -527,8 +527,7 @@ fn package_declaration(
         None => unattested?,
     };
     if let Some(root) = package_root_of(&path)
-        && let Some((_, name)) = root.rsplit_once("/node_modules/")
-        && runtime.contains(&name)
+        && runtime.contains(&installed_name(ctx, root).as_str())
     {
         return None;
     }
@@ -592,6 +591,13 @@ fn import_declaration(
         && !lookup.in_dependency_source(&path)
         && (is_declaration_file(&path) || !analyzed.contains(path.as_str())))
     .then_some(DeclarationAt { path })
+}
+
+/// What the package at `root` is called: the `name` its manifest gives (the backend read it), else the directory's own name.
+fn installed_name(ctx: &AnalysisContext<'_>, root: &str) -> String {
+    ctx.package_reach
+        .and_then(|index| index.name_of(root))
+        .map_or_else(|| package_label(root), str::to_owned)
 }
 
 /// The package name of a module specifier (`@solidjs/web/storage` is `@solidjs/web`).

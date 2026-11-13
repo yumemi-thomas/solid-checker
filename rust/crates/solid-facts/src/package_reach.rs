@@ -95,9 +95,17 @@ impl PackageReach {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PackageReachIndex {
     pub by_root: BTreeMap<String, PackageReach>,
+    /// The `name` of each root's `package.json`: what the package is called, whatever directory a linker put it in (`.store/<slot>/package`).
+    pub names: BTreeMap<String, String>,
 }
 
 impl PackageReachIndex {
+    /// The name the manifest at `root` gives its package; `None` where the backend read no manifest.
+    #[must_use]
+    pub fn name_of(&self, root: &str) -> Option<&str> {
+        self.names.get(root).map(String::as_str)
+    }
+
     /// The verdict for the code a declaration at `path` describes. A path the backend did not decide is undecided, never clear.
     #[must_use]
     pub fn for_declaration(&self, path: &str) -> PackageReach {

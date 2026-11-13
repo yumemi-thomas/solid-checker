@@ -198,6 +198,12 @@ pub fn package_reach_index(
                 .unwrap_or_else(|| missing(format!("no verdict for {}", short(&runtime)))),
             Err(reach) => reach,
         };
+        if let Some(name) = manifest(Path::new(&root))
+            .ok()
+            .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
+        {
+            index.names.insert(root.clone(), name);
+        }
         index.by_root.insert(root, reach);
     }
     index
