@@ -959,6 +959,21 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
         }
     }
     on_flush_sites(ctx, &mut found);
+    inline_action_sites(ctx, &mut found);
+    // ADR 0972: a call into code of a package the build does not read, whose closure is not clear.
+    for (file, at, callee, via) in crate::package_action_calls::universe_sites(ctx) {
+        found.push((
+            file,
+            Site {
+                table: "action",
+                source: "package",
+                via,
+                at,
+                alternates: vec![callee],
+                codes: ACTION_CODES,
+            },
+        ));
+    }
     found
 }
 
@@ -983,6 +998,36 @@ fn on_flush_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts,
                         at: call.callee,
                         alternates: vec![call.span],
                         codes: ON_FLUSH_CODES,
+                    },
+                ));
+            }
+        }
+    }
+}
+
+/// ADR 0972: SC2002's sites with no action binding: each call of what an `action(…)` call returns, written as one (`action(step)(…)`),
+/// outside dependency source.
+fn inline_action_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
+    let lookup = ctx.semantic_lookup;
+    for file in crate::base::reads::file_slots(ctx.facts) {
+        if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        for call in &file.ast.calls {
+            let Some(inner) = file.ast.call_at(file.ast.peel_ts_sugar_span(call.callee)) else {
+                continue;
+            };
+            if lookup.primitive_at_call(file, inner.span) == Some(solid_dialect::Primitive::Action)
+            {
+                found.push((
+                    file,
+                    Site {
+                        table: "action",
+                        source: "primitive",
+                        via: "call",
+                        at: call.span,
+                        alternates: vec![call.callee],
+                        codes: ACTION_CODES,
                     },
                 ));
             }

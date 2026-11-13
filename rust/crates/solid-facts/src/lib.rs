@@ -12,6 +12,8 @@
 pub mod ast;
 pub mod compiler;
 pub mod core;
+pub mod module_reach;
+pub mod package_reach;
 pub mod resolution;
 pub mod runtime_resolution;
 

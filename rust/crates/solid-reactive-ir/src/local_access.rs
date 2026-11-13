@@ -2820,6 +2820,18 @@ impl LocalAccessContext<'_, '_> {
                 self.discover_created_accessor_call(file, call, created, allowed, result);
                 return;
             }
+            // ADR 0972: `action(step)(…)` calls the action the inner call creates, where it is written: an action call as a bound one is.
+            if let Some(created) = file
+                .ast
+                .call_at(file.ast.peel_ts_sugar_span(call.callee))
+                .filter(|inner| {
+                    self.lookup.primitive_at_call(file, inner.span)
+                        == Some(solid_dialect::Primitive::Action)
+                })
+            {
+                self.push_inline_action_invocation(file, call, created, allowed, result);
+                return;
+            }
             // F-B: a call of what a call handed back (`m.get("f")!()`, `make()()`).
             // ADR 0770: or a member no type names (`props.o.go()`, `o: any`).
             let peeled = file.ast.peel_ts_sugar_span(call.callee);
@@ -5382,6 +5394,78 @@ impl LocalAccessContext<'_, '_> {
                 result.action_invocations.push(record);
             }
         }
+    }
+
+    /// ADR 0972: the row of `action(step)(…)`, the call of the action `created` makes, placed as [`Self::push_action_invocation`] places a
+    /// bound action's call: by its role where a reachable function holds it, uncertifiable where nothing reaches it and it may run, and
+    /// silent where it cannot run.
+    fn push_inline_action_invocation(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        created: &solid_facts::ast::CallFact,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) {
+        let callee = location(file.path.shared(), call.callee);
+        let (execution, multiplicity) = match self.reachable_calls.get(&callee).copied() {
+            Some(multiplicity) => {
+                let role =
+                    crate::role_log::decide("action", file.path.as_str(), call.callee, || {
+                        semantic_write_execution_role(
+                            file,
+                            call.callee,
+                            allowed,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                            RootBodyGuard::Rejects,
+                        )
+                    });
+                let role = handed_write_execution(
+                    file,
+                    call.callee,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                    role,
+                );
+                (role, multiplicity)
+            }
+            None if unreached_write_may_run(file, call.span, self.lookup) => {
+                (ExecutionRole::Unknown, 1)
+            }
+            None => {
+                result.ends.end_with(
+                    file,
+                    call.span,
+                    SiteSilence::UnreachedWriteCannotRun,
+                    || cannot_run_premises(file, call.span, self.lookup),
+                );
+                return;
+            }
+        };
+        if multiplicity == 0 {
+            return;
+        }
+        result.action_invocations.push(Arc::new(ActionInvocation {
+            action: "action(…)".into(),
+            location: location(file.path.shared(), call.span),
+            declaration: location(file.path.shared(), created.span),
+            execution,
+            context: analysis_context(
+                file,
+                call.span,
+                self.entities,
+                self.symbol_names,
+                self.lookup.dialect,
+                self.lookup,
+            )
+            .into(),
+            multiplicity,
+        }));
     }
 
     /// F0: the obligation of each call that runs a transported array's members
