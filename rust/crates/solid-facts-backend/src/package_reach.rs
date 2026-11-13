@@ -206,7 +206,49 @@ pub fn package_reach_index(
         }
         index.by_root.insert(root, reach);
     }
+    index.linked = linked_roots(facts);
     index
+}
+
+/// The linked workspace packages the project imports: for each attested import of a `node_modules` link (the compiler's `symlink_path`), the real
+/// directory of the link's package root, keyed to the link's root ([`linked_root`]). The compiler gives the package's declarations that real path,
+/// which lies in no `node_modules`, so without this the code behind them reads as the project's own.
+fn linked_roots(facts: &solid_facts::ProjectFacts) -> BTreeMap<String, String> {
+    let mut linked = BTreeMap::new();
+    let Some(imports) = &facts.resolved_imports else {
+        return linked;
+    };
+    for (importer, import) in imports.iter() {
+        if importer.contains("/node_modules/") || facts.dependency_source_root(importer).is_some() {
+            continue;
+        }
+        if let Some((real, link)) = linked_root(&import.symlink_path, &import.resolved_path) {
+            linked.insert(real, link);
+        }
+    }
+    linked
+}
+
+/// The real directory and the link's root of an import the compiler resolved through a `node_modules` link: the link's package root, canonicalized.
+/// Only a real directory the compiler's own resolved path lies in counts, and one outside every `node_modules` (a store slot's declarations already
+/// are installed code, and a root that is no link has nothing to map).
+fn linked_root(symlink_path: &str, resolved_path: &str) -> Option<(String, String)> {
+    if symlink_path.is_empty() || resolved_path.is_empty() {
+        return None;
+    }
+    let link_root = package_root_of(symlink_path)?;
+    let real = Path::new(link_root)
+        .canonicalize()
+        .ok()?
+        .to_str()?
+        .to_owned();
+    if real == link_root
+        || real.contains("/node_modules/")
+        || !resolved_path.starts_with(&format!("{real}/"))
+    {
+        return None;
+    }
+    Some((real, link_root.to_owned()))
 }
 
 /// The runtime files beside a declaration file of an installed package (`dist/util.d.ts`: `dist/util.js`, `.mjs`, `.cjs`, `.jsx`), and the file itself
@@ -1111,6 +1153,59 @@ mod tests {
             demand,
             &BTreeSet::new(),
         )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_workspace_package_maps_its_real_directory_to_the_link() {
+        let directory = project();
+        let base = directory.path().canonicalize().unwrap();
+        write(
+            &base,
+            "packages/kernel/package.json",
+            r#"{"name":"@ws/kernel"}"#,
+        );
+        write(&base, "packages/kernel/dist/index.d.ts", "export {};");
+        fs::create_dir_all(base.join("app/node_modules/@ws")).unwrap();
+        std::os::unix::fs::symlink(
+            base.join("packages/kernel"),
+            base.join("app/node_modules/@ws/kernel"),
+        )
+        .unwrap();
+        let link_root = base.join("app/node_modules/@ws/kernel");
+        let real = base.join("packages/kernel");
+        let linked = linked_root(
+            link_root.join("dist/index.d.ts").to_str().unwrap(),
+            real.join("dist/index.d.ts").to_str().unwrap(),
+        );
+        assert_eq!(
+            linked,
+            Some((
+                real.to_str().unwrap().to_owned(),
+                link_root.to_str().unwrap().to_owned()
+            ))
+        );
+        // The compiler's own path must lie in the real directory: another file is no evidence of this link.
+        assert_eq!(
+            linked_root(
+                link_root.join("dist/index.d.ts").to_str().unwrap(),
+                base.join("elsewhere/index.d.ts").to_str().unwrap()
+            ),
+            None
+        );
+        // A package that is no link, a path that names no package and an empty attestation map nothing.
+        write(
+            &base,
+            "app/node_modules/plain/package.json",
+            r#"{"name":"plain"}"#,
+        );
+        let plain = base.join("app/node_modules/plain/index.d.ts");
+        assert_eq!(
+            linked_root(plain.to_str().unwrap(), plain.to_str().unwrap()),
+            None
+        );
+        assert_eq!(linked_root("/p/src/a.ts", "/p/src/a.ts"), None);
+        assert_eq!(linked_root("", plain.to_str().unwrap()), None);
     }
 
     #[test]

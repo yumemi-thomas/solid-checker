@@ -21146,5 +21146,11 @@
    "mx-primitive-in-effect-callback-er-classfield-apply-jsx-component-direct-none"
   ],
   "rediscovered": "the head of #225 (a8a6bd69c, release build): 7 false-clean programs (the five JSX variants and two call variants), Chrome confirming (same); the fix: none (8 recall-gap programs, an uncertifiable row stands). The legal twins (the stored class is never constructed) are clean (some) or uncertifiable on the head and uncertifiable on the fix (the named cost; 0 false positives)"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, a member call into a linked workspace package whose built declarations lie in the link's real directory (`kernel.run(cb)`, `kernel` made once at module scope by the package's `makeKernel()`, `run(cb)` being `action(function* () { cb(); })()`), was no site: the compiler gives the member the real path (in no `node_modules`), so it read as the project's own and only the import's own call stood. The runtime is an installed package's, so Chrome throws as for `pkgaction/reach-body`",
+  "found": "Mac 6, 2026-11-13: my review of the ADR 0972 head 238c2424a (a package the build does not read, reached through the workspace link), probed on the checker: 1 row (the import's call) where 3 stand",
+  "fixed": "ADR 0972 (`PackageReachIndex::linked`, `package_reach.rs` `linked_roots`, `package_action_calls.rs` `package_declaration`): the backend maps the real directory of each linked package the project imports to the link, and a declaration there is spelled by the link, where the package's verdict stands",
+  "outside": "the generator writes regular files and the Chrome oracle installs a case's packages by copying files (`oracle.json` names them), so no cell can write a `node_modules` link to a real directory; the fixture `action-in-owned-scope-linked-package` (its snapshot: `KernelBody`, `KernelMemo` and `KernelMake` are SC2002 `package-may-call-action:reaches-solid` rows, the timer, handler and pure twins silent; the previous build gives only `KernelMake`) and the backend test `a_link_to_a_workspace_package_maps_its_real_directory_to_the_link` hold the shape"
  }
 ]

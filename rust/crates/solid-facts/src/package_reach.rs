@@ -97,6 +97,10 @@ pub struct PackageReachIndex {
     pub by_root: BTreeMap<String, PackageReach>,
     /// The `name` of each root's `package.json`: what the package is called, whatever directory a linker put it in (`.store/<slot>/package`).
     pub names: BTreeMap<String, String>,
+    /// Each linked workspace package the project imports: the real directory a `node_modules` link points to (outside every `node_modules`) keyed to the
+    /// link's own package root. The compiler gives a linked package's declarations their real paths, so they read as no installed code until the link names
+    /// them ([`Self::linked_spelling`]).
+    pub linked: BTreeMap<String, String>,
 }
 
 impl PackageReachIndex {
@@ -104,6 +108,20 @@ impl PackageReachIndex {
     #[must_use]
     pub fn name_of(&self, root: &str) -> Option<&str> {
         self.names.get(root).map(String::as_str)
+    }
+
+    /// The `node_modules` spelling of a declaration `path` inside a linked workspace package (the link's root, then the path below the real directory), when the
+    /// backend found the link; `None` for any other path. The longest real directory that holds the path names it.
+    #[must_use]
+    pub fn linked_spelling(&self, path: &str) -> Option<String> {
+        self.linked
+            .iter()
+            .filter_map(|(real, link)| {
+                let below = path.strip_prefix(real.as_str())?.strip_prefix('/')?;
+                Some((real.len(), format!("{link}/{below}")))
+            })
+            .max_by_key(|(length, _)| *length)
+            .map(|(_, spelled)| spelled)
     }
 
     /// The verdict for the code a declaration at `path` describes. A path the backend did not decide is undecided, never clear.
@@ -213,6 +231,35 @@ mod tests {
             package_label("/p/node_modules/.store/relay-compiler-npm-21.0.1-1e06a71766/package"),
             "relay-compiler"
         );
+    }
+
+    #[test]
+    fn a_declaration_in_a_linked_package_is_spelled_by_its_link() {
+        let mut index = PackageReachIndex::default();
+        index.linked.insert(
+            "/ws/packages/kernel".to_owned(),
+            "/ws/apps/web/node_modules/@ws/kernel".to_owned(),
+        );
+        index.linked.insert(
+            "/ws/packages/kernel/vendor".to_owned(),
+            "/ws/apps/web/node_modules/vendor".to_owned(),
+        );
+        assert_eq!(
+            index.linked_spelling("/ws/packages/kernel/dist/index.d.ts"),
+            Some("/ws/apps/web/node_modules/@ws/kernel/dist/index.d.ts".to_owned())
+        );
+        // The longest real directory names the path.
+        assert_eq!(
+            index.linked_spelling("/ws/packages/kernel/vendor/x.d.ts"),
+            Some("/ws/apps/web/node_modules/vendor/x.d.ts".to_owned())
+        );
+        // A sibling that only shares the prefix, the directory itself and any other path are not in a link.
+        assert_eq!(
+            index.linked_spelling("/ws/packages/kernel-extra/x.d.ts"),
+            None
+        );
+        assert_eq!(index.linked_spelling("/ws/packages/kernel"), None);
+        assert_eq!(index.linked_spelling("/ws/apps/web/ambient.d.ts"), None);
     }
 
     #[test]

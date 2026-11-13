@@ -510,16 +510,23 @@ fn package_declaration(
         };
         hop = (next_file, next_file.ast.peel_ts_sugar_span(initializer));
     }
-    // Installed code only: a declaration under `node_modules` (a linked workspace package is found through its import's `node_modules` spelling),
-    // not a file the program analyzes itself (a package read as source, or a JavaScript file `allowJs` brings into the program). A declaration in
-    // a project declaration file stands for code no installed package holds (a global a script provides, a `declare module` shim: the import's file
-    // stands for the shim's package), so it is no site.
-    let installed = paths.into_iter().find(|path| {
+    // Installed code only: a declaration under `node_modules`, or in the real directory of a linked workspace package the backend found the link of
+    // (the compiler gives its declarations that real path; the index spells it by the link), not a file the program analyzes itself (a package read as
+    // source, or a JavaScript file `allowJs` brings into the program). A declaration in a project declaration file stands for code no installed package
+    // holds (a global a script provides, a `declare module` shim: the import's file stands for the shim's package), so it is no site.
+    let installed = paths.into_iter().find_map(|path| {
         // The standard library's files are the producer's `bundled:` ones.
-        !path.starts_with("bundled:")
-            && path.contains("/node_modules/")
-            && !lookup.in_dependency_source(path)
-            && (is_declaration_file(path) || !analyzed.contains(path.as_str()))
+        if path.starts_with("bundled:")
+            || lookup.in_dependency_source(&path)
+            || !(is_declaration_file(&path) || !analyzed.contains(path.as_str()))
+        {
+            return None;
+        }
+        if path.contains("/node_modules/") {
+            return Some(path);
+        }
+        ctx.package_reach
+            .and_then(|index| index.linked_spelling(&path))
     });
     let path = match installed {
         Some(path) => path,

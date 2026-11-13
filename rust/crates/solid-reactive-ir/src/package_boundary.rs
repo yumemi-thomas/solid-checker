@@ -393,6 +393,11 @@ impl PackageBoundary {
                 text(hash, &reach.describe());
                 text(hash, index.name_of(root).unwrap_or(""));
             }
+            hash.update((index.linked.len() as u64).to_be_bytes());
+            for (real, link) in &index.linked {
+                text(hash, real);
+                text(hash, link);
+            }
         }
     }
 

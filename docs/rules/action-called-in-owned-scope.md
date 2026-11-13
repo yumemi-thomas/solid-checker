@@ -51,8 +51,8 @@ An action call that no row, discard or named silence ends is uncertifiable: `act
 An action called where it is created, with no binding (`action(function* () {})()`), is that action's call
 and is placed as a bound one is (ADR 0972).
 
-A call into code of an installed package the build does not read as source may call `action` inside the
-package, where the program shows none (ADR 0972). Each such call, `new`, tagged template, render of the
+A call into code of an installed package the build does not read as source (a workspace package linked into
+`node_modules` is one) may call `action` inside the package, where the program shows none (ADR 0972). Each such call, `new`, tagged template, render of the
 package's component and function handed on as a value (an import binding passed as an argument, a
 `{ shorthand }` property, a namespace member) is a site: where its role may run under an owner or nothing
 places it, it is **uncertifiable** (`package-may-call-action:<why>`), never a violation, unless the package's
