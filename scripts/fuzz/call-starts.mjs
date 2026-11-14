@@ -73,7 +73,10 @@ export function carrierLines(source, line, fileName = "App.tsx") {
 
 export function frameStarts(source, fileName = "App.tsx") {
   const starts = callStarts(source, fileName);
-  return (frame, depth) => [...starts(frame.line, frame.column), ...(depth === 0 ? starts.args(frame.line, frame.column).map((place) => ({ ...place, handed: true })) : [])];
+  // `inner` is the frame one step nearer the read (ADR 0981): a deeper frame that leads to it through a project function forwarding its parameter has the call's arguments.
+  return (frame, depth, inner) => [...starts(frame.line, frame.column), ...(depth === 0
+    ? starts.args(frame.line, frame.column).map((place) => ({ ...place, handed: true }))
+    : starts.forwarded(frame.line, frame.column, (inner?.file ?? "App.tsx") === fileName ? inner : null).map((place) => ({ ...place, handed: true })))];
 }
 
 /** `(line, column) => [{ line, column }]` (1-based): the starts a frame at that position stands for, its own position first. */
@@ -102,6 +105,8 @@ export function callStarts(source, fileName = "App.tsx") {
   // `list.push(x)` writes `list`, not `x`; a dependency's body is unread, so nothing says what it writes; a static `Object.assign(st, x)`
   // writes its first argument.
   const handed = [];
+  // [start, end, argument starts, no store target] of a `new` keyword and a component element's `<`: where V8 puts the frame of what a constructor or element was handed.
+  const opening = [];
   // [start, end] of everything that mounts: a component tag, a `render(` or `hydrate(` callee.
   const mounts = [];
   // The names Solid's own code stands behind: what a Solid module exports here, and a tuple a primitive returned (`[c, setC]`). Such a
@@ -126,7 +131,13 @@ export function callStarts(source, fileName = "App.tsx") {
     if ((ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isReturnStatement(parent) || ts.isThrowStatement(parent)) && parent.expression === operand) return parent;
     return null;
   };
+  // Tags a project binding holds as `dynamic(loader)` or `lazy(loader)` (ADR 0981): the component is whatever the loader names, read as a dependency's.
+  const loaded = new Set();
   const collect = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && ts.isCallExpression(unwrap(node.initializer))) {
+      const maker = nameOf(unwrap(node.initializer).expression);
+      if (maker && /^(?:dynamic|lazy)$/.test(maker) && solid.has(maker)) loaded.add(node.name.text);
+    }
     if (ts.isVariableDeclaration(node) && ts.isArrayBindingPattern(node.name) && node.initializer && ts.isCallExpression(unwrap(node.initializer)) && solid.has(nameOf(rootOf(unwrap(node.initializer).expression)))) {
       for (const element of node.name.elements) if (ts.isBindingElement(element) && ts.isIdentifier(element.name)) solid.add(element.name.text);
     }
@@ -140,14 +151,43 @@ export function callStarts(source, fileName = "App.tsx") {
     const inner = unwrap(node.expression);
     if (ts.isCallExpression(inner) || ts.isNewExpression(inner)) access(node, inner.getEnd() - 1, inner.getEnd());
   };
+  // Project functions that call one of their own parameters (`function apply1(f, ...args) { return f(...args); }`), by name: the ranges of those calls. A read
+  // there has a frame in the function and one at each call of it, so the arguments of that call are what the function forwards.
+  const forwarders = new Map();
+  const forwarding = (node) => {
+    const named = ts.isFunctionDeclaration(node) ? node : (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && (ts.isArrowFunction(unwrap(node.initializer)) || ts.isFunctionExpression(unwrap(node.initializer))) ? unwrap(node.initializer) : null);
+    const name = ts.isFunctionDeclaration(node) ? node.name?.text : (ts.isVariableDeclaration(node) ? node.name.text : null);
+    if (!named || !name || !named.body) return;
+    const parameters = new Set(named.parameters.filter((parameter) => ts.isIdentifier(parameter.name)).map((parameter) => parameter.name.text));
+    if (!parameters.size) return;
+    const calls = [];
+    const scan = (child) => { if (ts.isCallExpression(child) && ts.isIdentifier(unwrap(child.expression)) && parameters.has(unwrap(child.expression).text)) calls.push([child.getStart(file), child.getEnd()]); ts.forEachChild(child, scan); };
+    scan(named.body);
+    if (calls.length) forwarders.set(name, [...(forwarders.get(name) ?? []), ...calls]);
+  };
   const visit = (node) => {
+    forwarding(node);
     let callee = null;
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) callee = node.expression;
     else if (ts.isTaggedTemplateExpression(node)) callee = node.tag;
     else if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) callee = node.tagName;
     if (callee) {
       calls.push([callee.getStart(file), callee.getEnd(), node.getStart(file), rootOf(callee).getStart(file)]);
-      if (node.arguments?.length && !solid.has(nameOf(rootOf(callee)))) handed.push([callee.getStart(file), callee.getEnd(), node.arguments.map((argument) => argument.getStart(file)), noTarget(callee)]);
+      if (node.arguments?.length && !solid.has(nameOf(rootOf(callee)))) handed.push([callee.getStart(file), callee.getEnd(), node.arguments.map((argument) => argument.getStart(file)), noTarget(callee), dependency.has(nameOf(rootOf(callee))) || (ts.isCallExpression(node) && callee.getText(file) === "Reflect.apply" && dependency.has(nameOf(node.arguments[0]))), ts.isCallExpression(node) ? nameOf(callee) : null]);
+      // ADR 0981: a `new`'s frame is on its keyword (the record of `new Site1(r1)` is at the `new`, not at `Site1`), a dependency's component element's on its `<`, and
+      // the values handed to it are its attributes' expressions and spreads (a Solid or project component has an authored frame of its own). A frame there with no authored frame inside means the same as in a
+      // call: native or dependency code read what the element or constructor was handed.
+      // The keyword's and the `<`'s own range is kept apart from the callee's: a frame there is also the start of an enclosing call's callee (`new Function(s)(a)`), whose
+      // handed arguments stay what they were; this adds the constructor's or element's own.
+      if (ts.isNewExpression(node) && node.arguments?.length && !solid.has(nameOf(rootOf(callee)))) opening.push([node.getStart(file), callee.getStart(file), node.arguments.map((argument) => argument.getStart(file)), noTarget(callee), dependency.has(nameOf(rootOf(callee)))]);
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const values = node.attributes.properties.flatMap((attribute) => (ts.isJsxSpreadAttribute(attribute) ? [attribute.expression] : attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression ? [attribute.initializer.expression] : []));
+        if (values.length && (dependency.has(nameOf(rootOf(callee))) || loaded.has(nameOf(rootOf(callee))))) { handed.push([callee.getStart(file), callee.getEnd(), values.map((value) => value.getStart(file)), true, true]); opening.push([node.getStart(file), callee.getStart(file), values.map((value) => value.getStart(file)), true, true]); }
+      }
+      // `createComponent(Pkg, props)` calls a dependency's component with the props: its arguments are handed, though `createComponent` is Solid's.
+      if (ts.isCallExpression(node) && node.arguments.length >= 2 && nameOf(callee) === "createComponent" && solid.has("createComponent") && dependency.has(nameOf(node.arguments[0]))) {
+        handed.push([callee.getStart(file), callee.getEnd(), node.arguments.map((argument) => argument.getStart(file)), true, true]);
+      }
       if (ts.isCallExpression(node) && /^(?:render|hydrate)$/.test(callee.getText(file))) mounts.push([callee.getStart(file), callee.getEnd()]);
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const tag = callee.getText(file);
@@ -156,6 +196,12 @@ export function callStarts(source, fileName = "App.tsx") {
     }
     // A tagged call's frame is on its template, the row on the tag.
     if (ts.isTaggedTemplateExpression(node)) calls.push([node.template.getStart(file), node.template.getEnd(), node.getStart(file), rootOf(node.tag).getStart(file)]);
+    // What a dependency's call returned, read at a member (`make1(a).value`): the code the call was handed runs in a getter of the result. V8 has no mapping past the call's `)` and
+    // puts the frame there (`onResult`), so that is where the call's handed arguments are looked up.
+    if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) && (ts.isCallExpression(unwrap(node.expression)) || ts.isNewExpression(unwrap(node.expression)))) {
+      const made = unwrap(node.expression);
+      if (made.arguments?.length && dependency.has(nameOf(rootOf(made.expression)))) opening.push([made.getEnd() - 1, made.getEnd(), made.arguments.map((argument) => argument.getStart(file)), true, true]);
+    }
     if (ts.isPropertyAccessExpression(node)) { access(node, node.name.getStart(file), node.name.getEnd()); onResult(node); }
     else if (ts.isElementAccessExpression(node)) {
       access(node, node.expression.getEnd(), node.getEnd());
@@ -206,7 +252,15 @@ export function callStarts(source, fileName = "App.tsx") {
   const distinct = (places) => places.filter((at, index) => places.findIndex((other) => other.line === at.line && other.column === at.column) === index);
   const starts = (line, column) => distinct([{ line, column }, ...smallest(calls, offsetOf(line, column)).flatMap((range) => [position(range[2]), position(range[3])])]);
   // The arguments of the call whose callee holds the position.
-  starts.args = (line, column) => smallest(handed, offsetOf(line, column)).flatMap((range) => range[2].map((offset, index) => ({ ...position(offset), index, noTarget: range[3] })));
+  starts.args = (line, column) => [...smallest(handed, offsetOf(line, column)), ...opening.filter((range) => range[0] <= offsetOf(line, column) && offsetOf(line, column) < range[1])]
+    .flatMap((range) => range[2].map((offset, index) => ({ ...position(offset), index, noTarget: range[3], ...(range[4] === true ? { dependency: true } : {}) })));
+  // The arguments of the call of a project function whose callee holds the position, when the frame nearer the read is in a call of one of that function's own parameters.
+  starts.forwarded = (line, column, inner) => {
+    if (!inner || !(inner.line > 0) || !Number.isInteger(inner.column)) return [];
+    const at = offsetOf(inner.line, inner.column);
+    return smallest(handed, offsetOf(line, column)).filter((range) => range[5] && (forwarders.get(range[5]) ?? []).some((call) => call[0] <= at && at < call[1]))
+      .flatMap((range) => range[2].map((offset, index) => ({ ...position(offset), index, noTarget: range[3] })));
+  };
   starts.mount = (line, column) => { const offset = offsetOf(line, column); return mounts.some((range) => range[0] <= offset && offset < range[1]); };
   cache.set(key, starts);
   if (cache.size > 64) cache.delete(cache.keys().next().value);

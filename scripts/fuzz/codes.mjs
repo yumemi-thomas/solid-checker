@@ -181,7 +181,7 @@ export const isPlacelessCode = (code) => placelessCodes.includes(code);
  */
 export const withholdingRules = ["reactive-dispatch-unresolved"];
 /** Codes about a value a call was handed, which code with no authored frame then read or wrote: a withholding at that argument covers them (R20). */
-export const handedCodes = ["STRICT_READ_UNTRACKED", "UNTRACKED_READ_AFTER_AWAIT", "PENDING_ASYNC_UNTRACKED_READ", "STORE_WRITE_OUTSIDE_SETTER"];
+export const handedCodes = ["STRICT_READ_UNTRACKED", "UNTRACKED_READ_AFTER_AWAIT", "PENDING_ASYNC_UNTRACKED_READ", "STORE_WRITE_OUTSIDE_SETTER", "REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"];
 /** The flat code -> declining rules table (the policy's `declining`), mirrored as `decliningRules` in scripts/runtime-oracle.mjs. */
 export const decliningRules = Object.fromEntries(Object.entries(codePolicy).filter(([, policy]) => policy.declining?.length).map(([code, policy]) => [code, policy.declining]));
 /**
@@ -207,7 +207,7 @@ export const coversCodeAt = (code, finding, atSite) => ((codeRules[code] ?? []).
  * cannot tell which argument a read went through (`Object.assign(out, st, holder.v)`).
  */
 const handedCovers = (at, finding, code) => handedCodes.includes(code) && withholdingRules.includes(finding.rule)
-  && (code !== "STORE_WRITE_OUTSIDE_SETTER" || (!at.noTarget && at.index === 0));
+  && (code !== "STORE_WRITE_OUTSIDE_SETTER" || at.dependency === true || (!at.noTarget && at.index === 0));
 
 export const withheldAtStack = (finding, stack, mount = () => true, code = null) => (stack ?? []).some((frame, depth) =>
   (frame.handRead ? finding.line === frame.line
@@ -237,7 +237,7 @@ export const withStarts = (stack, startsOf) => (stack ?? []).map((frame, depth) 
   // ADR 0930: a frame the host placed only through a compiled spread's `loc` (`unmapped`) has no position of its own: it stands for that
   // spread, at the top for a claiming or declining finding, and nothing else.
   if (frame.unmapped) return { ...frame, starts: depth === 0 ? (frame.compiled ?? []).filter((at) => Number.isInteger(at?.line) && Number.isInteger(at?.column)).map((at) => ({ line: at.line, column: at.column, compiled: true })) : [] };
-  const own = startsOf ? startsOf(frame, depth) : null;
+  const own = startsOf ? startsOf(frame, depth, (stack ?? [])[depth - 1]) : null;
   // ADR 0921: the top frame at a compiled `insert`/`effect`/`memo` call (chrome-host.mjs records `compiled`) also stands for the start of
   // the expression that call was handed (ADR 0930: or the spread a compiled `spread` call's `loc` names), the computation Solid's diagnostic is about; for a claiming or declining finding only, never a
   // withholding (`withheldAtStack`), and never deeper, where the frame is a call through it.

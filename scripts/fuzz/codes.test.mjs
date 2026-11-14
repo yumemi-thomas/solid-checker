@@ -13,6 +13,32 @@ const literal = (name) => {
   return oracle.slice(start, oracle.indexOf(close, start) + close.length - 1);
 };
 
+// ADR 0981 (R20 for writes and actions): the checker's SC9012 at a handed value stands for what the callee does with it, and a function the callee only
+// calls (a setter, an action) is as handed as a value it reads. The product output on the programs this was decided on (`phantom` packages that import no
+// Solid name): one SC9012 `value-to-unresolved-callee` at the handed argument, no row of the claiming rule, the project uncertifiable.
+describe("a withholding at a handed argument", () => {
+  const finding = { rule: "reactive-dispatch-unresolved", kind: "uncertifiable", line: 6, column: 9 };
+  const covers = (code, place) => withheldAtStack(finding, [{ line: 6, column: 3, starts: [{ line: 6, column: 9, handed: true, ...place }] }], () => true, code);
+  it("covers a read, a signal write and an action the callee runs, wherever the argument is", () => {
+    for (const code of ["STRICT_READ_UNTRACKED", "UNTRACKED_READ_AFTER_AWAIT", "PENDING_ASYNC_UNTRACKED_READ", "REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"]) {
+      expect(covers(code, { index: 0, noTarget: true }), code).toBe(true);
+      expect(covers(code, { index: 2, noTarget: false }), code).toBe(true);
+    }
+  });
+  it("covers a store write only where the argument can be what is written: a project function's first, or any argument of a dependency's unread function", () => {
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: false })).toBe(true);
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 1, noTarget: false })).toBe(false);
+    // `list.push(x)` says nothing of `x` (R22): a member call's argument is no target.
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: true })).toBe(false);
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: true, dependency: true })).toBe(true);
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 1, noTarget: true, dependency: true })).toBe(true);
+  });
+  it("covers no code about something other than a handed value, and no finding of another rule", () => {
+    expect(covers("CONTEXT_NOT_FOUND", { index: 0, noTarget: true, dependency: true })).toBe(false);
+    expect(withheldAtStack({ ...finding, rule: "action-called-in-owned-scope" }, [{ line: 6, column: 3, starts: [{ line: 6, column: 9, handed: true, index: 0, noTarget: true }] }], () => true, "ACTION_CALLED_IN_OWNED_SCOPE")).toBe(false);
+  });
+});
+
 describe("tables copied from scripts/runtime-oracle.mjs", () => {
   it("codeRules matches the oracle's", () => {
     // eslint-disable-next-line no-new-func

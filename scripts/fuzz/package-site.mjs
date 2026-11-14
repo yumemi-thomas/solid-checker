@@ -45,10 +45,23 @@ export const OWN_KINDS = {
   memo: (sig) => ({ lines: [`const ${sig.name} = createMemo(() => 1);`], uses: ["createMemo"] }),
 };
 export const ownCapable = (sigs) => sigs.length > 0 && sigs.every((sig) => typeof OWN_KINDS[String(sig.kind)] === "function" && /^[A-Za-z_$][\w$]*$/.test(sig.name) && /^[A-Za-z_$][\w$]*$/.test(sig.setter));
-/** `"tagged-own"` -> `{ entry: "tagged", own: true }`. */
-export const parsePkg = (value) => { const text = String(value); return text.endsWith("-own") ? { entry: text.slice(0, -4), own: true } : { entry: text, own: false }; };
+/**
+ * The manifest axis (ADR 0981, `pk-manifest=phantom`): `<shape>-phantom` is the same package with a manifest that names no Solid package (no `dependencies`, no
+ * `peerDependencies`) where its code imports `solid-js` (the own values, `createComponent`, any Solid name the site uses), as a package that forgot its peer does. A handed site that uses no Solid name imports none, so it is a package ADR 0981 leaves unselected. The default is the manifest of a package that declares its
+ * peer, the one ADR 0297's default selection reads as source.
+ */
+export const PHANTOM_SUFFIX = "-phantom";
+/** `"tagged-own"` -> `{ entry: "tagged", own: true, phantom: false }`, `"call-own-phantom"` -> `{ entry: "call", own: true, phantom: true }`. */
+export const parsePkg = (value) => {
+  let text = String(value);
+  const phantom = text.endsWith(PHANTOM_SUFFIX);
+  if (phantom) text = text.slice(0, -PHANTOM_SUFFIX.length);
+  return text.endsWith("-own") ? { entry: text.slice(0, -4), own: true, phantom } : { entry: text, own: false, phantom };
+};
 /** Every shape name a grid crosses: the entries handed, and each again with its own values where the template has signals to own. */
 export const pkgShapesOf = (sigs) => PKG_ENTRIES.flatMap((entry) => [entry, ...(ownCapable(sigs) ? [`${entry}-own`] : [])]);
+/** [`pkgShapesOf`] with the phantom manifest: the grids cross these beside the declared ones. */
+export const phantomShapesOf = (sigs) => pkgShapesOf(sigs).map((shape) => `${shape}${PHANTOM_SUFFIX}`);
 
 const here = dirname(fileURLToPath(import.meta.url));
 let loaded = null;
@@ -124,9 +137,10 @@ const joined = (names) => names.join(", ");
  * is `describeUse`'s output for the same node with its own binding).
  * @param {object} base `describeUse`'s description: text, solid, web, namespaces, moduleLines, preludeLines, contextLine, importLines, files
  * @param {string} entry one of PKG_ENTRIES
+ * @param {{ own?: boolean, sigs?: object[], phantom?: boolean }} options `phantom`: the manifest names no Solid package (ADR 0981)
  * @param {Record<string, string>} moduleNames `{ "solid-js": "S", "@solidjs/web": "W" }`: the namespace names
  */
-export function packageSite(base, entry, moduleNames, { own = false, sigs = [] } = {}) {
+export function packageSite(base, entry, moduleNames, { own = false, sigs = [], phantom = false } = {}) {
   if (!PKG_ENTRIES.includes(entry)) throw new Error(`package-site: unknown entry ${entry}`);
   const strip = (line) => line.replaceAll("@@AUX@@", "");
   const prelude = base.preludeLines.map(strip);
@@ -229,7 +243,7 @@ export function packageSite(base, entry, moduleNames, { own = false, sigs = [] }
   const files = {
     "package.json": `${JSON.stringify({
       name: SITE_PACKAGE, version: "1.0.0", type: "module",
-      peerDependencies: { "solid-js": "^2.0.0-rc.21" },
+      ...(phantom ? {} : { peerDependencies: { "solid-js": "^2.0.0-rc.21" } }),
       exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
     }, null, 2)}\n`,
     "index.js": `${stripTypes(ts.join("\n")).replace(/\n+$/, "")}\n`,
