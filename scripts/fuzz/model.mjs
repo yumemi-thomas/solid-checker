@@ -216,8 +216,9 @@ export const WRAP_FORMS = ["jsx", "call"];
 export const WRAP_CASES = ["real", "outside", "shadow"];
 export const wrapEl = (id, boundary, form, kase, children, { inner } = {}) => ({ k: "wrap", id, boundary, form, case: kase, children, ...(inner ? { inner } : {}) });
 /** `<Loading fallback={0} on={<on>()}>` around `children` (the recall template of LOADING_ON_OUTSIDE_HOLD); `on` null: no `on`;
- * `onExpr`: the `on` attribute's expression as written (LOADING_ON_ACCESSOR). */
-export const loadingView = (on, children, onExpr = null) => ({ k: "loading", on, children, onExpr });
+ * `onExpr`: the `on` attribute's expression as written (LOADING_ON_ACCESSOR). `form` (lf-shapes.mjs LF_FORMS, ADR 0978): how the boundary is entered, the JSX
+ * element by default; `fallback`: view items rendered as the boundary's fallback instead of `0`. */
+export const loadingView = (on, children, onExpr = null, form = "jsx", fallback = null) => ({ k: "loading", on, children, onExpr, ...(form === "jsx" ? {} : { form }), ...(fallback ? { fallback } : {}) });
 
 export const signal = (name, init, role = "src", scope = "component") => ({
   k: "signal", name, setter: `set${name[0].toUpperCase()}${name.slice(1)}`, init, role, scope,
@@ -461,7 +462,7 @@ export function validate(program, { maxNodes = 400 } = {}) {
           if (type && type.t !== "fn") fail(`${where}: a callback prop must be a function, not ${type.t}`);
           break;
         }
-        case "loading": if (item.on !== null) sigCheck(item.on, "read"); for (const c of item.children) checkView(c, scope); break;
+        case "loading": if (item.on !== null) sigCheck(item.on, "read"); for (const c of [...item.children, ...(item.fallback ?? [])]) checkView(c, scope); break;
         case "wrap": {
           if (!WRAP_BOUNDARIES.includes(item.boundary) || !WRAP_FORMS.includes(item.form) || !WRAP_CASES.includes(item.case)) fail(`${where}: unknown wrapper ${item.boundary}/${item.form}/${item.case}`);
           for (const c of item.children) checkView(c, scope);

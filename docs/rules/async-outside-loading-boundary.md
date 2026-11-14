@@ -144,3 +144,15 @@ A named function a carrier provably runs at a tracked position reads there, with
 A source no fact proves async, a `lazy` tag, and a read in a method nothing places are uncertifiable, blocker `async-provenance-unproven` for the first two (ADRs 0665-0667). So is a source whose compute reads what it was handed (`createMemo(() => props.get())`) or names an async source in a function form: it is pending while that is, and a settled caller is not followed yet (ADR 0802). A hook's tuple slot is the accessor it names, so its read is proved or certified by that source (ADR 0801). A `Loading` covers what it holds, not what sits beside it (ADR 0668).
 
 A flow element that is no JSX child and no component's return may never render, and rc.21 is silent then: its read is uncertifiable, blocker `carrier-run-unproven` (ADR 0892).
+
+A boundary the program enters by a call covers what Solid renders inside it (ADR 0978): the
+`children` getter of the props of `Loading(props)` or `createComponent(Loading, props)` (an
+alias, a namespace member and a `const` alias resolve like the tag), and the first argument
+of `createLoadingBoundary`. The `fallback` renders outside the hold (rc.21 `Loading(props)` is
+`createLoadingBoundary(() => props.children, () => props.fallback, ..)`): a read in the
+`fallback` attribute of the tag, in a `fallback` getter, or in the second argument of the
+primitive is read outside the boundary, and the walk goes on outward from it. A layer no call
+edge places is uncertifiable (blocker `mount-unresolved`), never uncovered: the other members
+of the props (a function-valued `children`, a method, `on`), an array element, a class element,
+a tag function, a closure handed to a call whose target the analysis does not resolve
+(`Loading.call(null, props)`, `[Loading][0](props)`, a wrapper's `props`).

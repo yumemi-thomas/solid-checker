@@ -15,6 +15,7 @@
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
 import { AUX, MODULE, describeUse, parentSource, sourcedName, sourcedRead } from "./misuse.mjs";
+import { LF_FORMS } from "./lf-shapes.mjs";
 import { LATER_MOUNTS, mountParts } from "./mounts.mjs";
 import { CONTEXT_PACKAGE, accessOf, contextPackageFiles, packageFiles } from "./package.mjs";
 
@@ -228,6 +229,9 @@ function render(program, instrument) {
   const spans = [];
   // The same-file children a callback prop renders (model.mjs `cbProp`): written after the components, which hoisting allows.
   const kids = [];
+  // ADR 0978 (`loadingText`): the import lines and module helpers a boundary form brings, once each.
+  const extraImports = new Set();
+  const loadingHelpers = new Set();
   const span = (node, text) => {
     if (!LINE_KINDS.has(node.k)) return text;
     spans.push({ node, path: pathOf.get(node) });
@@ -650,12 +654,65 @@ function render(program, instrument) {
         // `inner`: a component of the same body rendered as the wrapper's child, the way a parent mounts a child (the walks follow the call site).
         return [`${ind(depth)}<Wrap${n}>`, ...(item.inner ? [`${ind(depth + 1)}<${item.inner} />`] : item.children.flatMap((c) => viewText(c, depth + 1))), `${ind(depth)}</Wrap${n}>`];
       }
-      case "loading": {
-        used.add("Loading");
-        return [`${ind(depth)}<Loading fallback={0}${item.onExpr ? ` on={${item.onExpr}}` : item.on === null ? "" : ` on={${item.on}()}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
-      }
+      case "loading": return loadingText(item, depth);
       default: throw new Error(`cannot print view ${item.k}`);
     }
+  }
+
+  /**
+   * A `loading` item (model.mjs `loadingView`). The JSX element by default; `form` (lf-shapes.mjs LF_FORMS, ADR 0978) enters the boundary another way: a call
+   * with the props as a literal (`children` and `fallback` as getters, the shape the component function reads them in; `on` a getter when it reads a signal), a
+   * value reference (`dynamicComponent(() => Loading)`, `<Dynamic component={Loading}>`, a tag a prop holds), or `createLoadingBoundary`. `fallback`: view items
+   * rendered as the fallback.
+   */
+  /** The body line of each `clb-on` boundary in `items` (model.mjs `loadingView`, form `clb-on`): `createLoadingBoundary(children, fallback, { on })`, read in the hole. */
+  function boundaryDeclarations(items) {
+    return items.flatMap((item) => {
+      if (item.k !== "loading") return [];
+      const own = item.form === "clb-on" ? (used.add("createLoadingBoundary"), [`const lfv = createLoadingBoundary(() => <>${item.children.flatMap((c) => viewText(c, 0)).map((line) => line.trim()).join(" ")}</>, () => <p>f</p>, { on: () => ${item.onExpr ?? `${item.on}()`} });`]) : [];
+      return [...own, ...boundaryDeclarations(item.children)];
+    });
+  }
+
+  function loadingText(item, depth) {
+    const form = item.form ?? "jsx";
+    const inline = (items) => items.flatMap((c) => viewText(c, 0)).map((line) => line.trim()).join(" ");
+    const fragment = (items) => `<>${inline(items)}</>`;
+    const onText = item.onExpr ?? (item.on === null ? null : `${item.on}()`);
+    if (form === "jsx") {
+      used.add("Loading");
+      return [`${ind(depth)}<Loading fallback={${item.fallback ? fragment(item.fallback) : 0}}${onText === null ? "" : ` on={${onText}}`}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</Loading>`];
+    }
+    const spec = LF_FORMS[form];
+    const fallback = item.fallback ? fragment(item.fallback) : "<p>f</p>";
+    // `clb-on`: the boundary is made in the component's body (`boundaryDeclarations`), as Chrome re-arms it there; made inside the render effect of the hole it does not.
+    if (form === "clb-on") return [`${ind(depth)}{lfv()}`];
+    if (form === "clb") {
+      used.add("createLoadingBoundary");
+      return [`${ind(depth)}{createLoadingBoundary(() => ${fragment(item.children)}, () => ${fallback})()}`];
+    }
+    if (spec.used) used.add(spec.used); else used.add("Loading");
+    for (const name of spec.also ?? []) used.add(name);
+    for (const name of spec.web ?? []) parentWeb.add(name);
+    if (spec.namespace) extraImports.add('import * as S from "solid-js";');
+    const helpers = {
+      wrapper: ["function LfWrap(p: any) {", `${INDENT}return Loading(p);`, "}", ""],
+      dynamic: ["const LfDyn: any = dynamicComponent(() => Loading);", ""],
+      gate: ["function LfGate(p: any) {", `${INDENT}return <p.as on={p.on} fallback={p.fallback}>{p.children}</p.as>;`, "}", ""],
+    }[spec.helper];
+    if (helpers && !loadingHelpers.has(spec.helper)) {
+      loadingHelpers.add(spec.helper);
+      if (spec.helper === "dynamic") used.add("dynamicComponent");
+      kids.push(...helpers);
+    }
+    if (spec.element) {
+      const attrs = `${onText === null ? "" : ` on={${onText}}`} fallback={${item.fallback ? fragment(item.fallback) : "<p>f</p>"}}`;
+      return [`${ind(depth)}<${spec.element}${attrs}>`, ...item.children.flatMap((c) => viewText(c, depth + 1)), `${ind(depth)}</${spec.closeTag ?? spec.element}>`];
+    }
+    const getter = onText !== null && onText.endsWith("()") && !onText.startsWith("(");
+    const props = `{ ${[onText === null ? null : getter ? `get on() { return ${onText}; }` : `on: ${onText}`, `get fallback() { return ${fallback}; }`, `get children() { return ${fragment(item.children)}; }`].filter(Boolean).join(", ")} }`;
+    const call = spec.close ? `${spec.call}${props}${spec.close}` : `${spec.call}(${props})`;
+    return [`${ind(depth)}{${call}}`];
   }
 
   /**
@@ -752,6 +809,7 @@ function render(program, instrument) {
       // A use repeated in a copy of the site (`freshCopy`, the shared-helper contexts) brings the same prelude line: one declaration serves both.
       const preluded = new Set();
       for (const [node, described] of useList) for (const line of described.preludeLines) if (!preluded.has(line)) { preluded.add(line); out.push(`${INDENT}${auxLine(node, line)}`); }
+      for (const line of boundaryDeclarations(component.view)) out.push(`${INDENT}${line}`);
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
       out.push(`${INDENT}return (`, `${INDENT}${INDENT}<div>`);
       for (const item of component.view) out.push(...viewText(item, 3));
@@ -798,6 +856,7 @@ function render(program, instrument) {
   if (fromHelpers.length) packageImports.push(`import { ${fromHelpers.join(", ")} } from "./helpers";`);
   for (const helper of moduleHelpers.filter((h) => h.via)) packageImports.push(helperImportLine(helper));
   for (const component of program.components) packageImports.push(...sourceImportLines(component, signals));
+  packageImports.push(...extraImports);
   packageImports.push(...new Set(useList.flatMap(([, described]) => described.importLines ?? [])));
   packageImports.push(...new Set(program.components.flatMap((component) => component.importLines ?? [])));
   const typeNames = [...new Set(program.components.flatMap((component) => sourceTypeNames(component, signals)))].sort();

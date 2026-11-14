@@ -725,7 +725,7 @@
         "why": "pending-review"
       },
       "name-only-match": {
-        "count": 6,
+        "count": 3,
         "why": "`on` and `children` are the prop names of a boundary the code has already resolved: every element and call reaches them only through `known_primitive(&primitives.jsx[index])` or `primitives.calls[index]` with `boundary_on_may_hold_outside`, so the spelling is the primitive's own prop, not an identification of what the element is; the candidate log of batch-11 slice 0 (`log_candidates`, measurement only) reads the same two props through the same resolved boundary (`known_primitive` / `primitives.calls[index]`)"
       }
     },
