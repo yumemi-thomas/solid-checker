@@ -1240,6 +1240,10 @@ fn global_use(
                     read,
                 };
             }
+            // A value that is only looked at (`typeof globalThis.window`, `window === self`, `if (window)`) goes nowhere.
+            if holder == Holder::Global && only_inspected(nodes, child_span, parent) {
+                return GlobalUse::Inert;
+            }
             return match holder {
                 Holder::Global => GlobalUse::Escape { path, at },
                 Holder::Document => GlobalUse::Inert,
@@ -1489,6 +1493,35 @@ fn member_parts<'a>(expression: &'a Expression<'a>) -> Option<(&'a Expression<'a
             Some((&member.object, literal_specifier(&member.expression)?))
         }
         _ => None,
+    }
+}
+
+/// Whether the value of the expression at `child` is only inspected by its `parent` and goes nowhere: the operand of `typeof` or `!`, a side of an equality, the test of a
+/// conditional, `if` or loop, or the left side of `&&` (an object is truthy, so the expression's value is the right side's).
+fn only_inspected(nodes: &AstNodes<'_>, child: oxc_span::Span, parent: NodeId) -> bool {
+    use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
+    match nodes.get_node(parent).kind() {
+        AstKind::UnaryExpression(unary) => {
+            matches!(
+                unary.operator,
+                UnaryOperator::Typeof | UnaryOperator::LogicalNot
+            )
+        }
+        AstKind::BinaryExpression(binary) => matches!(
+            binary.operator,
+            BinaryOperator::StrictEquality
+                | BinaryOperator::StrictInequality
+                | BinaryOperator::Equality
+                | BinaryOperator::Inequality
+        ),
+        AstKind::ConditionalExpression(conditional) => conditional.test.span() == child,
+        AstKind::IfStatement(statement) => statement.test.span() == child,
+        AstKind::WhileStatement(statement) => statement.test.span() == child,
+        AstKind::DoWhileStatement(statement) => statement.test.span() == child,
+        AstKind::LogicalExpression(logical) => {
+            logical.operator == LogicalOperator::And && logical.left.span() == child
+        }
+        _ => false,
     }
 }
 
@@ -2826,13 +2859,11 @@ mod tests {
             "use(x ? 1 : G);",
             "use(x || G);",
             "use(G ?? x);",
-            "use(G && x);",
             "use(...[G]);",
             "use(`${G}`);",
             "G();",
             "new G();",
             "async function a() { await G; } use(a);",
-            "use(G === x);",
             "use('x' in G);",
             "const { btoa } = G; use(btoa);",
             "export default G;",
@@ -2843,7 +2874,6 @@ mod tests {
             "use(void G);",
             "class C { static field = G; } use(C);",
             "function t() { throw G; } use(t);",
-            "if (G) use(1);",
         ];
         for name in names {
             for template in escapes {
@@ -2852,6 +2882,28 @@ mod tests {
                 let found = scan(&source);
                 assert!(
                     kinds(&found)
+                        .iter()
+                        .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                    "{source}: {:?}",
+                    kinds(&found)
+                );
+            }
+        }
+        // A value that is only looked at goes nowhere.
+        for name in names {
+            for template in [
+                "use(G && x);",
+                "use(G === x);",
+                "use(G !== x);",
+                "if (G) use(1);",
+                "use(!G);",
+                "use(G ? 1 : 2);",
+                "use(typeof G);",
+            ] {
+                let source = template.replace('G', &format!("({name})"));
+                let found = scan(&source);
+                assert!(
+                    !kinds(&found)
                         .iter()
                         .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
                     "{source}: {:?}",
@@ -2925,6 +2977,39 @@ mod tests {
         ] {
             let found = scan(source).global_writes;
             assert!(!found.any_name && !found.accessors_any_name, "{source}");
+        }
+    }
+
+    /// ADR 0974: a value of the global object that is only inspected goes nowhere: it is no escape.
+    #[test]
+    fn an_inspected_global_object_is_no_escape() {
+        for source in [
+            "use(typeof globalThis.window === 'undefined');",
+            "use(window === self);",
+            "use(window.self !== window);",
+            "if (window) { use(1); }",
+            "use(!window.window);",
+            "use(window ? 1 : 2);",
+            "use(window && 1);",
+            "while (globalThis.self) { use(1); break; }",
+        ] {
+            let found = scan(source);
+            assert!(
+                !kinds(&found)
+                    .iter()
+                    .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                "{source}: {:?}",
+                kinds(&found)
+            );
+            assert!(!found.global_writes.any_name, "{source}");
+        }
+        for source in [
+            "use(window || 1);",
+            "use(cond ? window : 1);",
+            "use(window && window);",
+            "use(window.self);",
+        ] {
+            assert!(scan(source).global_writes.any_name, "{source}");
         }
     }
 
