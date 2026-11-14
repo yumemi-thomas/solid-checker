@@ -615,6 +615,24 @@
    "rules": [
     "sync-computation-received-async"
    ]
+  },
+  {
+   "id": "pkgaction/patch-f32-undeclared",
+   "item": "ADR 0974 named miss: a builtin prototype a package extends without declaring it (`Float32Array.prototype.reverse = …`): no fact of the whole program says who writes the shared object",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/global-route-event-view",
+   "item": "ADR 0974 named premise: the global object handed back by a typed DOM member that no syntax names (`event.view`): a package that writes a global through it is not recorded as a writer",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
   }
  ],
  "notGenerated": [

@@ -719,6 +719,37 @@ fn collect_return_spans(
     }
 }
 
+/// Whether the callee (through its members and the calls it is a member of) roots in a binding imported from a package some reviewed premise starts from
+/// (`vitest`: [`crate::reviewed_packages::PREMISES`]). A demand only, so that the facts a reviewed reading asks of the arguments are produced where it can use them
+/// and nowhere else; what they decide is asked of the compiler's resolved declaration. A call it misses (a re-export through a project module, a global `expect`) has
+/// no fact, and a reading never clears without one.
+fn callee_roots_at_reviewed_package_import(file: &FileFacts, callee: Span) -> bool {
+    let ast = &file.ast;
+    let mut at = ast.peel_ts_sugar_span(callee);
+    for _ in 0..32 {
+        if let Some(member) = ast.member_at(at) {
+            at = ast.peel_ts_sugar_span(member.object);
+        } else if let Some(call) = ast.call_at(at) {
+            at = ast.peel_ts_sugar_span(call.callee);
+        } else {
+            break;
+        }
+    }
+    let Some(declaration) = ast.reference_declaration(at) else {
+        return false;
+    };
+    ast.imports.iter().any(|import| {
+        !import.type_only
+            && crate::reviewed_packages::PREMISES
+                .iter()
+                .any(|premise| premise.entry == &*import.module)
+            && import
+                .bindings
+                .iter()
+                .any(|binding| !binding.type_only && binding.local.span == declaration)
+    })
+}
+
 fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
     let DemandSpans {
         symbol_spans,
@@ -763,6 +794,15 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
         if let Some(value) = file.asserted_call_value(call.callee) {
             add_symbol(value, false);
             library_type_spans.insert(value);
+        }
+        // ADR 0975: a reviewed reading of a package's API (a matcher handed a value) is judged by whether each value it is handed is a primitive, which is
+        // stable for every inhabitant of a type. Asked at the arguments of a call rooted at a binding of a reviewed package (`expect(a).toBe(b)`, `vi.fn(f)`).
+        if callee_roots_at_reviewed_package_import(file, call.callee) {
+            for argument in call.arguments.iter().filter(|argument| !argument.spread) {
+                let span = argument.value_span.unwrap_or(argument.span);
+                add_symbol(span, false);
+                primitive_value_domain_spans.insert(span);
+            }
         }
         for argument in &call.arguments {
             match argument.value {

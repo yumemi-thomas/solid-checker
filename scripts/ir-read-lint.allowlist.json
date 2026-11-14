@@ -265,6 +265,9 @@
     "file_slots": 1,
     "typescript-table": 1
   },
+  "rust/crates/solid-reactive-ir/src/package_action_calls.rs": {
+    "file_by_path": 1
+  },
   "rust/crates/solid-reactive-ir/src/pending_accounting.rs": {
     "file_by_path": 7,
     "pending-review": [

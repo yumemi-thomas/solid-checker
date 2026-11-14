@@ -95,6 +95,7 @@ mod proof_log;
 mod proof_universe;
 mod reachability;
 mod reactive_analysis;
+mod reviewed_api;
 mod role_log;
 mod site_accounting;
 pub use execution_role::{WALK_STEP_BOUND, bound_walks, follow_every_path};

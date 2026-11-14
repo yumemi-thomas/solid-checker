@@ -332,6 +332,24 @@ impl PackageBoundary {
             folded.names.extend(index.names);
             folded.linked.extend(index.linked);
             folded.project_js.extend(index.project_js);
+            folded.accessors.extend(index.accessors);
+            for (name, roots) in index.global_writers {
+                folded.global_writers.entry(name).or_default().extend(roots);
+            }
+            folded.global_writers_any.extend(index.global_writers_any);
+            for (name, roots) in index.global_accessor_writers {
+                folded
+                    .global_accessor_writers
+                    .entry(name)
+                    .or_default()
+                    .extend(roots);
+            }
+            folded
+                .global_accessor_writers_any
+                .extend(index.global_accessor_writers_any);
+            for (root, ids) in index.reviewed {
+                folded.reviewed.entry(root).or_default().extend(ids);
+            }
             folded.unseen_code.extend(index.unseen_code);
             folded.reads_receiver.extend(index.reads_receiver);
         }
@@ -388,7 +406,7 @@ impl PackageBoundary {
         }
         // ADR 0972: an absent index adds nothing, so the digest of a boundary without one is unchanged.
         if let Some(index) = &self.package_reach {
-            hash.update(b"package-reach-v1");
+            hash.update(b"package-reach-v4");
             hash.update((index.by_root.len() as u64).to_be_bytes());
             for (root, reach) in &index.by_root {
                 text(hash, root);
@@ -404,6 +422,51 @@ impl PackageBoundary {
             hash.update((index.project_js.len() as u64).to_be_bytes());
             for path in &index.project_js {
                 text(hash, path);
+            }
+            // ADR 0974: the reviewed premises that hold, by root.
+            hash.update((index.reviewed.len() as u64).to_be_bytes());
+            for (root, ids) in &index.reviewed {
+                text(hash, root);
+                hash.update((ids.len() as u64).to_be_bytes());
+                for id in ids {
+                    text(hash, id);
+                }
+            }
+            // ADR 0974: the packages that write each global.
+            hash.update((index.global_writers.len() as u64).to_be_bytes());
+            for (name, roots) in &index.global_writers {
+                text(hash, name);
+                hash.update((roots.len() as u64).to_be_bytes());
+                for root in roots {
+                    text(hash, root);
+                }
+            }
+            hash.update((index.global_writers_any.len() as u64).to_be_bytes());
+            for root in &index.global_writers_any {
+                text(hash, root);
+            }
+            // The packages that define an accessor on the global object, by name.
+            hash.update((index.global_accessor_writers.len() as u64).to_be_bytes());
+            for (name, roots) in &index.global_accessor_writers {
+                text(hash, name);
+                hash.update((roots.len() as u64).to_be_bytes());
+                for root in roots {
+                    text(hash, root);
+                }
+            }
+            hash.update((index.global_accessor_writers_any.len() as u64).to_be_bytes());
+            for root in &index.global_accessor_writers_any {
+                text(hash, root);
+            }
+            // ADR 0974: where each closure may define an accessor.
+            hash.update((index.accessors.len() as u64).to_be_bytes());
+            for (root, facts) in &index.accessors {
+                text(hash, root);
+                hash.update([u8::from(facts.closed), u8::from(facts.any_name)]);
+                hash.update((facts.names.len() as u64).to_be_bytes());
+                for name in &facts.names {
+                    text(hash, name);
+                }
             }
             // The second re-check of #232: a package whose code is not all seen. Added only where there is one, so a boundary without any keeps its digest.
             if !index.unseen_code.is_empty() {

@@ -11,7 +11,21 @@
 //! `exports` map that names no file), and a file whose scan finds a load by a computed name, code generation or a file Oxc does not parse. A global the pinned libraries do
 //! not declare and the global object handed on hide no code (the second is the rule's own question of the file's text), so they do not end it.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+//! Whether an installed package's closure runs code the build does not see (the second re-check of #232): a file of the closure names `Object.prototype` or builds code as a
+//! string (`solid_reactive_ir::unseen_code_in`, the rule the analysis asks of the files of the program), or the closure is not read to its end.
+//!
+//! A package that gives a shared prototype an accessor (`Object.defineProperty(Object.prototype, "h", { get() { … this.m() … } })`) reads any key of any plain object through
+//! it, wherever the program reads one, and nothing in the project shows the read; a package the build cannot read may do the same, and unavailable source is no evidence
+//! (AGENTS.md, invariants 2 and 3). The answer comes from the one walk of the closure that [`super::package_reach`] makes (ADR 0974): the walk reads every file once, so what
+//! each file says here (the rule's answer on its facts, [`routes_in`]) is a step of the file's visit beside the hazards and loads, and the closure's `why` is the first place in
+//! walk order that a hazard hides code, the walk cannot read a file or a load, or a file names `Object.prototype` or builds code. It follows every load the action walk follows, the
+//! Solid packages' own (the dialect's, audited) aside, and it ends in an answer only when every file was read.
+//!
+//! What ends the closure undecided: a file or load the walk cannot read (a missing file, a native module, a file type it does not read, a closure past the limit, an
+//! `exports` map that names no file), and a file whose scan finds a load by a computed name, code generation or a file Oxc does not parse. A global the pinned libraries do
+//! not declare and the global object handed on hide no code (the second is the rule's own question of the file's text), so they do not end it.
+
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -19,14 +33,7 @@ use std::time::SystemTime;
 
 use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
 use solid_facts::core::{Generation, SourceHash};
-use solid_facts::module_reach::ModuleHazardKind;
-use solid_facts::package_reach::{PackageReach, is_declaration_file};
 use solid_reactive_ir::UnseenCode;
-
-use super::{
-    CODE_FREE_EXTENSIONS, Demand, MAX_CLOSURE_FILES, NATIVE_EXTENSIONS, SCRIPT_EXTENSIONS,
-    SolidPackages, Walk, manifest, scanned, short,
-};
 
 /// What a package's closure was found to run that the build does not see.
 #[derive(Clone, Debug, Default)]
@@ -37,143 +44,12 @@ pub(super) struct Closure {
     pub(super) reads_receiver: bool,
 }
 
-/// What the closures the program loads run that the build does not see, by runtime root: for each root the program loads (`demand` names a subpath), the answer of
-/// [`closure`]. A Solid package is the dialect's and is not asked.
-pub(super) fn closures_by_runtime(
-    by_runtime: &BTreeMap<PathBuf, (Demand, BTreeSet<PathBuf>)>,
-    solid: &SolidPackages<'_>,
-) -> HashMap<PathBuf, Closure> {
-    let mut closures = HashMap::new();
-    for (runtime, (demand, siblings)) in by_runtime {
-        // A package only a declaration names (a type another package's declarations mention) loads nothing the program runs.
-        if demand.subpaths.is_empty() {
-            continue;
-        }
-        closures.insert(runtime.clone(), closure(runtime, solid, demand, siblings));
-    }
-    closures
-}
-
-/// What the closure of the package at `root` runs that the build does not see: why, in a phrase (`names Object.prototype (fz-proto/index.js)`,
-/// `undecided: dynamic-load (…)`), and whether it holds a receiver.
-fn closure(
-    root: &Path,
-    solid: &SolidPackages<'_>,
-    demand: &Demand,
-    extra_entries: &BTreeSet<PathBuf>,
-) -> Closure {
-    let name = manifest(root)
-        .ok()
-        .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
-        .unwrap_or_default();
-    if solid.contains(&name) {
-        return Closure::default();
-    }
-    let mut walk = Walk {
-        solid,
-        files: BTreeSet::new(),
-        queue: VecDeque::new(),
-        entered: BTreeSet::new(),
-    };
-    let mut found = Closure::default();
-    if let Err(reach) = walk.enter(root, demand) {
-        found.why = Some(undecided(&reach));
-        return found;
-    }
-    for entry in extra_entries {
-        walk.push(entry.clone());
-    }
-    while let Some(file) = walk.queue.pop_front() {
-        if walk.files.len() > MAX_CLOSURE_FILES {
-            found.why = Some(format!(
-                "undecided: closure-limit (more than {MAX_CLOSURE_FILES} files)"
-            ));
-            return found;
-        }
-        if let Some(why) = visit(&mut walk, &file, &mut found.reads_receiver) {
-            found.why = Some(why);
-            return found;
-        }
-    }
-    found
-}
-
-/// What one file of the closure runs that the build does not see, and what it loads in turn.
-fn visit(walk: &mut Walk<'_, '_>, file: &Path, reads_receiver: &mut bool) -> Option<String> {
-    let name = file.to_string_lossy();
-    if NATIVE_EXTENSIONS
-        .iter()
-        .any(|extension| name.ends_with(extension))
-    {
-        return Some(format!("undecided: native-module ({})", short(file)));
-    }
-    if is_declaration_file(&name)
-        || CODE_FREE_EXTENSIONS
-            .iter()
-            .any(|extension| name.ends_with(extension))
-    {
-        return None;
-    }
-    if !SCRIPT_EXTENSIONS
-        .iter()
-        .any(|extension| name.ends_with(extension))
-    {
-        return Some(format!(
-            "undecided: unparseable ({}: a file type the walk does not read)",
-            short(file)
-        ));
-    }
-    let scan = match scanned(file) {
-        Ok(scan) => scan,
-        Err(reach) => return Some(undecided(&reach)),
-    };
-    for hazard in &scan.hazards {
-        match hazard.kind {
-            ModuleHazardKind::Unparseable
-            | ModuleHazardKind::DynamicLoad
-            | ModuleHazardKind::CodeGeneration => {
-                return Some(format!(
-                    "undecided: {} ({}: {})",
-                    hazard.kind.word(),
-                    short(file),
-                    hazard.detail
-                ));
-            }
-            // Neither hides code: a global the libraries do not declare is looked up, and the global object handed on is the rule's question of the text.
-            ModuleHazardKind::UnknownGlobal | ModuleHazardKind::GlobalObjectEscape => {}
-        }
-    }
-    match routes_in(file) {
-        Ok(answer) => {
-            *reads_receiver |= answer.reads_receiver;
-            if let Some(why) = answer.why {
-                return Some(format!("{why} ({})", short(file)));
-            }
-        }
-        Err(why) => return Some(format!("undecided: unparseable ({}: {why})", short(file))),
-    }
-    let directory = file.parent().unwrap_or(Path::new("/"));
-    for specifier in &scan.loads {
-        match walk.load(file, directory, specifier) {
-            Ok(()) => {}
-            // A Solid package is the dialect's: neither walked nor asked.
-            Err(PackageReach::ReachesSolid { .. }) => {}
-            Err(other) => return Some(undecided(&other)),
-        }
-    }
-    None
-}
-
-fn undecided(reach: &PackageReach) -> String {
-    format!("undecided: {}", reach.describe())
-}
-
 /// A file's answer, kept for the process while its length and modification time hold: a package several closures load is asked once.
 type Kept = Mutex<HashMap<PathBuf, ((u64, Option<SystemTime>), Result<UnseenCode, String>)>>;
 
 /// Whether the file names `Object.prototype` or builds code as a string, by the rule the analysis asks of the files of the program ([`solid_reactive_ir::unseen_code_in`]), on
 /// the file's own facts. `Err` where the file does not parse.
-fn routes_in(file: &Path) -> Result<UnseenCode, String> {
+pub(super) fn routes_in(file: &Path) -> Result<UnseenCode, String> {
     static KEPT: OnceLock<Kept> = OnceLock::new();
     let metadata = fs::metadata(file).map_err(|error| error.to_string())?;
     let stamp = (metadata.len(), metadata.modified().ok());
@@ -217,7 +93,9 @@ fn ask(file: &Path) -> Result<UnseenCode, String> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{Demand, Memo, SolidPackages, package_reach};
     use super::*;
+    use std::collections::BTreeSet;
 
     const SOLID: SolidPackages<'static> = SolidPackages {
         names: &["solid-js", "@solidjs/signals", "@solidjs/web"],
@@ -277,11 +155,19 @@ mod tests {
             .join(name)
             .canonicalize()
             .unwrap();
+        // A package the program loads (`.`): only such a closure is asked.
         let demand = Demand {
+            subpaths: BTreeSet::from([".".to_owned()]),
             everything: true,
-            ..Demand::default()
         };
-        closure(&root, &SOLID, &demand, &BTreeSet::new())
+        package_reach(
+            &root,
+            &SOLID,
+            &demand,
+            &BTreeSet::new(),
+            &mut Memo::default(),
+        )
+        .unseen
     }
 
     #[test]
