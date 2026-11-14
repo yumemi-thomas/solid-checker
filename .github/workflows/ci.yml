@@ -329,7 +329,7 @@ jobs:
   scripts-and-cli:
     needs: tested
     if: ${{ !cancelled() && needs.tested.outputs.tested == '' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

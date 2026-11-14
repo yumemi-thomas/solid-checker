@@ -10791,7 +10791,7 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above. ADR 0973: `props.onClose()` after `await Promise.resolve()` (line 8) is a call of a function value written after its async function's own suspension that no tracked computation walks and no role proof places yet, so it carries an uncertifiable SC1002 `read-after-await-unaccounted` row (the handler and listener role silence is a named follow-up in docs/open-work.md)",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -10822,6 +10822,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1002",
+      "context": "read-after-await-unaccounted"
      }
     ]
    }

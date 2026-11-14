@@ -531,166 +531,684 @@
    "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at such a call when the package calls action, and the checker was silent; the new rows are uncertifiable (never violations)"
   },
   {
-   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
-   "key": "SC2002 package-may-call-action",
-   "from": 20,
-   "to": 21,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "fixture": "engine/eslint-reactivity-v2",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/async-boundary",
-   "key": "SC2002 package-may-call-action",
+   "fixture": "reactive-ir/accessor-passed-by-reference",
+   "key": "SC1002 read-after-await-unaccounted",
    "from": 0,
    "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/callback-props-reads",
-   "key": "SC2002 package-may-call-action",
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-carrier-runs",
+   "key": "SC1002 read-after-await-unaccounted",
    "from": 0,
    "to": 3,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-cross-file-same-span",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-exact-callbacks",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 13,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-helper-callback",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-rowless-ends",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-paths",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 11,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/await-continuation-reads",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 8,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/bounds-search-depth-limit",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/callee-callback-timing",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
    "fixture": "reactive-ir/closed-export-alias-load",
-   "key": "SC2002 package-may-call-action",
-   "from": 0,
-   "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
-  },
-  {
-   "fixture": "reactive-ir/context-package-lazy",
-   "key": "SC2002 package-may-call-action",
-   "from": 0,
-   "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
-  },
-  {
-   "fixture": "reactive-ir/dependency-value-unfollowed",
-   "key": "SC2002 package-may-call-action",
-   "from": 0,
-   "to": 7,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
-  },
-  {
-   "fixture": "reactive-ir/escaping-object-methods",
-   "key": "SC2002 package-may-call-action",
+   "key": "SC1002 read-after-await-unaccounted",
    "from": 0,
    "to": 2,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/instance-key-writes",
-   "key": "SC2002 package-may-call-action",
+   "fixture": "reactive-ir/closed-export-namespace-call",
+   "key": "SC1002 read-after-await-unaccounted",
    "from": 0,
    "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/context-callee-past-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/eslint-plugin-corpus",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-nested-async-read",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/handed-residuals",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/helper-prop-read",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
    "fixture": "reactive-ir/invocation-flow",
-   "key": "SC2002 package-may-call-action",
+   "key": "SC1002 read-after-await-unaccounted",
    "from": 0,
    "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/member-value-alternatives",
-   "key": "SC2002 package-may-call-action",
+   "fixture": "reactive-ir/leaf-scope-helper-callback",
+   "key": "SC1002 read-after-await-unaccounted",
    "from": 0,
-   "to": 6,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/route-config-key-read",
-   "key": "SC2002 package-may-call-action",
-   "from": 2,
+   "fixture": "reactive-ir/leaf-scope-helper-completion",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/leaf-scope-host-callbacks",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/leaf-scope-skippable-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
    "to": 3,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/router-params-use-action-imported",
-   "key": "SC2002 package-may-call-action",
-   "from": 6,
-   "to": 7,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "fixture": "reactive-ir/literal-argument-member-dispatch",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/router-params-use-action-imported-namespace",
-   "key": "SC2002 package-may-call-action",
-   "from": 4,
-   "to": 6,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "fixture": "reactive-ir/local-alias-bindings",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/router-params-use-action-kept",
-   "key": "SC2002 package-may-call-action",
-   "from": 9,
+   "fixture": "reactive-ir/local-alias-member-reads",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/member-routes-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/named-inheriting-callback",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-freeze-write",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-import",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 17,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-namespace-escape",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/obligation-exclusion-boundary",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 11,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/owner-after-await-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 8,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/package-operations",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/parameter-initializer-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
    "to": 10,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
   },
   {
-   "fixture": "reactive-ir/value-walk-budget",
+   "fixture": "reactive-ir/past-await-owner-observer",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/prop-callback-roles-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/provider-array-provenance",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/provider-array-vetoes",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-event-windows",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-flush-in-action-unplaced",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/rc9-flush-in-action-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/rc9-heldout-execution-shapes",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-already-tracked",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-premise",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-purity",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach-member-helpers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/read-in-place-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/reads-entered-unseen",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/reads-entered-unseen-closed",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/ref-await-in-place-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/resolve-thunk-writes",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/server-function-rich-args",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 24,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/settled-cleanup-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/solid2-precision",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/stored-function-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 10,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-observation",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/strict-read-maybe-suspended",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 17,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/summary-direct-read",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-role",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-component",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/walk-bounds",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/write-cleanup-handle-call",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/write-legality-proofs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 8,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/write-past-layered-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/write-render-apply-row-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc9012",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0973",
+   "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
    "key": "SC2002 package-may-call-action",
-   "from": 0,
-   "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "from": 22,
+   "to": 26,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
   },
   {
-   "fixture": "reactive-ir/value-walk-budget-dynamic",
-   "key": "SC2002 package-finding-at-entry",
-   "from": 0,
-   "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
   },
   {
-   "fixture": "reactive-ir/value-walk-budget-reexport",
-   "key": "SC2002 package-finding-at-entry",
-   "from": 0,
-   "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
   },
   {
-   "fixture": "reactive-ir/value-walk-budget-transitive",
-   "key": "SC2002 package-finding-at-entry",
-   "from": 0,
-   "to": 1,
-   "adr": "ADR 0974",
-   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), so whether it calls action is not proven",
-   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the review of #231: B4, B5, S2) and the checker was silent; the new rows are uncertifiable (never violations)"
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
   }
  ]
 }

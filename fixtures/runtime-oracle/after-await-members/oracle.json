@@ -1,0 +1,1 @@
+{"note": "slice 9B (ADR 0973), members: a project method called after the await of a tracked async computation reads untracked on the continuation; the universe lists the call as a site (exact member through the callee summary, inexact member with its row)."}

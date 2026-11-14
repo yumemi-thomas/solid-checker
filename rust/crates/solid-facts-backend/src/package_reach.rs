@@ -26,7 +26,7 @@
 //! loads name, as steps in the order the visit meets them) is kept in a [`Memo`] that every walk holding the file replays. A walk finds the same files in the same
 //! order and notes the same problems as one that read everything itself. The files one step out of a walk are scanned side by side before the walk visits them.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -40,6 +40,9 @@ use solid_facts::package_reach::{
 };
 
 use crate::host_constants::{find_package_root, split_bare_specifier};
+
+// The second re-check of #232: whether a package's closure runs code the build does not see, a walk of its own beside the action walk below.
+mod prototype;
 
 /// How many files one package's closure walk reads before it stops undecided.
 pub const MAX_CLOSURE_FILES: usize = 20_000;
@@ -192,6 +195,13 @@ pub fn package_reach_index(
             }
         }
     }
+    // The runtimes the program loads (a package only a declaration names loads nothing the program runs); only they are asked what their code runs that the build does
+    // not see (the second re-check of #232, `prototype`).
+    let loaded = by_runtime
+        .iter()
+        .filter(|(_, (demand, _))| !demand.subpaths.is_empty())
+        .map(|(runtime, _)| runtime.clone())
+        .collect::<HashSet<_>>();
     let mut memo = Memo::default();
     let verdicts = by_runtime
         .into_iter()
@@ -211,6 +221,20 @@ pub fn package_reach_index(
                 ),
             },
             Err(reach) => (reach.clone(), AccessorFacts::open()),
+        };
+        // What the closure runs that the build does not see: the walk's own answer, for a package the program loads that has a runtime to read.
+        let closure = match &named.runtime {
+            Ok(runtime) if loaded.contains(runtime) => verdicts
+                .get(runtime)
+                .map(|verdict| verdict.unseen.clone())
+                .unwrap_or_default(),
+            Ok(_) => prototype::Closure::default(),
+            // A package the program loads that has no runtime to read is unread.
+            Err(reach) if !named.subpaths.is_empty() => prototype::Closure {
+                why: Some(format!("undecided: {}", reach.describe())),
+                reads_receiver: false,
+            },
+            Err(_) => prototype::Closure::default(),
         };
         index.accessors.insert(root.clone(), accessors);
         if let Ok(runtime) = &named.runtime
@@ -242,6 +266,22 @@ pub fn package_reach_index(
             .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
         {
             index.names.insert(root.clone(), name);
+        }
+        // The second re-check of #232 (`prototype`): a package whose closure runs code the build does not see. Solid's own packages are the dialect's.
+        if !index
+            .names
+            .get(&root)
+            .is_some_and(|name| solid.contains(name))
+        {
+            match closure.why {
+                Some(why) => {
+                    index.unseen_code.insert(root.clone(), why);
+                }
+                None if closure.reads_receiver => {
+                    index.reads_receiver.insert(root.clone());
+                }
+                None => {}
+            }
         }
         index.by_root.insert(root, reach);
     }
@@ -739,6 +779,8 @@ struct Closure {
     accessors: AccessorFacts,
     /// The globals the closure writes (ADR 0974).
     global_writes: solid_facts::module_reach::GlobalWrites,
+    /// What the closure runs that the build does not see (the second re-check of #232): the answer of the walk that reads every file once, beside the action verdict.
+    unseen: prototype::Closure,
 }
 
 /// The closure walk of one package. It reads the whole closure: a hazard, an unreadable file or a load of Solid ends nothing but that branch (a Solid package is
@@ -761,6 +803,8 @@ fn package_reach(
             problems: vec![PackageReach::ReachesSolid { via: name }],
             accessors: AccessorFacts::open(),
             global_writes: solid_facts::module_reach::GlobalWrites::default(),
+            // Solid's own packages are the dialect's and are not asked.
+            unseen: prototype::Closure::default(),
         };
     }
     let mut walk = Walk {
@@ -777,6 +821,8 @@ fn package_reach(
         written_any: false,
         accessors_written: BTreeSet::new(),
         accessors_written_any: false,
+        unseen: None,
+        reads_receiver: false,
     };
     walk.run(root, demand, extra_entries);
     let problems = walk
@@ -802,6 +848,10 @@ fn package_reach(
             accessor_names: walk.accessors_written.into_iter().collect(),
             accessors_any_name: walk.accessors_written_any,
         },
+        unseen: prototype::Closure {
+            why: walk.unseen.map(|why| walk.memo.unseen_text(why).to_owned()),
+            reads_receiver: walk.reads_receiver,
+        },
     }
 }
 
@@ -815,6 +865,10 @@ struct FileId(usize);
 /// A problem a walk notes, by the index the [`Memo`] gave it: two equal problems are one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ProblemId(usize);
+
+/// A phrase for why a closure runs code the build does not see, by the index the [`Memo`] gave it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct UnseenId(usize);
 
 /// A package entered at a subpath (`*` is every entry), by the index the [`Memo`] gave the pair.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -874,6 +928,9 @@ enum Step {
     Push(FileId),
     /// A package one of its loads names, entered at a subpath.
     Enter(EntryId),
+    /// The visit is where the closure is found to run code the build does not see (a hazard that hides code, a file the walk cannot read, a load nothing answers, a name
+    /// of `Object.prototype`): the first of these in walk order is the closure's `why`.
+    Unseen(UnseenId),
 }
 
 /// What visiting one file does to a walk, in the order the visit meets it. A file's visit depends on the file and on the tree alone, so it is worked out once and
@@ -881,6 +938,8 @@ enum Step {
 struct Visit {
     /// What the file's scan says of the accessors and global writes a walk collects; `None` for a file nobody scans.
     scan: Option<Arc<ModuleScan>>,
+    /// Whether the file holds a `this` or a `super` (read only for a file whose syntax answered).
+    reads_receiver: bool,
     steps: Vec<Step>,
 }
 
@@ -905,6 +964,8 @@ struct Memo {
     problem_ids: HashMap<ProblemKey, ProblemId>,
     entries: Vec<Entry>,
     entry_ids: HashMap<(PathBuf, String), EntryId>,
+    unseen: Vec<String>,
+    unseen_ids: HashMap<String, UnseenId>,
 }
 
 impl Memo {
@@ -936,6 +997,20 @@ impl Memo {
 
     fn problem(&self, problem: ProblemId) -> &PackageReach {
         &self.problems[problem.0]
+    }
+
+    fn unseen_id(&mut self, text: String) -> UnseenId {
+        if let Some(&id) = self.unseen_ids.get(&text) {
+            return id;
+        }
+        let id = UnseenId(self.unseen.len());
+        self.unseen_ids.insert(text.clone(), id);
+        self.unseen.push(text);
+        id
+    }
+
+    fn unseen_text(&self, unseen: UnseenId) -> &str {
+        &self.unseen[unseen.0]
     }
 
     /// The pair of a package root (canonical) and a subpath.
@@ -997,10 +1072,12 @@ impl Memo {
                 RawStep::Note(problem) => Step::Note(self.problem_id(problem)),
                 RawStep::Push(path) => Step::Push(self.file(path)),
                 RawStep::Enter(root, subpath) => Step::Enter(self.entry(root, subpath)),
+                RawStep::Unseen(text) => Step::Unseen(self.unseen_id(text)),
             })
             .collect();
         let visit = Rc::new(Visit {
             scan: raw.scan,
+            reads_receiver: raw.reads_receiver,
             steps,
         });
         self.visits[file.0] = Some(Rc::clone(&visit));
@@ -1014,11 +1091,14 @@ enum RawStep {
     Push(PathBuf),
     /// A package (canonical root) entered at a subpath.
     Enter(PathBuf, String),
+    /// See [`Step::Unseen`].
+    Unseen(String),
 }
 
 /// What visiting a file does, as [`record`] found it.
 struct RawVisit {
     scan: Option<Arc<ModuleScan>>,
+    reads_receiver: bool,
     steps: Vec<RawStep>,
 }
 
@@ -1028,6 +1108,7 @@ fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
     let mut recorder = Recorder {
         solid,
         steps: Vec::new(),
+        reads_receiver: false,
     };
     let scan = match recorder.visit(file) {
         Ok(scan) => scan,
@@ -1038,6 +1119,7 @@ fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
     };
     RawVisit {
         scan,
+        reads_receiver: recorder.reads_receiver,
         steps: recorder.steps,
     }
 }
@@ -1046,11 +1128,23 @@ fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
 struct Recorder<'a, 'd> {
     solid: &'a SolidPackages<'d>,
     steps: Vec<RawStep>,
+    reads_receiver: bool,
 }
 
 impl Recorder<'_, '_> {
     fn note(&mut self, problem: PackageReach) {
         self.steps.push(RawStep::Note(problem));
+    }
+
+    /// A load that fails: noted, and where it is no load of Solid's runtime (the dialect's, not walked) it leaves the closure not read to its end.
+    fn failed(&mut self, problem: PackageReach) {
+        if !matches!(problem, PackageReach::ReachesSolid { .. }) {
+            self.steps.push(RawStep::Unseen(format!(
+                "undecided: {}",
+                problem.describe()
+            )));
+        }
+        self.note(problem);
     }
 
     fn push(&mut self, file: PathBuf) {
@@ -1064,6 +1158,10 @@ impl Recorder<'_, '_> {
             .iter()
             .any(|extension| name.ends_with(extension))
         {
+            self.steps.push(RawStep::Unseen(format!(
+                "undecided: native-module ({})",
+                short(file)
+            )));
             return Err(PackageReach::Undecided {
                 blocker: ReachBlocker::NativeModule,
                 detail: short(file),
@@ -1075,22 +1173,63 @@ impl Recorder<'_, '_> {
         }
         if !is_script(&name) {
             // A file a bundler plugin compiles (`.vue`, `.svelte`) may become code that loads anything.
+            self.steps.push(RawStep::Unseen(format!(
+                "undecided: unparseable ({}: a file type the walk does not read)",
+                short(file)
+            )));
             return Err(PackageReach::Undecided {
                 blocker: ReachBlocker::Unparseable,
                 detail: format!("{}: a file type the walk does not read", short(file)),
             });
         }
-        let scan = scanned(file)?;
+        let scan = match scanned(file) {
+            Ok(scan) => scan,
+            Err(problem) => {
+                self.steps.push(RawStep::Unseen(format!(
+                    "undecided: {}",
+                    problem.describe()
+                )));
+                return Err(problem);
+            }
+        };
         for hazard in &scan.hazards {
+            // A global the libraries do not declare and the global object handed on hide no code (the second is the rule's own question of the file's text).
+            if matches!(
+                hazard.kind,
+                ModuleHazardKind::Unparseable
+                    | ModuleHazardKind::DynamicLoad
+                    | ModuleHazardKind::CodeGeneration
+            ) {
+                self.steps.push(RawStep::Unseen(format!(
+                    "undecided: {} ({}: {})",
+                    hazard.kind.word(),
+                    short(file),
+                    hazard.detail
+                )));
+            }
             self.note(PackageReach::Undecided {
                 blocker: blocker_of(hazard.kind),
                 detail: format!("{}: {}", short(file), hazard.detail),
             });
         }
+        // Whether the file names `Object.prototype` or builds code as a string, by the rule the analysis asks of the files of the program, and whether it holds a receiver.
+        match prototype::routes_in(file) {
+            Ok(answer) => {
+                self.reads_receiver |= answer.reads_receiver;
+                if let Some(why) = answer.why {
+                    self.steps
+                        .push(RawStep::Unseen(format!("{why} ({})", short(file))));
+                }
+            }
+            Err(why) => self.steps.push(RawStep::Unseen(format!(
+                "undecided: unparseable ({}: {why})",
+                short(file)
+            ))),
+        }
         let directory = file.parent().unwrap_or(Path::new("/"));
         for specifier in &scan.loads {
             if let Err(problem) = self.load(file, directory, specifier) {
-                self.note(problem);
+                self.failed(problem);
             }
         }
         Ok(Some(scan))
@@ -1137,7 +1276,7 @@ impl Recorder<'_, '_> {
                     Target::File(path) => self.push(path),
                     Target::Bare(bare) => {
                         if let Err(problem) = self.load(file, directory, &bare) {
-                            self.note(problem);
+                            self.failed(problem);
                         }
                     }
                 }
@@ -1204,6 +1343,9 @@ struct Walk<'s, 'd, 'm> {
     /// The globals the files read may define an accessor for on the global object, and whether one may be defined under a name the syntax does not fix.
     accessors_written: BTreeSet<String>,
     accessors_written_any: bool,
+    /// The first place in walk order the closure was found to run code the build does not see, and whether any file read holds a `this` or a `super`.
+    unseen: Option<UnseenId>,
+    reads_receiver: bool,
 }
 
 impl Walk<'_, '_, '_> {
@@ -1220,6 +1362,9 @@ impl Walk<'_, '_, '_> {
             prepare(self.memo, self.solid, &level);
             for file in level {
                 if self.files.len() > MAX_CLOSURE_FILES {
+                    self.unseen_text(format!(
+                        "undecided: closure-limit (more than {MAX_CLOSURE_FILES} files)"
+                    ));
                     self.note(PackageReach::Undecided {
                         blocker: ReachBlocker::ClosureLimit,
                         detail: format!("more than {MAX_CLOSURE_FILES} files"),
@@ -1234,6 +1379,13 @@ impl Walk<'_, '_, '_> {
     fn note(&mut self, problem: PackageReach) {
         let problem = self.memo.problem_id(problem);
         self.note_problem(problem);
+    }
+
+    /// The closure runs code the build does not see, as `text` says; the first such place in walk order is the one kept.
+    fn unseen_text(&mut self, text: String) {
+        if self.unseen.is_none() {
+            self.unseen = Some(self.memo.unseen_id(text));
+        }
     }
 
     fn note_problem(&mut self, problem: ProblemId) {
@@ -1251,6 +1403,7 @@ impl Walk<'_, '_, '_> {
     /// The entries `demand` asks of the package at `root`, each pair once; what cannot be read is a problem, and the rest of the walk goes on.
     fn enter(&mut self, root: &Path, demand: &Demand) {
         if let Err(problem) = self.try_enter(root, demand) {
+            self.unseen_text(format!("undecided: {}", problem.describe()));
             self.note(problem);
         }
     }
@@ -1284,6 +1437,7 @@ impl Walk<'_, '_, '_> {
     /// One file: what visiting it does, replayed in order.
     fn visit(&mut self, file: FileId) {
         let visit = self.memo.visit(self.solid, file);
+        self.reads_receiver |= visit.reads_receiver;
         if let Some(scan) = &visit.scan {
             extend(&mut self.accessor_names, &scan.accessors.names);
             self.accessors_any_name |= scan.accessors.any_name;
@@ -1301,7 +1455,17 @@ impl Walk<'_, '_, '_> {
                 Step::Push(file) => self.push(file),
                 Step::Enter(entry) => {
                     if let Err(problem) = self.enter_entry(entry) {
+                        if self.unseen.is_none() {
+                            let text =
+                                format!("undecided: {}", self.memo.problem(problem).describe());
+                            self.unseen_text(text);
+                        }
                         self.note_problem(problem);
+                    }
+                }
+                Step::Unseen(why) => {
+                    if self.unseen.is_none() {
+                        self.unseen = Some(why);
                     }
                 }
             }
@@ -2628,11 +2792,12 @@ mod tests {
         assert_eq!(found.names, ["data", "other", "plain", "ratio"]);
         assert_eq!(found.accessor_names, ["ratio"]);
         assert!(!found.any_name && !found.accessors_any_name, "{found:?}");
-        // A file whose writer is used where its target is not seen makes the package a writer of any global, and of an accessor under any name.
+        // A file whose writer is used where nothing reads its target makes the package a writer of any global, and of an accessor under any name; a target the file reads
+        // that names something else (a parameter) is no global, as for a direct call.
         write(
             root,
             "node_modules/glob/more.js",
-            "const define = Object.defineProperty; export const f = (target) => define(target, 'x', { get() {} });",
+            "const define = Object.defineProperty; export const f = (...args) => define(...args);",
         );
         let found = closure(root, "glob").global_writes;
         assert!(found.any_name && found.accessors_any_name, "{found:?}");

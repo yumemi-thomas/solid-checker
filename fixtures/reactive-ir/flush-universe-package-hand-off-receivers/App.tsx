@@ -448,3 +448,95 @@ setTimeout(() => {
   twinOwn.run();
   twinOwn.m();
 });
+
+// ---- the twins above, with keys of their own: the same shapes, each with a flushing member stored under a key no receiver reads, so each stays silent. The twins above keep their
+// keys (`g`, `m`), which the program's other cases read through a receiver: a function stored under a key that a receiver reads, in code a package may run, is handed whichever
+// object the receiver is of (the review of #229, B2), so those five keep the three uncertifiable rows of their flush. That is the name net's known cost: Chrome is quiet at each.
+const renamedProtoBase = {
+  get renamedProtoG(): number {
+    flush();
+    return 1;
+  },
+};
+const renamedProto = {
+  __proto__: renamedProtoBase,
+  get h(): number {
+    return 1;
+  },
+};
+setTimeout(() => {
+  void renamedProto.h;
+});
+// the same, the prototype written after the literal
+const renamedWrittenBase = {
+  get renamedWrittenG(): number {
+    flush();
+    return 1;
+  },
+};
+const renamedWritten = {
+  get h(): number {
+    void runStep(() => {
+      void 1;
+    });
+    return 1;
+  },
+};
+(renamedWritten as any).__proto__ = renamedWrittenBase;
+setTimeout(() => {
+  void renamedWritten.h;
+});
+// a `null` prototype: the literal's receiver reads a key (`g`) the getter is not stored under
+const renamedNullBase = {
+  get renamedNullG(): number {
+    flush();
+    return 1;
+  },
+};
+const renamedNull = {
+  __proto__: null,
+  get h(): number {
+    void runStep(() => {
+      void (this as any).g;
+    });
+    return 1;
+  },
+};
+setTimeout(() => {
+  void renamedNullBase.renamedNullG;
+  void renamedNull.h;
+});
+// a receiver in a literal that holds no flushing member, beside a literal that holds one under another key
+const renamedUnrelatedFlush = {
+  get renamedUnrelatedG(): number {
+    flush();
+    return 1;
+  },
+};
+const renamedUnrelatedReader = {
+  get h(): number {
+    void runStep(() => {
+      void (this as any).g;
+    });
+    return 1;
+  },
+};
+setTimeout(() => {
+  void renamedUnrelatedFlush.renamedUnrelatedG;
+  void renamedUnrelatedReader.h;
+});
+// a literal whose method flushes and which writes no receiver; a step runs a closure that never reads it
+const renamedOwn = {
+  renamedOwnM(): void {
+    flush();
+  },
+  run(): void {
+    void runStep(() => {
+      void 1;
+    });
+  },
+};
+setTimeout(() => {
+  renamedOwn.run();
+  renamedOwn.renamedOwnM();
+});

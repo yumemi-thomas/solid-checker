@@ -27,7 +27,11 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // ADR 0516: one is the uncertifiable read after `loopAwait`'s loop,
         // pinned below. ADR 0870: two more, the reads after
         // `conditionalAwait`'s and `shortCircuitAwait`'s skippable awaits.
-        ("reactive-read-after-await", 22),
+        // ADR 0973: one more, `after-await-valid.tsx:33`, the read after
+        // `standalone`'s await (an exported function no tracked computation
+        // calls, so no producer walks it): the uncertifiable row
+        // `read-after-await-unaccounted`.
+        ("reactive-read-after-await", 23),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
         // ADR 0646: two more, `owned-scope-valid.tsx:28`, a tuple's function
         // slots from a local hook: its transport does not resolve.
@@ -452,9 +456,34 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                                     .file_name()
                                     .is_some_and(|name| name == file)
                             })
+                            || is_the_unaccounted_row_of_standalone(file, finding)
                     }),
                 "unexpected {file} / {rule}: {findings:#?}"
             );
         }
     }
+    // ADR 0973: the one finding of its rule an upstream-valid file may hold. `standalone` is an exported async function no computation calls, so no producer walks it and
+    // no analysis places its read after the await: the accounting's uncertifiable row `read-after-await-unaccounted` stands at the read (line 33). The row claims nothing
+    // about the file (uncertifiable is internal), and it is the only one: no violation and no other row of the rule.
+    let standalone = findings_for_rule(&findings, "reactive-read-after-await")
+        .into_iter()
+        .filter(|finding| {
+            finding["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/after-await-valid.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(standalone.len(), 1, "{standalone:#?}");
+    assert!(
+        is_the_unaccounted_row_of_standalone("after-await-valid.tsx", standalone[0]),
+        "{standalone:#?}"
+    );
+}
+
+/// ADR 0973: the accounting's uncertifiable row at `standalone`'s read in `after-await-valid.tsx` (line 33), the only finding an upstream-valid file may hold.
+fn is_the_unaccounted_row_of_standalone(file: &str, finding: &serde_json::Value) -> bool {
+    file == "after-await-valid.tsx"
+        && finding["kind"] == "uncertifiable"
+        && finding["analysisContext"] == "read-after-await-unaccounted"
+        && finding["primaryLocation"]["line"] == 33
 }

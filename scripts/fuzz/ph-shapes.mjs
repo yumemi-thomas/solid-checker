@@ -110,6 +110,91 @@
 //             foreigncall `g: make1()`, `function make1() { return function (this: any) { … }; }`: through a call's result
 //             foreignalias `const { a: h1 } = src1; const o1 = { m() { cb1(); }, h1 }`, `o1.h1()`: an alias a destructuring makes
 //             foreignarray `const fns1 = [function (this: any) { … }]`, `g: fns1[0]`: an array's element
+//           and the review of #229 (B2: a member reaches the receiver by no placement in the literal: the object that holds it is no reference a read of it follows; S2):
+//             lateassign  `const o1 = { get h() { runStep(() => { (this as any).m1(); }); return 1; }, m1: undefined as any }`, `o1.m1 = function () { cb1(); }` after the literal
+//             latesetter  the same through a setter: `set h(value) { … }`, `o1.h = 1` in a timer
+//             latenested  `o1.sub1 = { m() { cb1(); } }`, the getter runs `this.sub1.m()`
+//             lateput     the member written by a project function: `function put1(target: any) { target.m1 = function () { cb1(); }; }`, `put1(o1)`
+//             protoreceiver the receiver on the prototype, the flushing member on the derived literal: `const o1 = { __proto__: base1, m1() { cb1(); } }`
+//             protocreate `const o1: any = Object.create(base1)`, `o1.m1 = function () { cb1(); }`
+//             protoclass  `class K1 { m1: any; get h() { runStep(() => { this.m1(); }); return 1; } }`, `const o1 = new K1()`, `o1.m1 = function () { cb1(); }`
+//             protokey    a prototype written through a computed key the program does not spell: `const k1 = "__pro" + "to__"`, `o1[k1] = base1`
+//             lateself    the receiver kept in a local (`const self1 = this`) and read in the step: `self1.m1()`
+//             latedestr   `const { m1 } = this as any` in the step
+//             latecomputed `(this as any)[key1]()`, a key the program does not name
+//           and the neighbours the probing of #229's B2 found (no receiver in them: a function stored through a parameter's member is stored into the object the callers pass,
+//           and the code that reads that object reads it by the caller's name):
+//             putparam    `function put1(target: { m1(): void }) { target.m1 = function () { cb1(); }; }`, `const o1 = { m1(): void {} }`, `put1(o1)`, `runStep(() => { o1.m1(); })`
+//             putparamany the same with `target: any` and `const o1: any = {}`
+//             putchain    the argument is the parameter of an outer function: `function putOuter1(holder: …) { put1(holder); }`, `putOuter1(o1)`
+//           and the review of #232 (B1 to B5, S3: the strict prefilter proves a holder is no receiver, and what it gives out, how a key is spelled, what a parameter that is a pattern is, what
+//           a write through the receiver is, and which names are unique are its premises). Each reads `this.m1()` in a getter of `base1`, and `base1` is the prototype of the holder
+//           that has the flushing member, or is the holder's own getter:
+//             restcopy    `const { ...rest1 } = o1; rest1.__proto__ = base1`: a rest copy holds the same functions and is given the prototype
+//             nestedpattern `const { sub1 } = hh1`: the nested literal, bound by a pattern, given the prototype
+//             nestedread  `const s1 = hh1.sub1`: the nested literal, through a member read
+//             nestedchain `hh1.sub1.__proto__ = base1`: with no local
+//             nestedarg   `function give1(p) { p.sub1.__proto__ = base1; … }`, `give1({ sub1: { m1() { … } } })`: the nested literal in an argument of a function the build reads
+//             restnested  a rest copy of an object that holds the nested literal; `base1` reads `this.sub1.m1()`
+//             nestedspread `const copy1 = { ...hh1 }; copy1.sub1.__proto__ = base1`: a spread copy shares the nested literal
+//             keyescape   `o1.\u006d1 = function () { … }`: a key spelled with a unicode escape is the key `m1`
+//             keyreadescape the read `this.\u006d1()` of a key stored as `m1`
+//             keymethodescape `{ __proto__: base1, \u006d1() { … } }` read by `this.m1()`
+//             keyhex      `{ __proto__: base1, 0x1() { … } }` read by `this[1]()`: a number written as a key is its whole-number key
+//             keyfloat    `{ __proto__: base1, 1.0() { … } }` read by `this["1"]()`
+//             parampattern `function f1({ m1 }) { m1.call(null); }`, `f1(this)` in the getter: the pattern reads the key where the function runs
+//             paramgetter the pattern alone reads a getter of the receiver: `function f1({ m1 }) { void m1; }`
+//             paramarray  `function f1([a]) {}`: an array pattern runs the receiver's iterator
+//             paramrest   `function f1(...xs) { xs[0].m1(); }`, `f1(this)`: a rest parameter is an array that holds the receiver
+//             paramrestpass `function f1(...xs) { g1(xs[0]); }`: and passes it on
+//             assignthis  `Object.assign(this, { k1: 1 })` in the getter: a write of every key of the sources, which runs the setter `set k1` of the derived literal
+//             symbolrewrite `let s1 = Symbol(); ({ s1 } = { s1: "m1" }); o1[s1] = function () { … }`: a name an object pattern assignment rewrites is no unique symbol
+//             objproto    `Object.defineProperty(Object.prototype, "h", { get() { … this.m1() … } })`: every plain object inherits the accessor
+//           and the re-check of #232 (S3: the ways to `Object.prototype` that the rule had not followed; each defines `h` on it with a getter that runs `this.m1()`, and `o1`, a plain
+//           object that stores the flushing function under `m1`, reads `o1.h` in a timer):
+//             opvalueof    `Object.prototype.valueOf()` returns the prototype itself
+//             opvalueofkey the same through `(Object.prototype as any)["valueOf"]()`
+//             opglobalalias `const g1 = globalThis; g1.Object.prototype`
+//             opglobaldestr `const { Object: O1 } = globalThis`
+//             opassigned   `let O1; O1 = Object`
+//             opparam      `function g1(O1) { … O1.prototype … } g1(Object)`
+//             oparray      `const [O1] = [Object]`
+//             opassignpattern `({ prototype: P1 } = Object)`
+//             opreflectget `Reflect.get(Object, "prototype")`
+//             opreturn     `function getO1() { return Object; }`
+//             opsequence   `(touch1(), Object).prototype` (a comma operator whose left side has no effect is TS2695, so the left side is a call)
+//             oplogical    `(Object ?? null).prototype`
+//             opgetproto   `Object.getPrototypeOf({})`
+//             opreflectgetproto `Reflect.getPrototypeOf({})`
+//             opconstructor `({}).constructor.prototype`
+//             opdunder     `({}).__proto__`
+//             opclassdunder `class X1 {}`, `X1.prototype.__proto__`
+//             opsuper      `class X1 extends Object { static proto() { return super.prototype; } }`
+//             opvalueofcall `Object.prototype.valueOf.call(({}).__proto__)`
+//           and its second round (the names for the window and the keys a program builds, found probing the fix; the same frame):
+//             optop, opparent, opframes `(top as any).Object.prototype`, `parent`, `frames`: bare names of the global object
+//             opwindowview `(window as any).document.defaultView.Object.prototype`
+//             opglobalview `(globalThis as any).document.defaultView.Object.prototype`
+//             opdocalias   `const d = document; d.defaultView.Object.prototype`
+//             opdocpattern `const { defaultView } = document; defaultView.Object.prototype`
+//             opdoccall    `getDoc().defaultView.Object.prototype`
+//             opbuiltkey   `({})["const" + "ructor"].prototype`: a key built at run time is a spelling as good as the word
+//             opbuiltconst `const k = "const" + "ructor"; ({})[k].prototype`
+//             opbuiltproto `({})["__pro" + "to__"]`
+//             opreflectbuilt `Reflect.get({}, "const" + "ructor").prototype`
+//             opparamkey   `function pick(k) { return ({})[k]; } pick(["const", "ructor"].join("")).prototype`: a key no expression proves
+//             oppatternkey `const { [key]: C } = {}` with `key` built from two strings
+//             opforofkey   `for (const k of ["constructor"]) C = ({})[k]`
+//             opreflectalias `const get = Reflect.get; get({}, ["const", "ructor"].join("")).prototype`
+//           and the third round (code the program builds as a string defines the getter; the code reaches the runner through `globalThis`, and the read of `h` waits where the
+//           code runs later):
+//             opsinktimer  `setTimeout("Object.defineProperty(Object.prototype, 'h', { get() { rs(() => { this.m1(); }); … } })", 0)`
+//             opsinkscript a `<script>` element's text, appended to the document
+//             opsinkonerror an `onerror` attribute set with `setAttribute` on an image that fails to load
+//             opsinkonclick an `onclick` attribute set with `setAttribute` and a `.click()`
+//             opsinkimport `await import("data:text/javascript," + encodeURIComponent(code))`
+//             opsinkblob   a `<script>` element whose `src` is a Blob URL
+//             opsinkhtml   `innerHTML` markup with an `onerror` handler
 //           These routes are written at module scope (`top`), beside the component, not in its body: a function written in the body of an exported component is run by a package
 //           whenever the program's boundary is open (the fuzz programs' is), so a cell there is handed by the component and says nothing of the position the route is about.
 //   hosts   step (the package runs it in an action's step: FLUSH_IN_ACTION), apply (an effect's apply: FLUSH_IN_EFFECT_CALLBACK), leaf (a leaf owner's callback:
@@ -122,7 +207,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -132,7 +217,9 @@ export const PH_CODES = {
 };
 /** `{ [context]: "misuse" | "legal" }`. */
 /** The routes that exist on some hosts only: `Dynamic` creates a memo, and a spread or an inserted child an effect, which an effect's apply and a leaf owner's callback refuse (PRIMITIVE_IN_EFFECT_CALLBACK, before the callback is applied); the frame routes' component, read from the view's children there, never runs in Chrome. */
-const ROUTE_HOSTS = { dynref: ["step"], spreadref: ["step"], spreadvar: ["step"], childfn: ["step"], framechild: ["step"], framebare: ["step"], framemap: ["step"], framecall: ["step"], framerender: ["step"], frameiife: ["step"], framemapref: ["step"], framevoid: ["step"], frametypeof: ["step"] };
+// The three event-handler sinks (`opsinkonerror`, `opsinkonclick`, `opsinkhtml`) are on the step host only: under an effect's apply the oracle's page reports "Failed to load url /" (inconclusive),
+// so Chrome cannot decide the program there; the checker's answer does not depend on the host, and the lane's programs hold each form.
+const ROUTE_HOSTS = { dynref: ["step"], spreadref: ["step"], spreadvar: ["step"], childfn: ["step"], framechild: ["step"], framebare: ["step"], framemap: ["step"], framecall: ["step"], framerender: ["step"], frameiife: ["step"], framemapref: ["step"], framevoid: ["step"], frametypeof: ["step"] , opsinkonerror: ["step"], opsinkonclick: ["step"], opsinkhtml: ["step"]};
 export const PH_CONTEXTS = Object.fromEntries(PH_ROUTES.flatMap((route) => PH_HOSTS.filter((host) => (ROUTE_HOSTS[route] ?? PH_HOSTS).includes(host)).flatMap((host) => [[`ph-${route}-${host}`, "misuse"], [`ph-${route}-${host}-never`, "legal"]])));
 export const PH_CONTEXT_NAMES = Object.keys(PH_CONTEXTS);
 
@@ -157,6 +244,12 @@ const callee = (route, host, never) => {
   const kind = ["member", "method", "holder", "class"].includes(route) ? "With" : route === "array" ? "All" : "";
   return never ? `skipRun${kind}` : `run${UPPER[host]}${kind}`;
 };
+
+/** A name with its first letter written as a unicode escape (`m1` as `\u006d1`): the same key, spelled another way (the review of #232, B2). */
+const escaped = (name) => `\\u${name.codePointAt(0).toString(16).padStart(4, "0")}${name.slice(1)}`;
+
+/** The prototype of the review of #232's holders: `h` is a getter that runs `read` in a step the package runs, with the holder as its receiver. */
+const prefilterBase = (f, base, read) => `const ${base} = {\n  get h(): number {\n    ${f}(() => {\n      ${read}\n    });\n    return 1;\n  },\n};`;
 
 /** The frame text of a route: `head` precedes the body (the callback's or the function's block), `close` follows it. */
 const ROUTE_FRAMES = {
@@ -567,10 +660,329 @@ const ROUTE_FRAMES = {
     const object = n("o");
     return { head: `const ${cb} = () => `, close: `;\nconst ${fns} = [\n  function (this: any) {\n    ${f}(() => {\n      this.m();\n    });\n  },\n];\nconst ${object} = {\n  m(): void {\n    ${cb}();\n  },\n  g: ${fns}[0],\n};\nsetTimeout(() => {\n  ${object}.g();\n});` };
   },
+  lateassign: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  latesetter: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  set h(value: number) {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  ${object}.h = 1;\n});` };
+  },
+  latenested: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}.m();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = {\n  m(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  lateput: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const put = n("put");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\nfunction ${put}(target: any) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\n${put}(${object});\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protoreceiver: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const base = n("base");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  ${key}(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  protocreate: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const base = n("base");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any).${key}();\n    });\n    return 1;\n  },\n};\nconst ${object}: any = Object.create(${base});\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protoclass: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const klass = n("K");
+    return { head: `const ${cb} = () => `, close: `;\nclass ${klass} {\n  ${key}: any;\n  get h(): number {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  }\n}\nconst ${object} = new ${klass}();\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  protokey: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const base = n("base");
+    const name = n("k");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get g(): number {\n    ${cb}();\n    return 1;\n  },\n};\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      void this.g;\n    });\n    return 1;\n  },\n};\nconst ${name} = \"__pro\" + \"to__\";\n${object}[${name}] = ${base};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  lateself: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const self = n("self");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    const ${self} = this;\n    ${f}(() => {\n      ${self}.${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  latedestr: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      const { ${key} } = this as any;\n      ${key}();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  latecomputed: (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const name = n("k");
+    return { head: `const ${cb} = () => `, close: `;\nconst ${name} = \"${key}\";\nconst ${object} = {\n  get h(): number {\n    ${f}(() => {\n      (this as any)[${name}]();\n    });\n    return 1;\n  },\n  ${key}: undefined as any,\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  putparam: (f, n) => {
+    const cb = n("cb");
+    const put = n("put");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: { ${key}(): void }) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nconst ${object} = {\n  ${key}(): void {},\n};\n${put}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
+  },
+  putparamany: (f, n) => {
+    const cb = n("cb");
+    const put = n("put");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: any) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nconst ${object}: any = {};\n${put}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
+  },
+  putchain: (f, n) => {
+    const cb = n("cb");
+    const put = n("put");
+    const outer = n("outer");
+    const object = n("o");
+    const key = n("m");
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: { ${key}(): void }) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nfunction ${outer}(holder: { ${key}(): void }) {\n  ${put}(holder);\n}\nconst ${object} = {\n  ${key}(): void {},\n};\n${outer}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
+  },
+  // The review of #232 (B1 to B5, S3). Every route stores the flushing function in a holder that the strict prefilter might call confined; `base1`'s getter reads it through `this`.
+  restcopy: (f, n) => {
+    const [cb, object, key, base, rest] = [n("cb"), n("o"), n("m"), n("base"), n("rest")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${object} = {\n  ${key}(): void {\n    ${cb}();\n  },\n};\nconst { ...${rest} }: any = ${object};\n${rest}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${rest}.h;\n});` };
+  },
+  nestedpattern: (f, n) => {
+    const [cb, outer, sub, key, base, inner] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("s")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst { ${sub}: ${inner} }: any = ${outer};\n${inner}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${inner}.h;\n});` };
+  },
+  nestedread: (f, n) => {
+    const [cb, outer, sub, key, base, inner] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("s")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst ${inner}: any = ${outer}.${sub};\n${inner}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${inner}.h;\n});` };
+  },
+  nestedchain: (f, n) => {
+    const [cb, outer, sub, key, base] = [n("cb"), n("hh"), n("sub"), n("m"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer}: any = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\n${outer}.${sub}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${outer}.${sub}.h;\n});` };
+  },
+  nestedarg: (f, n) => {
+    const [cb, give, sub, key, base] = [n("cb"), n("give"), n("sub"), n("m"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nfunction ${give}(p: any) {\n  p.${sub}.__proto__ = ${base};\n  setTimeout(() => {\n    void p.${sub}.h;\n  });\n}\n${give}({\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n});` };
+  },
+  restnested: (f, n) => {
+    const [cb, outer, sub, key, base, rest] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("rest")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${sub}.${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst { ...${rest} }: any = ${outer};\n${rest}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${rest}.h;\n});` };
+  },
+  nestedspread: (f, n) => {
+    const [cb, outer, sub, key, base, copy] = [n("cb"), n("hh"), n("sub"), n("m"), n("base"), n("copy")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${outer} = {\n  ${sub}: {\n    ${key}(): void {\n      ${cb}();\n    },\n  },\n};\nconst ${copy}: any = { ...${outer} };\n${copy}.${sub}.__proto__ = ${base};\nsetTimeout(() => {\n  void ${copy}.${sub}.h;\n});` };
+  },
+  keyescape: (f, n) => {
+    const [cb, object, key] = [n("cb"), n("o"), n("m")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  },\n};\n${object}.${escaped(key)} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  keyreadescape: (f, n) => {
+    const [cb, object, key] = [n("cb"), n("o"), n("m")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      this.${escaped(key)}();\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  keymethodescape: (f, n) => {
+    const [cb, object, key, base] = [n("cb"), n("o"), n("m"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, `(this as any).${key}();`)}\nconst ${object} = {\n  __proto__: ${base},\n  ${escaped(key)}(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  keyhex: (f, n) => {
+    const [cb, object, base] = [n("cb"), n("o"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, "(this as any)[1]();")}\nconst ${object} = {\n  __proto__: ${base},\n  0x1(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  keyfloat: (f, n) => {
+    const [cb, object, base] = [n("cb"), n("o"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\n${prefilterBase(f, base, '(this as any)["1"]();')}\nconst ${object} = {\n  __proto__: ${base},\n  1.0(): void {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  parampattern: (f, n) => {
+    const [cb, object, key, fn] = [n("cb"), n("o"), n("m"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}({ ${key} }: any) {\n  ${key}.call(null);\n}\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  paramgetter: (f, n) => {
+    const [cb, object, key, base, fn] = [n("cb"), n("o"), n("m"), n("base"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}({ ${key} }: any) {\n  void ${key};\n}\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  get ${key}(): number {\n    ${cb}();\n    return 1;\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  paramarray: (f, n) => {
+    const [cb, object, base, fn] = [n("cb"), n("o"), n("base"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}([a]: any) {\n  void a;\n}\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  *[Symbol.iterator]() {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  paramrest: (f, n) => {
+    const [cb, object, key, fn] = [n("cb"), n("o"), n("m"), n("read")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${fn}(...xs: any[]) {\n  xs[0].${key}();\n}\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      ${fn}(this);\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  paramrestpass: (f, n) => {
+    const [cb, object, key, inner, outer] = [n("cb"), n("o"), n("m"), n("read"), n("pass")];
+    return { head: `const ${cb} = () => `, close: `;\nfunction ${inner}(p: any) {\n  p.${key}();\n}\nfunction ${outer}(...xs: any[]) {\n  ${inner}(xs[0]);\n}\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      ${outer}(this);\n    });\n    return 1;\n  },\n};\n${object}.${key} = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  assignthis: (f, n) => {
+    const [cb, object, key, base] = [n("cb"), n("o"), n("k"), n("base")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${base} = {\n  get h(): number {\n    ${f}(() => {\n      Object.assign(this, { ${key}: 1 });\n    });\n    return 1;\n  },\n};\nconst ${object} = {\n  __proto__: ${base},\n  set ${key}(value: number) {\n    ${cb}();\n  },\n};\nsetTimeout(() => {\n  void (${object} as any).h;\n});` };
+  },
+  symbolrewrite: (f, n) => {
+    const [cb, object, key, symbol] = [n("cb"), n("o"), n("m"), n("sym")];
+    return { head: `const ${cb} = () => `, close: `;\nlet ${symbol}: any = Symbol();\n({ ${symbol} } = { ${symbol}: \"${key}\" });\nconst ${object}: any = {\n  get h(): number {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  },\n};\n${object}[${symbol}] = function () {\n  ${cb}();\n};\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
+  objproto: (f, n) => {
+    const [cb, object, key] = [n("cb"), n("o"), n("m")];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object}: any = {};\n${object}.${key} = function () {\n  ${cb}();\n};\nObject.defineProperty(Object.prototype, \"h\", {\n  get() {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  },\n  configurable: true,\n});\nsetTimeout(() => {\n  void ${object}.h;\n});` };
+  },
 };
 
+/**
+ * The re-check of #232 (S3): the ways a program reaches `Object.prototype`. Each way writes the statement that defines the getter `h` on what it reaches (`define(target)`), after the
+ * declarations it needs, so the plain object `o1` that stores the flushing function under `m1` inherits an accessor that runs `this.m1()` in a step the package runs.
+ */
+const OBJECT_PROTOTYPE_WAYS = {
+  opvalueof: (n, define) => define("Object.prototype.valueOf()"),
+  opvalueofkey: (n, define) => define('(Object.prototype as any)["valueOf"]()'),
+  opglobalalias: (n, define) => {
+    const alias = n("g");
+    return `const ${alias}: any = globalThis;\n${define(`${alias}.Object.prototype`)}`;
+  },
+  opglobaldestr: (n, define) => {
+    const name = n("O");
+    return `const { Object: ${name} }: any = globalThis;\n${define(`${name}.prototype`)}`;
+  },
+  opassigned: (n, define) => {
+    const name = n("O");
+    return `let ${name}: any;\n${name} = Object;\n${define(`${name}.prototype`)}`;
+  },
+  opparam: (n, define) => {
+    const take = n("take");
+    return `function ${take}(O: any) {\n  ${define("O.prototype")}\n}\n${take}(Object);`;
+  },
+  oparray: (n, define) => {
+    const name = n("O");
+    return `const [${name}]: any[] = [Object];\n${define(`${name}.prototype`)}`;
+  },
+  opassignpattern: (n, define) => {
+    const name = n("P");
+    return `let ${name}: any;\n({ prototype: ${name} } = Object);\n${define(name)}`;
+  },
+  opreflectget: (n, define) => {
+    const name = n("P");
+    return `const ${name} = Reflect.get(Object, "prototype");\n${define(name)}`;
+  },
+  opreturn: (n, define) => {
+    const get = n("getO");
+    return `function ${get}(): any {\n  return Object;\n}\n${define(`${get}().prototype`)}`;
+  },
+  opsequence: (n, define) => {
+    const touch = n("touch");
+    return `function ${touch}() {}\n${define(`(${touch}(), Object).prototype`)}`;
+  },
+  oplogical: (n, define) => define("(Object ?? null).prototype"),
+  opgetproto: (n, define) => define("Object.getPrototypeOf({})"),
+  opreflectgetproto: (n, define) => define("Reflect.getPrototypeOf({})!"),
+  opconstructor: (n, define) => define("({} as any).constructor.prototype"),
+  opdunder: (n, define) => define("({} as any).__proto__"),
+  opclassdunder: (n, define) => {
+    const klass = n("X");
+    return `class ${klass} {}\n${define(`(${klass}.prototype as any).__proto__`)}`;
+  },
+  opsuper: (n, define) => {
+    const klass = n("X");
+    return `class ${klass} extends Object {\n  static proto(): any {\n    return super.prototype;\n  }\n}\n${define(`${klass}.proto()`)}`;
+  },
+  opvalueofcall: (n, define) => {
+    const valueOf = n("v");
+    const proto = n("p");
+    return `const ${valueOf} = Object.prototype.valueOf;\nconst ${proto} = ${valueOf}.call(({} as any).__proto__);\n${define(proto)}`;
+  },
+  optop: (n, define) => define("(top as any).Object.prototype"),
+  opparent: (n, define) => define("(parent as any).Object.prototype"),
+  opframes: (n, define) => define("(frames as any).Object.prototype"),
+  opwindowview: (n, define) => define("(window as any).document.defaultView.Object.prototype"),
+  opglobalview: (n, define) => define("(globalThis as any).document.defaultView.Object.prototype"),
+  opdocalias: (n, define) => {
+    const doc = n("d");
+    return `const ${doc}: any = document;\n${define(`${doc}.defaultView.Object.prototype`)}`;
+  },
+  opdocpattern: (n, define) => {
+    const view = n("view");
+    return `const { defaultView: ${view} }: any = document;\n${define(`${view}.Object.prototype`)}`;
+  },
+  opdoccall: (n, define) => {
+    const get = n("getDoc");
+    return `function ${get}(): any {\n  return document;\n}\n${define(`${get}().defaultView.Object.prototype`)}`;
+  },
+  opbuiltkey: (n, define) => define('({} as any)["const" + "ructor"].prototype'),
+  opbuiltconst: (n, define) => {
+    const key = n("k");
+    return `const ${key} = "const" + "ructor";\n${define(`({} as any)[${key}].prototype`)}`;
+  },
+  opbuiltproto: (n, define) => define('({} as any)["__pro" + "to__"]'),
+  opreflectbuilt: (n, define) => define('Reflect.get({}, "const" + "ructor").prototype'),
+  opparamkey: (n, define) => {
+    const pick = n("pick");
+    return `function ${pick}(k: string): any {\n  return ({} as any)[k];\n}\n${define(`${pick}(["const", "ructor"].join("")).prototype`)}`;
+  },
+  oppatternkey: (n, define) => {
+    const key = n("key");
+    const klass = n("Ctor");
+    return `const ${key} = "const" + "ructor";\nconst { [${key}]: ${klass} }: any = {};\n${define(`${klass}.prototype`)}`;
+  },
+  opforofkey: (n, define) => {
+    const klass = n("Ctor");
+    return `let ${klass}: any;\nfor (const k of ["constructor"]) {\n  ${klass} = ({} as any)[k];\n}\n${define(`${klass}.prototype`)}`;
+  },
+  opreflectalias: (n, define) => {
+    const get = n("get");
+    const key = n("k");
+    return `const ${get} = Reflect.get;\nconst ${key} = ["const", "ructor"].join("");\n${define(`${get}({}, ${key}).prototype`)}`;
+  },
+  opsinktimer: (n, define, ctx) => `${ctx.expose}setTimeout(${JSON.stringify(ctx.code)}, 0);`,
+  opsinkscript: (n, define, ctx) => {
+    const script = n("s");
+    return `${ctx.expose}const ${script} = document.createElement("script");\n${script}.textContent = ${JSON.stringify(ctx.code)};\ndocument.head.append(${script});`;
+  },
+  opsinkonerror: (n, define, ctx) => {
+    const image = n("img");
+    return `${ctx.expose}const ${image} = document.createElement("img");\n${image}.setAttribute("onerror", ${JSON.stringify(ctx.code)});\n${image}.src = "data:,x";\ndocument.body.append(${image});`;
+  },
+  opsinkonclick: (n, define, ctx) => {
+    const box = n("b");
+    return `${ctx.expose}const ${box} = document.createElement("div");\n${box}.setAttribute("onclick", ${JSON.stringify(ctx.code)});\n${box}.click();`;
+  },
+  opsinkimport: (n, define, ctx) => `${ctx.expose}await import(/* @vite-ignore */ "data:text/javascript," + encodeURIComponent(${JSON.stringify(ctx.code)}));`,
+  opsinkblob: (n, define, ctx) => {
+    const script = n("s");
+    return `${ctx.expose}const ${script} = document.createElement("script");\n${script}.src = URL.createObjectURL(new Blob([${JSON.stringify(ctx.code)}], { type: "text/javascript" }));\ndocument.head.append(${script});`;
+  },
+  opsinkhtml: (n, define, ctx) => {
+    const host = n("host");
+    return `${ctx.expose}const ${host} = document.createElement("div");\n${host}.innerHTML = \`<img src="data:," onerror="${ctx.code}">\`;\ndocument.body.append(${host});`;
+  },
+};
+/** The ways whose code runs after the read of `h` would, written with no delay: the milliseconds the read waits (an image's error, a script's load). */
+const OBJECT_PROTOTYPE_DELAYS = { opsinkonerror: 30, opsinkimport: 30, opsinkblob: 40, opsinkhtml: 30 };
+for (const [route, way] of Object.entries(OBJECT_PROTOTYPE_WAYS)) {
+  ROUTE_FRAMES[route] = (f, n) => {
+    const cb = n("cb");
+    const object = n("o");
+    const key = n("m");
+    const define = (target) => `Object.defineProperty(${target}, "h", {\n  get() {\n    ${f}(() => {\n      this.${key}();\n    });\n    return 1;\n  },\n  configurable: true,\n});`;
+    // The code a string holds reaches the runner through a global it is written to first.
+    const handle = n("rs");
+    const code = `Object.defineProperty(Object.prototype, 'h', { get() { ${handle}(() => { this.${key}(); }); return 1; }, configurable: true })`;
+    const ctx = { code, expose: `(globalThis as any).${handle} = ${f};\n` };
+    const delay = OBJECT_PROTOTYPE_DELAYS[route];
+    return { head: `const ${cb} = () => `, close: `;\nconst ${object}: any = {};\n${object}.${key} = function () {\n  ${cb}();\n};\n${way(n, define, ctx)}\nsetTimeout(() => {\n  void ${object}.h;\n}${delay ? `, ${delay}` : ""});` };
+  };
+}
+
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };

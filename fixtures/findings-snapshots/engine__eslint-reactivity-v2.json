@@ -219,11 +219,33 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-stepped-generator.tsx",
+      "start": 299,
+      "end": 343,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "generator-stepped",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-stepped-generator.tsx",
       "start": 318,
       "end": 323,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-stepped-generator.tsx",
+      "start": 506,
+      "end": 537,
       "fixes": 0
     },
     {

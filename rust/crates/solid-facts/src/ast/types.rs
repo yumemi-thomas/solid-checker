@@ -139,6 +139,32 @@ pub struct AstFacts {
     /// fact in the file and that struct is kept to two words.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reference_declarations: Vec<(Span, Span)>,
+    /// The spans of every identifier reference in a value position (not a type, not a `typeof` in a type) that no binding of the file
+    /// declares: the globals the host or the library provides (`Object`, `Reflect`, `globalThis`, `window`, `console`), in source order
+    /// (facts schema 95). A consumer that asks whether the program names a global reads this and the spelling at each span, and so
+    /// needs neither alias following nor type positions (`let a: Object` is no reference of the global).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub global_value_references: Vec<Span>,
+    /// The key of every property of an object assignment pattern (`({ a, b: c } = value)`) that is written statically: the shorthand's name and a plain key's span. A
+    /// computed key names nothing here (facts schema 95).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assignment_pattern_keys: Vec<Span>,
+    /// The places the file runs code it builds, in source order (facts schema 95): `eval`, the `Function` constructor, a `.constructor(..)` call, a timer given anything but a
+    /// proven function, a `<script>` element made at run time, an event attribute set as text, markup written as a string that is not proven inert, a load by a computed
+    /// specifier or a `data:`/`blob:` URL, and a `javascript:` URL. Code a program builds as a string is code nobody here reads: a consumer treats the file's receivers as
+    /// unreadable. Nothing is listed for a file that holds none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub code_sinks: Vec<CodeSinkFact>,
+    /// Whether the file holds a `this` or a `super` expression (facts schema 95): its code may read a member through the object a function was called on, which no
+    /// other file shows. The one answer a file of a package the build reads gives of its receivers, without a table of every use.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub uses_receiver: bool,
+    /// Every read under a computed key that nothing proves is a number, a symbol or a plain non-text value, in source order of the read (facts schema 95): a computed member
+    /// whose key is no literal (`x[k]`), a computed property of an object pattern (`{ [k]: p }`, in a declaration, a parameter or an assignment) and the key argument of
+    /// `Reflect.get(x, k)`. Each says whether the key is proven to be one of a few constant strings (`texts`) or any string (`proven` false). A key that is a number, a symbol, a
+    /// boolean, `undefined` or text containing a number is left out: no key a consumer asks about can be one of them. A key's type is no proof (an `any`, a cast, a union).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub computed_keys: Vec<ComputedKeyFact>,
     pub awaits: Vec<Span>,
     /// The subset of [`AstFacts::awaits`] proven to execute on every run of
     /// their innermost enclosing function (or of module evaluation): awaits
@@ -1710,6 +1736,71 @@ pub struct LiteralMemberKeyFact {
     pub key: CompactString,
 }
 
+/// What makes a place run code the program builds (a [`CodeSinkFact`]).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CodeSinkKind {
+    /// `eval`, or the `eval` member of anything.
+    Eval,
+    /// The `Function` constructor.
+    FunctionConstructor,
+    /// A call of a `.constructor` member: the `Function` constructor of a function value.
+    ConstructorCall,
+    /// A timer (`setTimeout`, `setInterval`, …) given anything but a proven function: a string runs as code.
+    StringTimer,
+    /// A `<script>` element made at run time, or an element of a tag the program does not name.
+    ScriptElement,
+    /// An event attribute set as text (`setAttribute("onclick", …)`, a JSX `onclick` that is no function written there), or an attribute of a name the program does not name.
+    EventAttribute,
+    /// Markup written as a string that is not proven to hold no script, event attribute or `javascript:` URL.
+    MarkupWrite,
+    /// A load by a specifier the program does not fix, or a `data:`, `blob:`, `javascript:` or network URL.
+    DynamicImport,
+    /// A string literal that is a `javascript:` URL.
+    JavascriptUrl,
+    /// A global looked up by a name the program does not fix (`window[name]`).
+    GlobalLookup,
+}
+
+/// A place a file runs code it builds as a string: see [`AstFacts::code_sinks`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeSinkFact {
+    pub at: Span,
+    pub kind: CodeSinkKind,
+}
+
+/// Where a [`ComputedKeyFact`]'s read is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ComputedKeySite {
+    /// A computed member whose key is no literal: `x[k]`. `read` is the member's span.
+    Member,
+    /// A computed property of an object pattern: `const { [k]: p } = x`, a parameter `({ [k]: p })`, an assignment `({ [k]: p } = x)`. `read` is the property's span; a
+    /// literal key (`{ ["constructor"]: c }`) is listed too, with its text.
+    Pattern,
+    /// The key argument of a call of the global `Reflect`'s `get` (`Reflect.get(x, k)`): a read of the key. `read` is the call's span.
+    ReflectGet,
+}
+
+/// A read under a computed key that nothing proves is a number, a symbol or a plain non-text value (facts schema 95).
+///
+/// What a key can be is proven from the expression alone, never from a type: a literal or a substitution-free template (its text), the numeric operators and `++`/`--` (a
+/// number), `typeof`, `!`, `void` and the comparisons (a value that is no key a consumer asks about), `+` of strings (the concatenation), a conditional or logical expression
+/// (each arm), `Symbol(...)` and the well-known symbols, and a name: a `const` is its initializer's proof, and a `let` or `var` is its initializer's and every write's, each of
+/// which must be one of these forms (a destructuring, a `for in` or `for of` target, a parameter, an import and a declaration with a pattern prove nothing).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComputedKeyFact {
+    pub read: Span,
+    pub site: ComputedKeySite,
+    /// Whether the key is proven to be one of `texts` or a value no consumer asks about; false: any string, nothing proves otherwise.
+    pub proven: bool,
+    /// The constant strings the key may be, sorted (a proven key with none is not listed).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub texts: Vec<CompactString>,
+}
+
 /// One member of an array or object literal written directly as a call
 /// argument: the property key the runtime gives it and the span of the value
 /// written there. See [`ArgumentFact::literal_members`].
@@ -2368,6 +2459,11 @@ impl AstFacts {
             module_blocks: Vec::new(),
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
+            global_value_references: Vec::new(),
+            assignment_pattern_keys: Vec::new(),
+            computed_keys: Vec::new(),
+            code_sinks: Vec::new(),
+            uses_receiver: false,
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),

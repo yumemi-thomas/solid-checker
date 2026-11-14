@@ -11,6 +11,8 @@ mod what_if_support;
 
 #[path = "accessor_provenance_process.rs"]
 mod accessor_provenance_process;
+#[path = "after_await_accounting_process.rs"]
+mod after_await_accounting_process;
 #[path = "attestation_kept_process.rs"]
 mod attestation_kept_process;
 

@@ -887,6 +887,33 @@ fn reactive_read_after_await<'a>(
     after_await::run(ctx, computations, draft);
 }
 
+/// See [`after_await::unresolved_invocation_shaped`].
+pub(crate) fn unresolved_invocation_shaped(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    after_await::unresolved_invocation_shaped(ctx, file, call)
+}
+
+/// See [`after_await::callee_declared_outside_project`].
+pub(crate) fn callee_declared_outside_project(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<bool> {
+    after_await::callee_declared_outside_project(ctx, file, call)
+}
+
+/// See [`after_await::solid_owned_call`].
+pub(crate) fn solid_owned_call(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    after_await::solid_owned_call(ctx, file, call)
+}
+
 /// SC1002 through a call: a call after the first await of a tracked async
 /// computation whose callee reads an accessor in its own body (`await load();
 /// return byUser(posts)`). The prepass above proves only a read written in the

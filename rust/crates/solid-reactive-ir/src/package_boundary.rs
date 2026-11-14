@@ -350,6 +350,8 @@ impl PackageBoundary {
             for (root, ids) in index.reviewed {
                 folded.reviewed.entry(root).or_default().extend(ids);
             }
+            folded.unseen_code.extend(index.unseen_code);
+            folded.reads_receiver.extend(index.reads_receiver);
         }
     }
 
@@ -464,6 +466,22 @@ impl PackageBoundary {
                 hash.update((facts.names.len() as u64).to_be_bytes());
                 for name in &facts.names {
                     text(hash, name);
+                }
+            }
+            // The second re-check of #232: a package whose code is not all seen. Added only where there is one, so a boundary without any keeps its digest.
+            if !index.unseen_code.is_empty() {
+                hash.update(b"package-unseen-code-v1");
+                hash.update((index.unseen_code.len() as u64).to_be_bytes());
+                for (root, why) in &index.unseen_code {
+                    text(hash, root);
+                    text(hash, why);
+                }
+            }
+            if !index.reads_receiver.is_empty() {
+                hash.update(b"package-reads-receiver-v1");
+                hash.update((index.reads_receiver.len() as u64).to_be_bytes());
+                for root in &index.reads_receiver {
+                    text(hash, root);
                 }
             }
         }

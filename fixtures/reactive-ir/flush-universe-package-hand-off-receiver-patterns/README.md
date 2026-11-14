@@ -1,0 +1,9 @@
+# flush-universe-package-hand-off-receiver-patterns
+
+**Claim (the review of #232, B3 and B4; ADR 0967 amended).** A parameter that is a pattern or a rest is no name for the receiver: `function f({ m }) { m.call(null); }` called as `f(this)` reads the key `m` where `f` runs (and the value it binds is called through `call`), a pattern alone runs a getter of the receiver (`{ m }`), an array pattern runs its iterator (`[a]`), and a rest parameter is an array that holds the receiver (`xs[0].m()`, or passed on). The reads the pattern makes (every key, where the function runs) are recorded as such, and a function stored in a holder that may be a receiver is handed whatever key it is stored under. `Object.assign(this, …)` writes every key of its sources through `[[Set]]`, which runs a setter of the receiver, own or inherited: it is a write of any key where the call is written, not a call that reads nothing of its target. Each site keeps its three uncertifiable rows (SC2006, SC2008, SC3001): never silence, never a violation. Chrome (rc.21) reports FLUSH_IN_ACTION at each; the head the review read certified them with no finding (`scripts/fuzz/patterns/pkghand/param-*-step`, `assign-this-step`).
+
+**The cases.** `patternCall`, `patternGetter`, `patternArray`, `restParam`, `restPass`, `assignThis`.
+
+**Twins, silent.** A plain `const` literal whose every use keeps it plain is no receiver, whatever the program's receivers read (the reads here are of every key): `twinPlain`, `twinNested` (a nested literal read as a value nothing takes), `twinLeaf` (given to a function whose pattern names a key no object is held under). The twin of a pattern parameter that nothing hands a package is in `flush-universe-package-hand-off-receiver-reads-twins`.
+
+Published bytes: `node_modules/steplib` is synthetic; `@solidjs/web/types/index.d.ts` is the same excerpt. `.solid-checker/runtime.json` closes the program boundary.

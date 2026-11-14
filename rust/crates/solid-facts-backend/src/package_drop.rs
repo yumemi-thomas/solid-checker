@@ -62,6 +62,15 @@ impl DropReport {
     }
 }
 
+/// ADR 0973: the SC1002 accounting's placeholder at a site (`read-after-await-unaccounted`): a row of the rule that holds the site until a better one stands. It is no
+/// "finding of the rule already at the site" for [`hand_off`]: a package finding handed to that site stands beside it, as the entry rows stood before the accounting
+/// (the placeholder displaced none, and nothing is dropped here).
+fn is_unaccounted_placeholder(finding: &Finding) -> bool {
+    finding.id == "SC1002"
+        && finding.kind == "uncertifiable"
+        && finding.analysis_context == solid_reactive_ir::READ_AFTER_AWAIT_UNACCOUNTED
+}
+
 /// Whether `id` is a style rule's code (SC80xx: duplicate props, prefer-for, prefer-show): the premise
 /// `package-style-not-project` applies to a finding of it that sits in a package.
 fn is_style_rule(id: &str) -> bool {
@@ -109,6 +118,7 @@ pub(crate) fn hand_off(
     // the call walk or the read transport attributed there.
     let mut standing = kept
         .iter()
+        .filter(|finding| !is_unaccounted_placeholder(finding))
         .map(|finding| finding_key(finding, &finding.primary_location))
         .collect::<BTreeSet<_>>();
     let entries = entries_by_path(program);
@@ -486,6 +496,59 @@ mod tests {
         assert!(report.every_drop_attributed());
         assert_eq!(findings.len(), 1, "the violation stands; nothing beside it");
         assert_eq!(findings[0].kind, "violation");
+    }
+
+    fn placeholder(location: Location) -> Finding {
+        let mut row = finding("SC1002", "uncertifiable", location);
+        row.analysis_context = solid_reactive_ir::READ_AFTER_AWAIT_UNACCOUNTED.into();
+        row
+    }
+
+    #[test]
+    fn the_after_await_placeholder_is_no_row_of_the_rule_at_the_entry_site() {
+        // The accounting wrote a placeholder at the project call that enters the package function holding an SC1002 finding: the entry row stands beside it (the
+        // placeholder is not the site's own row), and a placeholder at a site no package finding is handed to stays alone.
+        let mut findings = vec![
+            finding(
+                "SC1002",
+                "uncertifiable",
+                at("/p/node_modules/pkg/index.js", 10, 20),
+            ),
+            placeholder(at("/p/App.tsx", 100, 105)),
+            placeholder(at("/p/App.tsx", 300, 305)),
+        ];
+        let entries = vec![PackageEntries {
+            function: at("/p/node_modules/pkg/index.js", 0, 40),
+            sites: vec![PackageEntrySite {
+                location: at("/p/App.tsx", 100, 110),
+                kind: DependencyEntry::Call,
+            }],
+        }];
+        let report = hand_off(
+            &mut findings,
+            &facts(),
+            &program(entries, Vec::new()),
+            false,
+        );
+        assert!(report.every_drop_attributed());
+        let rows = findings
+            .iter()
+            .map(|finding| {
+                (
+                    finding.primary_location.start_byte,
+                    finding.analysis_context.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            vec![
+                (100, solid_reactive_ir::READ_AFTER_AWAIT_UNACCOUNTED),
+                (300, solid_reactive_ir::READ_AFTER_AWAIT_UNACCOUNTED),
+                (100, "package-finding-at-entry:SC1002")
+            ],
+            "{findings:?}"
+        );
     }
 
     #[test]

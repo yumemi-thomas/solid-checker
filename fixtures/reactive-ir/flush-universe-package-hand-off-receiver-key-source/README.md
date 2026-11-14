@@ -1,0 +1,5 @@
+# flush-universe-package-hand-off-receiver-key-source
+
+**Claim (the review of #229, S2; ADR 0643, ADR 0967 amended).** Whether a write through a key the program does not name may install a prototype is asked of the text of every file of the program, as the stores under a read key are: `dep-keys` (read as dependency source: `.solid-checker/runtime.json` names it) spells `"__proto__"` and exports it as `PROTO`, so `sourceKeyTarget[PROTO] = sourceKeyBase` is a possible install, and the getter of the base that flushes keeps its three uncertifiable rows (SC2006, SC2008, SC3001). The scan skipped files analyzed as dependency source: the key this package exports was a key no file of the project spells, and the write was not handed. Chrome (rc.21) is quiet where the getter is read in a timer (the key is `__proto__`, the getter runs in the timer's stack): the answer is a net's, uncertifiable, never a violation.
+
+Published bytes: `node_modules/dep-keys` is synthetic (a package whose source holds one export); `.solid-checker/runtime.json` closes the program boundary and names it as dependency source.

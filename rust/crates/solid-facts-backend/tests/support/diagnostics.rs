@@ -9,12 +9,20 @@ fn decode_findings(output: &[u8]) -> Vec<serde_json::Value> {
 }
 
 pub fn diagnostic_fixture(name: &str) -> Option<Vec<serde_json::Value>> {
+    diagnostic_fixture_with(name, &[])
+}
+
+/// [`diagnostic_fixture`] with the options a fixture's `.solid-checker/runtime.json` selects (`--dependency-source`, the runtime target and build), which the CLI does not read.
+#[allow(dead_code)] // the test binaries that include this module and take no option leave it unused
+pub fn diagnostic_fixture_with(name: &str, options: &[&str]) -> Option<Vec<serde_json::Value>> {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").ok()?;
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let project = root.join(format!("fixtures/reactive-ir/{name}/tsconfig.json"));
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", typefacts)
-        .args(["--format", "json", "--project"])
+        .args(["--format", "json"])
+        .args(options)
+        .arg("--project")
         .arg(project)
         .output()
         .expect("run Rust diagnostic CLI");
