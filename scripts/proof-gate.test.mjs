@@ -44,6 +44,98 @@ describe("C2(c): a package finding the dependency-source drop discarded stands a
   });
 });
 
+describe("C4: a site ended by a finding the report no longer holds (ADR 0982)", () => {
+  const STORE = "STORE_WRITE_OUTSIDE_SETTER";
+  const RULE = "no-store-mutation-outside-setter";
+  // A store-write site a violation of the claiming rule ended (`by: rule:<R>`); the accounting decided it before the passes that may drop that violation.
+  const ended = (s, extra = {}) => site(s, { t: "store-write", code: STORE, end: "violation", detail: "SC2003", by: `rule:${RULE}`, credited: true, ...extra });
+  const dropped = (s, pass, extra = {}) => drop(s, { code: "SC2003", rule: RULE, pass, premises: [], ...extra });
+  const standing = (s, extra = {}) => verdict(s, { code: "SC2003", rule: RULE, kind: "uncertifiable", ...extra });
+
+  test("(i) an SC2003 violation that SupersededByViolation drops, with nothing left, is a hit", () => {
+    const lines = [ended(10), dropped(10, "SupersededByViolation", { premises: [{ kind: "ViolationAtSite", at: [10, 13] }] })];
+    assert.deepEqual(kinds(lines), ["C4/ended-by-dropped-finding"]);
+    const [hit] = proofHits(lines);
+    assert.deepEqual(hit.detail, { code: STORE, rule: RULE, pass: "SupersededByViolation", spans: ["10:13"] });
+    // Another violation standing at the span that does not credit the code leaves it a hit: the verdict must answer THIS code.
+    assert.deepEqual(kinds([...lines, verdict(10, { code: "SC5001", rule: "pending-async-unsuspendable-read", kind: "violation" })]), ["C4/ended-by-dropped-finding"]);
+    // A rule that is not the claiming one never credits by its spelling.
+    assert.deepEqual(kinds([...lines, verdict(10, { code: "SC2003", rule: `${RULE}-x`, kind: "violation" })]), ["C4/ended-by-dropped-finding"]);
+  });
+
+  test("(ii) the same with the claiming rule's obligation left standing is clean", () => {
+    const lines = [ended(10), dropped(10, "SupersededByViolation"), standing(10)];
+    assert.deepEqual(kinds(lines), []);
+    assert.deepEqual(kinds([ended(10), standing(10, { kind: "violation" })]), []);
+    // No drop line at all, and nothing standing: a hit with no pass.
+    const bare = proofHits([ended(10)]);
+    assert.deepEqual(bare.map((hit) => `${hit.check}/${hit.kind}`), ["C4/ended-by-dropped-finding"]);
+    assert.equal(bare[0].detail.pass, null);
+  });
+
+  test("(iii) an ExecutionPaths drop with its typed premise is accepted; without it, or another pass, it is not", () => {
+    assert.deepEqual(kinds([ended(10), dropped(10, "ExecutionPaths", { premises: [{ kind: "ClientRuntimeReach", at: [10, 13] }] })]), []);
+    assert.deepEqual(kinds([ended(10), dropped(10, "ExecutionPaths")]), ["C4/ended-by-dropped-finding"]);
+    assert.deepEqual(kinds([ended(10), dropped(10, "ExecutionPaths", { premises: [{ kind: "ClientRuntimeReach" }] })]), ["C4/ended-by-dropped-finding"]);
+    for (const [pass, premise] of [["AbsentProp", "SiteReachAbsentProp"], ["RuleDisabled", "UserRuleOption"], ["HostSuppression", "SuppressionComment"]]) {
+      assert.deepEqual(kinds([ended(10), dropped(10, pass, { premises: [{ kind: premise, at: [10, 13] }] })]), [], pass);
+      assert.deepEqual(kinds([ended(10), dropped(10, pass)]), ["C4/ended-by-dropped-finding"], pass);
+    }
+    for (const pass of ["InstanceField", "UndecidedComponent", "SiteUnreached", "RuntimeConfiguration", "EqualFinding", "CompilerRefusedFile"]) {
+      assert.deepEqual(kinds([ended(10), dropped(10, pass, { premises: [{ kind: "Anything", at: [10, 13] }] })]), ["C4/ended-by-dropped-finding"], pass);
+    }
+    // The last drop decides: an accepted pass followed by an unaccepted one is a hit.
+    assert.deepEqual(
+      kinds([ended(10), dropped(10, "AbsentProp", { premises: [{ kind: "SiteReachAbsentProp", at: [10, 13] }] }), dropped(10, "EqualFinding", { premises: [{ kind: "EqualFinding", at: [10, 13] }] })]),
+      ["C4/ended-by-dropped-finding"],
+    );
+  });
+
+  test("(iv) PackageStyleNotProject on a non-style code is a hit, and a drop of another rule's finding is no account", () => {
+    const style = dropped(10, "PackageStyleNotProject", { premises: [{ kind: "DependencySourceRoot", at: [10, 13] }, { kind: "PackageStyleNotProject", at: [10, 13] }] });
+    assert.deepEqual(kinds([ended(10), style]), ["C4/ended-by-dropped-finding"]);
+    assert.deepEqual(kinds([ended(10), dropped(10, "AbsentProp", { rule: "another-rule", premises: [{ kind: "SiteReachAbsentProp", at: [10, 13] }] })]), ["C4/ended-by-dropped-finding"]);
+    // A log written before the drop line carried its rule has none: fail closed.
+    assert.deepEqual(kinds([ended(10), dropped(10, "AbsentProp", { rule: undefined, premises: [{ kind: "SiteReachAbsentProp", at: [10, 13] }] })]), ["C4/ended-by-dropped-finding"]);
+  });
+
+  test("(v) the ending, the standing verdict and the drop are matched by the site's exact spans: its own and each `alt`, never a nearby one", () => {
+    const alt = ended(10, { alt: [[20, 23]] });
+    assert.deepEqual(kinds([alt, standing(20)]), []);
+    assert.deepEqual(kinds([alt, standing(11)]), ["C4/ended-by-dropped-finding"]);
+    assert.deepEqual(kinds([alt, dropped(20, "AbsentProp", { premises: [{ kind: "SiteReachAbsentProp", at: [20, 23] }] })]), []);
+    assert.deepEqual(kinds([alt, dropped(30, "AbsentProp", { premises: [{ kind: "SiteReachAbsentProp", at: [30, 33] }] })]), ["C4/ended-by-dropped-finding"]);
+    // A `none` line is another check's: an ending that does not credit the code is never C4.
+    assert.deepEqual(kinds([site(10, { t: "store-write", code: STORE, end: "none", by: `rule:${RULE}`, credited: false }), decision(10)]).filter((kind) => kind.startsWith("C4")), []);
+  });
+
+  test("DependencySource accepts only with its attributed line; OwnedByEnabledRule only with a PendingThrowsFirst the final list confirms", () => {
+    const source = dropped(10, "DependencySource", { from: "uncertifiable", premises: [{ kind: "DependencySourceRoot", at: [10, 13] }] });
+    assert.deepEqual(kinds([ended(10), source, attributed(10, [["/p/App.tsx", 100, 110]], { code: "SC2003" })]), []);
+    // C2(c) fails the drop with no attribution too; the site's own check fails it as well.
+    assert.deepEqual(kinds([ended(10), source]).sort(), ["C2/package-drop-unattributed", "C4/ended-by-dropped-finding"]);
+    const READ = "STRICT_READ_UNTRACKED";
+    const strict = (s, extra = {}) => site(s, { t: "read", code: READ, end: "violation", detail: "SC1001", by: "rule:strict-read-untracked", credited: true, ...extra });
+    const owned = (s, extra = {}) => drop(s, { code: "SC1001", rule: "strict-read-untracked", pass: "OwnedByEnabledRule", premises: [{ kind: "OwningFindingAtSite", at: [s, s + 3] }, { kind: "PendingThrowsFirst", at: [s, s + 3] }], ...extra });
+    const owner = (s, extra = {}) => verdict(s, { code: "SC5001", rule: "pending-async-unsuspendable-read", kind: "violation", ...extra });
+    assert.deepEqual(kinds([strict(10), owned(10), owner(10)]), []);
+    // The premise is claimed and the list refutes it (an open SC5001, or none): the site's check fails, never accepted.
+    assert.deepEqual(kinds([strict(10), owned(10), owner(10, { kind: "uncertifiable" })]), ["C4/ended-by-dropped-finding"]);
+    assert.deepEqual(kinds([strict(10), owned(10)]), ["C4/ended-by-dropped-finding"]);
+    // Without the premise the pass is no account.
+    assert.deepEqual(kinds([strict(10), owned(10, { premises: [{ kind: "OwningFindingAtSite", at: [10, 13] }] }), owner(10)]), ["C4/ended-by-dropped-finding"]);
+    // A crediting owner at the span (the handler or the return-shape condition) leaves the site standing.
+    assert.deepEqual(kinds([strict(10), owned(10, { premises: [{ kind: "OwningFindingAtSite", at: [10, 13] }] }), verdict(10, { code: "SC1007", rule: "reactive-handler-frozen", kind: "violation" })]), []);
+  });
+
+  test("C4 is never an accepted gap", () => {
+    const hit = proofHits([ended(10), dropped(10, "EqualFinding")])[0];
+    const key = hitKey("fx", "App.tsx", hit);
+    const problems = gapProblems(new Map([[key, hit]]), { [key]: { check: "C4", why: "an accepted gap states the fact that makes the silence sound, never a C4" } });
+    assert.ok(problems.some((problem) => problem.kind === "invalid"));
+  });
+});
+
 describe("a site has one line per Chrome code (batch 11, slice 4): the checks are asked of each (site, code)", () => {
   const OPTIMISTIC = "OPTIMISTIC_WRITE_BEFORE_LOAD";
   const WRITE = "REACTIVE_WRITE_IN_OWNED_SCOPE";

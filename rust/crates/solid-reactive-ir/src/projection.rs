@@ -1373,7 +1373,21 @@ pub fn suppress_findings_owned_by_enabled_rules(
             })
     });
     if let Some(stage) = stage {
-        stage.end(crate::DropPass::OwnedByEnabledRule, findings);
+        // ADR 0982: a strict read an SC5001 *violation* owns is dropped because the run throws before it would warn; the log says so (`PendingThrowsFirst`), and the proof gate
+        // confirms it from the final list. An open SC5001 owns the read as well, and names no such fact.
+        stage.end_with(
+            crate::DropPass::OwnedByEnabledRule,
+            findings,
+            |path, start, end| {
+                let exact = (path, start, end);
+                pending_reads
+                    .iter()
+                    .any(|((owner_path, owner_start, owner_end), open)| {
+                        !open && (owner_path.as_ref(), *owner_start, *owner_end) == exact
+                    })
+                    .then_some(crate::proof_log::PremiseKind::PendingThrowsFirst)
+            },
+        );
     }
 }
 

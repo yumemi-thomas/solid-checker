@@ -318,6 +318,10 @@ pub(crate) enum PremiseKind {
     /// the claim (SC2001, ADR 0932). Unknown or `ownedWrite: true` never
     /// carry it. The span is the setter call, where the violation stands.
     SetterGuardThrowsFirst,
+    /// The strict read the dropped finding is about is a pending async read, and the SC5001 violation that owns it stands at the same span: the run throws before it would warn
+    /// (`suppress_findings_owned_by_enabled_rules`, ADR 0511). The proof gate confirms it from the final list (an SC5001 violation at the span), as it does for
+    /// `SetterGuardThrowsFirst` (ADR 0982): SC5001 does not credit the strict-read code, so this premise is what lets the drop end the site.
+    PendingThrowsFirst,
     /// The site is in a function that returns JSX and is also handed to code
     /// that may call it as a plain function.
     UndecidedComponent,
@@ -604,6 +608,8 @@ impl DropPass {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct StageEntry {
     code: String,
+    /// The rule that reports the finding (ADR 0982: the proof gate asks whether a stage's removal of a finding left a crediting one standing, and a finding's rule is what credits).
+    rule: String,
     kind: String,
     context: String,
     path: String,
@@ -615,6 +621,7 @@ impl StageEntry {
     fn of(finding: &Finding) -> Self {
         Self {
             code: finding.id.clone(),
+            rule: finding.rule.clone(),
             kind: finding.kind.clone(),
             context: finding.analysis_context.clone(),
             path: finding.primary_location.path.to_string(),
@@ -685,13 +692,25 @@ impl ProofStage {
     /// Writes a `drop` line for each finding of `begin` that is not in
     /// `findings`, a `reclass` line for each that changed kind.
     pub fn end(self, pass: DropPass, findings: &[Finding]) {
+        self.end_with(pass, findings, |_, _, _| None);
+    }
+
+    /// [`Self::end`] for a pass whose removal of some finding rests on one more typed fact: `extra` is asked of each moved finding's path and span, and the premise kind it
+    /// answers is written beside the pass's own (ADR 0982: `OwnedByEnabledRule` and `PendingThrowsFirst`).
+    pub(crate) fn end_with(
+        self,
+        pass: DropPass,
+        findings: &[Finding],
+        extra: impl Fn(&str, u64, u64) -> Option<PremiseKind>,
+    ) {
         let after = findings.iter().map(StageEntry::of).collect::<Vec<_>>();
         for (index, change) in changes(&self.before, &after) {
             let entry = &self.before[index];
+            let more = extra(&entry.path, entry.start, entry.end);
             emit(
                 &entry.path,
                 Some((entry.start, entry.end)),
-                stage_fields(pass, entry, &change),
+                stage_fields(pass, entry, &change, more.as_slice()),
             );
         }
     }
@@ -784,7 +803,12 @@ impl RowStage {
     }
 }
 
-fn stage_fields(pass: DropPass, entry: &StageEntry, change: &Change) -> Fields {
+fn stage_fields(
+    pass: DropPass,
+    entry: &StageEntry,
+    change: &Change,
+    extra: &[PremiseKind],
+) -> Fields {
     let at = u32::try_from(entry.start)
         .ok()
         .zip(u32::try_from(entry.end).ok())
@@ -792,10 +816,12 @@ fn stage_fields(pass: DropPass, entry: &StageEntry, change: &Change) -> Fields {
     let premises = pass
         .premise_kinds()
         .iter()
+        .chain(extra)
         .map(|kind| Premise::at(*kind, at))
         .collect::<Vec<_>>();
     let mut fields = object(json!({
         "code": entry.code,
+        "rule": entry.rule,
         "from": entry.kind,
         "ctx": entry.context,
         "pass": pass.name(),
@@ -1140,6 +1166,7 @@ mod tests {
     fn entry(code: &str, kind: &str, start: u64) -> StageEntry {
         StageEntry {
             code: code.to_owned(),
+            rule: String::new(),
             kind: kind.to_owned(),
             context: String::new(),
             path: "/p/App.tsx".to_owned(),
@@ -1190,7 +1217,7 @@ mod tests {
     #[test]
     fn a_drop_line_names_its_proof_and_the_facts_it_rests_on() {
         let moved = entry("SC1001", "violation", 10);
-        let fields = stage_fields(DropPass::AbsentProp, &moved, &Change::Dropped);
+        let fields = stage_fields(DropPass::AbsentProp, &moved, &Change::Dropped, &[]);
         let value = Value::Object(fields);
         assert_eq!(value["k"], "drop");
         assert_eq!(value["pass"], "AbsentProp");
@@ -1198,6 +1225,23 @@ mod tests {
         assert_eq!(value["from"], "violation");
         assert_eq!(value["premises"][0]["kind"], "SiteReachAbsentProp");
         assert_eq!(value["premises"][0]["at"], json!([10, 13]));
+    }
+
+    #[test]
+    fn a_drop_line_names_the_rule_and_an_extra_typed_fact() {
+        let mut moved = entry("SC1001", "violation", 10);
+        moved.rule = "strict-read-untracked".to_owned();
+        let fields = stage_fields(
+            DropPass::OwnedByEnabledRule,
+            &moved,
+            &Change::Dropped,
+            &[PremiseKind::PendingThrowsFirst],
+        );
+        let value = Value::Object(fields);
+        assert_eq!(value["rule"], "strict-read-untracked");
+        assert_eq!(value["premises"][0]["kind"], "OwningFindingAtSite");
+        assert_eq!(value["premises"][1]["kind"], "PendingThrowsFirst");
+        assert_eq!(value["premises"][1]["at"], json!([10, 13]));
     }
 
     #[test]
@@ -1209,6 +1253,7 @@ mod tests {
             &Change::Reclassified {
                 to: "uncertifiable".to_owned(),
             },
+            &[],
         );
         let value = Value::Object(fields);
         assert_eq!(value["k"], "reclass");

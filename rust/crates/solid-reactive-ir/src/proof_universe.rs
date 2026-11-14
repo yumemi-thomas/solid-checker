@@ -727,6 +727,9 @@ pub(crate) struct Ending<'p> {
 pub(crate) struct End<'p> {
     pub(crate) credited: Option<Ending<'p>>,
     pub(crate) uncredited: Option<Ending<'p>>,
+    /// The span of the chain finding that ended a store write (a finding that starts inside the site's span and ends where it ends), for the log: the proof gate matches the
+    /// ending's finding by exact span, so the site line names it as an alternate (ADR 0982).
+    pub(crate) chain_at: Option<(u64, u64)>,
 }
 
 /// The final program's rows, census obligations, defects and violations by file and byte span: every ending standing at each, with what it is.
@@ -892,6 +895,7 @@ impl<'p> Endings<'p> {
         let mut found = End {
             credited: None,
             uncredited: None,
+            chain_at: None,
         };
         // The held ending is kept unless the new one is strictly stronger (an empty slot is filled below).
         let stronger = |slot: &Option<Ending<'p>>, ending: &Ending<'p>| {
@@ -921,7 +925,7 @@ impl<'p> Endings<'p> {
         // A store write is reported from the chain's root through its wrappers:
         // a finding that ends where the chain-end member ends and starts inside it.
         if site.table == "store-write"
-            && let Some((_, _, ending)) =
+            && let Some((start, end, ending)) =
                 self.mutations
                     .get(path)
                     .into_iter()
@@ -933,6 +937,7 @@ impl<'p> Endings<'p> {
                     })
         {
             found.credited = Some(*ending);
+            found.chain_at = Some((*start, *end));
             return found;
         }
         if crate::execution_role::discarded_region_contains(file, site.at) {
@@ -1216,13 +1221,21 @@ pub(crate) fn log_site(file: &FileFacts, site: &Site, code: SiteCode, end: &End<
         (Some(ending), _) => (ending.class.name(), Some(ending), true),
         (None, other) => ("none", other.as_ref(), false),
     };
+    // The chain finding that ended a store write stands at a span of its own (inside the site's); it is named here, so the gate reads the verdict by exact span.
+    let mut alternates = site.alternates.clone();
+    if let Some((start, end)) = end.chain_at
+        && let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(end))
+        && !alternates.contains(&Span::new(start, end))
+    {
+        alternates.push(Span::new(start, end));
+    }
     proof_log::site(&SiteRecord {
         table: site.table,
         source: site.source,
         via: site.via,
         code: code.name(),
         location: &site.at.location(file.path.shared()),
-        alternates: &site.alternates,
+        alternates: &alternates,
         end: class,
         detail: &ending.map_or_else(String::new, |ending| ending.detail.text()),
         by: &ending.map_or_else(String::new, |ending| ending.by.text()),
