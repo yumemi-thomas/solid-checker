@@ -160,6 +160,16 @@ describe("classify: the checker is quiet, uncertifiable or failed", () => {
       expect(placeless([]).items.map((item) => item.kind)).not.toContain("candidate-false-clean");
       expect(placeless([violation("no-write-in-pure-computation", 8)]).items.map((item) => item.kind)).not.toContain("candidate-false-clean");
     });
+    // ADR 0979: the code accounts for as many violation sites as the run raised diagnostics of it.
+    it("accounts for one violation per diagnostic raised, not every violation of the file", () => {
+      const rule = "async-outside-loading-boundary";
+      const counted = { ...sites[0], hit: "h1" };
+      const other = { ...sites[1], hit: "h2" };
+      const run = (hits) => classify({ sites: [counted, other], checker: checker([violation(rule, 8, 8, "SC5003"), violation(rule, 20, 20, "SC5003")]), runtime: runtime({ diagnostics: [diag("ASYNC_OUTSIDE_LOADING_BOUNDARY", 99)], hits }), plan });
+      expect(run({ h1: 1, h2: 1 }).items.map((item) => item.kind)).toEqual(["candidate-false-positive", "candidate-false-positive"]);
+      // A site the ledger shows never ran is not counted: the other violation is the one diagnostic's.
+      expect(run({ h1: 1, h2: 0 }).items.map((item) => item.kind)).toEqual(["agree", "agree"]);
+    });
     it("leaves a code reported at its call to the line", () => {
       const result = classify({ sites, checker: checker([uncertifiable("reactive-dispatch-unresolved", 8)]), runtime: runtime({ diagnostics: [diag("STRICT_READ_UNTRACKED", 3)] }), plan });
       expect(result.verdict).toBe("candidate-false-clean");

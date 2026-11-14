@@ -28,6 +28,7 @@ import { assertFindingsMapped } from "./checker.mjs";
 import { disturbances, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
 import { codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
+import { accountViolations } from "./site-judge.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
@@ -103,7 +104,16 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   }
   if (disturbed.length) return { outcome: "disturbed", detail: { ...detail, why: disturbed[0] } };
   // A violation of a rule the runtime can contradict, none of whose codes the runtime reports anywhere.
-  const contradicted = atSite.filter((finding) => ruleHasRuntimeCounterpart(finding.rule) && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
+  // ADR 0979: a violation at the site is accounted for by a diagnostic at that site (site-judge.mjs), not by a code of its rule reported anywhere in the
+  // file: the code reported at another line used to excuse it. A placeless code accounts for as many sites as the run raised diagnostics of it.
+  const asSite = (finding) => ({ rule: finding.rule, line: finding.line, endLine: finding.endLine, column: finding.column, finding });
+  const loose = new Set(accountViolations({
+    violations: atSite.filter((finding) => ruleHasRuntimeCounterpart(finding.rule)).map(asSite),
+    diagnostics: events.map((event) => ({ code: event.code, frames: event.positions })),
+    ran: (violation) => (hitCount(runtime.hits ?? null, site.hit) === 0 && inLines(violation.finding, region) ? false : null),
+    alsoCounted: violations.filter((finding) => !atSite.includes(finding)).map(asSite),
+  }).filter((row) => row.verdict === "unaccounted").map((row) => row.violation.finding));
+  const contradicted = atSite.filter((finding) => loose.has(finding));
   if (!contradicted.length) return { outcome: "uncertifiable", detail: { ...detail, why: "a violation whose rule no runtime code contradicts, or whose code the runtime reports" } };
   const ran = hitCount(runtime.hits ?? null, site.hit);
   if (ran === null) return { outcome: "disturbed", detail: { ...detail, why: "no hit ledger" } };
@@ -159,7 +169,8 @@ function withOffSite(verdict, uses, { built, program, checker, runtime, plan }) 
   if (!checker?.ok || !runtime || !["clean", "uncertifiable", "unexecuted", "false-positive"].includes(verdict.outcome)) return verdict;
   const regions = uses.map(regionOf);
   const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !regions.some((region) => inLines(finding, region)));
-  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: plan ?? built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
+  const siteFindings = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !offSite.includes(finding));
+  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: plan ?? built.plan, siteFindings }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
   if (!judged.length) return verdict;
   const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.first ? `<${row.first}` : ""}${row.why ? `(${row.why})` : ""}`) };
   // A stacked violation (classify.mjs, stacked.mjs): a false positive unless its pair is proved, then a `stacked-claim`.

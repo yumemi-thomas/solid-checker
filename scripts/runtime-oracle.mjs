@@ -67,6 +67,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NODE } from "./lib/node-runtime.mjs";
+import { placelessExcess, siteKey } from "./fuzz/site-judge.mjs";
 import { recommendedConcurrency } from "./lib/pool.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -762,8 +763,8 @@ async function runCase(id, slot) {
   });
   // Each diagnostic's positions (its site, then its application frames) and the rules its code claims.
   const framed = [];
-  const diagnostics = [...(report.execution?.diagnostics ?? []), ...thrown]
-    .filter((row) => caseFile(row.site?.location?.path))
+  const raised = [...(report.execution?.diagnostics ?? []), ...thrown].filter((row) => caseFile(row.site?.location?.path));
+  const diagnostics = raised
     // The two event passes repeat a diagnostic; one row per code and site.
     .filter((row) => {
       const key = `${row.code} ${row.site.location.path}:${row.site.line}:${row.site.column}`;
@@ -800,11 +801,16 @@ async function runCase(id, slot) {
     });
   // A violation no diagnostic covers: not at a diagnostic's line, nor at a frame of a diagnostic whose code claims its rule
   // (the runtime attributes a read to the call that led to it, and the read's line is a frame).
+  // ADR 0979: a violation of a code judged by file (`fileJudgedCodes`) is accounted for by the file's diagnostics of it only as far as they go: more
+  // violation sites than diagnostics the run raised of the code (not merged by site) leaves each of them uncovered (site-judge.mjs `placelessExcess`).
+  const excess = placelessExcess(findings.filter((finding) => finding.kind === "violation").map((finding) => ({ rule: finding.rule, file: finding.file, line: finding.line, column: finding.column, finding })),
+    raised.map((row) => ({ code: row.code, file: caseFile(row.site.location.path) })), { only: fileJudgedCodes });
+  const outnumbered = (finding) => fileJudgedCodes.some((code) => excess.get(`${code}|${finding.file}`)?.keys.has(siteKey({ file: finding.file, line: finding.line, column: finding.column })));
   const uncovered = findings.filter((finding) => finding.kind === "violation"
     && !["prefer-show", "prefer-for"].includes(finding.rule)
     && !diagnostics.some((row) => row.file === finding.file && finding.line <= row.line && row.line <= finding.endLine)
     && !framed.some(({ rules, positions, wholeFile }) => rules.includes(finding.rule)
-      && (wholeFile === finding.file
+      && ((wholeFile === finding.file && !outnumbered(finding))
         || positions.some((position) => position.file === finding.file && finding.line <= position.line && position.line <= finding.endLine))));
   const failure = report.failure?.message ?? report.execution?.failure?.message ?? null;
   const typingErrors = report.typingErrorCount ?? null;

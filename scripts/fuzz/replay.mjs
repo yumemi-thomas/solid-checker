@@ -27,6 +27,7 @@ import { chromeCacheFor } from "./cache.mjs";
 import { runChrome } from "./chrome.mjs";
 import { projectModules, siteVerdicts } from "./checker.mjs";
 import { runtimeEvents } from "./classify.mjs";
+import { accountViolations, runtimeDiagnosticRows } from "./site-judge.mjs";
 import { appStack, codeRules, codesForRule, coversCodeAt, withheldAtStack, ignoredRules, isDefectCode, ruleHasRuntimeCounterpart } from "./codes.mjs";
 import { buildCase, writeCase } from "./emit.mjs";
 import { classifyDivergence, compareVariant, judge, judgeDivergence, siteMap, siteSummary } from "./equivalence.mjs";
@@ -236,8 +237,13 @@ export function judgeWithChrome(row, records) {
     });
     // A violation of a rule a runtime diagnostic can contradict, where Chrome reports no defect of its codes on its lines: a candidate
     // false positive. A bare text has no witness, so nothing shows the site ran: it is for a person to read, never confirmed here.
-    const unmatched = input.findings.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule)
-      && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
+    // ADR 0979: a violation no diagnostic accounts for at its site (site-judge.mjs), not one of whose rule's codes Chrome reported nowhere.
+    const candidates = input.findings.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule));
+    const accounted = new Set(accountViolations({
+      violations: candidates.map((finding) => ({ rule: finding.rule, line: finding.line, endLine: finding.endLine, column: finding.column, finding })),
+      diagnostics: runtimeDiagnosticRows(events, record.runtime),
+    }).filter((row) => row.verdict !== "unaccounted").map((row) => row.violation.finding));
+    const unmatched = candidates.filter((finding) => !accounted.has(finding));
     const claimed = judged.filter((entry) => entry.status !== "unclaimed");
     const base = !judged.length ? (record.runtime.failure ? "chrome-inconclusive" : "no-defect") : !claimed.length ? "unclaimed"
       : claimed.every((entry) => entry.status === "agree") ? "agree" : claimed.some((entry) => entry.status === "false-clean") ? "false-clean" : "recall-gap";

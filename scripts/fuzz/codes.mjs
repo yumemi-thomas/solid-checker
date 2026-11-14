@@ -171,6 +171,7 @@ export const sameDefectFamily = (a, b) => defectFamilies.some((family) => family
  * flush too (ADR 0517). `SETTLED_CLEANUP_UNOWNED` is reported by the one-shot's `fire` after the callback returned: 642 of 642 smoke rows
  * that fired it had no authored position (ADR 0815).
  */
+// Recall judges only: a violation no diagnostic accounts for is judged by site-judge.mjs (ADR 0979), which counts these codes' diagnostics and, for LOADING_ON_ACCESSOR, whose Chrome stack does hold the `<Loading>` element's frame, matches frames.
 export const placelessCodes = ["ASYNC_OUTSIDE_LOADING_BOUNDARY", "LOADING_ON_OUTSIDE_HOLD", "LOADING_ON_ACCESSOR", "CAUGHT_REACTIVE_READ", "SETTLED_CLEANUP_UNOWNED"];
 export const isPlacelessCode = (code) => placelessCodes.includes(code);
 
