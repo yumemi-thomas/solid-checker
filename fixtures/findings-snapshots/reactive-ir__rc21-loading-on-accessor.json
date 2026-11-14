@@ -720,6 +720,17 @@
       "fixes": 0
     },
     {
+      "rule": "loading-on-outside-hold",
+      "code": "SC5006",
+      "kind": "uncertifiable",
+      "blocker": "loading-hold-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2814,
+      "end": 2823,
+      "fixes": 0
+    },
+    {
       "rule": "loading-on-accessor",
       "code": "SC5007",
       "kind": "violation",
@@ -771,6 +782,17 @@
       "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
       "start": 2862,
       "end": 2869,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-outside-hold",
+      "code": "SC5006",
+      "kind": "uncertifiable",
+      "blocker": "loading-hold-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2872,
+      "end": 2883,
       "fixes": 0
     },
     {
@@ -848,6 +870,17 @@
       "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
       "start": 2969,
       "end": 2976,
+      "fixes": 0
+    },
+    {
+      "rule": "loading-on-outside-hold",
+      "code": "SC5006",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-loading-on-accessor/App.tsx",
+      "start": 2977,
+      "end": 2986,
       "fixes": 0
     },
     {

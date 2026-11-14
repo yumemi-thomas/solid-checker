@@ -1,0 +1,9 @@
+# loading-entries
+
+**Claim (ADR 0978).** `Loading` is a component function: a program enters it as a JSX tag, by a call (`Loading(props)`, through an import alias, a namespace, a `const` alias, a wrapper, an immediately invoked function, `createComponent(Loading, props)`), or names it as a value (`Loading.call(null, props)`, `[Loading][0](props)`, `dynamicComponent(() => Loading)`, `<Dynamic component={Loading}>`, a tag a parameter holds). SC5006 (an `on` that holds a read the boundary re-arms) and SC5007 (an accessor handed as `on`) were asked of the tag only (SC5007 also of the direct call): the other entries were a false clean. Each entry that may pass `on` now carries a row, an obligation where the claim needs runtime state, never a certified clean.
+
+`App.tsx`: the first group (`JsxTag` to `ParameterTag`) is SC5006 uncertifiable at the `on` property of the call (at the argument where the props are not a literal, at the reference where the function is named as a value, at the `on` attribute of an unresolved tag); Chrome (rc.21) warns `LOADING_ON_OUTSIDE_HOLD` after the click in each. The second (`Accessor*`) is SC5007: a typed accessor in `on` of an exact call is a violation, in a form the analysis does not follow uncertifiable. The rest stay clean: `createComponent(Loading, { on: t() })` (no function), a literal closed against `on`, `on: 1` (names nothing, never re-arms), a local function named `Loading`, a project component `Legend`, `createLoadingBoundary`.
+
+A literal with accessors (`get children() {…}`) is closed against `on`, so SC5007 reads its absence and its value as for any other literal (ADR 0978); it was an uncertifiable merely for being a getter-bearing literal.
+
+Stub: `Loading`, `createComponent` and `dynamicComponent` as in the published rc.21 `types/client/flow.d.ts`, `component.d.ts` and `dynamic.d.ts`; `createLoadingBoundary` from `types/internal.d.ts`.
