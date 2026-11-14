@@ -1,0 +1,82 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-declared/App.tsx",
+      "start": 88,
+      "end": 101,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-declared/App.tsx",
+      "start": 88,
+      "end": 101,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-declared/App.tsx",
+      "start": 116,
+      "end": 131,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-declared/App.tsx",
+      "start": 171,
+      "end": 179,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-declared/App.tsx",
+      "start": 171,
+      "end": 179,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-declared/App.tsx",
+      "start": 179,
+      "end": 187,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-declared/App.tsx",
+      "start": 179,
+      "end": 187,
+      "fixes": 0
+    }
+  ]
+}

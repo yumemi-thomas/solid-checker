@@ -220,6 +220,17 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-components/variants/rc9/Routes.tsx",
+      "start": 760,
+      "end": 889,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-components/variants/rc9/Routes.tsx",
@@ -257,6 +268,17 @@
       "path": "fixtures/reactive-ir/route-components/variants/rc9/Routes.tsx",
       "start": 1236,
       "end": 1241,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-components/variants/rc9/Routes.tsx",
+      "start": 1279,
+      "end": 1347,
       "fixes": 0
     },
     {

@@ -948,6 +948,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/Package.tsx",
+      "start": 2472,
+      "end": 2492,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1014,6 +1025,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/Package.tsx",
+      "start": 2833,
+      "end": 2861,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1044,6 +1066,17 @@
       "path": "fixtures/reactive-ir/write-detached-owner-helper/Package.tsx",
       "start": 2884,
       "end": 2885,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-detached-owner-helper/Package.tsx",
+      "start": 3004,
+      "end": 3023,
       "fixes": 0
     },
     {

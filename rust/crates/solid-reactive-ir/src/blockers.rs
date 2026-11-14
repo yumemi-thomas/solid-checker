@@ -130,6 +130,10 @@ pub(crate) const ACTION_UNACCOUNTED: &str = "action-unaccounted";
 /// ADR 0972: a call into code of a package the build does not read, in an owned scope or where nothing places it, whose source does not
 /// prove that it cannot reach a Solid action. The detail names why (`reaches-solid`, `unknown-global`, `missing-source`, …).
 pub(crate) const PACKAGE_MAY_CALL_ACTION: &str = "package-may-call-action";
+/// ADR 0981: a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks it or
+/// nothing places it. The detail says which (`untracked`, `unplaced`). The package's source is not read, so the value may be a getter or accessor it defines, or a function
+/// or object the program handed it; reading its source (selection, or a proof that a returned value cannot come from what the program hands it) is what clears the row.
+pub(crate) const PACKAGE_VALUE_READ: &str = "package-value-read";
 /// ADR 0936: an assignment, `delete` or in-place array method through a store
 /// or props root.
 pub(crate) const STORE_WRITE_UNACCOUNTED: &str = "store-write-unaccounted";

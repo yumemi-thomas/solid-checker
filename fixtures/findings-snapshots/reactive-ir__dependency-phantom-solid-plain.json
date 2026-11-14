@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-plain/App.tsx",
+      "start": 162,
+      "end": 174,
+      "fixes": 0
+    }
+  ]
+}

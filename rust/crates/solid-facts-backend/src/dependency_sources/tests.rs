@@ -878,3 +878,288 @@ fn an_unmapped_root_refuses_the_generated_program() {
     assert!(notes.refusals.iter().any(|refusal| refusal.name == "aaa"
         && refusal.kind == UnanalyzableReason::ProgramPreparationUnavailable));
 }
+
+/// ADR 0981: what `prepare_all` selects from a tree of installed packages, none of which declares a Solid package but the one that says so.
+fn selection_in(
+    name: &str,
+    packages: &[(&str, &str, &[(&str, &str)])],
+    requests: &[&str],
+) -> (Vec<String>, super::SelectionNotes) {
+    let directory = std::env::temp_dir().join(format!(
+        "solid-checker-phantom-{name}-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    for (package, manifest, files) in packages {
+        let root = directory.join("node_modules").join(package);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("package.json"), manifest).unwrap();
+        for (file, source) in *files {
+            std::fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
+            std::fs::write(root.join(file), source).unwrap();
+        }
+    }
+    let app = directory.join("App.tsx");
+    let mut notes = super::SelectionNotes::default();
+    let prepared = super::prepare_all(
+        requests
+            .iter()
+            .map(|request| (app.clone(), (*request).to_owned()))
+            .collect(),
+        &host(&["browser", "development"]),
+        &["solid-js".to_owned()].into_iter().collect(),
+        &["@solidjs/"],
+        &mut super::UnsupportedBindings::default(),
+        &|_, _| None,
+        &mut notes,
+    )
+    .unwrap();
+    let mut roots = prepared
+        .map(|prepared| {
+            prepared
+                .roots
+                .iter()
+                .map(|root| root.file_name().unwrap().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    roots.sort();
+    std::fs::remove_dir_all(&directory).unwrap();
+    (roots, notes)
+}
+
+const SOLID: (&str, &str, &[(&str, &str)]) = (
+    "solid-js",
+    r#"{"name":"solid-js","version":"2.0.0-rc.21"}"#,
+    &[],
+);
+const BARE_MANIFEST: &str = r#"{"name":"dep","exports":{".":"./index.js"}}"#;
+
+fn bare(name: &str) -> String {
+    BARE_MANIFEST.replace("\"dep\"", &format!("\"{name}\""))
+}
+
+#[test]
+fn a_package_whose_closure_imports_solid_without_declaring_it_is_selected() {
+    let manifest = bare("dep");
+    let (roots, notes) = selection_in(
+        "phantom",
+        &[
+            SOLID,
+            (
+                "dep",
+                &manifest,
+                &[
+                    ("index.js", "export * from './inner.js';"),
+                    (
+                        "inner.js",
+                        "import { createMemo } from 'solid-js'; export const m = createMemo;",
+                    ),
+                ],
+            ),
+        ],
+        &["dep"],
+    );
+    assert_eq!(roots, ["dep"]);
+    assert!(notes.refusals.is_empty(), "{notes:?}");
+}
+
+#[test]
+fn a_solid_import_is_decided_by_the_module_it_resolves_to() {
+    // `my-solid` is spelled like no Solid package; its directory's manifest is `solid-js`.
+    let manifest = bare("dep");
+    let (roots, _) = selection_in(
+        "aliased",
+        &[
+            (
+                "my-solid",
+                r#"{"name":"solid-js","version":"2.0.0-rc.21"}"#,
+                &[],
+            ),
+            (
+                "dep",
+                &manifest,
+                &[(
+                    "index.js",
+                    "import { createMemo } from 'my-solid'; export const m = createMemo;",
+                )],
+            ),
+        ],
+        &["dep"],
+    );
+    assert_eq!(roots, ["dep"]);
+    // The spelling `solid-js` is no evidence when the directory it resolves to is another package.
+    let (roots, notes) = selection_in(
+        "spelled",
+        &[
+            (
+                "solid-js",
+                r#"{"name":"not-solid","exports":{".":"./index.js"}}"#,
+                &[("index.js", "export const x = 1;")],
+            ),
+            (
+                "dep",
+                &manifest,
+                &[(
+                    "index.js",
+                    "import { createMemo } from 'solid-js'; export const m = createMemo;",
+                )],
+            ),
+        ],
+        &["dep"],
+    );
+    assert!(roots.is_empty());
+    assert!(notes.refusals.iter().any(|refusal| refusal.name == "dep"
+        && refusal.kind
+            == UnanalyzableReason::NotSelected(
+                solid_reactive_ir::package_boundary::SelectionFailure::NoDemand
+            )));
+}
+
+#[test]
+fn a_wrapper_of_a_phantom_package_is_selected_with_it() {
+    let shell = bare("shell");
+    let inner = bare("inner");
+    let (roots, notes) = selection_in(
+        "reexport",
+        &[
+            SOLID,
+            (
+                "shell",
+                &shell,
+                &[("index.js", "export { m } from 'inner';")],
+            ),
+            (
+                "inner",
+                &inner,
+                &[(
+                    "index.js",
+                    "import { createMemo } from 'solid-js'; export const m = createMemo;",
+                )],
+            ),
+        ],
+        &["shell"],
+    );
+    assert_eq!(roots, ["inner", "shell"]);
+    assert!(notes.refusals.is_empty(), "{notes:?}");
+}
+
+#[test]
+fn a_package_importing_no_solid_package_stays_unselected() {
+    let plain = bare("plain");
+    let types = r#"{"name":"types","exports":{".":"./index.ts"}}"#;
+    let (roots, notes) = selection_in(
+        "plain",
+        &[
+            SOLID,
+            (
+                "plain",
+                &plain,
+                &[("index.js", "export const parse = (text) => text.length;")],
+            ),
+            (
+                "types",
+                types,
+                &[(
+                    "index.ts",
+                    "import type { Accessor } from 'solid-js'; export const make = (): { read?: Accessor<number> } => ({});",
+                )],
+            ),
+        ],
+        &["plain", "types"],
+    );
+    assert!(roots.is_empty());
+    assert_eq!(notes.refusals.len(), 2);
+    assert!(notes.refusals.iter().all(|refusal| refusal.kind
+        == UnanalyzableReason::NotSelected(
+            solid_reactive_ir::package_boundary::SelectionFailure::NoDemand
+        )));
+}
+
+#[test]
+fn an_unreadable_closure_is_undecided_and_says_so() {
+    let manifest = bare("dep");
+    // The closure imports a file that resolves to no source: whether it loads Solid is not known, so nothing is selected and the refusal says
+    // so, apart from the plain no-demand answer.
+    let (roots, notes) = selection_in(
+        "undecided",
+        &[
+            SOLID,
+            (
+                "dep",
+                &manifest,
+                &[("index.js", "export * from './missing.js';")],
+            ),
+        ],
+        &["dep"],
+    );
+    assert!(roots.is_empty());
+    let refusal = notes
+        .refusals
+        .iter()
+        .find(|refusal| refusal.name == "dep")
+        .expect("a refusal is recorded");
+    assert_eq!(refusal.kind, UnanalyzableReason::ClosureUnavailable);
+    assert!(refusal.detail.contains("undecided"), "{refusal:?}");
+    // A syntax error is the same.
+    let (roots, notes) = selection_in(
+        "unparsable",
+        &[
+            SOLID,
+            ("dep", &manifest, &[("index.js", "export const = ;")]),
+        ],
+        &["dep"],
+    );
+    assert!(roots.is_empty());
+    assert!(
+        notes
+            .refusals
+            .iter()
+            .any(|refusal| refusal.kind == UnanalyzableReason::ClosureUnavailable)
+    );
+}
+
+#[test]
+fn a_package_loading_a_declared_solid_package_is_selected() {
+    let wrapper = bare("wrapper");
+    let ui = r#"{"name":"ui","peerDependencies":{"solid-js":"2"},"exports":{".":"./index.js"}}"#;
+    let (roots, _) = selection_in(
+        "declared-hop",
+        &[
+            SOLID,
+            (
+                "wrapper",
+                &wrapper,
+                &[("index.js", "export { c } from 'ui';")],
+            ),
+            ("ui", ui, &[("index.js", "export const c = 1;")]),
+        ],
+        &["wrapper"],
+    );
+    assert_eq!(roots, ["ui", "wrapper"]);
+}
+
+#[test]
+fn a_later_subpath_that_loads_solid_selects_the_package_for_the_subpaths_refused_before() {
+    let manifest = r#"{"name":"dep","exports":{".":"./index.js","./extra":"./extra.js"}}"#;
+    let (roots, notes) = selection_in(
+        "subpaths",
+        &[
+            SOLID,
+            (
+                "dep",
+                manifest,
+                &[
+                    ("index.js", "export const a = 1;"),
+                    (
+                        "extra.js",
+                        "import { createMemo } from 'solid-js'; export const b = createMemo;",
+                    ),
+                ],
+            ),
+        ],
+        &["dep", "dep/extra"],
+    );
+    assert_eq!(roots, ["dep"]);
+    assert!(notes.refusals.is_empty(), "{notes:?}");
+}

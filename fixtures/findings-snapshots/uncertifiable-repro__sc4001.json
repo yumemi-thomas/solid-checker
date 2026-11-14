@@ -1142,6 +1142,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
+      "start": 283,
+      "end": 313,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1150,6 +1161,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
       "start": 283,
       "end": 313,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-callback-to-package.tsx",
+      "start": 317,
+      "end": 361,
       "fixes": 0
     },
     {
@@ -1431,7 +1453,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
+      "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-dependency-getter.tsx",
       "start": 305,
@@ -1458,6 +1480,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-dependency-getter.tsx",
       "start": 305,
       "end": 318,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-dependency-getter.tsx",
+      "start": 339,
+      "end": 356,
       "fixes": 0
     },
     {
@@ -1524,6 +1557,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
       "start": 607,
       "end": 613,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-event-listener-target.tsx",
+      "start": 637,
+      "end": 695,
       "fixes": 0
     },
     {
@@ -1659,6 +1703,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
+      "start": 312,
+      "end": 413,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1777,6 +1832,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
       "start": 313,
       "end": 319,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-forward.tsx",
+      "start": 420,
+      "end": 436,
       "fixes": 0
     },
     {
@@ -1945,6 +2011,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
+      "start": 321,
+      "end": 417,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2085,6 +2162,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
       "start": 379,
       "end": 391,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-prop-read.tsx",
+      "start": 424,
+      "end": 440,
       "fixes": 0
     },
     {
@@ -2264,6 +2352,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 703,
+      "end": 759,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2404,6 +2503,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 717,
       "end": 723,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 766,
+      "end": 782,
       "fixes": 0
     },
     {
@@ -2572,6 +2682,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 839,
+      "end": 854,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -2715,6 +2836,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 863,
+      "end": 879,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -2855,6 +2987,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
       "start": 864,
       "end": 870,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-kobalte-dialog-setters.tsx",
+      "start": 890,
+      "end": 904,
       "fixes": 0
     },
     {
@@ -3078,6 +3221,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-function.ts",
+      "start": 429,
+      "end": 446,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3115,6 +3269,17 @@
       "code": "SC1002",
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
+      "start": 306,
+      "end": 335,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-leaf-package-member.ts",
       "start": 306,
@@ -3232,6 +3397,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
+      "start": 304,
+      "end": 333,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3240,6 +3416,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
       "start": 304,
       "end": 333,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-memo-package-callback.tsx",
+      "start": 374,
+      "end": 430,
       "fixes": 0
     },
     {
@@ -3367,7 +3554,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
+      "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-pointer.tsx",
       "start": 274,
@@ -3576,7 +3763,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
+      "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
       "start": 367,
@@ -3650,6 +3837,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
+      "start": 409,
+      "end": 416,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3675,7 +3873,7 @@
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
+      "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
       "start": 625,
@@ -3746,6 +3944,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
       "start": 641,
       "end": 654,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/pkg-raf.tsx",
+      "start": 668,
+      "end": 675,
       "fixes": 0
     },
     {

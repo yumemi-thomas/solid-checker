@@ -2339,6 +2339,22 @@ impl<'l, 'a> Census<'l, 'a> {
         if self.context_provider_tag(file, element.name.span) {
             return self.context_readers(file, element.name.span, mode);
         }
+        // ADR 0981: a tag a project binding holds as `dynamic(loader)` or `lazy(loader)` is the component the loader returns or imports, which this walk does not
+        // name: the call graph's function for the tag is the loader itself (an arrow with no parameter, so no prop read), and a prop handed to it would be followed
+        // to nothing. Its props go to a component nobody resolved.
+        if let Some((initializer_file, initializer)) = self
+            .lookup
+            .exact_initializer_at_reference(file, element.name.span)
+            && let Some(call) = initializer_file
+                .ast
+                .call_at(initializer_file.ast.peel_ts_sugar_span(initializer))
+            && matches!(
+                self.lookup.primitive_at_call(initializer_file, call.span),
+                Some(solid_dialect::Primitive::Dynamic | solid_dialect::Primitive::Lazy)
+            )
+        {
+            return Position::Open(blockers::VALUE_TO_UNRESOLVED_CALLEE);
+        }
         let Some((component_file, component)) = self
             .lookup
             .function_called_at(file.path.as_str(), element.name.span)

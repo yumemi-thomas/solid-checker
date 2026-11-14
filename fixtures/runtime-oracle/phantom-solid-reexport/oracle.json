@@ -1,0 +1,5 @@
+{
+  "note": "ADR 0981: dep-shell re-exports dep-router (a phantom solid-js import); neither declares a Solid package. The pin is the selection the default makes (`dependency-phantom-solid-reexport`).",
+  "packages": ["dep-shell", "dep-router"],
+  "dependencySources": ["dep-shell", "dep-router"]
+}
