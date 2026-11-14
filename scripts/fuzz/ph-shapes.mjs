@@ -127,6 +127,21 @@
 //             putparam    `function put1(target: { m1(): void }) { target.m1 = function () { cb1(); }; }`, `const o1 = { m1(): void {} }`, `put1(o1)`, `runStep(() => { o1.m1(); })`
 //             putparamany the same with `target: any` and `const o1: any = {}`
 //             putchain    the argument is the parameter of an outer function: `function putOuter1(holder: …) { put1(holder); }`, `putOuter1(o1)`
+//           and ADR 0980 (the review of #232's B6 and S2, and the probes a01 to a18: a store through another name of the object, or through a parameter whose callers are not
+//           one name's direct calls; the run reads the object by its own name; a program of two files, `putimport`, `putreexport` and `putstar`, is not one the generator can print):
+//             putalias    `const a1 = o1; put1(a1)`, the step runs `o1.m1()`
+//             putaliaslet `let a1: any; a1 = o1; put1(a1)`
+//             putinner    `function put1(target: any) { const s = target; s.m1 = … }`
+//             putreassign `function put1(target: any, other: any) { target = other; target.m1 = … }`, `put1({}, o1)`
+//             putdefault  `function put1(target: any = shared1) { … }`, `put1()`, the step runs `shared1.m1()`
+//             putspread   `function put1(first: any, target: any) { … }`, `put1(...args1)` with `args1 = [{}, o1]`
+//             putmethod   `const api1 = { put1(target: any) { … } }`, `api1.put1(o1)`
+//             aliasstore  `const a1 = o1; a1.m1 = function () { … }` (S2)
+//             aliasgetter `const box1 = { get a1() { return o1; } }; box1.a1.m1 = function () { … }`
+//             aliascomputed `a1["m1"] = function () { … }`
+//             aliasclass  `class K1 { m1: any }`, `const o1 = new K1(); const a1 = o1; a1.m1 = …`
+//             aliassequence `const a1 = (0, o1)`; aliascond `const a1: any = cond ? o1 : null`; aliasnullish `const a1: any = o1 ?? null`
+//             aliasdestrlit `const { o1: a1 } = { o1 }`; aliasproxy `const a1: any = new Proxy(o1, {})`
 //           and the review of #232 (B1 to B5, S3: the strict prefilter proves a holder is no receiver, and what it gives out, how a key is spelled, what a parameter that is a pattern is, what
 //           a write through the receiver is, and which names are unique are its premises). Each reads `this.m1()` in a getter of `base1`, and `base1` is the prototype of the holder
 //           that has the flushing member, or is the holder's own getter:
@@ -207,7 +222,7 @@
 import { contain } from "./model.mjs";
 
 export const PH_PACKAGE = "fz-step";
-export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"];
+export const PH_ROUTES = ["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "putalias", "putaliaslet", "putinner", "putreassign", "putdefault", "putspread", "putmethod", "aliasstore", "aliasgetter", "aliascomputed", "aliasclass", "aliassequence", "aliascond", "aliasnullish", "aliasdestrlit", "aliasproxy", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"];
 export const PH_HOSTS = ["step", "apply", "leaf"];
 /** The hosts each code is judged in: the code the host's callback reports for a flush in it. */
 export const PH_CODES = {
@@ -252,6 +267,42 @@ const escaped = (name) => `\\u${name.codePointAt(0).toString(16).padStart(4, "0"
 const prefilterBase = (f, base, read) => `const ${base} = {\n  get h(): number {\n    ${f}(() => {\n      ${read}\n    });\n    return 1;\n  },\n};`;
 
 /** The frame text of a route: `head` precedes the body (the callback's or the function's block), `close` follows it. */
+/**
+ * A store through a parameter (ADR 0980, B6): `put1(target)` stores `function () { cb1(); }` under `m1`, the run is `o1.m1()` in the step. `shape` varies one premise of the
+ * caller list or of the parameter: the argument another name of the object (`holder`/`call`), a copy of the parameter inside the function (`inner`), the parameter reassigned to
+ * another (`reassign`: the store goes into the second argument), a default value that receives the store (`fallback`), a spread before the index (`spread`), a method of an
+ * object literal (`method`).
+ */
+function putFrame(f, n, shape) {
+  const [cb, put, object, key, alias, rest, api, shared] = [n("cb"), n("put"), n("o"), n("m"), n("a"), n("args"), n("api"), n("shared")];
+  const store = `${shape.inner ? "s" : "target"}.${key} = function () {\n    ${cb}();\n  };`;
+  const body = `${shape.inner ? "const s = target;\n  " : shape.reassign ? "target = other;\n  " : ""}${store}`;
+  const params = shape.reassign ? "target: any, other: any" : shape.spread ? "first: any, target: any" : shape.fallback ? `target: any = ${shared}` : "target: any";
+  const lines = [];
+  if (shape.fallback) lines.push(`const ${shared}: any = {};`);
+  if (shape.method) lines.push(`const ${api} = {\n  ${put}(${params}) {\n    ${body}\n  },\n};`);
+  else lines.push(`function ${put}(${params}) {\n  ${body}\n}`);
+  lines.push(shape.holder(object, alias));
+  lines.push(shape.call(put, object, alias, rest, api));
+  lines.push(`${f}(() => {\n  ${shape.read === "shared" ? shared : object}.${key}();\n});`);
+  return { head: `const ${cb} = () => `, close: `;\n${lines.join("\n")}` };
+}
+
+/**
+ * A store through another name of the object (ADR 0980, S2 and the probes a01 to a18): `holder` binds the other name (`a1`, and `box1` for a getter that returns the object),
+ * `target` is the member the function is stored under; the step reads the object by its own name. `klass` makes the object an instance of a class the program declares.
+ */
+function aliasFrame(f, n, holder, target, options = {}) {
+  const [cb, object, key, alias, box, klass] = [n("cb"), n("o"), n("m"), n("a"), n("box"), n("K")];
+  const lines = [];
+  if (options.klass) lines.push(`class ${klass} {\n  ${key}: any;\n}`, `const ${object} = new ${klass}();`);
+  else lines.push(`const ${object}: any = {};`);
+  lines.push(holder(object, alias, box));
+  lines.push(`${target(alias, key, box)} = function () {\n  ${cb}();\n};`);
+  lines.push(`${f}(() => {\n  ${object}.${key}();\n});`);
+  return { head: `const ${cb} = () => `, close: `;\n${lines.join("\n")}` };
+}
+
 const ROUTE_FRAMES = {
   literal: (f) => ({ head: `setTimeout(() => {\n  ${f}(() => `, close: `);\n});` }),
   ref: (f, n) => {
@@ -755,6 +806,25 @@ const ROUTE_FRAMES = {
     const key = n("m");
     return { head: `const ${cb} = () => `, close: `;\nfunction ${put}(target: { ${key}(): void }) {\n  target.${key} = function () {\n    ${cb}();\n  };\n}\nfunction ${outer}(holder: { ${key}(): void }) {\n  ${put}(holder);\n}\nconst ${object} = {\n  ${key}(): void {},\n};\n${outer}(${object});\n${f}(() => {\n  ${object}.${key}();\n});` };
   },
+  // ADR 0980 (the review of #232's B6 and S2, and the probes a01 to a18): a function stored into an object through another name of it, or through a parameter whose callers
+  // are not the plain direct calls of one name. The run reads the object by its own name (`o1.m1()`) in the step the package runs. Every route keeps its `-never` twin
+  // (`skipRun`: the package's function ignores what it is handed).
+  putalias: (f, n) => putFrame(f, n, { holder: (o, a) => `const ${o}: any = {};\nconst ${a} = ${o};`, call: (put, o, a) => `${put}(${a});` }),
+  putaliaslet: (f, n) => putFrame(f, n, { holder: (o, a) => `const ${o}: any = {};\nlet ${a}: any;\n${a} = ${o};`, call: (put, o, a) => `${put}(${a});` }),
+  putinner: (f, n) => putFrame(f, n, { inner: true, holder: (o) => `const ${o}: any = {};`, call: (put, o) => `${put}(${o});` }),
+  putreassign: (f, n) => putFrame(f, n, { reassign: true, holder: (o) => `const ${o}: any = {};`, call: (put, o) => `${put}({}, ${o});` }),
+  putdefault: (f, n) => putFrame(f, n, { fallback: true, holder: (o) => `const ${o}: any = {};`, call: (put) => `${put}();`, read: "shared" }),
+  putspread: (f, n) => putFrame(f, n, { spread: true, holder: (o) => `const ${o}: any = {};`, call: (put, o, a, rest) => `const ${rest}: [any, any] = [{}, ${o}];\n${put}(...${rest});` }),
+  putmethod: (f, n) => putFrame(f, n, { method: true, holder: (o) => `const ${o}: any = {};`, call: (put, o, a, rest, api) => `${api}.${put}(${o});` }),
+  aliasstore: (f, n) => aliasFrame(f, n, (o, a) => `const ${a} = ${o};`, (a, key) => `${a}.${key}`),
+  aliasgetter: (f, n) => aliasFrame(f, n, (o, a, box) => `const ${box} = {\n  get ${a}() {\n    return ${o};\n  },\n};`, (a, key, box) => `${box}.${a}.${key}`),
+  aliascomputed: (f, n) => aliasFrame(f, n, (o, a) => `const ${a} = ${o};`, (a, key) => `${a}["${key}"]`),
+  aliasclass: (f, n) => aliasFrame(f, n, (o, a) => `const ${a} = ${o};`, (a, key) => `${a}.${key}`, { klass: true }),
+  aliassequence: (f, n) => aliasFrame(f, n, (o, a) => `const ${a} = (0, ${o});`, (a, key) => `${a}.${key}`),
+  aliascond: (f, n) => aliasFrame(f, n, (o, a) => `const ${a}: any = Math.random() < 2 ? ${o} : null;`, (a, key) => `${a}.${key}`),
+  aliasnullish: (f, n) => aliasFrame(f, n, (o, a) => `const ${a}: any = ${o} ?? null;`, (a, key) => `${a}.${key}`),
+  aliasdestrlit: (f, n) => aliasFrame(f, n, (o, a) => `const { ${o}: ${a} } = { ${o} };`, (a, key) => `${a}.${key}`),
+  aliasproxy: (f, n) => aliasFrame(f, n, (o, a) => `const ${a}: any = new Proxy(${o}, {});`, (a, key) => `${a}.${key}`),
   // The review of #232 (B1 to B5, S3). Every route stores the flushing function in a holder that the strict prefilter might call confined; `base1`'s getter reads it through `this`.
   restcopy: (f, n) => {
     const [cb, object, key, base, rest] = [n("cb"), n("o"), n("m"), n("base"), n("rest")];
@@ -982,7 +1052,7 @@ for (const [route, way] of Object.entries(OBJECT_PROTOTYPE_WAYS)) {
 }
 
 /** The routes written at module scope: the review of #217's, whose question is the position of the function itself. */
-const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"]);
+const TOP_ROUTES = new Set(["mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "putalias", "putaliaslet", "putinner", "putreassign", "putdefault", "putspread", "putmethod", "aliasstore", "aliasgetter", "aliascomputed", "aliasclass", "aliassequence", "aliascond", "aliasnullish", "aliasdestrlit", "aliasproxy", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"]);
 
 /** The other names a route imports from the package, and the import lines of the program's own libraries it needs. */
 const ROUTE_NAMES = { assign: ["config"] };

@@ -2461,6 +2461,54 @@
    "to": 11,
    "adr": "ADR 0976",
    "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-flip",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 0980",
+   "fact": "the holder is bound to a call's result (document.createElement, Object.create(null)), which is no fresh object the program writes and no sole name (an appended element is reachable through the DOM): the store is handed"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-flip",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 0980",
+   "fact": "the holder is bound to a call's result (document.createElement, Object.create(null)), which is no fresh object the program writes and no sole name (an appended element is reachable through the DOM): the store is handed"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-flip",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 0980",
+   "fact": "the holder is bound to a call's result (document.createElement, Object.create(null)), which is no fresh object the program writes and no sole name (an appended element is reachable through the DOM): the store is handed"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receiver-reads-twins",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0980",
+   "fact": "the holder is bound to a call's result (document.createElement, Object.create(null)), which is no fresh object the program writes and no sole name (an appended element is reachable through the DOM): the store is handed"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receiver-reads-twins",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0980",
+   "fact": "the holder is bound to a call's result (document.createElement, Object.create(null)), which is no fresh object the program writes and no sole name (an appended element is reachable through the DOM): the store is handed"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receiver-reads-twins",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0980",
+   "fact": "the holder is bound to a call's result (document.createElement, Object.create(null)), which is no fresh object the program writes and no sole name (an appended element is reachable through the DOM): the store is handed"
   }
  ]
 }

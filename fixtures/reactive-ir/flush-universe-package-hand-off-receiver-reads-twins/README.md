@@ -7,3 +7,5 @@ The silence is the program's, as the stability proof of ADR 0300 is: one receive
 Published bytes: `node_modules/steplib` is synthetic; `.solid-checker/runtime.json` closes the program boundary.
 
 **Added by the review of #232 (B3).** `twinPattern`: a pattern parameter (`function twinPatternRead({ twinPatternM })`) reads every key where the function runs, and the function that passes the receiver to it is one nothing hands a package, so the read is on no package's stack and the flush keeps no row (the same pattern run by a function a package may run is `flush-universe-package-hand-off-receiver-patterns`).
+
+**ADR 0980 (a named cost).** `twinPattern` is bound to `Object.create(null)`, a call's result, which is no fresh object the program writes, so its store is now handed: the flush at `twinPattern.twinPatternM = function () { flush(); }` keeps the three uncertifiable rows (SC2006, SC2008, SC3001) and the project is `uncertifiable`, not `certified`. The other twins stay silent.
