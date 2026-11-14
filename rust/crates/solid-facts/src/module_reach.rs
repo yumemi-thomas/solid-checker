@@ -729,18 +729,16 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                 }
                 // `document.defaultView` is the global object, so `document` is followed too; any other use of `document` holds no global object.
                 "document" => match global_use(scoping, nodes, id, name, Holder::Document) {
-                    GlobalUse::Member {
-                        name: member,
-                        path,
-                        at,
-                    } => {
-                        defined_by_receiver(scoping, nodes, &member, at, &mut writes);
-                        if generates_code_by_member(nodes, &member, at) {
-                            hazard(ModuleHazardKind::CodeGeneration, &path);
-                            code_generated(&mut writes);
-                        }
-                        if !is_known_global(&member) {
-                            hazard(ModuleHazardKind::UnknownGlobal, &path);
+                    GlobalUse::Member { reads, at } => {
+                        for (member, path) in reads {
+                            defined_by_receiver(scoping, nodes, &member, at, &mut writes);
+                            if generates_code_by_member(nodes, &member, at) {
+                                hazard(ModuleHazardKind::CodeGeneration, &path);
+                                code_generated(&mut writes);
+                            }
+                            if !is_known_global(&member) {
+                                hazard(ModuleHazardKind::UnknownGlobal, &path);
+                            }
                         }
                     }
                     GlobalUse::Escape { path, at } => {
@@ -757,22 +755,20 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                 },
                 _ if GLOBAL_OBJECTS.contains(&name) => {
                     match global_use(scoping, nodes, id, name, Holder::Global) {
-                        GlobalUse::Member {
-                            name: member,
-                            path,
-                            at,
-                        } => {
-                            defined_by_receiver(scoping, nodes, &member, at, &mut writes);
-                            if generates_code_by_member(nodes, &member, at) {
-                                hazard(ModuleHazardKind::CodeGeneration, &path);
-                                code_generated(&mut writes);
-                            }
-                            if member == "valueOf" {
-                                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                                escaped(&mut writes);
-                            }
-                            if !is_known_global(&member) {
-                                hazard(ModuleHazardKind::UnknownGlobal, &path);
+                        GlobalUse::Member { reads, at } => {
+                            for (member, path) in reads {
+                                defined_by_receiver(scoping, nodes, &member, at, &mut writes);
+                                if generates_code_by_member(nodes, &member, at) {
+                                    hazard(ModuleHazardKind::CodeGeneration, &path);
+                                    code_generated(&mut writes);
+                                }
+                                if member == "valueOf" {
+                                    hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                                    escaped(&mut writes);
+                                }
+                                if !is_known_global(&member) {
+                                    hazard(ModuleHazardKind::UnknownGlobal, &path);
+                                }
                             }
                         }
                         // A write reads nothing (a compound operator reads the member first), but it installs a global: the name, the names the key's constants decide,
@@ -1129,11 +1125,10 @@ enum Holder {
 }
 
 enum GlobalUse {
-    /// A member of the global object read by a static name or a string literal key: its name, the chain as it was spelled (`window.self.solid`), and the node of the member
-    /// at the chain's end.
+    /// A member of the global object read by a static name, a string literal key or a key the file's constants decide (`const KEY = "x"; window[KEY]`, a loop variable over
+    /// `["a", "b"]`: one read of each name): each name with the chain as it was spelled (`window.self.solid`), and the node of the member at the chain's end.
     Member {
-        name: String,
-        path: String,
+        reads: Vec<(String, String)>,
         at: NodeId,
     },
     /// A member of the global object assigned (`window.x = …`, `window["x"] = …`, `window.x ||= …`, any assignment operator): the global `x` is installed; `keys` is what the
@@ -1191,17 +1186,32 @@ fn global_use(
         let mut computed = false;
         let member = match nodes.get_node(parent).kind() {
             AstKind::StaticMemberExpression(member) if member.object.span() == child_span => {
-                Some(Some(member.property.name.to_string()))
+                Some(Some(vec![member.property.name.to_string()]))
             }
             AstKind::ComputedMemberExpression(member) if member.object.span() == child_span => {
                 computed = true;
-                // A key the file's own constants decide to one name is that name, as a write by it is (`const KEY = "x"; window[KEY]`).
-                Some(literal_specifier(&member.expression).or_else(|| {
-                    match key_of(scoping, nodes, &member.expression, KEY_DEPTH) {
-                        Keys::Names(mut names) if names.len() == 1 => names.pop(),
-                        _ => None,
-                    }
-                }))
+                // A key the file's own constants decide is that name, as a write by it is (`const KEY = "x"; window[KEY]`): one read of each name where it is one of several
+                // (`for (const name of ["a", "b"]) globalThis[name]`), unless one of them is a name the global object goes by (a read of it hands the object back).
+                Some(
+                    literal_specifier(&member.expression)
+                        .map(|name| vec![name])
+                        .or_else(
+                            || match key_of(scoping, nodes, &member.expression, KEY_DEPTH) {
+                                Keys::Names(names)
+                                    if !names.is_empty()
+                                        && (names.len() == 1
+                                            || (holder == Holder::Global
+                                                && names.iter().all(|name| {
+                                                    !GLOBAL_OBJECTS.contains(&name.as_str())
+                                                        && name != "document"
+                                                }))) =>
+                                {
+                                    Some(names)
+                                }
+                                _ => None,
+                            },
+                        ),
+                )
             }
             AstKind::AssignmentExpression(assignment) if assignment.left.span() == child_span => {
                 return GlobalUse::Reassigned;
@@ -1210,7 +1220,10 @@ fn global_use(
         };
         // The value itself is used, or read by a key the syntax does not fix: the global object escapes, `document` holds no global object. A key the syntax does not
         // fix that is assigned writes what the key is: the names the file's constants decide, a symbol, or any global.
-        let Some(Some(name)) = member else {
+        // A computed key that is several names and is assigned is a write under `keys`, below.
+        let member = member
+            .map(|names| names.filter(|names| names.len() == 1 || assigned(parent).is_none()));
+        let Some(Some(names)) = member else {
             if computed
                 && holder == Holder::Global
                 && let Some(read) = assigned(parent)
@@ -1232,6 +1245,19 @@ fn global_use(
                 Holder::Document => GlobalUse::Inert,
             };
         };
+        if names.len() > 1 {
+            return GlobalUse::Member {
+                reads: names
+                    .into_iter()
+                    .map(|name| {
+                        let spelled = format!("{path}.{name}");
+                        (name, spelled)
+                    })
+                    .collect(),
+                at: parent,
+            };
+        }
+        let name = names.into_iter().next().unwrap_or_default();
         if let Some(read) = assigned(parent) {
             // `window.document.title = …` writes `document`'s member, no global.
             if holder == Holder::Document {
@@ -1251,8 +1277,7 @@ fn global_use(
             Holder::Global if name == "document" => holder = Holder::Document,
             Holder::Global => {
                 return GlobalUse::Member {
-                    name,
-                    path,
+                    reads: vec![(name, path)],
                     at: parent,
                 };
             }
@@ -1479,14 +1504,16 @@ fn route_use(
     writes: &mut GlobalWrites,
 ) {
     match global_use(scoping, nodes, id, root, Holder::Global) {
-        GlobalUse::Member { name, path, at } => {
-            defined_by_receiver(scoping, nodes, &name, at, writes);
-            if generates_code_by_member(nodes, &name, at) {
-                hazard(ModuleHazardKind::CodeGeneration, &path);
-                code_generated(writes);
-            }
-            if lookup && !is_known_global(&name) {
-                hazard(ModuleHazardKind::UnknownGlobal, &path);
+        GlobalUse::Member { reads, at } => {
+            for (name, path) in reads {
+                defined_by_receiver(scoping, nodes, &name, at, writes);
+                if generates_code_by_member(nodes, &name, at) {
+                    hazard(ModuleHazardKind::CodeGeneration, &path);
+                    code_generated(writes);
+                }
+                if lookup && !is_known_global(&name) {
+                    hazard(ModuleHazardKind::UnknownGlobal, &path);
+                }
             }
         }
         GlobalUse::Written { keys, path, read } => written(hazard, writes, keys, &path, read),
@@ -1510,8 +1537,12 @@ fn generates_code_by_member(nodes: &AstNodes<'_>, name: &str, at: NodeId) -> boo
     }
 }
 
-/// Whether `expression` is the global object's name, or a member chain that starts from one or from `document` (those chains are followed from their name).
+/// Whether `expression` is a chain the name walk ([`global_use`]) follows from its root: a name of the global object or `document`, then members that are themselves a name
+/// of the global object, `document` or `defaultView` (`document`, `window.document`, `self.window.document`, `document.defaultView.document`). Any other member ends the walk
+/// (`document.body.ownerDocument` holds a document the walk does not follow), so `defaultView` read off it is a route of its own.
 fn rooted_in_global(scoping: &Scoping, expression: &Expression<'_>) -> bool {
+    let followed =
+        |name: &str| GLOBAL_OBJECTS.contains(&name) || name == "document" || name == "defaultView";
     match expression.get_inner_expression() {
         Expression::Identifier(identifier) => {
             names_global(scoping, identifier, "document")
@@ -1519,8 +1550,13 @@ fn rooted_in_global(scoping: &Scoping, expression: &Expression<'_>) -> bool {
                     .iter()
                     .any(|name| names_global(scoping, identifier, name))
         }
-        Expression::StaticMemberExpression(member) => rooted_in_global(scoping, &member.object),
-        Expression::ComputedMemberExpression(member) => rooted_in_global(scoping, &member.object),
+        Expression::StaticMemberExpression(member) => {
+            followed(member.property.name.as_str()) && rooted_in_global(scoping, &member.object)
+        }
+        Expression::ComputedMemberExpression(member) => {
+            literal_specifier(&member.expression).is_some_and(|key| followed(&key))
+                && rooted_in_global(scoping, &member.object)
+        }
         _ => false,
     }
 }
@@ -2892,6 +2928,29 @@ mod tests {
         }
     }
 
+    /// ADR 0974: a read of the global object by a key the file's constants decide to several names is one read of each (no escape, no writer); one of the names the object goes by
+    /// hands it back.
+    #[test]
+    fn a_key_of_several_constant_names_is_a_read_of_each() {
+        let found = scan(
+            "for (const name of ['escape', 'unescape']) { const real = globalThis[name]; use(real); }",
+        );
+        assert!(!found.global_writes.any_name, "{found:?}");
+        assert!(
+            !kinds(&found)
+                .iter()
+                .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+            "{:?}",
+            kinds(&found)
+        );
+        // A name no library declares is the lookup it is.
+        let found = scan("for (const name of ['escape', 'fzNope']) { use(globalThis[name]); }");
+        assert!(kinds(&found).contains(&(ModuleHazardKind::UnknownGlobal, "globalThis.fzNope")));
+        // A route name among them hands the object back.
+        let found = scan("for (const name of ['escape', 'self']) { use(globalThis[name]); }");
+        assert!(found.global_writes.any_name);
+    }
+
     /// ADR 0974: the members of the global object that generate code (`window.eval`, `globalThis.Function`, a string timer) or hand the object back (`window.valueOf()`) are
     /// routes as the unbound names are.
     #[test]
@@ -2941,6 +3000,19 @@ mod tests {
             );
             assert!(found.global_writes.any_name, "{source}");
         }
+        // A chain through a member the name walk does not follow is a route of its own.
+        for source in [
+            "const view = document.body.ownerDocument.defaultView; use(view);",
+            "use(document.querySelector('x').ownerDocument.defaultView);",
+            "use(window.document.body.ownerDocument.defaultView);",
+        ] {
+            assert!(
+                kinds(&scan(source))
+                    .iter()
+                    .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                "{source}"
+            );
+        }
         // A member read of it, or one already followed from a name, is not a second route.
         let found = scan("use(el.ownerDocument.defaultView.btoa);");
         assert!(!found.global_writes.any_name);
@@ -2951,6 +3023,8 @@ mod tests {
         );
         let found = scan("use(document.defaultView.btoa);");
         assert!(!found.global_writes.any_name);
+        let found = scan("use(self.window.document.defaultView.document.defaultView.btoa);");
+        assert!(!found.global_writes.any_name, "{found:?}");
     }
 
     /// ADR 0974: `this` at the top of a file with no module syntax is the global object; handed on it escapes, as a member read it is the file's own.
