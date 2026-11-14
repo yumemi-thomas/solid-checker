@@ -3625,6 +3625,15 @@
    "adr": "ADR 0981",
    "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
    "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/flush-holder-alias",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned, read where nothing tracks or places it (SC1001 package-value-read)",
+   "why": "fail-closed, as the rows of the same ADR: the new row is uncertifiable, never a violation"
   }
  ]
 }
