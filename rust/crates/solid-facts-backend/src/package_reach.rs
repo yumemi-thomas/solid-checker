@@ -823,6 +823,9 @@ fn package_reach(
         accessors_written_any: false,
         unseen: None,
         reads_receiver: false,
+        // Only a package the program loads is asked what its code runs that the build does not see (a package only a declaration names loads nothing the program runs):
+        // the rule's answer on a file is a second parse of it, which no other closure needs.
+        wants_unseen: !demand.subpaths.is_empty(),
     };
     walk.run(root, demand, extra_entries);
     let problems = walk
@@ -929,6 +932,9 @@ enum Step {
     Push(FileId),
     /// A package one of its loads names, entered at a subpath.
     Enter(EntryId),
+    /// Where the rule asked of the files of the program (does the file name `Object.prototype` or build code as a string?) is asked of this file, between its hazards and its
+    /// loads, so the answer takes its place in walk order. Replayed only by a walk that asks ([`Walk::wants_unseen`]).
+    Routes,
     /// The visit is where the closure is found to run code the build does not see (a hazard that hides code, a file the walk cannot read, a load nothing answers, a name
     /// of `Object.prototype`): the first of these in walk order is the closure's `why`.
     Unseen(UnseenId),
@@ -939,8 +945,6 @@ enum Step {
 struct Visit {
     /// What the file's scan says of the accessors and global writes a walk collects; `None` for a file nobody scans.
     scan: Option<Arc<ModuleScan>>,
-    /// Whether the file holds a `this` or a `super` (read only for a file whose syntax answered).
-    reads_receiver: bool,
     steps: Vec<Step>,
 }
 
@@ -1074,11 +1078,11 @@ impl Memo {
                 RawStep::Push(path) => Step::Push(self.file(path)),
                 RawStep::Enter(root, subpath) => Step::Enter(self.entry(root, subpath)),
                 RawStep::Unseen(text) => Step::Unseen(self.unseen_id(text)),
+                RawStep::Routes => Step::Routes,
             })
             .collect();
         let visit = Rc::new(Visit {
             scan: raw.scan,
-            reads_receiver: raw.reads_receiver,
             steps,
         });
         self.visits[file.0] = Some(Rc::clone(&visit));
@@ -1094,12 +1098,13 @@ enum RawStep {
     Enter(PathBuf, String),
     /// See [`Step::Unseen`].
     Unseen(String),
+    /// See [`Step::Routes`].
+    Routes,
 }
 
 /// What visiting a file does, as [`record`] found it.
 struct RawVisit {
     scan: Option<Arc<ModuleScan>>,
-    reads_receiver: bool,
     steps: Vec<RawStep>,
 }
 
@@ -1109,7 +1114,6 @@ fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
     let mut recorder = Recorder {
         solid,
         steps: Vec::new(),
-        reads_receiver: false,
     };
     let scan = match recorder.visit(file) {
         Ok(scan) => scan,
@@ -1120,7 +1124,6 @@ fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
     };
     RawVisit {
         scan,
-        reads_receiver: recorder.reads_receiver,
         steps: recorder.steps,
     }
 }
@@ -1129,7 +1132,6 @@ fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
 struct Recorder<'a, 'd> {
     solid: &'a SolidPackages<'d>,
     steps: Vec<RawStep>,
-    reads_receiver: bool,
 }
 
 impl Recorder<'_, '_> {
@@ -1213,20 +1215,8 @@ impl Recorder<'_, '_> {
                 detail: format!("{}: {}", short(file), hazard.detail),
             });
         }
-        // Whether the file names `Object.prototype` or builds code as a string, by the rule the analysis asks of the files of the program, and whether it holds a receiver.
-        match prototype::routes_in(file) {
-            Ok(answer) => {
-                self.reads_receiver |= answer.reads_receiver;
-                if let Some(why) = answer.why {
-                    self.steps
-                        .push(RawStep::Unseen(format!("{why} ({})", short(file))));
-                }
-            }
-            Err(why) => self.steps.push(RawStep::Unseen(format!(
-                "undecided: unparseable ({}: {why})",
-                short(file)
-            ))),
-        }
+        // Whether the file names `Object.prototype` or builds code as a string, and whether it holds a receiver: asked by a walk that wants it, at this place.
+        self.steps.push(RawStep::Routes);
         let directory = file.parent().unwrap_or(Path::new("/"));
         for specifier in &scan.loads {
             if let Err(problem) = self.load(file, directory, specifier) {
@@ -1347,6 +1337,8 @@ struct Walk<'s, 'd, 'm> {
     /// The first place in walk order the closure was found to run code the build does not see, and whether any file read holds a `this` or a `super`.
     unseen: Option<UnseenId>,
     reads_receiver: bool,
+    /// Whether this closure is asked what it runs that the build does not see ([`Step::Routes`] is replayed, [`Step::Unseen`] noted, only then).
+    wants_unseen: bool,
 }
 
 impl Walk<'_, '_, '_> {
@@ -1360,7 +1352,7 @@ impl Walk<'_, '_, '_> {
         // finds come after the ones already waiting): what the walk answers does not depend on how many threads scan.
         while !self.queue.is_empty() {
             let level = self.queue.drain(..).collect::<Vec<_>>();
-            prepare(self.memo, self.solid, &level);
+            prepare(self.memo, self.solid, &level, self.wants_unseen);
             for file in level {
                 if self.files.len() > MAX_CLOSURE_FILES {
                     self.unseen_text(format!(
@@ -1384,8 +1376,25 @@ impl Walk<'_, '_, '_> {
 
     /// The closure runs code the build does not see, as `text` says; the first such place in walk order is the one kept.
     fn unseen_text(&mut self, text: String) {
-        if self.unseen.is_none() {
+        if self.wants_unseen && self.unseen.is_none() {
             self.unseen = Some(self.memo.unseen_id(text));
+        }
+    }
+
+    /// The rule asked of the files of the program, on `file`'s facts (kept for the process while the file holds): whether it names `Object.prototype` or builds code, and
+    /// whether it holds a `this` or a `super`.
+    fn ask_routes(&mut self, file: FileId) {
+        let path = self.memo.path(file).to_path_buf();
+        match prototype::routes_in(&path) {
+            Ok(answer) => {
+                self.reads_receiver |= answer.reads_receiver;
+                if let Some(why) = answer.why {
+                    self.unseen_text(format!("{why} ({})", short(&path)));
+                }
+            }
+            Err(why) => {
+                self.unseen_text(format!("undecided: unparseable ({}: {why})", short(&path)));
+            }
         }
     }
 
@@ -1438,7 +1447,6 @@ impl Walk<'_, '_, '_> {
     /// One file: what visiting it does, replayed in order.
     fn visit(&mut self, file: FileId) {
         let visit = self.memo.visit(self.solid, file);
-        self.reads_receiver |= visit.reads_receiver;
         if let Some(scan) = &visit.scan {
             extend(&mut self.accessor_names, &scan.accessors.names);
             self.accessors_any_name |= scan.accessors.any_name;
@@ -1465,8 +1473,13 @@ impl Walk<'_, '_, '_> {
                     }
                 }
                 Step::Unseen(why) => {
-                    if self.unseen.is_none() {
+                    if self.wants_unseen && self.unseen.is_none() {
                         self.unseen = Some(why);
+                    }
+                }
+                Step::Routes => {
+                    if self.wants_unseen {
+                        self.ask_routes(file);
                     }
                 }
             }
@@ -1535,7 +1548,7 @@ impl Drop for Held<'_> {
 /// Works out, on a few threads, what visiting each file of `level` that no walk has visited does: the scan of the file and the resolution of its loads, which is
 /// where the file system is asked. The memo keeps the results in the order of the level, as the visits of the walk would have, so what the walk finds does not
 /// depend on how many threads worked. A file that cannot be read or scanned here is left for its visit, which meets the same problem and notes it.
-fn prepare(memo: &mut Memo, solid: &SolidPackages<'_>, level: &[FileId]) {
+fn prepare(memo: &mut Memo, solid: &SolidPackages<'_>, level: &[FileId], wants_routes: bool) {
     let mut big = Vec::new();
     let mut small = Vec::new();
     let mut bytes = 0_u64;
@@ -1634,6 +1647,10 @@ fn prepare(memo: &mut Memo, solid: &SolidPackages<'_>, level: &[FileId]) {
                             bytes: held,
                         };
                         let _ = scanned(file);
+                        // The rule's answer on the file (a second parse), kept for the process: the walk that asks finds it there.
+                        if wants_routes {
+                            let _ = prototype::routes_in(file);
+                        }
                     }
                     let raw = record(file, solid);
                     locked(&results)[at] = Some(raw);

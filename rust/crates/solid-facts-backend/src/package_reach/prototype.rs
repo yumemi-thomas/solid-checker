@@ -155,9 +155,10 @@ mod tests {
             .join(name)
             .canonicalize()
             .unwrap();
+        // A package the program loads (`.`): only such a closure is asked.
         let demand = Demand {
+            subpaths: BTreeSet::from([".".to_owned()]),
             everything: true,
-            ..Demand::default()
         };
         package_reach(
             &root,
