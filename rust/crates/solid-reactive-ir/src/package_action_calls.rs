@@ -1272,6 +1272,9 @@ fn global_accessor(ctx: &AnalysisContext<'_>, name: &str) -> Option<DeclarationA
     if matches!(name, "undefined" | "NaN" | "Infinity") {
         return None;
     }
+    if !is_identifier_name(name) {
+        return None;
+    }
     let (root, named) = ctx.package_reach?.global_accessor_writers_of(name).next()?;
     let prefix = if named {
         WRITE_PREFIX
@@ -1293,11 +1296,24 @@ fn unspelled_accessor(ctx: &AnalysisContext<'_>) -> Option<DeclarationAt> {
         })
 }
 
+/// Whether `name` can be the name of a global: an identifier. The origin walk can end on the text of any expression (a project function written as an arrow function ends on
+/// `() => {}`), and no package writes a global by that name, whatever any-name writer the program loads.
+fn is_identifier_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+        && chars.all(|next| next.is_ascii_alphanumeric() || next == '_' || next == '$')
+}
+
 /// The origin of a global the standard library declares that some installed package the program loads writes at run time and may reach a Solid action there
 /// (`globalThis.setTimeout = …`, `Object.defineProperty(window, "fetch", …)`, found by the scan of each package's closure): the writer's code is what a call of it runs,
 /// whatever type the library declares the global with. The premise is that types are sound for declarations and runtime writes come from the scan. A writer under a key
 /// nothing in its file decides may have written any global, so it answers for a name the others do not write ([`WRITE_ANY_PREFIX`]); one that writes the name answers first.
 fn written_global(ctx: &AnalysisContext<'_>, name: &str) -> Option<Origin> {
+    if !is_identifier_name(name) {
+        return None;
+    }
     let (root, named) = ctx.package_reach?.global_writers_of(name).next()?;
     let prefix = if named {
         WRITE_PREFIX
@@ -2735,7 +2751,7 @@ pub(crate) fn universe_sites<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::package_name;
+    use super::{is_identifier_name, package_name};
 
     #[test]
     fn a_module_names_its_package() {
@@ -2744,5 +2760,25 @@ mod tests {
         assert_eq!(package_name("@solidjs/web/storage"), "@solidjs/web");
         assert_eq!(package_name("@solidjs/web"), "@solidjs/web");
         assert_eq!(package_name("fz-step"), "fz-step");
+    }
+
+    /// ADR 0974: only an identifier can name a global; the text of any other expression the origin walk ends on is none (an any-name writer matches no function literal).
+    #[test]
+    fn only_an_identifier_names_a_global() {
+        for name in ["btoa", "JSON", "_x", "$", "XRWebGLBinding", "a1"] {
+            assert!(is_identifier_name(name), "{name}");
+        }
+        for name in [
+            "",
+            "() => {}",
+            "1a",
+            "a.b",
+            "a b",
+            "async () => 1",
+            "{}",
+            "x[0]",
+        ] {
+            assert!(!is_identifier_name(name), "{name}");
+        }
     }
 }
