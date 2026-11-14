@@ -1,0 +1,5 @@
+# action-in-owned-scope-writer-functions-fresh
+
+**Claim (ADR 0974, the reviews of #231): the twin of `action-in-owned-scope-writer-functions`.** The writer functions are followed to their calls, and a call whose target is a fresh object writes no global: `fz-wfresh` uses `Object.assign` and `Object.defineProperty` only through a name they are bound to (`const assign = Object.assign`, `const { defineProperty } = Object`), `.call`, `.apply`, `.bind` and `Reflect.apply`, and every target is an object literal, an array literal, a `new`, a function, or a `const` bound to an object literal. It names `solid-js`, so it is not clear: a site that ran its code would be a row. It writes no global of any name, so the project's `fetch`, `setTimeout` and `window.innerWidth` are the host's and the project is silent.
+
+`node_modules/fz-*` are **not** published bytes: each is written for this fixture. `node_modules/solid-js` and `@solidjs/*` are the manifests of `action-in-owned-scope-unread-packages`; `.solid-checker/runtime.json` closes the program boundary.

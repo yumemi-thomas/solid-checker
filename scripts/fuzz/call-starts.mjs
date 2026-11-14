@@ -116,6 +116,16 @@ export function callStarts(source, fileName = "App.tsx") {
     if (clause?.namedBindings) (ts.isNamespaceImport(clause.namedBindings) ? [clause.namedBindings] : clause.namedBindings.elements).forEach((element) => { if (!VALUE_READERS.has(element.propertyName?.text ?? element.name.text)) names.add(element.name.text); });
   }
   const nameOf = (expression) => (ts.isIdentifier(unwrap(expression)) ? unwrap(expression).text : null);
+  /** The statement an identifier is the whole operand of, through parentheses, casts and unary operators (`void x;`, `void typeof x;`, `x;`, `if (!x)`, `while (x)`, `return x`, `throw x`). */
+  const bareOperandStatement = (identifier) => {
+    let operand = identifier;
+    while (ts.isParenthesizedExpression(operand.parent) || ts.isAsExpression(operand.parent) || ts.isSatisfiesExpression(operand.parent) || ts.isNonNullExpression(operand.parent)
+      || ts.isPrefixUnaryExpression(operand.parent) || ts.isVoidExpression(operand.parent) || ts.isTypeOfExpression(operand.parent)) operand = operand.parent;
+    const parent = operand.parent;
+    if (ts.isExpressionStatement(parent)) return parent;
+    if ((ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isReturnStatement(parent) || ts.isThrowStatement(parent)) && parent.expression === operand) return parent;
+    return null;
+  };
   const collect = (node) => {
     if (ts.isVariableDeclaration(node) && ts.isArrayBindingPattern(node.name) && node.initializer && ts.isCallExpression(unwrap(node.initializer)) && solid.has(nameOf(rootOf(unwrap(node.initializer).expression)))) {
       for (const element of node.name.elements) if (ts.isBindingElement(element) && ts.isIdentifier(element.name)) solid.add(element.name.text);
@@ -173,6 +183,9 @@ export function callStarts(source, fileName = "App.tsx") {
     else if (ts.isTemplateExpression(node)) for (const span of node.templateSpans) calls.push([node.getStart(file), node.head.getEnd(), span.expression.getStart(file), rootOf(span.expression).getStart(file)]);
     // A destructuring reads its properties: V8's frame is on the binding, the row on the pattern.
     else if (ts.isBindingElement(node)) { let pattern = node.parent; while (ts.isBindingElement(pattern.parent)) pattern = pattern.parent.parent; calls.push([node.getStart(file), node.getEnd(), pattern.getStart(file), pattern.getStart(file)]); }
+    // A global read has no position of its own where nothing around it sets one: V8's frame is the statement's start (`void x;`, `typeof x;`, `if (x) {}`, `return x;`),
+    // the row on the read. Where the read is an argument, an initializer, an element or an operand of another expression the frame is on the identifier already.
+    else if (ts.isIdentifier(node) && bareOperandStatement(node)) { const statement = bareOperandStatement(node); calls.push([statement.getStart(file), statement.getStart(file) + 1, node.getStart(file), node.getStart(file)]); }
     // The same as an assignment: `({ v } = st)`.
     else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && (ts.isObjectLiteralExpression(unwrap(node.left)) || ts.isArrayLiteralExpression(unwrap(node.left)))) {
       const left = unwrap(node.left);

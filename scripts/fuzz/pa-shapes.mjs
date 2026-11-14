@@ -6,6 +6,27 @@
 //               pure     `fz-calm`: names no Solid package in its closure, loads nothing by a computed name, reads only the libraries' globals (the checker clears it)
 //               dyn      `fz-load`: loads `import(name)` on a branch that never runs (the checker cannot clear it; Chrome is quiet)
 //               inline   no package: the program's own `action(function* () {})()`, an action called where it is created (the second hole of ADR 0972)
+//               winself  `fz-pub` (a side-effect import that reaches Solid and writes `window.__paAct`) and `fz-winself`, whose `paEnter()` calls `window.self.__paAct()`:
+//                        the global object through its own member (ADR 0974: the scan followed one member and cleared it)
+//               docview  `fz-pub` and `fz-docview`, whose `paEnter()` calls `document.defaultView.__paAct()` (ADR 0974)
+//               getter   `fz-getter`: `clock` has `get now()` that calls the action; the site is the read `void clock.now`, no call (ADR 0974)
+//               gwrite   `fz-gwrite` replaces the host's `btoa` (`globalThis.btoa = …`) with a function that calls the action; the site is `btoa("x")`, a global the library
+//                        declares, so the compiler's signature is the host's (ADR 0974: the write comes from the scan of the package's closure)
+//               gwritekey  `fz-gwritekey`: the same, the key a `const KEY = "btoa"` (the file's constants decide it)
+//               gwriteany  `fz-gwriteany`: the same through `Object.assign(globalThis, loadPatches())`: a key nothing in the file decides, so any global may be written
+//               gwritesym  `fz-gwritesym` reaches Solid and writes only a symbol-keyed property: no global a call can run, `btoa("x")` is the host's (legal)
+//               gwriteand  `fz-gwriteand`: `globalThis.btoa &&= …` (a logical assignment writes as `=` does, ADR 0974)
+//               gwritereflect  `fz-gwritereflect`: `Reflect.apply(Object.assign, null, [globalThis, { btoa }])` (a writer called through `Reflect.apply`, ADR 0974)
+//               gwritealias  `fz-gwritealias`: `const assign = Object.assign; assign(globalThis, { btoa })` (a writer held by a name, ADR 0974)
+//               gwritebind   `fz-gwritebind`: `Object.assign.bind(null, globalThis)` called with the patch (a bound writer, ADR 0974)
+//               gcallkey, gcallconst, gcalldestr, gcallalias, gcallarray, gcallself, gcallhanded  `fz-gwrite` again, the program reaching the replaced `btoa` by another
+//                        route to the global object: `window["btoa"]("x")`, a constant key, `const { btoa: enc } = window`, `const enc = window.btoa`, `[btoa][0]("x")`,
+//                        `window.self.btoa("x")`, the global object handed to a function that calls it (ADR 0974: every route the call side can decide is followed, and the
+//                        object handed on, where any global may be read, is a hand-off; the site is the call)
+//               getterrename, getterdefault  `fz-getter` again, the getter read through a pattern: `({ now: n } = clock)`, `({ now = 0 } = clock)` (ADR 0974: the row stands at the
+//                        pattern's property, where the runtime reports the call, not at `clock`)
+//               gaccmember, gaccbare, gacctypeof, gaccpattern  `fz-gaccessor` redefines `devicePixelRatio` with a getter that calls the action; the site is the value read, no
+//                        call: `void window.devicePixelRatio`, `void devicePixelRatio`, `void typeof window.devicePixelRatio`, `({ devicePixelRatio: ratio } = window)` (ADR 0974)
 //     hosts     body     the component's body                         owned
 //               memo     a memo's compute, read by the view           owned
 //               root     a `createRoot` body in the component's body  owned
@@ -17,13 +38,25 @@
 // (`paShape`), not crossed by the census, ACTION_CALLED_IN_OWNED_SCOPE only (not mirrored to ON_FLUSH_IN_OWNED_SCOPE: the package calls `action`, not `onFlush`).
 import { call, child, decl, expr, fn, num, prim, ref, ret } from "./model.mjs";
 
-export const PA_PACKAGE_KINDS = ["reach", "pure", "dyn", "inline"];
+/** The writers a package replaces `btoa` with (ADR 0974: the forms of a write the scan follows), and the program's routes to the replaced global and to a redefined accessor. */
+const WRITER_KINDS = ["gwrite", "gwritekey", "gwriteany", "gwritesym", "gwriteand", "gwritereflect", "gwritealias", "gwritebind"];
+const CALL_KINDS = ["gcallkey", "gcallconst", "gcalldestr", "gcallalias", "gcallarray", "gcallself", "gcallhanded"];
+const ACCESSOR_KINDS = ["gaccmember", "gaccbare", "gacctypeof", "gaccpattern"];
+const PATTERN_KINDS = ["getterrename", "getterdefault"];
+export const PA_PACKAGE_KINDS = ["reach", "pure", "dyn", "inline", "winself", "docview", "getter", ...WRITER_KINDS, ...CALL_KINDS, ...ACCESSOR_KINDS, ...PATTERN_KINDS];
 export const PA_HOSTS = ["body", "memo", "root", "timer", "micro"];
 const OWNED_HOSTS = ["body", "memo", "root"];
-const THROWING_KINDS = ["reach", "inline"];
+const THROWING_KINDS = ["reach", "inline", "winself", "docview", "getter", ...WRITER_KINDS.filter((kind) => kind !== "gwritesym"), ...CALL_KINDS, ...ACCESSOR_KINDS, ...PATTERN_KINDS];
 export const PA_CODE = "ACTION_CALLED_IN_OWNED_SCOPE";
-/** The package each kind imports from (`inline` imports none). */
-export const PA_PACKAGES = { reach: "fz-act", pure: "fz-calm", dyn: "fz-load" };
+/** The packages each kind imports from, in the order its site writes them (`inline` imports none); the last holds the entry. */
+export const PA_PACKAGES = {
+  reach: ["fz-act"], pure: ["fz-calm"], dyn: ["fz-load"], winself: ["fz-pub", "fz-winself"], docview: ["fz-pub", "fz-docview"], getter: ["fz-getter"],
+  gwrite: ["fz-gwrite"], gwritekey: ["fz-gwritekey"], gwriteany: ["fz-gwriteany"], gwritesym: ["fz-gwritesym"],
+  gwriteand: ["fz-gwriteand"], gwritereflect: ["fz-gwritereflect"], gwritealias: ["fz-gwritealias"], gwritebind: ["fz-gwritebind"],
+  ...Object.fromEntries(CALL_KINDS.map((kind) => [kind, ["fz-gwrite"]])),
+  ...Object.fromEntries(ACCESSOR_KINDS.map((kind) => [kind, ["fz-gaccessor"]])),
+  ...Object.fromEntries(PATTERN_KINDS.map((kind) => [kind, ["fz-getter"]])),
+};
 /** `{ [context]: "misuse" | "legal" }`. */
 export const PA_CONTEXTS = Object.fromEntries(
   PA_PACKAGE_KINDS.flatMap((kind) => PA_HOSTS.map((host) => [`pa-${kind}-${host}`, THROWING_KINDS.includes(kind) && OWNED_HOSTS.includes(host) ? "misuse" : "legal"])),
@@ -42,26 +75,77 @@ export function paShape(context, shape) {
   return !paParts(context) || (shape.binding === "direct" && (shape.layer ?? "none") === "none");
 }
 
-/** The files of each package: a manifest that names no Solid package (the build does not read its source; the program's own `solid-js` serves the import at run time). */
-export function paPackageFiles(kind) {
-  const js = {
-    reach: ['import { action } from "solid-js";', "", "export const paEnter = () => {", "  void action(function* () {})();", "  return 1;", "};"],
-    pure: ["const twice = (n) => n * 2;", "", "export const paEnter = () => twice([1].length) + Math.max(1, 2);"],
-    dyn: ["export const paEnter = () => {", '  const name = ["./", "never.js"].join("");', '  if (name === "") void import(name);', "  return 1;", "};"],
-  }[kind];
+/** The files of one package of a kind (`name` is one of `PA_PACKAGES[kind]`): a manifest that names no Solid package (the build does not read its source; the program's own `solid-js` serves the import at run time). */
+export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
+  const entry = ["export declare const paEnter: () => number;"];
+  const files = {
+    "fz-act": { js: ['import { action } from "solid-js";', "", "export const paEnter = () => {", "  void action(function* () {})();", "  return 1;", "};"], dts: entry },
+    "fz-calm": { js: ["const twice = (n) => n * 2;", "", "export const paEnter = () => twice([1].length) + Math.max(1, 2);"], dts: entry },
+    "fz-load": { js: ["export const paEnter = () => {", '  const name = ["./", "never.js"].join("");', '  if (name === "") void import(name);', "  return 1;", "};"], dts: entry },
+    // A side-effect import that reaches Solid and writes a global; the packages that read it name no Solid package themselves.
+    "fz-pub": { js: ['import { action } from "solid-js";', "", "window.__paAct = () => {", "  void action(function* () {})();", "  return 1;", "};"], dts: ["export {};"] },
+    "fz-winself": { js: ["export const paEnter = () => window.self.__paAct();"], dts: entry },
+    "fz-docview": { js: ["export const paEnter = () => document.defaultView.__paAct();"], dts: entry },
+    "fz-getter": { js: ['import { action } from "solid-js";', "", "export const clock = {", "  get now() {", "    void action(function* () {})();", "    return 1;", "  },", "};"], dts: ["export declare const clock: { readonly now: number };"] },
+    // ADR 0974: a package that replaces a global the library declares, imported for its effect: the type is sound for the declaration, the write comes from the scan.
+    "fz-gwrite": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "globalThis.btoa = (text) => {", "  void action(function* () {})();", "  return real(text);", "};"], dts: ["export {};"] },
+    "fz-gwritekey": { js: ['import { action } from "solid-js";', "", 'const KEY = "btoa";', "const real = globalThis[KEY];", "globalThis[KEY] = (text) => {", "  void action(function* () {})();", "  return real(text);", "};"], dts: ["export {};"] },
+    "fz-gwriteany": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "function loadPatches() {", "  return {", "    btoa: (text) => {", "      void action(function* () {})();", "      return real(text);", "    },", "  };", "}", "Object.assign(globalThis, loadPatches());"], dts: ["export {};"] },
+    // ADR 0974: the other forms of a write to `btoa`, each a write the scan must see: a logical assignment, a writer called through `Reflect.apply`, a writer held by a name, a bound writer.
+    "fz-gwriteand": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "globalThis.btoa &&= (text) => {", "  void action(function* () {})();", "  return real(text);", "};"], dts: ["export {};"] },
+    "fz-gwritereflect": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "Reflect.apply(Object.assign, null, [globalThis, {", "  btoa: (text) => {", "    void action(function* () {})();", "    return real(text);", "  },", "}]);"], dts: ["export {};"] },
+    "fz-gwritealias": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "const assign = Object.assign;", "assign(globalThis, {", "  btoa: (text) => {", "    void action(function* () {})();", "    return real(text);", "  },", "});"], dts: ["export {};"] },
+    "fz-gwritebind": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", "const patch = Object.assign.bind(null, globalThis);", "patch({", "  btoa: (text) => {", "    void action(function* () {})();", "    return real(text);", "  },", "});"], dts: ["export {};"] },
+    // ADR 0974: a global redefined with a getter: the read runs the package's code, so the site is the read, not a call.
+    "fz-gaccessor": { js: ['import { action } from "solid-js";', "", 'Object.defineProperty(window, "devicePixelRatio", {', "  configurable: true,", "  get() {", "    void action(function* () {})();", "    return 1;", "  },", "});"], dts: ["export {};"] },
+    "fz-gwritesym": { js: ['import { action } from "solid-js";', "", 'var MARK = /* @__PURE__ */ Symbol.for("fz-gwritesym");', "globalThis[MARK] = () => {", "  void action(function* () {})();", "};"], dts: ["export {};"] },
+  }[name];
   return {
-    "package.json": `${JSON.stringify({ name: PA_PACKAGES[kind], version: "1.0.0", type: "module", exports: { ".": { types: "./index.d.ts", default: "./index.js" } } }, null, 2)}\n`,
-    "index.js": `${js.join("\n")}\n`,
-    "index.d.ts": "export declare const paEnter: () => number;\n",
+    "package.json": `${JSON.stringify({ name, version: "1.0.0", type: "module", exports: { ".": { types: "./index.d.ts", default: "./index.js" } } }, null, 2)}\n`,
+    "index.js": `${files.js.join("\n")}\n`,
+    "index.d.ts": `${files.dts.join("\n")}\n`,
   };
 }
+
+/** ADR 0974: the program's routes to the global `fz-gwrite` replaced: `{ text, prelude? }` (the prelude is a declaration at the top of the component's body, the text the site). */
+const CALL_ROUTES = {
+  gcallkey: { text: 'window["btoa"]("x")' },
+  gcallconst: { prelude: ['const key = "btoa";'], text: 'window[key]("x")' },
+  gcalldestr: { prelude: ["const { btoa: enc } = window;"], text: 'enc("x")' },
+  gcallalias: { prelude: ["const enc = window.btoa;"], text: 'enc("x")' },
+  gcallarray: { text: '[btoa][0]("x")' },
+  gcallself: { text: 'window.self.btoa("x")' },
+  gcallhanded: { text: '((w: Window) => w.btoa("x"))(window)' },
+};
+/** ADR 0974: the reads of `devicePixelRatio`, which `fz-gaccessor` redefines with a getter. */
+const ACCESSOR_READS = {
+  gaccmember: { text: "void window.devicePixelRatio" },
+  gaccbare: { text: "void devicePixelRatio" },
+  gacctypeof: { text: "void typeof window.devicePixelRatio" },
+  gaccpattern: { prelude: ["let ratio = 0;"], text: "({ devicePixelRatio: ratio } = window)" },
+};
+
+/** ADR 0974: the read of `clock.now` (the getter of `fz-getter`) through a pattern: the runtime reports the call at the pattern's property, so the row stands there, not at `clock`. */
+const GETTER_PATTERNS = {
+  getterrename: { prelude: ["let n = 0;"], text: "({ now: n } = clock)" },
+  getterdefault: { prelude: ["let now = 0;"], text: "({ now = 0 } = clock)" },
+};
 
 /** The site's text for a `pa-*` cell (misuse.mjs `describeUse` asks): the package's entry, or the action called where it is created. */
 export function paUse(kind) {
   const base = { solid: [], web: [], namespaces: [], moduleLines: [], preludeLines: [], contextLine: undefined };
-  return kind === "inline"
-    ? { ...base, solid: ["action"], text: "action(function* () {})()" }
-    : { ...base, text: "paEnter()", importLines: [`import { paEnter } from "${PA_PACKAGES[kind]}";`] };
+  if (kind === "inline") return { ...base, solid: ["action"], text: "action(function* () {})()" };
+  // A global the library declares, replaced by a package imported for its effect: the call is of the global, no import names it.
+  if (kind.startsWith("gwrite")) return { ...base, text: 'btoa("x")', importLines: [`import "${PA_PACKAGES[kind][0]}";`] };
+  // ADR 0974: the same replaced global reached by another route (a declaration the body holds first, then the call), or a redefined accessor read (the site is the read).
+  const form = CALL_ROUTES[kind] ?? ACCESSOR_READS[kind];
+  if (form) return { ...base, text: form.text, preludeLines: form.prelude ?? [], importLines: [`import "${PA_PACKAGES[kind][0]}";`] };
+  if (GETTER_PATTERNS[kind]) return { ...base, text: GETTER_PATTERNS[kind].text, preludeLines: GETTER_PATTERNS[kind].prelude, importLines: [`import { clock } from "${PA_PACKAGES[kind][0]}";`] };
+  // The read of a getter: no call, the member evaluated for its value.
+  if (kind === "getter") return { ...base, text: "void clock.now", importLines: [`import { clock } from "${PA_PACKAGES[kind][0]}";`] };
+  // A package that publishes the global is imported for its effect before the entry's.
+  const [publisher, entry] = PA_PACKAGES[kind].length === 2 ? PA_PACKAGES[kind] : [undefined, PA_PACKAGES[kind][0]];
+  return { ...base, text: "paEnter()", importLines: [...(publisher ? [`import "${publisher}";`] : []), `import { paEnter } from "${entry}";`] };
 }
 
 /** Every `use` node of `nodes`, at any depth. */
@@ -91,8 +175,8 @@ export function paContext(context, stmts, kit) {
       default: throw new Error(`pa: no host ${parts.host}`);
     }
   })();
-  const pkg = PA_PACKAGES[parts.kind];
-  return { ...hosted, ...(pkg ? { packages: { [pkg]: paPackageFiles(parts.kind) } } : {}) };
+  const names = PA_PACKAGES[parts.kind];
+  return { ...hosted, ...(names ? { packages: Object.fromEntries(names.map((name) => [name, paPackageFiles(parts.kind, name)])) } : {}) };
 }
 
 /** `{ [code]: { misuse, legal } }` for SPEC. */

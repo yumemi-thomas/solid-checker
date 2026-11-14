@@ -2789,6 +2789,12 @@ impl Dialect for Solid2 {
         (self.lazy_renders_component && primitive == Primitive::Lazy && arguments == 1).then_some(0)
     }
 
+    /// ADR 0974: `lazy(loader)` makes its component of the module `loader` imports, on every release read (rc.3's `lazy(fn)` to rc.21's, with or without the
+    /// `{ export }` option): the loader is the first argument.
+    fn component_loader_argument(&self, primitive: Primitive) -> Option<usize> {
+        (primitive == Primitive::Lazy).then_some(0)
+    }
+
     /// ADR 0153, read on every bundle of the audited `solid-js` archives
     /// (rc.3 and rc.9: `dist/solid.js`, `dist/dev.js`, `dist/server.js`, and
     /// rc.9's observe variants) and on `@solidjs/signals` rc.3, rc.6 and rc.9

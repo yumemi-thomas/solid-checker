@@ -58,6 +58,7 @@ pub mod package_reach;
 mod package_requirements;
 mod program_boundary;
 mod release_scope;
+mod reviewed_packages;
 pub mod runtime_resolution;
 pub mod source_redirects;
 mod suppression;
