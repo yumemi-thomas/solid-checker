@@ -1352,7 +1352,13 @@ impl Walk<'_, '_, '_> {
         // finds come after the ones already waiting): what the walk answers does not depend on how many threads scan.
         while !self.queue.is_empty() {
             let level = self.queue.drain(..).collect::<Vec<_>>();
-            prepare(self.memo, self.solid, &level, self.wants_unseen);
+            // Once the closure is found to run code the build does not see, the rule's answer on the files after it decides nothing (the first place in walk order is the answer).
+            prepare(
+                self.memo,
+                self.solid,
+                &level,
+                self.wants_unseen && self.unseen.is_none(),
+            );
             for file in level {
                 if self.files.len() > MAX_CLOSURE_FILES {
                     self.unseen_text(format!(
@@ -1478,7 +1484,8 @@ impl Walk<'_, '_, '_> {
                     }
                 }
                 Step::Routes => {
-                    if self.wants_unseen {
+                    // The first place in walk order is the answer: past it the rule is not asked (a second parse of every later file of the closure).
+                    if self.wants_unseen && self.unseen.is_none() {
                         self.ask_routes(file);
                     }
                 }
