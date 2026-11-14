@@ -1,0 +1,5 @@
+{
+  "note": "G2 of the check of #227 (ADR 0981): super.slot = location replaces the holder slot: Chrome is quiet at the read. dep-router declares no Solid package, so only the pinned selection reads it.",
+  "packages": ["dep-router"],
+  "dependencySources": ["dep-router"]
+}

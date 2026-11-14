@@ -36,7 +36,9 @@
 // runs against the real packages of `--install`, never against a stub. The one
 // exception is `"packages": ["name"]` in oracle.json: each named directory under the case's
 // `node_modules` is copied to the run directory's own node_modules (a package the case
-// ships, as a project's dependency; it imports solid-js from the install, as a peer).
+// ships, as a project's dependency; it imports solid-js from the install, as a peer). `"dependencySources": ["name"]`
+// (each also in `packages`) passes `--dependency-source name` to the case's feedback run, the selection a fixture's
+// `.solid-checker/runtime.json` makes for `check` (ADR 0981).
 //
 // The install is committed: scripts/runtime-oracle-install holds the manifest and
 // lockfile of the pinned Solid 2.0.0-rc.21 install (solid-js, @solidjs/web,
@@ -694,6 +696,13 @@ async function runCase(id, slot) {
     assert(!existsSync(join(install, "node_modules", name)), `${id}: package ${name} is already in the install`);
     cpSync(join(source, "node_modules", name), join(dir, "node_modules", name), { recursive: true });
   }
+  // `dependencySources` names the packages the checker reads as source in this case, as `check --dependency-source` does for a fixture
+  // (ADR 0981): each one a package the case ships, so the oracle cannot name a selection the case has no package for.
+  const dependencySources = spec.dependencySources ?? [];
+  assert(Array.isArray(dependencySources) && (spec.dependencySources === undefined || dependencySources.length > 0)
+    && new Set(dependencySources).size === dependencySources.length
+    && dependencySources.every((name) => (spec.packages ?? []).includes(name)),
+  `${id}: dependencySources must be a non-empty list of distinct names, each listed in packages`);
   // `mount` lists the exported components to render by name (ADR 0501): the differential fuzzer's cases.
   assert(spec.mount === undefined || (Array.isArray(spec.mount) && spec.mount.length > 0 && spec.mount.every((name) => /^[A-Z][A-Za-z0-9_]*$/.test(name))), `${id}: mount must be a non-empty list of component names`);
   writeFileSync(join(dir, "main.tsx"), mainSource(observations, spec.mount));
@@ -724,13 +733,15 @@ async function runCase(id, slot) {
     const batch = slot.process;
     batch.ran.push(id);
     // The case's own working directory, as its `feedback run` had.
-    const answer = await batch.send({ project: join(dir, "tsconfig.json"), scenario: join(dir, "scenario.json"), report: join(dir, "report.json"), cwd: dir });
+    const answer = await batch.send({ project: join(dir, "tsconfig.json"), scenario: join(dir, "scenario.json"), report: join(dir, "report.json"), cwd: dir,
+      ...(dependencySources.length ? { dependencySources } : {}) });
     wallMs = Date.now() - started;
     if (!batch.usable) slot.retired.push(batch);
     try { report = JSON.parse(answer.report); } catch { failed = answer.error ?? "the batch process wrote no report"; }
   } else {
     const result = await run(NODE, [cli, "feedback", "run",
-      "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"), ...sharedArgs()], dir);
+      "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"),
+      ...dependencySources.flatMap((name) => ["--dependency-source", name]), ...sharedArgs()], dir);
     wallMs = Date.now() - started;
     try { report = JSON.parse(result.stdout.slice(result.stdout.indexOf("{"))); } catch { failed = (result.stderr || result.stdout).slice(-1500); }
     if (report) writeFileSync(join(dir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
