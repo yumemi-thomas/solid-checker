@@ -2414,6 +2414,26 @@ impl Dialect for Solid2 {
         )
     }
 
+    /// ADR 0976, R5: `runWithOwner`'s callback keeps the after-await flag. Probed on rc.21 (Chrome, the oracle case `after-await-primitives`): a read after the `await` of an
+    /// async computation, inside `runWithOwner(null, () => read())` or `runWithOwner(getOwner(), …)` (the owner of a continuation is none), raises UNTRACKED_READ_AFTER_AWAIT;
+    /// the same read inside `runWithOwner(owner, …)` with the owner captured before the `await`, `untrack(…)` or `createRoot(…)` raises nothing. Which owner the program passes is
+    /// the program's fact, not the dialect's: the slot is the dialect's, and the accounting asks the owner.
+    fn callback_keeps_after_await_flag(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!((primitive, argument), (Primitive::RunWithOwner, 1))
+    }
+
+    /// ADR 0976, R5: `getOwner()` returns the owner the code runs under.
+    fn returns_current_owner(&self, primitive: Primitive) -> bool {
+        matches!(primitive, Primitive::GetOwner)
+    }
+
+    /// ADR 0976: `createSignal(initial, options)` returns the setter, and its `equals` option runs on every set.
+    fn signal_creation_options(&self, primitive: Primitive) -> Option<usize> {
+        matches!(primitive, Primitive::CreateSignal)
+            .then(|| self.options_argument(primitive))
+            .flatten()
+    }
+
     /// The callbacks nothing runs until the returned value is used:
     /// `createReaction`'s invalidation callback arms only once the returned
     /// tracker is called, `lazy`'s loader waits for the wrapper component to

@@ -596,6 +596,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 4289,
+      "end": 4296,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -882,6 +893,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 7367,
+      "end": 7374,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -912,6 +934,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
       "start": 7627,
       "end": 7634,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 7738,
+      "end": 7745,
       "fixes": 0
     },
     {
@@ -948,6 +981,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 8149,
+      "end": 8156,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
@@ -978,6 +1022,17 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
       "start": 8447,
       "end": 8454,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-causes/App.tsx",
+      "start": 8582,
+      "end": 8589,
       "fixes": 0
     },
     {

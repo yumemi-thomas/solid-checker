@@ -295,9 +295,7 @@ pub(super) fn run<'a>(
     };
     // ADR 0963: the region of the net for reads no call edge places: a tracked async computation, and a suspension in the program
     // for a continuation to follow (an `await` or an implicit suspension, or a promise handler: `then`, `catch`, `finally`).
-    computations
-        .holds_suspending
-        .set(!starts.is_empty() && program_suspends(ctx));
+    computations.holds_suspending.set(program_suspends(ctx));
     // ADR 0909: a member's walk is a function of the member and the build;
     // only the rows' span dedup reads the draft (`ProgramDraft::spans_agree`)
     // and only the queue's bound reads the walks so far
@@ -363,7 +361,8 @@ pub(super) fn reads_run_unplaced(
         for call in &file.ast.calls {
             let known = unresolved_invocation_known(ctx, file, call);
             if (known || unresolved_invocation_widened(ctx, file, call))
-                && crate::static_api::unplaced_member_blocker(file, call.span, lookup).is_some()
+                && crate::static_api::unplaced_member_or_generator_blocker(file, call.span, lookup)
+                    .is_some()
             {
                 let row = unresolved_invocation_obligation(
                     file,
@@ -380,7 +379,12 @@ pub(super) fn reads_run_unplaced(
         // Batch 10c (B1): a tag the program stored, written in member-route code, is called there as a call is.
         for template in &file.ast.tagged_templates {
             if unresolved_tag(ctx, file, template)
-                && crate::static_api::unplaced_member_blocker(file, template.span, lookup).is_some()
+                && crate::static_api::unplaced_member_or_generator_blocker(
+                    file,
+                    template.span,
+                    lookup,
+                )
+                .is_some()
             {
                 widened.push(unresolved_obligation_at(
                     file,
@@ -408,7 +412,8 @@ pub(super) fn reads_run_unplaced(
                 u32::try_from(read.location.start_byte).ok()?,
                 u32::try_from(read.location.end_byte).ok()?,
             );
-            let blocker = crate::static_api::unplaced_member_blocker(file, span, lookup)?;
+            let blocker =
+                crate::static_api::unplaced_member_or_generator_blocker(file, span, lookup)?;
             Some(StaticDefect {
                 kind: StaticDefectKind::ReactiveReadAfterAwait {
                     accessor: read.accessor.to_string(),
@@ -591,47 +596,93 @@ pub(super) fn unresolved_invocation_shaped(
     unresolved_invocation_known(ctx, file, call) || unresolved_invocation(ctx, file, call)
 }
 
-/// Whether `call` is a call of Solid's own: an accessor (a read of the universe), a setter, an action, or a typed candidate whose implementation is not visible (its
-/// own row, SC9012 `type-only-source`). The calls the SC1002 universe leaves to those rules (slice 9B's accounting, `after_await_accounting.rs`).
+/// Which of Solid's own callees a call has (slice 9B's accounting, `after_await_accounting.rs`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SolidCall {
+    /// An accessor: a read of the universe, listed as a site of its own.
+    Accessor,
+    /// A setter: it runs a function handed to it as an updater (ADR 0976).
+    Setter,
+    /// An action: it runs the function it was made of.
+    Action,
+    /// A typed candidate whose implementation is not visible (ADR 0294): its own row, SC9012 `type-only-source`.
+    Typed,
+}
+
+/// Whether `call` is a call of Solid's own, and which: an accessor (a read of the universe), a setter, an action, or a typed candidate whose implementation is not visible (its
+/// own row, SC9012 `type-only-source`).
 pub(super) fn solid_owned_call(
     ctx: &AnalysisContext<'_>,
     file: &FileFacts,
     call: &CallFact,
-) -> bool {
-    call_accessor_symbol(ctx, file, call).is_some_and(|symbol| {
-        ctx.accessors.contains_key(symbol)
-            || ctx.setters.contains_key(symbol)
-            || ctx.actions.contains_key(symbol)
-            || typed_unknown(ctx, symbol)
-    })
+) -> Option<SolidCall> {
+    let symbol = call_accessor_symbol(ctx, file, call)?;
+    if ctx.accessors.contains_key(symbol) {
+        Some(SolidCall::Accessor)
+    } else if ctx.setters.contains_key(symbol) {
+        Some(SolidCall::Setter)
+    } else if ctx.actions.contains_key(symbol) {
+        Some(SolidCall::Action)
+    } else if typed_unknown(ctx, symbol) {
+        Some(SolidCall::Typed)
+    } else {
+        None
+    }
 }
 
-/// Whether the symbol of `call`'s callee is declared only outside the project, by the compiler's own declarations of it: a package (a path under `node_modules`) or a default library
-/// file (`lib.*.d.ts`). `Some(false)` when one declaration lies in the project, `None` when the callee names no symbol or the symbol has no declaration (no fact: nothing is
-/// concluded). The facts are the ones demanded for every call's callee, so this asks for none of its own. Slice 9B's accounting uses it for a call whose resolved-call fact is missing
-/// (an argumentless call demands none): `expect(x).toBeNull()` names a matcher an installed package declares, which runs project code only through what it is handed.
-pub(super) fn callee_declared_outside_project(
+/// Where the compiler declares the symbol of a call's callee: see [`callee_home`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CalleeHome {
+    /// At least one declaration lies in the project (a function, a method, a declaration file the project holds, an augmentation).
+    Project,
+    /// Every declaration lies in the compiler's default library (`lib.dom.d.ts`, `lib.es2015.core.d.ts`).
+    DefaultLibrary,
+    /// Every declaration lies outside the project and at least one in an installed package (a path under `node_modules`).
+    Package,
+}
+
+/// Where the compiler's own declarations of the symbol of `call`'s callee lie. `None` when the callee names no symbol or the symbol has no declaration (no fact: nothing is
+/// concluded). The facts are the ones demanded for every call's callee, so this asks for none of its own. Slice 9B's accounting uses it for a call whose resolved-call fact is
+/// missing (an argumentless call demands none, a veto withholds a standard call): `expect(x).toBeNull()` names a matcher an installed package declares, `it.next()` a method the
+/// default library declares. Where the symbol is declared says what it is not (a project function); it says nothing of what runs.
+pub(super) fn callee_home(
     ctx: &AnalysisContext<'_>,
     file: &FileFacts,
     call: &CallFact,
-) -> Option<bool> {
+) -> Option<CalleeHome> {
     let declarations = ctx
         .semantic_lookup
         .symbol_declarations(call_accessor_symbol(ctx, file, call)?)?;
-    (!declarations.is_empty()).then(|| {
-        declarations
+    if declarations.is_empty() {
+        return None;
+    }
+    let outside = |path: &str| {
+        crate::effect_phase::package_root(path).is_some() || default_library_file(path)
+    };
+    if !declarations
+        .iter()
+        .all(|declaration| outside(declaration.location.path.as_ref()))
+    {
+        return Some(CalleeHome::Project);
+    }
+    Some(
+        if declarations
             .iter()
-            .all(|declaration| outside_project(declaration.location.path.as_ref()))
-    })
+            .all(|declaration| default_library_file(declaration.location.path.as_ref()))
+        {
+            CalleeHome::DefaultLibrary
+        } else {
+            CalleeHome::Package
+        },
+    )
 }
 
-/// Whether a declaration file is no project source: an installed package's, or one of the compiler's default libraries (`lib.dom.d.ts`, `lib.es2015.core.d.ts`).
-fn outside_project(path: &str) -> bool {
-    crate::effect_phase::package_root(path).is_some()
-        || std::path::Path::new(path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with("lib.") && name.ends_with(".d.ts"))
+/// Whether a declaration file is one of the compiler's default libraries (`lib.dom.d.ts`, `lib.es2015.core.d.ts`).
+fn default_library_file(path: &str) -> bool {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("lib.") && name.ends_with(".d.ts"))
 }
 
 /// Batch 10c (B1): the invocations [`unresolved_invocation`] takes beyond [`unresolved_invocation_known`]: a slot, `.call` and `.apply`, a

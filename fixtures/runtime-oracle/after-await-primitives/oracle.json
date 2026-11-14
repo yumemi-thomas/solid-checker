@@ -1,0 +1,1 @@
+{"note": "slice 9B follow-up (ADR 0976), R5 of the re-check of #233: runWithOwner(null, fn), runWithOwner(getOwner(), fn) after the await and runWithOwner(null, reader) raise UNTRACKED_READ_AFTER_AWAIT in rc.21 and each keeps SC1002's uncertifiable row (covered-uncertifiable); an owner captured before the await, untrack and createRoot raise nothing (quiet) and get no row"}

@@ -19,6 +19,17 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/closed-export-alias-load/main.ts",
+      "start": 254,
+      "end": 267,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/closed-export-alias-load/main.ts",
       "start": 286,
       "end": 287,
       "fixes": 0
@@ -32,6 +43,28 @@
       "path": "fixtures/reactive-ir/closed-export-alias-load/second.ts",
       "start": 371,
       "end": 378,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/closed-export-alias-load/second.ts",
+      "start": 396,
+      "end": 409,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/closed-export-alias-load/second.ts",
+      "start": 411,
+      "end": 422,
       "fixes": 0
     },
     {

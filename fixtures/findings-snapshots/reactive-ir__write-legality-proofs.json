@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 385,
+      "end": 389,
+      "fixes": 0
+    },
+    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -87,6 +98,17 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 822,
       "end": 825,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 1066,
+      "end": 1070,
       "fixes": 0
     },
     {
@@ -325,6 +347,17 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 2410,
+      "end": 2421,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 2422,
       "end": 2425,
       "fixes": 0
@@ -481,6 +514,17 @@
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
       "start": 3613,
       "end": 3616,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
+      "start": 4139,
+      "end": 4143,
       "fixes": 0
     },
     {

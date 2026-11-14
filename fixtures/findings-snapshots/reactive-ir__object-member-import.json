@@ -519,6 +519,17 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
       "start": 516,
+      "end": 530,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-import/Negatives.tsx",
+      "start": 516,
       "end": 541,
       "fixes": 0
     },
@@ -692,6 +703,17 @@
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/object-member-import/source.ts",
+      "start": 718,
+      "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/source.ts",
       "start": 718,
       "end": 725,

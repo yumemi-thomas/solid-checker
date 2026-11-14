@@ -5,6 +5,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 768,
+      "end": 775,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 816,
       "end": 822,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 986,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -126,6 +148,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 1432,
+      "end": 1442,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -153,6 +186,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 1508,
       "end": 1514,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 1665,
+      "end": 1700,
       "fixes": 0
     },
     {
@@ -203,6 +247,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 1887,
+      "end": 1895,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -219,6 +274,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 1902,
       "end": 1907,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 1934,
+      "end": 1943,
       "fixes": 0
     },
     {
@@ -247,6 +313,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 1982,
+      "end": 1990,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -263,6 +340,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 1997,
       "end": 2002,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 2029,
+      "end": 2042,
       "fixes": 0
     },
     {
@@ -291,6 +379,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 2080,
+      "end": 2091,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -307,6 +406,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 2099,
       "end": 2104,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 2126,
+      "end": 2136,
       "fixes": 0
     },
     {
@@ -340,6 +450,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 2248,
       "end": 2254,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 2566,
+      "end": 2573,
       "fixes": 0
     },
     {
@@ -384,6 +505,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 2650,
       "end": 2656,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 2823,
+      "end": 2830,
       "fixes": 0
     },
     {
@@ -640,6 +772,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 4056,
+      "end": 4063,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -791,6 +934,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 4651,
       "end": 4657,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 4800,
+      "end": 4807,
       "fixes": 0
     },
     {
@@ -1121,6 +1275,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 6380,
       "end": 6385,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 6459,
+      "end": 6466,
       "fixes": 0
     },
     {
@@ -1795,6 +1960,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 10748,
+      "end": 10771,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2004,6 +2180,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 11954,
+      "end": 11977,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2114,6 +2301,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 12446,
+      "end": 12460,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 12446,
+      "end": 12483,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2155,6 +2364,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 12521,
       "end": 12527,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 12697,
+      "end": 12723,
       "fixes": 0
     },
     {
@@ -2205,6 +2425,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 12922,
+      "end": 12945,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -2249,6 +2480,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 13186,
+      "end": 13209,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -2287,6 +2529,28 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 13299,
       "end": 13305,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 13469,
+      "end": 13499,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 13469,
+      "end": 13520,
       "fixes": 0
     },
     {
@@ -2419,6 +2683,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 14067,
       "end": 14073,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 14227,
+      "end": 14251,
       "fixes": 0
     },
     {
@@ -2601,6 +2876,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 15167,
+      "end": 15175,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -2634,6 +2920,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 15380,
+      "end": 15393,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -2661,6 +2958,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 15444,
       "end": 15450,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 15606,
+      "end": 15622,
       "fixes": 0
     },
     {
@@ -2818,6 +3126,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 16757,
+      "end": 16764,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2947,6 +3266,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 17520,
       "end": 17526,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 17707,
+      "end": 17714,
       "fixes": 0
     },
     {
@@ -3654,6 +3984,39 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 21838,
+      "end": 21849,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 21838,
+      "end": 21888,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 21851,
+      "end": 21865,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -4053,6 +4416,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 24274,
+      "end": 24284,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -4080,6 +4454,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 24334,
       "end": 24340,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 24503,
+      "end": 24518,
       "fixes": 0
     },
     {
@@ -5062,6 +5447,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 30065,
+      "end": 30076,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -5554,6 +5950,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 32351,
       "end": 32357,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 32389,
+      "end": 32396,
       "fixes": 0
     },
     {
@@ -6066,6 +6473,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 34486,
+      "end": 34493,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "tuple-iteration-written",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -6451,6 +6869,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 36092,
+      "end": 36103,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -6495,6 +6924,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 36449,
+      "end": 36460,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -6522,6 +6962,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 36478,
       "end": 36483,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 36740,
+      "end": 36751,
       "fixes": 0
     },
     {
@@ -7837,6 +8288,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 43803,
+      "end": 43815,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
@@ -7875,6 +8337,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 44173,
       "end": 44177,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 44245,
+      "end": 44249,
       "fixes": 0
     },
     {
@@ -7930,6 +8403,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 44554,
       "end": 44558,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 44626,
+      "end": 44629,
       "fixes": 0
     },
     {
@@ -8040,6 +8524,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 45305,
       "end": 45309,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 45363,
+      "end": 45370,
       "fixes": 0
     },
     {
@@ -8436,6 +8931,17 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 47690,
       "end": 47694,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
+      "start": 47734,
+      "end": 47746,
       "fixes": 0
     },
     {

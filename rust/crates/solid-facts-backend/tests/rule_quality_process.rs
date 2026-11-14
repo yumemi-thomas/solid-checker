@@ -31,7 +31,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // `standalone`'s await (an exported function no tracked computation
         // calls, so no producer walks it): the uncertifiable row
         // `read-after-await-unaccounted`.
-        ("reactive-read-after-await", 23),
+        // ADR 0976: four more, the library calls after an await in `await-control-flow-invalid.tsx`: `console.log(await …)` (byte 321) and three `Math.random()` (853, 997,
+        // 1127), a host call and argumentless calls with no exact fact: uncertifiable `read-after-await-unaccounted` rows, no violation moved. One more, the full S4 rule
+        // (owner ruling 2026-11-15): `after-await-invalid.tsx:18` `result.value`, a member of a project object literal no fact proves plain.
+        ("reactive-read-after-await", 28),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
         // ADR 0646: two more, `owned-scope-valid.tsx:28`, a tuple's function
         // slots from a local hook: its transport does not resolve.
@@ -83,14 +86,15 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         (
             "after-await-invalid.tsx",
             [
-                ("reactive-read-after-await", 2),
+                ("reactive-read-after-await", 3),
                 ("reactive-dispatch-unresolved", 2),
             ]
             .as_slice(),
         ),
         (
             "await-control-flow-invalid.tsx",
-            [("reactive-read-after-await", 11)].as_slice(),
+            // ADR 0976: 11 + the four library calls after an await (the rows counted above).
+            [("reactive-read-after-await", 15)].as_slice(),
         ),
         (
             "after-await-extended-invalid.tsx",

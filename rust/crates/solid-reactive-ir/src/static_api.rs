@@ -2470,6 +2470,8 @@ enum Routes {
     /// a class element, an object accessor or method, a tag function, a function a `new` runs. A function handed on is run by a
     /// call, which the walk of the rule that asks follows or answers itself; a parameter initializer is the call-site net's.
     Members,
+    /// ADR 0976 (R6): [`Routes::Members`] and a generator's body ([`crate::execution_role::runs_implicitly_or_generator`]), for the read after an await.
+    MembersAndGenerators,
 }
 
 /// ADR 0963: [`unplaced_blocker`] for a rule whose sites are everywhere (a reactive read), so a hand-off is not counted: the
@@ -2480,15 +2482,47 @@ pub(crate) fn unplaced_member_blocker(
     site: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'static str> {
+    unplaced_blocker_on(file, site, lookup, Routes::Members)
+}
+
+/// [`unplaced_member_blocker`] for the read after an await (SC1002, ADR 0976 R6): a generator's body is a member route too.
+pub(crate) fn unplaced_member_or_generator_blocker(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'static str> {
+    unplaced_blocker_on(file, site, lookup, Routes::MembersAndGenerators)
+}
+
+fn unplaced_blocker_on(
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    routes: Routes,
+) -> Option<&'static str> {
     let mut memo = rustc_hash::FxHashMap::default();
-    match runs_unplaced_through_callers(file, site, lookup, 4, false, Routes::Members, &mut memo) {
+    match runs_unplaced_through_callers(file, site, lookup, 4, false, routes, &mut memo) {
         // A climb the bound stopped is asked again without the bound: a site many helpers below a placed root is placed, and a
         // chain that ends in a member route (or the budget) keeps the row, named by the bound.
         Some(crate::blockers::SEARCH_DEPTH_LIMIT) => {
-            runs_unplaced_exhaustive_members(file, site, lookup)
+            runs_unplaced_exhaustive_members(file, site, lookup, routes)
                 .then_some(crate::blockers::SEARCH_DEPTH_LIMIT)
         }
         answer => answer,
+    }
+}
+
+/// Whether a member route ([`Routes::Members`]: [`crate::execution_role::runs_implicitly`]; [`Routes::MembersAndGenerators`] adds a generator's body) runs the code at `site`.
+fn member_route_runs(
+    routes: Routes,
+    file: &FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if routes == Routes::MembersAndGenerators {
+        crate::execution_role::runs_implicitly_or_generator(file, site, lookup)
+    } else {
+        crate::execution_role::runs_implicitly(file, site, lookup)
     }
 }
 
@@ -2498,12 +2532,15 @@ fn runs_unplaced_exhaustive_members(
     file: &FileFacts,
     site: Span,
     lookup: &SemanticLookup<'_>,
+    routes: Routes,
 ) -> bool {
     let mut visited = HashSet::default();
     search_fails_closed(
         (file, site),
         UNPLACED_WALK_BUDGET,
-        |(file, site), pending| unplaced_member_step(file, site, lookup, &mut visited, pending),
+        |(file, site), pending| {
+            unplaced_member_step(file, site, lookup, routes, &mut visited, pending)
+        },
     )
 }
 
@@ -2512,10 +2549,11 @@ fn unplaced_member_step<'s, 'f: 's>(
     file: &'s FileFacts,
     site: Span,
     lookup: &SemanticLookup<'f>,
+    routes: Routes,
     visited: &mut HashSet<(String, Span)>,
     pending: &mut Vec<(&'s FileFacts, Span)>,
 ) -> bool {
-    if crate::execution_role::runs_implicitly(file, site, lookup) {
+    if member_route_runs(routes, file, site, lookup) {
         return true;
     }
     // A climb the layer bound stopped (`exhausted`) answers where it stopped, and the walk asks from there: a chain of named
@@ -2621,7 +2659,9 @@ fn runs_unplaced_once(
     }
     if match routes {
         Routes::Every => crate::execution_role::unplaced_run(file, site, lookup),
-        Routes::Members => crate::execution_role::runs_implicitly(file, site, lookup),
+        Routes::Members | Routes::MembersAndGenerators => {
+            member_route_runs(routes, file, site, lookup)
+        }
     } {
         return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }

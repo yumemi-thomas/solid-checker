@@ -696,11 +696,33 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/provider-array-provenance/factory.ts",
+      "start": 1255,
+      "end": 1262,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/provider-array-provenance/factory.ts",
+      "start": 1385,
+      "end": 1392,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
       "path": "fixtures/reactive-ir/provider-array-provenance/factory.ts",
       "start": 1385,
       "end": 1392,

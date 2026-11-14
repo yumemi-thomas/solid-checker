@@ -95,6 +95,17 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-invalid.tsx",
+      "start": 392,
+      "end": 404,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-invalid.tsx",
@@ -191,6 +202,17 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-invalid.tsx",
+      "start": 321,
+      "end": 332,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-invalid.tsx",
@@ -231,6 +253,17 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-invalid.tsx",
+      "start": 853,
+      "end": 864,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-invalid.tsx",
@@ -241,11 +274,33 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-invalid.tsx",
+      "start": 997,
+      "end": 1008,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-invalid.tsx",
       "start": 1019,
       "end": 1024,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/await-control-flow-invalid.tsx",
+      "start": 1127,
+      "end": 1138,
       "fixes": 0
     },
     {
