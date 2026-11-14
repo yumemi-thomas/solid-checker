@@ -247,7 +247,7 @@ pub fn package_reach_index(
     }
     index.linked = linked_roots(facts);
     index.project_js = project_js(facts, &project_declarations);
-    // ADR 0973: the reviewed premises whose files match the installed bytes.
+    // ADR 0974: the reviewed premises whose files match the installed bytes.
     let installed_roots = index
         .by_root
         .keys()
@@ -419,7 +419,7 @@ fn project_js(
 
 /// The runtime files a relative import of the project reaches that the program does not analyze, where the compiler resolved the import to no analyzed
 /// source (an ambient `declare module "*.vendor.js"`, a declaration file): the bundler loads the file the specifier names, and nobody reads it. A dynamic
-/// `import("./view.vendor.js")` is one too (ADR 0973: `lazy(() => import(…))`). Each file is named by its path as the import joins it and by its canonical path.
+/// `import("./view.vendor.js")` is one too (ADR 0974: `lazy(() => import(…))`). Each file is named by its path as the import joins it and by its canonical path.
 fn imports_of_unread_js(
     facts: &solid_facts::ProjectFacts,
     analyzed: &BTreeSet<&str>,
@@ -737,7 +737,7 @@ struct Closure {
     problems: Vec<PackageReach>,
     /// Where the closure may define an accessor.
     accessors: AccessorFacts,
-    /// The globals the closure writes (ADR 0973).
+    /// The globals the closure writes (ADR 0974).
     global_writes: solid_facts::module_reach::GlobalWrites,
 }
 
@@ -1198,7 +1198,7 @@ struct Walk<'s, 'd, 'm> {
     /// The names accessors are defined under in the files read, and whether any is defined under a name the syntax does not fix.
     accessor_names: BTreeSet<String>,
     accessors_any_name: bool,
-    /// The globals the files read write (ADR 0973), and whether any is written under a name the syntax does not fix.
+    /// The globals the files read write (ADR 0974), and whether any is written under a name the syntax does not fix.
     written: BTreeSet<String>,
     written_any: bool,
     /// The globals the files read may define an accessor for on the global object, and whether one may be defined under a name the syntax does not fix.
@@ -2603,7 +2603,7 @@ mod tests {
         ));
     }
 
-    /// ADR 0973: a closure's global writes are the union of its files', and so are the accessors it may define on the global object (a read of such a global runs the
+    /// ADR 0974: a closure's global writes are the union of its files', and so are the accessors it may define on the global object (a read of such a global runs the
     /// package's code, a read of a data one does not).
     #[test]
     fn a_closure_unites_the_globals_its_files_write_and_the_accessors_they_define() {
@@ -2638,7 +2638,7 @@ mod tests {
         assert!(found.any_name && found.accessors_any_name, "{found:?}");
     }
 
-    /// ADR 0973: where a package's closure may define an accessor, read from the whole closure; a closure not read whole answers for every name.
+    /// ADR 0974: where a package's closure may define an accessor, read from the whole closure; a closure not read whole answers for every name.
     #[test]
     fn a_getter_a_package_declares_is_known_by_its_name_where_the_whole_closure_is_read() {
         let directory = project();
@@ -2769,7 +2769,7 @@ mod tests {
     }
 
     /// `@types/webxr` declares globals with no module in them and no runtime package: nothing to read, and nothing says who provides them (the host, a script or a
-    /// package that writes the global), so it is undecided as an unknown global (ADR 0973; ADR 0972 judged it clear). A types package that is a module
+    /// package that writes the global), so it is undecided as an unknown global (ADR 0974; ADR 0972 judged it clear). A types package that is a module
     /// (`export …`) for a package that is not installed stays undecided as missing source.
     #[test]
     fn types_of_globals_are_undecided_and_types_of_a_missing_package_are_too() {

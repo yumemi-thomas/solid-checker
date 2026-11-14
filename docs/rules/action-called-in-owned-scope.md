@@ -59,7 +59,7 @@ import its root names, through the calls and project bindings that made it), nev
 object passed as an argument, a `{ shorthand }` property, a namespace member, a project binding that holds one) is a site, and so is a call of a global the standard library declares that an installed package writes at run time (`globalThis.setTimeout = …`: the type is sound for the declaration, the write comes from the scan; a writer under a key nothing in its file decides, `window[key] = v` with a key from a call or a parameter, may have written any global, so every such call is a site), and a value whose origin the walk stopped following at a limit (`origin-limit`: an array of more than 256 elements, a chain of more than 48 hops), and the component a
 `lazy(() => import("pkg"))` makes, a call of a global a declaration file declares (a package of global declarations only, a project `declare function`,
 a member a project `interface Window` adds: the declaration does not say who provides the global, and a package may) and a member of an object the package made,
-evaluated for its value or read by an object pattern (`const { now } = made`), where the package's closure may define an accessor under that name (`void clock.now`: a getter runs where it is read; ADR 0973): where its role may run under an owner or nothing
+evaluated for its value or read by an object pattern (`const { now } = made`), where the package's closure may define an accessor under that name (`void clock.now`: a getter runs where it is read; ADR 0974): where its role may run under an owner or nothing
 places it, it is **uncertifiable** (`package-may-call-action:<why>`), never a violation, unless the package's
 source, walked from every entry through every import, `require` and literal `import()`, names no Solid
 package (a `@solidjs/*` package counts) and loads nothing by a computed name, generates no code (`eval`,
@@ -68,7 +68,7 @@ declare, however the global object is reached (`window.self.x`, `globalThis.glob
 whole closure is read and holds no accessor (class, object literal or `defineProperty` getter and setter, a `Proxy`) under a name of the chain. Missing source, a native module, an unparseable file and the WASM `checkSync` entry (no filesystem)
 stay uncertifiable. A package the build reads as source is analyzed, and a row in its code stands at the
 project's entry (ADR 0949); the dialect's own runtime, the standard library (and a member of a standard-library global the library declares), a reviewed test runner's
-registration, a call the reviewed reading of vitest 4.1's `expect` and `vi` clears (ADR 0974: pinned to the digests of the files read, for the matchers and values it names) and a function the project itself defines are no
+registration, a call the reviewed reading of vitest 4.1's `expect` and `vi` clears (ADR 0975: pinned to the digests of the files read, for the matchers and values it names) and a function the project itself defines are no
 sites.
 
 ## Why is this bad?

@@ -8,12 +8,12 @@
 //!   `.constructor` member), a lookup of a global the pinned TypeScript's `lib.es*` and `lib.dom*` files do not declare, and a computed or
 //!   escaping use of the global object (`globalThis[k]`, `window[k]`, `const g = window`). A file Oxc does not parse is a hazard too.
 //!
-//! - **accessors** (ADR 0973): the names a file defines a `get` or `set` under (class and object literal accessors, `defineProperty`, `defineProperties`,
+//! - **accessors** (ADR 0974): the names a file defines a `get` or `set` under (class and object literal accessors, `defineProperty`, `defineProperties`,
 //!   `Object.create` with descriptors, `__defineGetter__`, `accessor` fields), and whether it defines one under a name the syntax does not fix (a computed key, a
 //!   `Proxy`, `defineProperty` read as a value): a member read of a package's object runs the package's code only where one matches.
 //!
 //! The global object goes by several names, and a member of one that gives it back is the same global (`window.self.x`, `globalThis.globalThis.x`,
-//! `window.document.defaultView.x`): a member read off any of them that no library declares is a lookup of an unknown global (ADR 0973).
+//! `window.document.defaultView.x`): a member read off any of them that no library declares is a lookup of an unknown global (ADR 0974).
 //!
 //! The backend walks the loads (`solid-facts-backend/src/package_reach.rs`); this module never reads the filesystem and never matches text.
 //!
@@ -89,7 +89,7 @@ pub struct ModuleHazard {
     pub detail: String,
 }
 
-/// The ways a file defines an accessor (a `get` or `set` that runs code when a member is read or assigned), by the name it defines them under (ADR 0973).
+/// The ways a file defines an accessor (a `get` or `set` that runs code when a member is read or assigned), by the name it defines them under (ADR 0974).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AccessorScan {
     /// The names a getter or setter is defined under (class `get x()`, object literal `set x(v)`, `Object.defineProperty(o, "x", { get })`), sorted and distinct.
@@ -107,7 +107,7 @@ impl AccessorScan {
     }
 }
 
-/// The members of the global object a file writes at run time (ADR 0973): `window.x = …` (any assignment operator), `globalThis["x"] = …`, `Object.defineProperty(globalThis, "x", …)`,
+/// The members of the global object a file writes at run time (ADR 0974): `window.x = …` (any assignment operator), `globalThis["x"] = …`, `Object.defineProperty(globalThis, "x", …)`,
 /// `Object.assign(window, { x })`, `Reflect.set`, an unbound `x = …`, and a writer function (`Object.assign`, `Reflect.defineProperty`, …) used where the target is not seen.
 /// A call of a global some installed package writes runs that package's code, whatever type the library declares it with.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -546,7 +546,7 @@ pub fn is_known_global(name: &str) -> bool {
     .contains(name)
 }
 
-/// How the scan answers the questions ADR 0973 measures before it rules on them (TEMPORARY: the answers chosen become the only behavior and this type goes). `Default` is the
+/// How the scan answers the questions ADR 0974 measures before it rules on them (TEMPORARY: the answers chosen become the only behavior and this type goes). `Default` is the
 /// behavior the tree had when they were asked; `SC_MODE` (comma-separated: `decided`, `escape`, `this`, `lookup`) selects the others for a measurement run.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ScanMode {
@@ -850,7 +850,7 @@ pub fn scan_module_with(path: &Path, source: &str, mode: ScanMode) -> ModuleScan
             }
         }
     }
-    // `this` at the top of a script is the global object, and `defaultView` read off any object is (ADR 0973).
+    // `this` at the top of a script is the global object, and `defaultView` read off any object is (ADR 0974).
     if mode.this_route && !has_module_syntax(&program) {
         for node in nodes.iter() {
             if matches!(node.kind(), AstKind::ThisExpression(_))
@@ -911,7 +911,7 @@ pub fn scan_module_with(path: &Path, source: &str, mode: ScanMode) -> ModuleScan
     scan.loads = loads;
     scan.hazards = hazards;
     scan.accessors = scan_accessors(nodes);
-    // The writer functions used where the global object they write is not named (ADR 0973).
+    // The writer functions used where the global object they write is not named (ADR 0974).
     indirect_writers(scoping, nodes, &mut writes, mode);
     writes.names.sort();
     writes.names.dedup();
@@ -1564,7 +1564,7 @@ fn rooted_in_global(scoping: &Scoping, expression: &Expression<'_>) -> bool {
 }
 
 /// The global object was handed on (an argument, an assignment, a return, an element, a branch of a conditional): the code that has it may write any global, defining accessors
-/// under any name (ADR 0973; measured under [`ScanMode::escape_any`]).
+/// under any name (ADR 0974; measured under [`ScanMode::escape_any`]).
 fn escaped(writes: &mut GlobalWrites, mode: ScanMode) {
     if mode.escape_any {
         writes.undecided(true);
@@ -2310,7 +2310,7 @@ mod tests {
         );
     }
 
-    /// ADR 0973: the global object goes by more than one name, and a member read off any of them is a lookup of a global (the review of #231: `window.self.x` was
+    /// ADR 0974: the global object goes by more than one name, and a member read off any of them is a lookup of a global (the review of #231: `window.self.x` was
     /// judged clear where `window.x` was an unknown global).
     #[test]
     fn the_global_object_is_followed_through_the_members_that_return_it() {
@@ -2394,7 +2394,7 @@ mod tests {
         }
     }
 
-    /// ADR 0973: every way a file defines an accessor, under the name it defines it under (a getter a package declares runs its code where the project reads a
+    /// ADR 0974: every way a file defines an accessor, under the name it defines it under (a getter a package declares runs its code where the project reads a
     /// member: `void clock.now`).
     #[test]
     fn accessors_are_found_by_every_way_to_define_one() {
@@ -2470,7 +2470,7 @@ mod tests {
         }
     }
 
-    /// ADR 0973: the globals a file installs, by every way to write one (a call of a global whose type the library declares runs the package's code where a package writes it).
+    /// ADR 0974: the globals a file installs, by every way to write one (a call of a global whose type the library declares runs the package's code where a package writes it).
     #[test]
     fn globals_a_file_writes_are_found_by_every_way_to_write_one() {
         let writes = |source: &str| scan(source).global_writes;
@@ -2538,7 +2538,7 @@ mod tests {
         }
     }
 
-    /// ADR 0973: a key the file's own constants decide is a name, a symbol writes none, and only a key nothing in the file decides writes any global.
+    /// ADR 0974: a key the file's own constants decide is a name, a symbol writes none, and only a key nothing in the file decides writes any global.
     #[test]
     fn a_key_the_files_constants_decide_is_a_name() {
         let writes = |source: &str| scan(source).global_writes;
@@ -2630,7 +2630,7 @@ mod tests {
         }
     }
 
-    /// ADR 0973 (the reviews of #231): every assignment operator on a route to the global object writes the member, and a compound one reads it first.
+    /// ADR 0974 (the reviews of #231): every assignment operator on a route to the global object writes the member, and a compound one reads it first.
     #[test]
     fn every_assignment_operator_writes_a_global() {
         let writes = |source: &str| scan(source).global_writes;
@@ -2665,7 +2665,7 @@ mod tests {
         assert!(kinds(&scan("window.fzFlag = 1;")).is_empty());
     }
 
-    /// ADR 0973: a writer function (`Object.assign` and its kin) used where its target is not seen is a write to any global unless its target is a fresh object; one that
+    /// ADR 0974: a writer function (`Object.assign` and its kin) used where its target is not seen is a write to any global unless its target is a fresh object; one that
     /// escapes may be called with the global object anywhere.
     #[test]
     fn a_writer_function_used_elsewhere_is_judged_at_its_calls() {
@@ -2751,7 +2751,7 @@ mod tests {
         }
     }
 
-    /// ADR 0973: a read of a global runs a package's code only through an accessor the package defines on the global object: the names a file defines one under, or may.
+    /// ADR 0974: a read of a global runs a package's code only through an accessor the package defines on the global object: the names a file defines one under, or may.
     #[test]
     fn accessors_a_file_defines_on_the_global_object_are_found() {
         let writes = |source: &str| scan(source).global_writes;
@@ -2824,7 +2824,7 @@ mod tests {
         assert!(writes("const define = window.__defineGetter__;").accessors_any_name);
     }
 
-    /// ADR 0973 (the coordinator's check of the premise of judging a writer like a direct call): every use of the global object other than a spelled member access
+    /// ADR 0974 (the coordinator's check of the premise of judging a writer like a direct call): every use of the global object other than a spelled member access
     /// is recorded as an escape, whatever name the object goes by and whatever the use is.
     #[test]
     fn every_use_of_the_global_object_but_a_spelled_member_is_an_escape() {
@@ -2917,7 +2917,7 @@ mod tests {
         );
     }
 
-    /// ADR 0973: under `escape` the object handed on, and code that can reach it, may write any global and define an accessor under any name; a spelled member never does.
+    /// ADR 0974: under `escape` the object handed on, and code that can reach it, may write any global and define an accessor under any name; a spelled member never does.
     #[test]
     fn an_escape_of_the_global_object_is_a_writer_under_any_name_when_escapes_write() {
         let escape = ScanMode {
@@ -2953,7 +2953,7 @@ mod tests {
         }
     }
 
-    /// ADR 0973: the members of the global object that generate code (`window.eval`, `globalThis.Function`, a string timer) or hand the object back (`window.valueOf()`) are
+    /// ADR 0974: the members of the global object that generate code (`window.eval`, `globalThis.Function`, a string timer) or hand the object back (`window.valueOf()`) are
     /// routes as the unbound names are.
     #[test]
     fn members_of_the_global_object_generate_code_and_hand_it_back() {
@@ -2995,7 +2995,7 @@ mod tests {
         );
     }
 
-    /// ADR 0973: `defaultView` read off any object is the global object, as `document.defaultView` is.
+    /// ADR 0974: `defaultView` read off any object is the global object, as `document.defaultView` is.
     #[test]
     fn default_view_of_any_object_is_the_global_object() {
         let dom = ScanMode {
@@ -3033,7 +3033,7 @@ mod tests {
         ));
     }
 
-    /// ADR 0973: `this` at the top of a file with no module syntax is the global object; handed on it escapes, as a member read it is the file's own.
+    /// ADR 0974: `this` at the top of a file with no module syntax is the global object; handed on it escapes, as a member read it is the file's own.
     #[test]
     fn this_at_the_top_of_a_script_is_a_route_to_the_global_object() {
         let this = ScanMode {
@@ -3092,7 +3092,7 @@ mod tests {
         );
     }
 
-    /// ADR 0973: a writer called through a name, `.bind`, `.call`, `.apply` or `Reflect.apply` is judged as a direct call is under `decided`: a write where the target names the global
+    /// ADR 0974: a writer called through a name, `.bind`, `.call`, `.apply` or `Reflect.apply` is judged as a direct call is under `decided`: a write where the target names the global
     /// object, none where it is readable and names something else, any global where nothing reads it.
     #[test]
     fn a_writer_is_judged_as_a_direct_call_where_the_target_is_read() {

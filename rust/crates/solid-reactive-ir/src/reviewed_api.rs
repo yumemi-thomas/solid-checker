@@ -1,8 +1,8 @@
-//! ADR 0974: a reviewed reading of a package's source, applied at a site.
+//! ADR 0975: a reviewed reading of a package's source, applied at a site.
 //!
 //! A call into a package the build does not read as source is a site (ADR 0972). Where the source of one API was *read* (the backend pins the reading to digests
 //! of the files it rests on: `solid-facts-backend/src/reviewed_packages.rs`), the call is no site for what the reading shows it calls. The reading of vitest 4.1's
-//! `expect` and `vi` is in ADR 0974: a matcher that is handed a value no foreign accessor can run in calls only vitest's and chai's code, the functions the program
+//! `expect` and `vi` is in ADR 0975: a matcher that is handed a value no foreign accessor can run in calls only vitest's and chai's code, the functions the program
 //! registered (`expect.addEqualityTesters`, which are handed to a package and are the hand-off's), and the standard library.
 //!
 //! Everything is identified by the declaration the compiler resolves (its name, and the installed declaration file it is in), never by the spelling at the call, and

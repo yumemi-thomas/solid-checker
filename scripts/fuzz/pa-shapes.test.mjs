@@ -46,19 +46,19 @@ describe("the pa contexts (a package the build does not read may call an action)
     expect(paPackageFiles("reach")["index.js"]).toContain('from "solid-js"');
     expect(paPackageFiles("pure")["index.js"]).not.toContain("import");
     expect(paPackageFiles("dyn")["index.js"]).toContain("import(name)");
-    // ADR 0973: the publisher reaches Solid and writes the global; the packages that read it through the global object's own member name no Solid package.
+    // ADR 0974: the publisher reaches Solid and writes the global; the packages that read it through the global object's own member name no Solid package.
     expect(paPackageFiles("winself", "fz-pub")["index.js"]).toContain("window.__paAct = ");
     expect(paPackageFiles("winself")["index.js"]).toContain("window.self.__paAct()");
     expect(paPackageFiles("docview")["index.js"]).toContain("document.defaultView.__paAct()");
     expect(paPackageFiles("winself")["index.js"]).not.toContain("import");
     expect(paPackageFiles("getter")["index.js"]).toContain("get now()");
-    // ADR 0973: the writers replace `btoa`; the key is a literal member, a constant, a call's result (any global), or a symbol (no global).
+    // ADR 0974: the writers replace `btoa`; the key is a literal member, a constant, a call's result (any global), or a symbol (no global).
     expect(paPackageFiles("gwrite")["index.js"]).toContain("globalThis.btoa = ");
     expect(paPackageFiles("gwritekey")["index.js"]).toContain('const KEY = "btoa";');
     expect(paPackageFiles("gwriteany")["index.js"]).toContain("Object.assign(globalThis, loadPatches())");
     expect(paPackageFiles("gwritesym")["index.js"]).toContain('Symbol.for("fz-gwritesym")');
     for (const kind of ["gwrite", "gwritekey", "gwriteany", "gwritesym"]) expect(paPackageFiles(kind)["index.js"]).toContain('from "solid-js"');
-    // ADR 0973: the writes the scan must see besides `=`: a logical assignment, `Reflect.apply`, a writer held by a name, a bound one; and a global redefined with a getter.
+    // ADR 0974: the writes the scan must see besides `=`: a logical assignment, `Reflect.apply`, a writer held by a name, a bound one; and a global redefined with a getter.
     expect(paPackageFiles("gwriteand")["index.js"]).toContain("globalThis.btoa &&= ");
     expect(paPackageFiles("gwritereflect")["index.js"]).toContain("Reflect.apply(Object.assign, null, [globalThis, {");
     expect(paPackageFiles("gwritealias")["index.js"]).toContain("const assign = Object.assign;");
@@ -81,19 +81,19 @@ describe("the pa contexts (a package the build does not read may call an action)
     expect(text("pa-pure-timer")).toContain('import { paEnter } from "fz-calm";');
     expect(text("pa-dyn-root")).toContain("createRoot(");
     expect(Object.keys(built("pa-reach-root").files)).toContain("node_modules/fz-act/index.js");
-    // ADR 0973: the publisher is imported for its effect before the entry's package; a getter's site is the read, not a call.
+    // ADR 0974: the publisher is imported for its effect before the entry's package; a getter's site is the read, not a call.
     expect(text("pa-winself-body")).toContain('import "fz-pub";');
     expect(text("pa-winself-body")).toContain('import { paEnter } from "fz-winself";');
     expect(text("pa-docview-memo")).toContain('import { paEnter } from "fz-docview";');
     expect(text("pa-getter-body")).toContain('import { clock } from "fz-getter";');
     expect(text("pa-getter-body")).toMatch(/\n {2}(__h\(\d+\); )?void clock\.now;/);
     expect(Object.keys(built("pa-winself-root").files)).toEqual(expect.arrayContaining(["node_modules/fz-pub/index.js", "node_modules/fz-winself/index.js"]));
-    // ADR 0973: a global a package replaces is imported for its effect and the site is the call of the global.
+    // ADR 0974: a global a package replaces is imported for its effect and the site is the call of the global.
     expect(text("pa-gwrite-body")).toContain('import "fz-gwrite";');
     expect(text("pa-gwriteany-memo")).toMatch(/createMemo\(\(\) => \{\n\s+(__h\(\d+\); )?btoa\("x"\);/);
     expect(text("pa-gwritesym-timer")).toContain('import "fz-gwritesym";');
     expect(Object.keys(built("pa-gwritekey-root").files)).toContain("node_modules/fz-gwritekey/index.js");
-    // ADR 0973: the site is the call written by another route (a declaration at the top of the body names the route where it needs one), or the read of a redefined accessor.
+    // ADR 0974: the site is the call written by another route (a declaration at the top of the body names the route where it needs one), or the read of a redefined accessor.
     expect(text("pa-gwriteand-body")).toContain('import "fz-gwriteand";');
     expect(text("pa-gcallkey-body")).toMatch(/\n {2}(__h\(\d+\); )?window\["btoa"\]\("x"\);/);
     expect(text("pa-gcallconst-memo")).toContain('const key = "btoa";');

@@ -29,7 +29,7 @@ pub enum ReachBlocker {
     /// A declaration file of the project with runtime JavaScript beside it that the program does not analyze (`allowJs` is off): nobody reads that code.
     UnanalyzedProjectJs,
     /// The walk that finds where a value came from stopped at a limit (an array of more elements than it reads, a chain of more hops than it follows): what runs
-    /// for the value is not decided, so the call of it is a site rather than a silence (ADR 0973).
+    /// for the value is not decided, so the call of it is a site rather than a silence (ADR 0974).
     OriginLimit,
 }
 
@@ -55,11 +55,11 @@ impl ReachBlocker {
 }
 
 /// The prefix of a site's pseudo-path for a callee that is a global declared by no installed package and no standard-library file (a project declaration
-/// file: `declare function gtag(…)`), whose provider the declaration does not say: the host, a script or a package may write it (ADR 0973).
+/// file: `declare function gtag(…)`), whose provider the declaration does not say: the host, a script or a package may write it (ADR 0974).
 pub const AMBIENT_PREFIX: &str = "ambient:";
 
 /// The prefix of a site's pseudo-path for a global the standard library declares that an installed package writes at run time (`global-write:<name>:<writer root>`): a call
-/// of it runs the writer's code, whatever type the library declares the global with. Its verdict is the writer's (ADR 0973).
+/// of it runs the writer's code, whatever type the library declares the global with. Its verdict is the writer's (ADR 0974).
 pub const WRITE_PREFIX: &str = "global-write:";
 
 /// [`WRITE_PREFIX`] for a global the writer may write under a key the scan does not decide (`global-write-any:<name>:<writer root>`): the writer's code is what the call may
@@ -68,11 +68,11 @@ pub const WRITE_ANY_PREFIX: &str = "global-write-any:";
 
 /// The prefix of a site's pseudo-path for a member of the global object read by a key the program does not spell (`window[key]`, `const { [key]: value } = window`, a rest
 /// element of a destructuring of it): any global may be the one read, so the code is that of a package that writes any (`global-read-any:<writer root>`). Its verdict is the
-/// writer's (ADR 0973).
+/// writer's (ADR 0974).
 pub const READ_ANY_PREFIX: &str = "global-read-any:";
 
 /// The prefix of a site's pseudo-path for a value whose origin the walk could not follow to its end: it stopped at a limit (`origin-limit:array of more than 256 elements`),
-/// so what runs for the value is not decided (ADR 0973).
+/// so what runs for the value is not decided (ADR 0974).
 pub const LIMIT_PREFIX: &str = "origin-limit:";
 
 /// The prefix of a site's pseudo-path for a module loaded by a name the syntax does not fix (`lazy(() => import(name))`): any module may be the component.
@@ -122,7 +122,7 @@ impl PackageReach {
 }
 
 /// Where the closure of a package may define an accessor (a `get` or `set`, a `Proxy`): the code a member read or assignment of an object the package hands out may run
-/// (ADR 0973). Read from the whole closure, so it answers only where the whole closure was read.
+/// (ADR 0974). Read from the whole closure, so it answers only where the whole closure was read.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AccessorFacts {
     /// Whether the whole closure was read and holds nothing the syntax cannot see through: no unread file, load by a computed name, generated code or value from
@@ -172,10 +172,10 @@ pub struct PackageReachIndex {
     pub project_js: std::collections::BTreeSet<String>,
     /// Where each decided package's closure may define an accessor, by the same root.
     pub accessors: BTreeMap<String, AccessorFacts>,
-    /// The reviewed premises that hold for each root: a reading of the package's source for one API (ADR 0973), pinned to digests of the files read, so it holds
+    /// The reviewed premises that hold for each root: a reading of the package's source for one API (ADR 0974), pinned to digests of the files read, so it holds
     /// only where the installed bytes are those. The ids are the analysis's (`reviewed_api`).
     pub reviewed: BTreeMap<String, std::collections::BTreeSet<String>>,
-    /// The packages whose closure writes the global of each name (`globalThis.x = …`, `Object.defineProperty(window, "x", …)`), by root (ADR 0973): the installed code the
+    /// The packages whose closure writes the global of each name (`globalThis.x = …`, `Object.defineProperty(window, "x", …)`), by root (ADR 0974): the installed code the
     /// program loads that may be what a call of that global runs.
     pub global_writers: BTreeMap<String, std::collections::BTreeSet<String>>,
     /// The packages whose closure writes a global under a key nothing in the file decides (`window[key] = v` with a key from a call or a parameter,

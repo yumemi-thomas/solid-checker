@@ -1047,7 +1047,7 @@ fn only_an_on_cleanup_callback_runs_only_in_disposal() {
     }
 }
 
-/// ADR 0973: the argument of a call that is a component loader, whatever release was read.
+/// ADR 0974: the argument of a call that is a component loader, whatever release was read.
 #[test]
 fn lazy_is_the_component_loader_of_every_release() {
     let dialect = Solid2::CONSERVATIVE;

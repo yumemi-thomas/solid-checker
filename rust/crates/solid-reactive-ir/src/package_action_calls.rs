@@ -55,7 +55,7 @@ pub(crate) enum Entry {
     /// followed, so it has no legal role.
     Value,
     /// A member of an object the package made, evaluated for its value (`void clock.now`) where the package's closure may define an accessor under that name
-    /// (ADR 0973): the getter runs where the read stands, with that role.
+    /// (ADR 0974): the getter runs where the read stands, with that role.
     Read,
 }
 
@@ -269,7 +269,7 @@ fn file_sites(
     };
     for call in &file.ast.calls {
         // A dialect primitive is the catalog's; a reviewed test runner's registration (`describe`, `it`) runs the callback on its own stack and calls no action;
-        // a reviewed reading of a package's API (ADR 0974) shows what it calls for the value it is handed.
+        // a reviewed reading of a package's API (ADR 0975) shows what it calls for the value it is handed.
         if lookup.primitive_at_call(file, call.span).is_some()
             || lookup.reviewed_test_runner_registration(file, call)
             || crate::reviewed_api::clears_call(ctx, file, call)
@@ -351,7 +351,7 @@ fn file_sites(
             continue;
         };
         let at = handed_at(file, identifier.span);
-        // A reviewed reading shows the assertion the value is handed to reads it as a primitive (ADR 0974).
+        // A reviewed reading shows the assertion the value is handed to reads it as a primitive (ADR 0975).
         if crate::reviewed_api::clears_value_at(ctx, file, at) {
             continue;
         }
@@ -429,7 +429,7 @@ fn file_sites(
         );
     }
     // A getter a package declares runs where an object pattern reads it too: `const { now } = clock` and `({ now } = clock)` read each key the pattern names off the
-    // value, a computed key or a rest element reads any (ADR 0973). An array pattern reads the iterator, which is not followed.
+    // value, a computed key or a rest element reads any (ADR 0974). An array pattern reads the iterator, which is not followed.
     let slots = {
         let mut slots = HashMap::<Span, Vec<&solid_facts::ast::PatternElementFact>>::default();
         for element in &file.ast.pattern_elements {
@@ -1052,7 +1052,7 @@ fn origin_of(
     }
 }
 
-/// Where the component a `lazy(loader)` call makes comes from (ADR 0973): the modules its loader function literal imports dynamically (`() => import("pkg")`,
+/// Where the component a `lazy(loader)` call makes comes from (ADR 0974): the modules its loader function literal imports dynamically (`() => import("pkg")`,
 /// `() => import("pkg").then((m) => ({ default: m.View }))`), the loader's own code being the project's. A relative or runtime module is the project's or the
 /// dialect's; a package's is code of that package, which the first of them whose closure is not clear stands for; a module named by anything but a literal
 /// may be any package's. A loader that is no function literal, or imports nothing, ends where this pass does not follow (the dialect's `lazy`).
@@ -1233,7 +1233,7 @@ fn any_export_origin(
 /// declares an overload of it (`declare global { function setTimeout(cb: () => void, fz: "fz"): number }`) answers for the calls that resolve to its overload, which
 /// [`package_declaration`] asks of the signature the compiler chose (every global `@types/node` declares again is a declaration of it too, and its calls resolve to the
 /// library's). An installed package's declaration is decided by that package; a project declaration file that no module of the program implements (`declare function
-/// gtag(…)`) declares a global the host, a script or an installed package may provide (ADR 0973: a package that writes the global is code the program loads, and
+/// gtag(…)`) declares a global the host, a script or an installed package may provide (ADR 0974: a package that writes the global is code the program loads, and
 /// Chrome ran it).
 fn global_origin(
     ctx: &AnalysisContext<'_>,

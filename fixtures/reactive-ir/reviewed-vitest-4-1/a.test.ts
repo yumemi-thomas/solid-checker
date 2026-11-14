@@ -16,7 +16,7 @@ declare const mixed: string | { a: number };
 declare const anything: any;
 declare const unknownValue: unknown;
 
-// The reviewed reading (ADR 0973) clears a matcher it names, handed a value no foreign accessor can run in: a primitive by the compiler's facts, a flat object
+// The reviewed reading (ADR 0974) clears a matcher it names, handed a value no foreign accessor can run in: a primitive by the compiler's facts, a flat object
 // literal of primitives, and for the spy matchers a spy `vi.fn` made.
 export function Primitives(other: number) {
   expect(count).toBe(3);

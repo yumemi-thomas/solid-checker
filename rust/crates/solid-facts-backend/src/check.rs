@@ -363,7 +363,7 @@ pub fn package_inputs(
             scopes: dialect.vocabulary.ecosystem_scopes(),
         },
     );
-    // ADR 0973: the walk reads every file of a closure, so what it costs is measured where it is paid.
+    // ADR 0974: the walk reads every file of a closure, so what it costs is measured where it is paid.
     if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
         eprintln!(
             "solid-checker: timing: package reach: {} packages decided, {} reviewed ({:?})",

@@ -1076,7 +1076,7 @@ pub trait Dialect: Sync {
         None
     }
 
-    /// The argument of a call of `primitive` that is a **component loader** (ADR 0973): the call returns a component made of the module the loader's promise settles
+    /// The argument of a call of `primitive` that is a **component loader** (ADR 0974): the call returns a component made of the module the loader's promise settles
     /// to, and rendering or calling it runs that module's code, so a package the loader imports is where the component's body comes from. Unlike
     /// [`Dialect::renders_loaded_default_argument`] it holds on every release and for every call form (the member it selects is `default`, or the one an `{ export }`
     /// option names): which module the component comes from is the loader's, whatever member it selects. The call runs nothing of the module itself.
