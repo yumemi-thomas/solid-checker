@@ -841,6 +841,9 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0613: the `solid-js` copy each file loads, for the flush census's
     /// effect-phase exemption ([`crate::effect_phase`]).
     package_instances: crate::PackageInstanceEvidence,
+    /// ADR 0972: the backend's verdicts per installed package, with the packages whose code is not all seen (`PackageReachIndex::unseen_code`); `None` when the adapter
+    /// reads no filesystem. Set by the pipeline from the package boundary.
+    package_reach: Option<&'a solid_facts::package_reach::PackageReachIndex>,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
@@ -1097,6 +1100,23 @@ impl<'a> SemanticLookup<'a> {
         self
     }
 
+    /// The backend's package verdicts; see [`Self::package_reach`].
+    #[must_use]
+    pub(super) fn with_package_reach(
+        mut self,
+        index: Option<&'a solid_facts::package_reach::PackageReachIndex>,
+    ) -> Self {
+        self.package_reach = index;
+        self
+    }
+
+    /// The backend's reach verdicts per installed package and the packages whose code is not all seen; `None` when the adapter reads no filesystem.
+    pub(crate) fn package_reach(
+        &self,
+    ) -> Option<&'a solid_facts::package_reach::PackageReachIndex> {
+        self.package_reach
+    }
+
     pub(crate) fn memo_store(&self) -> &crate::base::memo::build::MemoStore {
         self.memos.store()
     }
@@ -1256,6 +1276,7 @@ impl<'a> SemanticLookup<'a> {
             program_closed,
             router_install: crate::router_params::RouterInstallEvidence::default(),
             package_instances: crate::PackageInstanceEvidence::default(),
+            package_reach: None,
             ast_indexes,
             entities,
             symbol_names,

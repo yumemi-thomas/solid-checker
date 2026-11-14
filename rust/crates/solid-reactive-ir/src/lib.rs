@@ -85,6 +85,7 @@ mod flush_accounting;
 mod package_action_calls;
 pub mod package_boundary;
 mod package_hand_off;
+pub use package_hand_off::{UnseenCode, unseen_code_in};
 mod pending_accounting;
 mod pipeline;
 mod projection;

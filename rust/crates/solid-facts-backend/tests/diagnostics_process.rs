@@ -23,8 +23,8 @@ mod context_census_workers_process;
 mod server_rules_workers_process;
 
 use support::{
-    assert_rule_findings, diagnostic_fixture, findings_for_rule, owner_entry_row,
-    partition_creation_rows,
+    assert_rule_findings, diagnostic_fixture, diagnostic_fixture_with, findings_for_rule,
+    owner_entry_row, partition_creation_rows,
 };
 
 #[test]
@@ -3412,19 +3412,352 @@ fn receiver_reads_keep_their_rows() {
             assert_eq!(rows[0]["kind"], "uncertifiable", "{site}: {id}");
         }
     }
-    // The twins: nothing reads the flushing member through a receiver, or the read runs where no package runs it.
-    for twin in [
+    // The name net's known cost (the review of #229, B2): the two twins below were silent. A function stored under a key that a receiver reads, in code a package may run, is
+    // handed whichever object the receiver is of when the holder may be a receiver, and a literal used as another's prototype may (the program's other cases read `g` through a
+    // receiver), so each keeps the three rows of its flush (Chrome is quiet). The other three of the five (`twinNull`, `twinUnrelatedReader`, `twinOwn`) are plain literals no use
+    // of which makes a receiver of them: silent, with the key they had.
+    for site in [
         "const twinProtoBase = {\n  get g(): number {\n    flush();",
         "const twinWrittenBase = {\n  get g(): number {\n    flush();",
+    ] {
+        let flush = line_of(site) + site.lines().count() as u64 - 1;
+        for id in ["SC2006", "SC2008", "SC3001"] {
+            let rows = rows_at(flush, id);
+            assert_eq!(rows.len(), 1, "{site}: {id}: {rows:#?}");
+            assert_eq!(rows[0]["kind"], "uncertifiable", "{site}: {id}");
+        }
+    }
+    // The twins, silent: nothing reads the flushing member through a receiver (the same five shapes, each stored under a key no receiver reads), or the read runs where no package
+    // runs it.
+    for twin in [
         "const twinNullBase = {\n  get g(): number {\n    flush();",
         "const twinUnrelatedFlush = {\n  get g(): number {\n    flush();",
         "const twinOwn = {\n  m(): void {\n    flush();",
+        "const renamedProtoBase = {\n  get renamedProtoG(): number {\n    flush();",
+        "const renamedWrittenBase = {\n  get renamedWrittenG(): number {\n    flush();",
+        "const renamedNullBase = {\n  get renamedNullG(): number {\n    flush();",
+        "const renamedUnrelatedFlush = {\n  get renamedUnrelatedG(): number {\n    flush();",
+        "const renamedOwn = {\n  renamedOwnM(): void {\n    flush();",
     ] {
         let flush = line_of(twin) + twin.lines().count() as u64 - 1;
         for id in ["SC2006", "SC2008", "SC3001"] {
             assert!(rows_at(flush, id).is_empty(), "{twin}: {id}");
         }
     }
+}
+
+/// The flush rows of the program a package may run (`flush-in-action-unaccounted`, `flush-in-effect-unaccounted`, `leaf-operation-unaccounted`): a site is the text that ends at the
+/// `flush();` that holds them. Each site keeps its three rows, uncertifiable, once; a twin keeps none.
+fn flush_site_rows<'a>(
+    findings: &'a [serde_json::Value],
+    source: &str,
+    site: &str,
+) -> Vec<Vec<&'a serde_json::Value>> {
+    let at = source
+        .find(site)
+        .unwrap_or_else(|| panic!("{site} in the fixture"));
+    let line = source[..at].lines().count() as u64 + site.lines().count() as u64;
+    ["SC2006", "SC2008", "SC3001"]
+        .into_iter()
+        .map(|id| {
+            findings
+                .iter()
+                .filter(|row| {
+                    row["id"] == id && row["primaryLocation"]["line"].as_u64() == Some(line)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn assert_flush_sites(
+    findings: &[serde_json::Value],
+    source: &str,
+    sites: &[&str],
+    twins: &[&str],
+) {
+    assert!(
+        findings.iter().all(|row| row["kind"] != "violation"),
+        "{findings:#?}"
+    );
+    for site in sites {
+        for rows in flush_site_rows(findings, source, site) {
+            assert_eq!(rows.len(), 1, "{site}: {rows:#?}");
+            assert_eq!(rows[0]["kind"], "uncertifiable", "{site}");
+        }
+    }
+    for twin in twins {
+        for rows in flush_site_rows(findings, source, twin) {
+            assert!(rows.is_empty(), "{twin}: {rows:#?}");
+        }
+    }
+}
+
+/// The review of #229, B2: a function stored under a key that a receiver reads (`this.k`, `super.k`, `const { k } = this`), in code a package may run, is handed wherever the
+/// object that holds it came from: assigned after the literal, a setter's read, an object assigned, a project function's write, a value the step receives, a destructuring, a
+/// string key, a function that another stored function calls, a derived literal, `Object.create`, a class's instance. The twins read another key, read it on a timer's stack,
+/// or are read by nothing.
+#[test]
+fn receiver_key_reads_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-reads")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "lateAssign.lateAssignM = function () {\n  flush();",
+            "lateSetter.lateSetterM = function () {\n  flush();",
+            "lateNested.lateNestedSub = {\n  m(): void {\n    flush();",
+            "function putLatePut(target: { latePutM: any }) {\n  target.latePutM = function () {\n    flush();",
+            "lateValue.lateValueM = function () {\n  flush();",
+            "lateDestr.lateDestrM = function () {\n  flush();",
+            "lateStrKey[\"lateStrKeyM\"] = function () {\n  flush();",
+            "lateChain.lateChainM = function () {\n  flush();",
+            "const protoReceiver = {\n  __proto__: protoReceiverBase,\n  protoReceiverM(): void {\n    flush();",
+            "protoCreate.protoCreateM = function () {\n  flush();",
+            "protoClass.protoClassM = function () {\n  flush();",
+        ],
+        &[
+            "twinOtherKey.twinStoredM = function () {\n  flush();",
+            "twinTimer.twinTimerM = function () {\n  flush();",
+            "const twinNoReader = {\n  twinNoReaderM(): void {\n    flush();",
+        ],
+    );
+}
+
+/// The review of #229, B2: the receiver used as a value (a local, a computed key, `Reflect.get(this, …)`, a spread, a rest) may read any key, so a function stored under any key
+/// is handed when a package may run what reads it; the twins (a function nothing hands a package keeps it or reads a key; a computed-key store no receiver read reaches) are
+/// in their own program, as the stability proof of ADR 0300 is the program's.
+#[test]
+fn receiver_value_uses_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-escapes")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "lateSelf.lateSelfM = function () {\n  flush();",
+            "lateComputed.lateComputedM = function () {\n  flush();",
+            "lateReflect.lateReflectM = function () {\n  flush();",
+            "lateSpread.lateSpreadM = function () {\n  flush();",
+            "lateRest.lateRestM = function () {\n  flush();",
+            "lateSelfClass.lateSelfClassM = function () {\n  flush();",
+        ],
+        &[],
+    );
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-reads-twins")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads-twins/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[],
+        &[
+            "twinEscape.twinEscapeM = function () {\n  flush();",
+            "twinRead.twinReadM = function () {\n  flush();",
+            "const twinKeyBase = {\n  get g(): number {\n    flush();",
+            // The review of #232 (B3): a pattern parameter of a function nothing hands a package reads a key where it runs.
+            "twinPattern.twinPatternM = function () {\n  flush();",
+        ],
+    );
+}
+
+/// The review of #232 (B1, B2, B5): the strict prefilter proves a holder is no receiver, and what its uses give out (a rest copy, a nested literal bound by a pattern, read through a
+/// member or a chain, passed to a function the build reads, spread, exported to a namespace picked by a key the analysis does not read), how a key is spelled (a unicode escape in a
+/// store, a read, a literal's method or `__proto__`; a number written as a key), and which names are unique (a symbol an object pattern assignment rewrites) are its premises: each
+/// site keeps its three uncertifiable rows. The twins use every one of those shapes in a way that keeps the holder plain, or store under a key nothing reads: silent.
+#[test]
+fn receiver_confinement_keeps_its_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-confinement")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "const restCopyHolder = {\n  restCopyM(): void {\n    flush();",
+            "const nestedPatternOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();",
+            "const nestedReadOuter = {\n  nestedReadSub: {\n    nestedReadM(): void {\n      flush();",
+            "const nestedChainOuter: any = {\n  nestedChainSub: {\n    nestedChainM(): void {\n      flush();",
+            "nestedArgGive({\n  nestedArgSub: {\n    nestedArgM(): void {\n      flush();",
+            "const restNestedOuter = {\n  restNestedSub: {\n    restNestedM(): void {\n      flush();",
+            "const nestedSpreadOuter = {\n  nestedSpreadSub: {\n    nestedSpreadM(): void {\n      flush();",
+            "keyEscapeStore.\\u006beyEscapeStoreM = function () {\n  flush();",
+            "keyEscapeRead.keyEscapeReadM = function () {\n  flush();",
+            "const keyEscapeMethod = {\n  __proto__: keyEscapeMethodBase,\n  \\u006beyEscapeMethodM(): void {\n    flush();",
+            "const keyProtoEscapeHolder: any = {\n  keyProtoEscapeM(): void {\n    flush();",
+            "const keyHex = {\n  __proto__: keyNumberBase,\n  0x1(): void {\n    flush();",
+            "const keyFloat = {\n  __proto__: keyNumberBase,\n  2.0(): void {\n    flush();",
+            "symbolRewrite[symbolRewritten] = function () {\n  flush();",
+        ],
+        &[
+            "const twinRestHolder = {\n  restCopyM(): void {\n    flush();",
+            "const twinNestedOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();",
+            "const twinNestedOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();\n    },\n  },\n  nestedReadSub: {\n    nestedReadM(): void {\n      flush();",
+            "const twinNestedOuter = {\n  nestedPatternSub: {\n    nestedPatternM(): void {\n      flush();\n    },\n  },\n  nestedReadSub: {\n    nestedReadM(): void {\n      flush();\n    },\n  },\n  nestedChainSub: {\n    nestedChainM(): void {\n      flush();",
+            "const twinLeafHolder = {\n  twinLeafCount: 1,\n  restCopyM(): void {\n    flush();",
+            "twinKeyEscape.\\u0074winKeyEscapeM = function () {\n  flush();",
+            "const twinKeyNumber = {\n  __proto__: keyNumberBase,\n  0x3(): void {\n    flush();",
+            "twinSymbol[twinSymbolFirst] = function () {\n  flush();",
+        ],
+    );
+    // The exported holder (the flush is in the other file, line 5): the namespace is picked by a key the analysis does not read, so what the module exports may be given a prototype.
+    for id in ["SC2006", "SC2008", "SC3001"] {
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["id"] == id
+                    && row["primaryLocation"]["path"]
+                        .as_str()
+                        .is_some_and(|path| path.ends_with("exported-holder.ts"))
+                    && row["primaryLocation"]["line"].as_u64() == Some(5)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 1, "exported holder: {id}: {rows:#?}");
+        assert_eq!(rows[0]["kind"], "uncertifiable", "exported holder: {id}");
+    }
+}
+
+/// The review of #232 (B3, B4): a parameter that is a pattern or a rest is no name for the receiver (it reads the key, or every key, where the function runs), and
+/// `Object.assign(this, …)` writes every key of its sources through `[[Set]]`, which runs a setter. The twins are holders that provably cannot be receivers: silent beside the reads.
+#[test]
+fn receiver_parameters_and_writes_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-patterns")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-patterns/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "patternCall.patternCallM = function () {\n  flush();",
+            "const patternGetter = {\n  __proto__: patternGetterBase,\n  get patternGetterM(): number {\n    flush();",
+            "const patternArray = {\n  __proto__: patternArrayBase,\n  *[Symbol.iterator]() {\n    flush();",
+            "restParam.restParamM = function () {\n  flush();",
+            "restPass.restPassM = function () {\n  flush();",
+            "const assignThis = {\n  __proto__: assignThisBase,\n  set assignThisK(value: number) {\n    void value;\n    flush();",
+        ],
+        &[
+            "const twinPlain = {\n  twinPlainM(): void {\n    flush();",
+            "const twinNested = {\n  twinNestedSub: {\n    twinNestedM(): void {\n      flush();",
+            "const twinLeaf = {\n  twinLeafCount: 1,\n  twinLeafM(): void {\n    flush();",
+        ],
+    );
+}
+
+/// The review of #232 (S3): a program that gives `Object.prototype` a member (`Object.defineProperty`, `__defineGetter__`) makes every plain object a possible receiver of that
+/// accessor, so no holder is confined: the stores under a key a receiver reads keep their rows, a plain literal included. A program that only reads a built-in method of
+/// `Object.prototype` keeps its holders plain (the twins, in `flush-universe-package-hand-off-receiver-reads-twins`).
+#[test]
+fn object_prototype_writes_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-object-prototype")
+    else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-object-prototype/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "objectProtoHolder.objectProtoM = function () {\n  flush();",
+            "definedHolder.definedM = function () {\n  flush();",
+            "const plainHolder = {\n  objectProtoM(): void {\n    flush();",
+        ],
+        &[],
+    );
+}
+
+/// The review of #229, B2 (P10) and S2: a prototype written through a computed key no file spells keeps the getter's rows (a receiver of the literal reads it in a step); a key a
+/// dependency source file spells (`dep-keys` exports `"__proto__"`) is the spelling the text test reads, so the write through it is a possible install.
+#[test]
+fn computed_prototype_keys_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-receiver-key") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &["const protoKeyBase = {\n  get g(): number {\n    flush();"],
+        &[],
+    );
+    let Some(findings) = diagnostic_fixture_with(
+        "flush-universe-package-hand-off-receiver-key-source",
+        &[
+            "--runtime-target",
+            "browser",
+            "--runtime-build",
+            "development",
+            "--dependency-source",
+            "dep-keys",
+        ],
+    ) else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key-source/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &["const sourceKeyBase = {\n  get g(): number {\n    flush();"],
+        &[],
+    );
+}
+
+/// A function stored through a parameter's member is stored into the object the callers pass, read by the caller's own name (the neighbours of the review of #229, B2; no
+/// receiver in the program): when every use of the function is a direct call the build resolves, the holder is each call's argument, followed like a store into it (a typed or an
+/// `any` holder, an argument that is the parameter of an outer function, a copy of the holder's name, an arrow with a rest parameter); a parameter that is a pattern has callers
+/// no walk follows, so the store is handed. A fresh literal argument, and a holder read on a timer by a member nothing calls, stay silent.
+#[test]
+fn parameter_holders_keep_their_rows() {
+    let Some(findings) = diagnostic_fixture("flush-universe-package-hand-off-holder-param") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/flush-universe-package-hand-off-holder-param/App.tsx"
+    );
+    assert_flush_sites(
+        &findings,
+        source,
+        &[
+            "function putTyped(target: { putTypedM(): void }) {\n  target.putTypedM = function () {\n    flush();",
+            "function putAny(target: any) {\n  target.putAnyM = function () {\n    flush();",
+            "function putInner(target: { putChainM(): void }) {\n  target.putChainM = function () {\n    flush();",
+            "function putCopy(target: { putCopyM(): void }) {\n  target.putCopyM = function () {\n    flush();",
+            "const putArrow = (target: { putArrowM(): void }, ...rest: unknown[]) => {\n  void rest;\n  target.putArrowM = function () {\n    flush();",
+            "function putPattern({ target }: { target: { putPatternM(): void } }) {\n  target.putPatternM = function () {\n    flush();",
+        ],
+        &[
+            "function twinFresh(target: { twinFreshM(): void }) {\n  target.twinFreshM = function () {\n    flush();",
+            "function twinTimer(target: { twinTimerM(): void }) {\n  target.twinTimerM = function () {\n    flush();",
+        ],
+    );
 }
 
 /// The review of #226, B1: a getter that names its own object, and a component that renders itself passing a prop on in a nested arrow, walked the accessor
@@ -3464,6 +3797,9 @@ fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
         "const superAccessor = {\n  get g(): number {\n    flush();",
         "const superMethod = {\n  get g(): number {\n    flush();",
         "const superSibling = {\n  get g(): number {\n    flush();",
+        // The name net's known cost (the review of #229, B2): `twinPick` was a silent twin. Its getter is stored under `g`, which `superBase` reads through a receiver, and its
+        // object reaches an array's element through a callback's return, so it keeps its rows (Chrome is quiet at the read in a timer).
+        "function twinPickHelper(): number {\n  flush();",
     ] {
         let flush = line_of(site) + site.lines().count() as u64 - 1;
         let rows = findings
@@ -3478,7 +3814,7 @@ fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
     // The twins, read where no package runs them, stay silent.
     for twin in [
         "const inlineFree = {\n  get g(): number {\n    flush();",
-        "function twinPickHelper(): number {\n  flush();",
+        "function renamedPickHelper(): number {\n  flush();",
     ] {
         let flush = line_of(twin) + twin.lines().count() as u64 - 1;
         let rows = findings

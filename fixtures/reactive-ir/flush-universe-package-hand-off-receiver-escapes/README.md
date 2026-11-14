@@ -1,0 +1,7 @@
+# flush-universe-package-hand-off-receiver-escapes
+
+**Claim (the review of #229, B2; ADR 0967 amended).** A receiver (`this`, `super`) used as a value reads any key, anywhere the value goes: `const self = this` (read in a closure), `this[key]` (a key the program does not name), `Reflect.get(this, …)`, `{ ...this }`, a destructuring with a rest, in a literal's accessor or a class's. A function stored under any key of the program (by an assignment after the literal, here) is then reached by a read no name shows, so when a package the build does not read as source (`steplib`) may run the code that reads the receiver, a flush in the stored function keeps its three uncertifiable rows (SC2006 `flush-in-action-unaccounted`, SC2008 `flush-in-effect-unaccounted`, SC3001 `leaf-operation-unaccounted`): never silence, never a violation. Chrome (rc.21) reports FLUSH_IN_ACTION at each; before this the checker certified them (`scripts/fuzz/patterns/pkghand/late-self-step`, `late-computed-step`).
+
+The use of a receiver as a value hands every stored function of the program, so a case here is judged by its own pattern program; the cases that stay silent (a use in a function nothing hands a package, a key no read names) are in `flush-universe-package-hand-off-receiver-reads-twins` and `flush-universe-package-hand-off-receiver-reads`.
+
+Published bytes: `node_modules/steplib` is synthetic, as in `flush-universe-package-hand-off-receivers`; `.solid-checker/runtime.json` closes the program boundary.

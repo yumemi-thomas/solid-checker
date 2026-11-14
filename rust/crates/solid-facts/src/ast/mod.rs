@@ -53,11 +53,21 @@ use thiserror::Error;
 /// with a direct `eval` or a `with` statement.
 /// 93 (ADR 0923): each `throw`'s operand, and a `catch` clause's identifier
 /// parameter.
-pub const AST_FACTS_SCHEMA: u32 = 93;
+/// 94 (the review of #232, B5): the shorthand target of an object assignment
+/// pattern (`({ s } = value)`, `({ s = 1 } = value)`) is a write target.
+/// 95 (the re-check of #232): the references in a value position that no binding
+/// of the file declares (`global_value_references`), the static keys of an
+/// object assignment pattern (`assignment_pattern_keys`) and every read under a
+/// computed key that nothing proves is a number, a symbol or a plain non-text
+/// value (`computed_keys`), and the places the file runs code it builds
+/// (`code_sinks`).
+pub const AST_FACTS_SCHEMA: u32 = 95;
 
 mod argument_completion;
+mod code_sinks;
 mod completion_call_cover;
 mod component_value_flow;
+mod computed_keys;
 mod emission;
 mod host_call_completion;
 mod host_constants;

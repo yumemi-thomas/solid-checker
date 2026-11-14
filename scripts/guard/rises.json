@@ -1153,6 +1153,62 @@
    "to": 1,
    "adr": "ADR 0973",
    "fact": "SC1002 read-after-await-unaccounted: a read, or a call that may run a project function, written after an async function's own suspension that no row of the rule, SC9012, discard or typed reason ends (after_await_accounting.rs)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC2002 package-may-call-action",
+   "from": 22,
+   "to": 26,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receivers",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 21,
+   "to": 23,
+   "adr": "ADR 0967",
+   "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
   }
  ]
 }
