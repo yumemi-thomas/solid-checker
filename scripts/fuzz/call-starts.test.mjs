@@ -75,6 +75,17 @@ describe("callStarts", () => {
     expect(at(1, 10)).toContainEqual({ line: 1, column: 7 });
     expect(at(2, 4)).toContainEqual({ line: 2, column: 2 });
   });
+  it("takes the start of a statement whose whole operand is a global read to the read (V8 gives it no position of its own)", () => {
+    const source = "function f() {\n  void devicePixelRatio;\n  void typeof devicePixelRatio;\n  if (devicePixelRatio) {}\n  return (devicePixelRatio as number);\n}\n";
+    const starts = callStarts(source);
+    expect(starts(2, 3)).toContainEqual({ line: 2, column: 8 });
+    expect(starts(3, 3)).toContainEqual({ line: 3, column: 15 });
+    expect(starts(4, 3)).toContainEqual({ line: 4, column: 7 });
+    expect(starts(5, 3)).toContainEqual({ line: 5, column: 11 });
+    // A read that is an argument, an initializer or an element has its frame on the identifier: nothing moves, and a statement of another shape is not this.
+    const other = callStarts("function f() {\n  use(devicePixelRatio);\n  const r = devicePixelRatio;\n  void [devicePixelRatio];\n  void devicePixelRatio + 1;\n}\n");
+    for (const line of [2, 3, 4, 5]) expect(other(line, 3)).toEqual([{ line, column: 3 }]);
+  });
   it("takes a frame on an attribute's name to the one call inside it; of two, to neither (R24)", () => {
     const at = callStarts("<C run={() => n()} other={m()} />;\n<C run={() => a() + b()} />;");
     expect(at(1, 4)).toContainEqual({ line: 1, column: 15 });
