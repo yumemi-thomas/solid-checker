@@ -107,9 +107,27 @@ pub struct PackageReachIndex {
     /// The project's own declaration files (`vendor/step.d.ts`) with runtime JavaScript beside them that the program does not analyze: a declaration there
     /// describes code nobody reads, so it is undecided ([`ReachBlocker::UnanalyzedProjectJs`]).
     pub project_js: std::collections::BTreeSet<String>,
+    /// Why the code a package's closure runs is not all seen, by installed package root (the second re-check of #232): a file of the closure the build reached names
+    /// `Object.prototype` or builds code as a string (`names Object.prototype`, `generates code`), or the closure is not read to its end (a file or a load the walk cannot
+    /// read: `undecided: <blocker>`). A package that gives a shared prototype an accessor reads any key through it, and nothing in the project shows the read; an
+    /// unread package may do the same. Solid's own packages are the dialect's and are not listed. Empty where every package the program loads was read and none does.
+    pub unseen_code: BTreeMap<String, String>,
+    /// The roots of the packages the program loads, read to the end of their closures, that hold a `this` or a `super` anywhere in it: a getter such a package writes reads
+    /// a member through the object it runs against, and no file of the program shows the read. Asked of a program that can name a shared prototype (`unseen_code` is
+    /// the answer for a package that does itself).
+    pub reads_receiver: std::collections::BTreeSet<String>,
 }
 
 impl PackageReachIndex {
+    /// The first package (by root) whose closure runs code the build does not see, and why; `None` where none does.
+    #[must_use]
+    pub fn unseen_code(&self) -> Option<(&str, &str)> {
+        self.unseen_code
+            .iter()
+            .next()
+            .map(|(root, why)| (root.as_str(), why.as_str()))
+    }
+
     /// The name the manifest at `root` gives its package; `None` where the backend read no manifest.
     #[must_use]
     pub fn name_of(&self, root: &str) -> Option<&str> {

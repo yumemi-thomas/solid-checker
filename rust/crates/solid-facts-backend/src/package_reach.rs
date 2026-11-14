@@ -32,6 +32,9 @@ use solid_facts::package_reach::{
 
 use crate::host_constants::{find_package_root, split_bare_specifier};
 
+// The second re-check of #232: whether a package's closure runs code the build does not see, a walk of its own beside the action walk below.
+mod prototype;
+
 /// How many files one package's closure walk reads before it stops undecided.
 pub const MAX_CLOSURE_FILES: usize = 20_000;
 
@@ -183,6 +186,7 @@ pub fn package_reach_index(
             }
         }
     }
+    let closures = prototype::closures_by_runtime(&by_runtime, solid);
     let verdicts = by_runtime
         .into_iter()
         .map(|(runtime, (demand, siblings))| {
@@ -192,6 +196,15 @@ pub fn package_reach_index(
         .collect::<HashMap<_, _>>();
     let mut index = PackageReachIndex::default();
     for (root, named) in roots {
+        let closure = match &named.runtime {
+            Ok(runtime) => closures.get(runtime).cloned().unwrap_or_default(),
+            // A package the program loads that has no runtime to read is unread.
+            Err(reach) if !named.subpaths.is_empty() => prototype::Closure {
+                why: Some(format!("undecided: {}", reach.describe())),
+                reads_receiver: false,
+            },
+            Err(_) => prototype::Closure::default(),
+        };
         let reach = match named.runtime {
             Ok(runtime) => verdicts
                 .get(&runtime)
@@ -204,6 +217,22 @@ pub fn package_reach_index(
             .and_then(|manifest| manifest.get("name")?.as_str().map(str::to_owned))
         {
             index.names.insert(root.clone(), name);
+        }
+        // The second re-check of #232 (`prototype`): a package whose closure runs code the build does not see. Solid's own packages are the dialect's.
+        if !index
+            .names
+            .get(&root)
+            .is_some_and(|name| solid.contains(name))
+        {
+            match closure.why {
+                Some(why) => {
+                    index.unseen_code.insert(root.clone(), why);
+                }
+                None if closure.reads_receiver => {
+                    index.reads_receiver.insert(root.clone());
+                }
+                None => {}
+            }
         }
         index.by_root.insert(root, reach);
     }

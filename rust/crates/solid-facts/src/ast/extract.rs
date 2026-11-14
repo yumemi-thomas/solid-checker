@@ -72,6 +72,9 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
             .is_some_and(|text| text.contains("@ts-nocheck"))
     });
     facts.unreachable_regions = unreachable::unreachable_regions(&parsed.program);
+    facts.computed_keys = computed_keys::computed_keys(&semantic, execution_semantics_valid);
+    (facts.code_sinks, facts.uses_receiver) =
+        code_sinks::code_sinks(&semantic, execution_semantics_valid);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
         facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
@@ -151,6 +154,8 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) with_statement: bool,
     pub(super) identifiers: Vec<IdentifierFact>,
     pub(super) reference_declarations: Vec<(Span, Span)>,
+    pub(super) global_value_references: Vec<Span>,
+    pub(super) assignment_pattern_keys: Vec<Span>,
     pub(super) awaits: Vec<Span>,
     pub(super) unconditional_awaits: Vec<Span>,
     pub(super) dominating_awaits: Vec<(Span, Span)>,
@@ -408,6 +413,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             with_statement: false,
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
+            global_value_references: Vec::new(),
+            assignment_pattern_keys: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
@@ -507,6 +514,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
         self.reference_declarations.sort_unstable();
+        self.global_value_references.sort_unstable();
+        self.assignment_pattern_keys.sort_unstable();
         self.awaits.sort_unstable();
         self.unconditional_awaits.sort_unstable();
         self.dominating_awaits.sort_unstable();
@@ -749,6 +758,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_blocks: self.module_blocks,
             identifiers: self.identifiers,
             reference_declarations: self.reference_declarations,
+            global_value_references: self.global_value_references,
+            assignment_pattern_keys: self.assignment_pattern_keys,
+            // Read from the semantic model after the walk (`computed_keys::computed_keys`).
+            computed_keys: Vec::new(),
+            code_sinks: Vec::new(),
+            uses_receiver: false,
             awaits: self.awaits,
             unconditional_awaits: self.unconditional_awaits,
             dominating_awaits: self.dominating_awaits,

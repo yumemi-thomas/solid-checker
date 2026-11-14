@@ -226,7 +226,7 @@ setTimeout(() => {
   void (keyEscapeMethod as any).g;
 });
 
-// ---- B2: `__proto__` spelled with an escape is the prototype write
+// ---- B2: the prototype key spelled with an escape is the prototype write
 const keyProtoEscapeBase = {
   get g(): number {
     void runStep(() => {
@@ -374,6 +374,16 @@ setTimeout(() => {
 const twinHasOwn = Object.prototype.hasOwnProperty;
 void twinHasOwn;
 void (Object.getPrototypeOf({}) === Object.prototype);
+// the other uses of the globals that give no prototype out (the re-check of #232, S1 and S2): a member whose key the program spells, an operand nothing takes, a type; a shadowing
+// binding named `Object` and a write of `constructor` (`F.prototype.constructor = F`) are in the rule's unit table, not here: each makes every standard member call of the file an impostor (SC9012)
+const twinGlobalKeys = Object.keys({ a: 1 });
+void twinGlobalKeys;
+if (typeof window !== "undefined") {
+  void window.location.href;
+}
+const twinGlobalType: Object = {};
+void twinGlobalType;
+void ((twinRestHolder as any).constructor === Object);
 
 // a package takes the step, and no receiver is read
 void runStep(() => {});

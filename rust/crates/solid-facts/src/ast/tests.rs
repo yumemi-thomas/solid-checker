@@ -2680,6 +2680,356 @@ fn a_shorthand_target_of_an_object_assignment_pattern_is_a_write_target() {
 }
 
 #[test]
+fn global_value_references_are_the_globals_in_value_positions() {
+    // The re-check of #232: `Object` written as a value (an initializer, an argument, a heritage, a shorthand property, the object of a member) is a reference of the global,
+    // and a type annotation, a `typeof` in a type and a binding of the file named `Object` are not.
+    let source = "const a: Object = {}; type T = typeof Object; const b = Object; f(Object); class C extends Object {} const c = { Object }; function g(Object: any) { return Object; } const w = window; const s = Object.keys; let h: Function;";
+    let facts = extract("globals.ts", source).unwrap();
+    let names = facts
+        .global_value_references
+        .iter()
+        .map(|reference| &source[reference.start as usize..reference.end as usize])
+        .collect::<Vec<_>>();
+    assert_eq!(
+        names.iter().filter(|name| **name == "Object").count(),
+        5,
+        "{names:?}"
+    );
+    assert!(names.contains(&"f"), "{names:?}");
+    assert!(names.contains(&"window"), "{names:?}");
+    // The annotation `: Function` and the parameter's own `Object` are no references of a global.
+    assert!(!names.contains(&"Function"), "{names:?}");
+    assert!(
+        facts
+            .global_value_references
+            .windows(2)
+            .all(|pair| pair[0] < pair[1])
+    );
+}
+
+#[test]
+fn assignment_pattern_keys_are_the_static_keys_an_object_assignment_pattern_reads() {
+    // The re-check of #232: `({ __proto__: P } = value)` reads the prototype whatever the target is. The shorthand's name and a plain or quoted key count; a computed key
+    // and a declaration pattern (`const { a } = value`, which has its own facts) do not.
+    let source = "let p: any, q: any, r: any; ({ __proto__: p, q, 'constructor': r, [key]: s } = value); const { a } = value;";
+    let facts = extract("keys.ts", source).unwrap();
+    let keys = facts
+        .assignment_pattern_keys
+        .iter()
+        .map(|key| &source[key.start as usize..key.end as usize])
+        .collect::<Vec<_>>();
+    assert_eq!(keys, vec!["__proto__", "q", "'constructor'"]);
+}
+
+/// The reads `computed_keys` lists for a source, as `(the read's text, its site, proven, its texts)`.
+fn computed_key_facts(source: &str) -> Vec<(String, ComputedKeySite, bool, Vec<String>)> {
+    extract("keys.ts", source)
+        .unwrap()
+        .computed_keys
+        .iter()
+        .map(|fact| {
+            (
+                source[fact.read.start as usize..fact.read.end as usize].to_string(),
+                fact.site,
+                fact.proven,
+                fact.texts.iter().map(ToString::to_string).collect(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_computed_key_proven_a_number_or_a_plain_value_is_not_listed() {
+    // The re-check of #232: a read under a key no consumer asks about (a number, a symbol, a boolean, `undefined`, text holding a digit) says nothing, and a literal key is
+    // spelled (`literal_computed_members`). A number added to anything is a number or text holding a digit.
+    let source = "declare const a: any, x: any; \
+        use(a[x - 1], a[+x], a[-x], a[~x], a[x | 0], a[x >>> 0], a[x * 2], a[x++], a[--x], a[1 + x], a[x + 1], a[`${x - 1}`], a[`k${x * 2}`], a[typeof x], a[!x], a[void 0], a[x > 1], a[x in a]); \
+        use(a[Symbol.iterator], a[Symbol('s')], a[Symbol.for('s')], a[0], a['k'], a[`k`], a[1.5], a[undefined], a[NaN], a[Infinity]);";
+    assert_eq!(computed_key_facts(source), vec![]);
+}
+
+#[test]
+fn a_computed_key_that_folds_to_text_lists_the_text() {
+    // A constant is the text of its initializer; concatenation and a conditional fold; a text is a proof only of itself, so the consumer decides which texts matter.
+    let source = "declare const a: any, x: any; \
+        const key = 'k'; const built = 'const' + 'ructor'; const pick = x ? 'a' : 'b'; const count = 3; const tpl = `__pro${'to__'}`; \
+        use(a[key], a[built], a[pick], a[count], a['const' + 'ructor'], a[tpl], a[x ? 'p' : 1]);";
+    assert_eq!(
+        computed_key_facts(source),
+        vec![
+            (
+                "a[key]".into(),
+                ComputedKeySite::Member,
+                true,
+                vec!["k".into()]
+            ),
+            (
+                "a[built]".into(),
+                ComputedKeySite::Member,
+                true,
+                vec!["constructor".into()]
+            ),
+            (
+                "a[pick]".into(),
+                ComputedKeySite::Member,
+                true,
+                vec!["a".into(), "b".into()]
+            ),
+            (
+                "a['const' + 'ructor']".into(),
+                ComputedKeySite::Member,
+                true,
+                vec!["constructor".into()]
+            ),
+            (
+                "a[tpl]".into(),
+                ComputedKeySite::Member,
+                true,
+                vec!["__proto__".into()]
+            ),
+            (
+                "a[x ? 'p' : 1]".into(),
+                ComputedKeySite::Member,
+                true,
+                vec!["p".into()]
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_computed_key_nothing_proves_is_listed_unproven() {
+    // A type says nothing (`n: number` may hold anything under a cast), and a parameter, a call, a member, an index and an import are no proof; neither is a name a destructuring,
+    // a `for in` or a `for of` writes, a name written with something unproven, a redeclared name or an ambient one.
+    let source = "declare const a: any, x: any, ambient: string; import { imported } from 'm'; \
+        function f(param: string, n: number) { return [a[param], a[n]]; } \
+        use(a[x()], a[x.y], a[x[0]], a[imported], a[ambient]); \
+        const [first] = x; use(a[first]); \
+        for (const k in a) use(a[k]); for (const v of x) use(a[v]); \
+        let written = 0; ({ written } = x); use(a[written]); \
+        let looped = 0; for (looped of x) use(a[looped]); \
+        let called = 0; called = x(); use(a[called]); \
+        let redeclared = 0; var again = 1; var again = 2; use(a[again]); \
+        let appended = 'a'; appended += 'b'; use(a[appended]); \
+        let cyclic = 'a'; cyclic = cyclic + 'b'; use(a[cyclic]);";
+    let listed = computed_key_facts(source);
+    assert!(
+        listed
+            .iter()
+            .all(|(_, site, proven, texts)| *site == ComputedKeySite::Member
+                && !*proven
+                && texts.is_empty()),
+        "{listed:?}"
+    );
+    let reads = listed
+        .iter()
+        .map(|(read, ..)| read.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reads,
+        vec![
+            "a[param]",
+            "a[n]",
+            "a[x()]",
+            "a[x.y]",
+            "a[x[0]]",
+            "a[imported]",
+            "a[ambient]",
+            "a[first]",
+            "a[k]",
+            "a[v]",
+            "a[written]",
+            "a[looped]",
+            "a[called]",
+            "a[again]",
+            "a[appended]",
+            "a[cyclic]"
+        ]
+    );
+}
+
+#[test]
+fn a_counter_every_write_of_which_is_a_number_is_a_number() {
+    // The loop counter and its kin: an initializer and every write are numbers (`++`, an arithmetic compound, `=` with a number, `+=` of a number, `i = i + 1`, a logical
+    // assignment of a number), so `a[i]` says nothing; one write that proves nothing makes it unproven, and the write may be anywhere in the file.
+    let source = "declare const a: any, x: any; \
+        for (let i = 0; i < 9; i++) use(a[i]); \
+        let j = 0; j += 2; j = j + 1; j -= x; j = 7; j ||= 8; use(a[j]); \
+        var k = 1; function bump() { k *= 2; } use(a[k]); \
+        let m = 0; m += x; use(a[m]); \
+        let q = 0; function late() { q = x; } use(a[q]);";
+    let listed = computed_key_facts(source);
+    // `m += x` is a number or text with a digit (`0 + x`): not listed; only `q = x` is unproven.
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert_eq!(listed[0].0, "a[q]");
+}
+
+#[test]
+fn a_computed_pattern_key_and_a_reflect_get_key_are_listed_with_their_text() {
+    // A key a pattern reads is a read of it (`const { [k]: p } = x`, a parameter, an assignment), a literal key too (`{ ['constructor']: c }`: computed, so not a static key
+    // of the pattern); `Reflect.get(x, k)` of the global `Reflect` reads `k`, and a shadowing `Reflect` or another member is no such read.
+    let source = "declare const x: any, k: string; let c: any; \
+        const { [k]: p, ['constructor']: q } = x; function f({ [k]: r }: any) { return r; } ({ [k]: c, ['__proto__']: c } = x); \
+        use(Reflect.get(x, k), Reflect.get(x, 'a'), Reflect.get(x, 1), Reflect.get(x), Reflect['get'](x, k), Reflect.get(...x), Reflect.has(x, k)); \
+        function g(Reflect: any) { return Reflect.get(x, k); }";
+    let listed = computed_key_facts(source);
+    let shape = |site: ComputedKeySite| {
+        listed
+            .iter()
+            .filter(|(_, listed_site, ..)| *listed_site == site)
+            .map(|(read, _, proven, texts)| {
+                (
+                    read.as_str(),
+                    *proven,
+                    texts.iter().map(String::as_str).collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        shape(ComputedKeySite::Pattern),
+        vec![
+            ("[k]: p", false, vec![]),
+            ("['constructor']: q", true, vec!["constructor"]),
+            ("[k]: r", false, vec![]),
+            ("[k]: c", false, vec![]),
+            ("['__proto__']: c", true, vec!["__proto__"]),
+        ]
+    );
+    assert_eq!(
+        shape(ComputedKeySite::ReflectGet),
+        vec![
+            ("Reflect.get(x, k)", false, vec![]),
+            ("Reflect.get(x, 'a')", true, vec!["a"]),
+            ("Reflect['get'](x, k)", false, vec![]),
+            ("Reflect.get(...x)", false, vec![]),
+        ]
+    );
+}
+
+/// The sinks `code_sinks` lists for a source, as `(the sink's text, its kind)`.
+fn code_sink_facts(source: &str) -> Vec<(String, CodeSinkKind)> {
+    extract("sinks.tsx", source)
+        .unwrap()
+        .code_sinks
+        .iter()
+        .map(|sink| {
+            (
+                source[sink.at.start as usize..sink.at.end as usize].to_string(),
+                sink.kind,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_place_that_runs_code_the_file_builds_is_a_code_sink() {
+    // The second re-check of #232: code built as a string runs where nothing here reads it, so it is listed; the neighbours that run none are not.
+    let source = "declare const f: any, name: string, el: any, doc: any; \
+        eval('1'); new Function('return 1'); (() => {}).constructor('return 1'); \
+        setTimeout('code', 0); setInterval(f, 1); window.setTimeout('code'); \
+        doc.createElement('script'); doc.createElement(name); doc.createElementNS('ns', 'SCRIPT'); \
+        el.setAttribute('onclick', 'x()'); el.setAttribute(name, 'x'); \
+        el.innerHTML = '<img onerror=x()>'; el.innerHTML = name; el.insertAdjacentHTML('beforeend', name); doc.write(name); \
+        import(name); import('data:text/javascript,1'); const url = 'javascript:void 0'; window[name];";
+    let listed = code_sink_facts(source).into_iter().collect::<Vec<_>>();
+    let kinds = |kind: CodeSinkKind| {
+        listed
+            .iter()
+            .filter(|(_, listed)| *listed == kind)
+            .map(|(text, _)| text.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(kinds(CodeSinkKind::Eval), vec!["eval"]);
+    assert_eq!(kinds(CodeSinkKind::FunctionConstructor), vec!["Function"]);
+    assert_eq!(
+        kinds(CodeSinkKind::ConstructorCall),
+        vec!["(() => {}).constructor('return 1')"]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::StringTimer),
+        vec![
+            "setTimeout('code', 0)",
+            "setInterval(f, 1)",
+            "window.setTimeout('code')"
+        ]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::ScriptElement),
+        vec![
+            "doc.createElement('script')",
+            "doc.createElement(name)",
+            "doc.createElementNS('ns', 'SCRIPT')"
+        ]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::EventAttribute),
+        vec![
+            "el.setAttribute('onclick', 'x()')",
+            "el.setAttribute(name, 'x')"
+        ]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::MarkupWrite),
+        vec![
+            "el.innerHTML = '<img onerror=x()>'",
+            "el.innerHTML = name",
+            "el.insertAdjacentHTML('beforeend', name)",
+            "doc.write(name)"
+        ]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::DynamicImport),
+        vec!["import(name)", "import('data:text/javascript,1')"]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::JavascriptUrl),
+        vec!["'javascript:void 0'"]
+    );
+    assert_eq!(kinds(CodeSinkKind::GlobalLookup), vec!["window[name]"]);
+}
+
+#[test]
+fn a_neighbour_of_a_code_sink_that_runs_no_built_code_is_not_one() {
+    // A function written there or a name a function declaration or a `const` declares, a literal module path, inert markup (no tag, a tag with no script, handler or
+    // `javascript:` URL), an element of a tag the program names, an attribute that is no handler, and the uses of `eval` and `Function` that run nothing.
+    let source = "declare const el: any, doc: any, other: any; \
+        function tick() {} const later = () => {}; let moved = () => {}; moved = other; \
+        setTimeout(() => {}, 0); setTimeout(function () {}, 0); setTimeout(tick, 1); setTimeout(later, 1); setTimeout(moved, 1); \
+        const timers = { setTimeout(x: any) {} }; timers.setTimeout('not the global'); \
+        function shadow(setTimeout: any) { setTimeout('not the global'); } \
+        doc.createElement('div'); doc.createElementNS('ns', 'svg'); el.setAttribute('class', 'x'); el.setAttribute('onerror'.slice(5), 'x'); \
+        el.innerHTML = ''; el.innerHTML = 'plain text'; el.innerHTML = '<b>bold</b> and <a href=\"/x\">link</a>'; el.textContent = other; el.outerHTML = `<p>x</p>`; \
+        doc.write('<p>hello</p>'); el.insertAdjacentHTML('beforeend', '<i>x</i>'); \
+        import('./Page'); import(`./Other`); const x = typeof eval; const y = other instanceof Function; const z = Function.prototype; const w = typeof window.eval; \
+        const label = 'java script: no'; el.onclick = other; (window as any).eval = other;";
+    let listed = code_sink_facts(source);
+    // An attribute named by a call's result (`'onerror'.slice(5)`) is a name the program does not fix, and a `let` that is written again is no proven function.
+    let texts = listed
+        .iter()
+        .map(|(text, _)| text.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        texts,
+        vec![
+            "setTimeout(moved, 1)",
+            "el.setAttribute('onerror'.slice(5), 'x')"
+        ]
+    );
+}
+
+#[test]
+fn a_native_event_attribute_of_jsx_is_a_code_sink_unless_a_function_is_written_there() {
+    let source = "declare const handler: any; \
+        const a = <img onerror=\"x()\" />; const b = <div onclick={handler} />; const c = <div onclick={() => {}} />; const d = <div onClick={handler} on:click={handler} />;";
+    let texts = code_sink_facts(source)
+        .into_iter()
+        .map(|(text, _)| text)
+        .collect::<Vec<_>>();
+    assert_eq!(texts, vec!["onerror=\"x()\"", "onclick={handler}"]);
+}
+
+#[test]
 fn a_member_never_read_is_a_plain_write_or_a_delete_operand() {
     // `delete` runs the proxy's `deleteProperty` trap, no Get; the path to the
     // deleted key is read, and a compound assignment reads its target.

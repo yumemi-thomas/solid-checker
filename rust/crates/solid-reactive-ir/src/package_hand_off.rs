@@ -61,6 +61,17 @@
 //! Not followed, named in `docs/open-work.md`: `this` handed from inside a class (a class's functions are handed whole), an instance a framework builds, and a value that
 //! reaches a package through a global (`globalThis.x = f` with a hand-off the program does not spell).
 
+mod object_prototype;
+
+/// What the backend asks of each file of an installed package its walk reaches: why it may run code nothing here reads (a route to `Object.prototype`, code it builds as a
+/// string) and whether it holds a `this` or `super`.
+#[must_use]
+pub fn unseen_code_in(file: &FileFacts) -> UnseenCode {
+    object_prototype::unseen_code(file)
+}
+
+pub use object_prototype::UnseenCode;
+
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -211,6 +222,10 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     nested_keys: std::cell::OnceCell<NestedKeys>,
     /// Whether a file of the program may give `Object.prototype` a member (`object_prototype_written`).
     object_prototype_written: std::cell::OnceCell<bool>,
+    /// Whether an installed package the program loads may run code nothing here reads (`packages_run_unseen_code`).
+    packages_unseen: std::cell::OnceCell<bool>,
+    /// Whether a file of the program can name `Object.prototype` or runs code it builds (`files_name_object_prototype`).
+    files_name_prototype: std::cell::OnceCell<bool>,
 }
 
 /// The keys under which an object literal of the program holds another object literal directly (`{ sub: { … } }`), and whether one holds it under a key the program does not
@@ -249,6 +264,8 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             confined: RefCell::new(HashMap::new()),
             nested_keys: std::cell::OnceCell::new(),
             object_prototype_written: std::cell::OnceCell::new(),
+            packages_unseen: std::cell::OnceCell::new(),
+            files_name_prototype: std::cell::OnceCell::new(),
         }
     }
 
@@ -592,6 +609,17 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         !inert
     }
 
+    /// Whether a file of the program (a dependency source file too) spells the `__proto__` key anywhere, escapes read: what makes a write, or a read, through a key the
+    /// program does not name a possible prototype access.
+    fn proto_key_spelled(&self) -> bool {
+        *self.proto_key_spelled.get_or_init(|| {
+            self.program_files().iter().any(|file| {
+                file.source.contains("__proto__")
+                    || (file.source.contains('\\') && unescaped(&file.source).contains("__proto__"))
+            })
+        })
+    }
+
     /// Whether the expression `outer` is, or holds as an element or a property value, the value written at `at`, through nothing that computes another value from it:
     /// parentheses and TypeScript's wrappers, a conditional's arms, a logical expression's operands, a comma's last operand, an array literal's elements and a spread's
     /// argument, an object literal's property values, and the arguments of a call of a dialect primitive. A context places the value only when it carries it: `[cb].map(f)`
@@ -770,13 +798,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             // #229, S2). A key no file spells is a write nothing here reads as an install: the stores under a key a receiver reads are the question of
             // [`Self::placed_under_read_key`] and [`Self::assigned_under_read_key`].
             None => {
-                *self.proto_key_spelled.get_or_init(|| {
-                    self.program_files().iter().any(|file| {
-                        file.source.contains("__proto__")
-                            || (file.source.contains('\\')
-                                && unescaped(&file.source).contains("__proto__"))
-                    })
-                }) && ast.computed_members.binary_search(&member.span).is_ok()
+                self.proto_key_spelled() && ast.computed_members.binary_search(&member.span).is_ok()
             }
         }
     }
@@ -831,6 +853,19 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             for file in self.program_files() {
                 self.collect_receiver_reads(file, &mut reads);
             }
+            // A package whose code is not all seen reads any key through any receiver, and no file of the program shows the read. So does a package that is seen and holds
+            // a `this` where a file of the program can name `Object.prototype`: the program may hand it the prototype, and a getter it gives it reads through its `this`.
+            // (Anchored at a file for the walk's sake: an unreadable read follows nothing.)
+            if (self.packages_run_unseen_code()
+                || (self.files_name_object_prototype() && self.packages_read_receivers()))
+                && let Some(file) = self.program_files().first().copied()
+            {
+                reads.any.push(ReceiverRead {
+                    file,
+                    at: Span::new(0, 0),
+                    kind: ReadKind::Unreadable,
+                });
+            }
             reads
         })
     }
@@ -840,6 +875,14 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     /// rest, an iteration), which reads any key anywhere it goes. A call of `super(…)`, a private member (`this.#k`: only the class's own code names it) and an operand nothing
     /// takes (`typeof this`) read no key.
     fn collect_receiver_reads(&self, file: &'a FileFacts, reads: &mut ReceiverReads<'a>) {
+        // Code the file builds as a string reads whatever it likes through any receiver, and nothing here reads it (facts `code_sinks`): any key may be read.
+        if object_prototype::generates_code(file) {
+            reads.any.push(ReceiverRead {
+                file,
+                at: Span::new(0, 0),
+                kind: ReadKind::Unreadable,
+            });
+        }
         if !file.source.contains("this") && !file.source.contains("super") {
             return;
         }
@@ -1654,35 +1697,56 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         })
     }
 
-    /// Whether a file of the program may give `Object.prototype` a member, read once: the object every plain object inherits from, so an accessor on it runs with any object as
-    /// its receiver where a member of that object is read, and no object is provably no receiver (the review of #232, S3). A file does when it spells `__defineGetter__` or
-    /// `__defineSetter__`, or uses the member `prototype` of the global `Object` other than as an operand nothing takes (`proto === Object.prototype`) or as the object of a
-    /// read of one of its built-in methods (`Object.prototype.hasOwnProperty.call(o, k)`). A package a build does not read as source is a premise (the dependency source
-    /// premises, ADRs 0266 and 0300), and a route to the prototype that spells none of these (`Object.getPrototypeOf({})`) is named in `docs/open-work.md`.
+    /// Whether a file of the program can name `Object.prototype`, read once: the object every plain object inherits from, so an accessor on it runs with any object as its
+    /// receiver where a member of that object is read, and no object is provably no receiver (the review of #232, S3). What a file names is read as `object_prototype`
+    /// does, with the polarity "touched unless the use provably gives nothing out"; and so is a package the build does not read to its end, or one a file of whose closure
+    /// does ([`Self::packages_run_unseen_code`]): unavailable source is no evidence.
     fn object_prototype_written(&self) -> bool {
-        *self.object_prototype_written.get_or_init(|| {
-            self.program_files().iter().any(|file| {
-                file.source.contains("__defineGetter__")
-                    || file.source.contains("__defineSetter__")
-                    || file
-                        .ast
-                        .members
-                        .iter()
-                        .any(|member| object_prototype_touched(file, member))
-                    || file.ast.bindings.iter().any(|binding| {
-                        // `const { prototype } = Object`: a pattern that names the key, or one that names keys the program does not (a rest, a computed key).
-                        binding.shape == solid_facts::ast::BindingShape::Object
-                            && binding.initializer.is_some_and(|initializer| {
-                                names_global_object(file, initializer, 0)
-                            })
-                            && (binding.object_slots.len() != binding.names.len()
-                                || binding
-                                    .object_slots
-                                    .iter()
-                                    .any(|slot| slot.property == "prototype"))
-                    })
+        *self
+            .object_prototype_written
+            .get_or_init(|| self.packages_run_unseen_code() || self.files_name_object_prototype())
+    }
+
+    /// Whether a file of the program (a dependency source file included) can name `Object.prototype` or runs code it builds, by what the file spells.
+    fn files_name_object_prototype(&self) -> bool {
+        *self.files_name_prototype.get_or_init(|| {
+            self.program_files()
+                .iter()
+                .any(|file| object_prototype::names_object_prototype(file))
+        })
+    }
+
+    /// Whether an installed package the program loads, read to the end of its closure, holds a `this` or a `super` somewhere in it: a getter it writes reads a member through
+    /// the object it runs against, and no file of the program shows the read. Where the adapter reads no filesystem (no index), any installed package the compiler resolved
+    /// an import into is unread, so it may.
+    fn packages_read_receivers(&self) -> bool {
+        match self.lookup.package_reach() {
+            Some(index) => !index.reads_receiver.is_empty(),
+            None => self.imports_installed_package(),
+        }
+    }
+
+    /// Whether the compiler resolved an import of the program into an installed package.
+    fn imports_installed_package(&self) -> bool {
+        self.lookup.resolved_imports().is_some_and(|imports| {
+            imports.iter().any(|(_, import)| {
+                !import.resolved_path.is_empty()
+                    && solid_facts::package_reach::package_root_of(&import.resolved_path).is_some()
             })
         })
+    }
+
+    /// Whether an installed package the program loads may run code nothing here reads (the second re-check of #232): a file of its closure names `Object.prototype` or
+    /// builds code as a string, or the closure is not read to its end (the backend's walk, `PackageReachIndex::unseen_code`), or a declaration of the project has runtime
+    /// JavaScript beside it that nobody reads. Where the adapter reads no filesystem (no index), any installed package the compiler resolved an import into is unread. Such
+    /// code may give `Object.prototype` an accessor that reads any key through `this`, so no object is confined and any key may be read ([`Self::receiver_reads`]).
+    fn packages_run_unseen_code(&self) -> bool {
+        *self
+            .packages_unseen
+            .get_or_init(|| match self.lookup.package_reach() {
+                Some(index) => index.unseen_code().is_some() || !index.project_js.is_empty(),
+                None => self.imports_installed_package(),
+            })
     }
 
     /// The key a property of an object literal stores its value under: its name, a quoted name's text, a unique symbol (`symbol_key`), or `None` for a key the program does not
@@ -2865,80 +2929,6 @@ fn key_of_text(text: &str, computed: bool) -> Option<String> {
         (_, Some(inner)) => Some(inner.to_owned()),
         (false, None) if !text.starts_with(['"', '\'']) => spelled_key(text),
         _ => None,
-    }
-}
-
-/// Whether the expression at `span` is the global `Object` (`Object`, `globalThis.Object`, `window.Object`, `self.Object`, `global.Object`, under any TypeScript cast, or a
-/// name a binding of the file gives one of them: `const O = Object`): a name no binding of the file declares, or an alias of one.
-fn names_global_object(file: &FileFacts, span: Span, depth: usize) -> bool {
-    let ast = &file.ast;
-    let global = |name: Span, expected: &[&str]| {
-        file.source_text(name)
-            .is_some_and(|text| expected.contains(&text))
-            && ast.reference_declaration(name).is_none()
-    };
-    let span = ast.peel_ts_sugar_span(span);
-    match ast.member_at(span) {
-        Some(member) => {
-            member_spelled_key(file, member).as_deref() == Some("Object")
-                && global(
-                    ast.peel_ts_sugar_span(member.object),
-                    &["globalThis", "window", "self", "global"],
-                )
-        }
-        None => {
-            global(span, &["Object"])
-                || (depth < 3
-                    && ast
-                        .reference_declaration(span)
-                        .and_then(|declaration| ast.identifier_binding(declaration))
-                        .and_then(|binding| binding.initializer)
-                        .is_some_and(|initializer| {
-                            names_global_object(file, initializer, depth + 1)
-                        }))
-        }
-    }
-}
-
-/// Whether the member is the global `Object`'s `prototype` (or a key of it the program does not name) used as anything but an operand nothing takes or the object of a read of
-/// a built-in method of `Object.prototype`: see [`UnreadPackageHandOff::object_prototype_written`].
-fn object_prototype_touched(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> bool {
-    if !names_global_object(file, member.object, 0) {
-        return false;
-    }
-    match member_spelled_key(file, member).as_deref() {
-        Some("prototype") => {}
-        Some(_) => return false,
-        None => return true,
-    }
-    let ast = &file.ast;
-    if ast
-        .inert_operands
-        .iter()
-        .any(|operand| ast.peel_ts_sugar_span(*operand) == member.span)
-    {
-        return false;
-    }
-    match ast.members_with_peeled_object(member.span).next() {
-        Some(parent) => {
-            let written = ast
-                .write_targets
-                .iter()
-                .any(|target| ast.peel_ts_sugar_span(*target) == parent.span);
-            let builtin = member_spelled_key(file, parent).is_some_and(|key| {
-                matches!(
-                    key.as_str(),
-                    "hasOwnProperty"
-                        | "isPrototypeOf"
-                        | "propertyIsEnumerable"
-                        | "toLocaleString"
-                        | "toString"
-                        | "valueOf"
-                )
-            });
-            written || !builtin
-        }
-        None => true,
     }
 }
 

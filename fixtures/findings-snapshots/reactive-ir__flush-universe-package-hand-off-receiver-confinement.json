@@ -470,8 +470,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 5871,
-      "end": 5932,
+      "start": 5877,
+      "end": 5938,
       "fixes": 0
     },
     {
@@ -481,8 +481,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6024,
-      "end": 6031,
+      "start": 6030,
+      "end": 6037,
       "fixes": 0
     },
     {
@@ -492,8 +492,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6024,
-      "end": 6031,
+      "start": 6030,
+      "end": 6037,
       "fixes": 0
     },
     {
@@ -503,8 +503,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6024,
-      "end": 6031,
+      "start": 6030,
+      "end": 6037,
       "fixes": 0
     },
     {
@@ -514,8 +514,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6344,
-      "end": 6420,
+      "start": 6350,
+      "end": 6426,
       "fixes": 0
     },
     {
@@ -525,8 +525,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6509,
-      "end": 6516,
+      "start": 6515,
+      "end": 6522,
       "fixes": 0
     },
     {
@@ -536,8 +536,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6509,
-      "end": 6516,
+      "start": 6515,
+      "end": 6522,
       "fixes": 0
     },
     {
@@ -547,8 +547,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6509,
-      "end": 6516,
+      "start": 6515,
+      "end": 6522,
       "fixes": 0
     },
     {
@@ -558,8 +558,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6593,
-      "end": 6600,
+      "start": 6599,
+      "end": 6606,
       "fixes": 0
     },
     {
@@ -569,8 +569,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6593,
-      "end": 6600,
+      "start": 6599,
+      "end": 6606,
       "fixes": 0
     },
     {
@@ -580,8 +580,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6593,
-      "end": 6600,
+      "start": 6599,
+      "end": 6606,
       "fixes": 0
     },
     {
@@ -591,8 +591,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 6923,
-      "end": 6974,
+      "start": 6929,
+      "end": 6980,
       "fixes": 0
     },
     {
@@ -602,8 +602,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 7047,
-      "end": 7054,
+      "start": 7053,
+      "end": 7060,
       "fixes": 0
     },
     {
@@ -613,8 +613,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 7047,
-      "end": 7054,
+      "start": 7053,
+      "end": 7060,
       "fixes": 0
     },
     {
@@ -624,8 +624,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 7047,
-      "end": 7054,
+      "start": 7053,
+      "end": 7060,
       "fixes": 0
     },
     {
@@ -635,8 +635,8 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-confinement/App.tsx",
-      "start": 8877,
-      "end": 8931,
+      "start": 8883,
+      "end": 8937,
       "fixes": 0
     },
     {

@@ -1610,6 +1610,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         {
             self.reference_declarations
                 .push((span(identifier.span), declaration));
+        } else if identifier.reference_id.get().is_some_and(|reference| {
+            let reference = self.scoping.get_reference(reference);
+            reference.is_value() && !reference.flags().is_value_as_type()
+        }) {
+            // A global in a value position: no binding of the file is it, and a type annotation (`: Object`) is no use of the value.
+            self.global_value_references.push(span(identifier.span));
         }
         walk::walk_identifier_reference(self, identifier);
     }
@@ -1851,7 +1857,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         property: &oxc_ast::ast::AssignmentTargetPropertyIdentifier<'a>,
     ) {
         self.write_targets.push(span(property.binding.span));
+        self.assignment_pattern_keys
+            .push(span(property.binding.span));
         walk::walk_assignment_target_property_identifier(self, property);
+    }
+
+    /// `({ key: target } = value)`: the key is read from the value, whatever the target is (the re-check of #232: `({ __proto__: P } = {})` is the prototype).
+    fn visit_assignment_target_property_property(
+        &mut self,
+        property: &oxc_ast::ast::AssignmentTargetPropertyProperty<'a>,
+    ) {
+        if !property.computed {
+            self.assignment_pattern_keys
+                .push(span(property.name.span()));
+        }
+        walk::walk_assignment_target_property_property(self, property);
     }
 
     fn visit_simple_assignment_target(

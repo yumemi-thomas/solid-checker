@@ -571,7 +571,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         rule_options.runtime.program_is_closed(),
     )
     .with_router_install(rule_options.runtime.router_install.clone())
-    .with_package_instances(rule_options.runtime.package_instances.clone());
+    .with_package_instances(rule_options.runtime.package_instances.clone())
+    .with_package_reach(inputs.boundary.package_reach());
     let semantic_lookup = match memos {
         Some(store) => semantic_lookup.with_memo_store(store),
         None => semantic_lookup,
