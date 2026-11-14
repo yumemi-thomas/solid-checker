@@ -21892,5 +21892,119 @@
    "lg-async-outside-loading-boundary-lf-cover-clb-x-direct-none"
   ],
   "rediscovered": "locally (2026-11-14): `focus.mjs --grids mx-recall,lg-recall --codes LOADING_ON_OUTSIDE_HOLD,LOADING_ON_ACCESSOR,ASYNC_OUTSIDE_LOADING_BOUNDARY` on origin/main eb0e2dd16 exits 1 (31 false cleans in mx-recall, 9 false positives in lg-recall); on the fix it exits 0 with nothing to look at"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, a call of a global the standard library declares that an installed package replaces with a logical assignment (`globalThis.btoa &&= wrapped`, `window.btoa &&= wrapped`; `||=` and `??=` write the same way wherever the global is absent), then `btoa(\"x\")` in a component body, a memo's compute or a `createRoot` body, was certified with no row: the scan of a package's files recorded `=` and the calls that write, and took a logical assignment for a read. Chrome reports ACTION_CALLED_IN_OWNED_SCOPE at the call",
+  "found": "Research B's probe of the head before this work (rel-cmp-t2a, 2026-11-14): pkgaction rb-gw-and-assign, Chrome-confirmed false clean; the coordinator's ruling: every assignment operator writes",
+  "fixed": "ADR 0974 (`module_reach.rs` `global_use`, its `assigned` answer): every assignment operator writes a global, a logical one included (a write that may not run is a write the package may make: whether the global is absent is the host's, which no type decides), by any route to the global object (`window`, `window.self`, `globalThis`, a computed spelled key)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gwriteand-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwriteand-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwriteand-root-x-direct-none"
+  ],
+  "rediscovered": "3 grid ids (Chrome confirmed): origin/main (dbb5e7612, release build) 3 false cleans (1 certified: no finding at all), this head (3cb0c69a9) 0; pattern lane `pkgaction/` in Chrome: origin/main fails 2 of 2 (`global-write-and-assign`, `global-write-and-assign-window`), this head fails 0."
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, a call of a global the standard library declares that an installed package replaces by a writer function that is not called directly (`Reflect.apply(Object.assign, null, [globalThis, { btoa }])`, a writer held by a name `const assign = Object.assign; assign(globalThis, { btoa })`, a bound one `Object.assign.bind(null, globalThis)({ btoa })`, `.call`/`.apply`, a writer that is exported or passed on), then `btoa(\"x\")` in a component body, a memo's compute or a `createRoot` body, was certified with no row: the scan judged the direct call `Object.assign(globalThis, \u2026)` and no other use of the writer. Chrome reports ACTION_CALLED_IN_OWNED_SCOPE at the call",
+  "found": "Research B's probe of the head before this work (rel-cmp-t2a, 2026-11-14): pkgaction rb-gw-reflect-apply, Chrome-confirmed false clean; the coordinator's ruling: an alias or a bound writer is followed to its calls, and one that escapes is a writer under any name (a named premise does not clear a false clean)",
+  "fixed": "ADR 0974 (`module_reach.rs` `Writer`, `writer_of`, `is_fresh`, `indirect_writers`, `WriterFlow`): an alias, a bound writer or a call through `Reflect.apply`, `.call` or `.apply` is followed exactly to its calls, and each call is judged as a direct call is (a target that is a fresh object literal writes no global, anything else is a writer under any name); a writer that escapes the walk (exported, passed on, stored), and one whose kind or descriptor nothing decides, is a writer under any name that may define an accessor",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gwritereflect-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritereflect-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritereflect-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritealias-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritealias-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritealias-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritebind-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritebind-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gwritebind-root-x-direct-none"
+  ],
+  "rediscovered": "9 grid ids (Chrome confirmed): origin/main (dbb5e7612, release build) 9 false cleans (3 certified: no finding at all), this head (3cb0c69a9) 0; pattern lane `pkgaction/` in Chrome: origin/main fails 1 of 1 (`global-write-reflect-apply`), this head fails 0."
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, the call of a global an installed package replaced (`fz-gwrite` replaces `btoa`) written by a route to the global object other than the bare name or one static member (`window[\"btoa\"](\"x\")`, `const key = \"btoa\"; window[key](\"x\")`, `const { btoa: enc } = window; enc(\"x\")`, `const enc = window.btoa; enc(\"x\")`, `[btoa][0](\"x\")`, `window.self.btoa(\"x\")`, and the global object handed to a function that calls it), in a component body, a memo's compute or a `createRoot` body, was certified with no row: the call side followed the bare name and a static member and stopped at every other route, where the package side follows the global object through them. Chrome reports ACTION_CALLED_IN_OWNED_SCOPE at the call",
+  "found": "Research B's probes of the head before this work (rel-cmp-t2a, 2026-11-14): pkgaction rb-gc-computed and rb-gc-destructure, Chrome-confirmed false cleans, and the third batch of the review, their siblings (`window.self`, other names of the global object, a constant key, destructuring `globalThis` and `window.self`, `const enc = window.btoa`, `[btoa][0]`); the coordinator's ruling: resolve every route the way the package side does, and a route nothing decides is an any-name read",
+  "fixed": "ADR 0974 (`package_action_calls.rs` `global_member_origin`, `Key`, `member_key`, `constant_string`, `evaluated_reference`, `global_slot_origin`, `unspelled_origin`, `written_global`, `Origin::GlobalObject`): a spelled or constant computed key reads like the member it spells, a destructuring or an alias holds the global it names, the global object itself (`window`, `window.self`, `globalThis`, `document.defaultView`) is an `Origin::GlobalObject`, and a route nothing decides, or the object handed to a call that may read any global, is an any-name read: a row at the site",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gcallkey-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallkey-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallkey-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallconst-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallconst-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallconst-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcalldestr-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcalldestr-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcalldestr-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallalias-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallalias-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallalias-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallarray-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallarray-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallarray-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallself-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallself-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallself-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallhanded-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallhanded-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gcallhanded-root-x-direct-none"
+  ],
+  "rediscovered": "21 grid ids (Chrome confirmed): origin/main (dbb5e7612, release build) 21 false cleans (2 certified: no finding at all), this head (3cb0c69a9) 0; pattern lane `pkgaction/` in Chrome: origin/main fails 10 of 10 (`global-call-alias`, `global-call-array`, `global-call-chain`, `global-call-computed`, `global-call-computed-const`, `global-call-computed-self`, `global-call-destructure`, `global-call-destructure-self`, `global-call-destructure-short`, `global-call-handed`), this head fails 0."
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, the value read of a global an installed package redefines with a getter that calls `action` (`Object.defineProperty(window, \"devicePixelRatio\", { get() { action(function* () {})(); \u2026 } })`, then `void window.devicePixelRatio`, `void devicePixelRatio`, `typeof window.devicePixelRatio` or `({ devicePixelRatio: ratio } = window)`), in a component body, a memo's compute or a `createRoot` body, was certified with no row: a member read of a global is no call, and the scan held the getter nowhere a read of the global object looks. Chrome reports ACTION_CALLED_IN_OWNED_SCOPE at the read",
+  "found": "Research B's probes of the head before this work (rel-cmp-t2a, 2026-11-14): pkgaction rb-gc-value-read and rb-gc-value-bare, Chrome-confirmed false cleans, and the third batch (`typeof window.x`, a renamed pattern key); the coordinator's ruling: a value read of a global some reached package writes or redefines is a site, as a call is",
+  "fixed": "ADR 0974 (`module_reach.rs` `GlobalWrites` `accessor_names` and `accessors_any_name`, `package_reach.rs` `global_accessor_writers_of`, `package_action_calls.rs` `global_accessor`, `unspelled_accessor`, `Entry::Read`): a value read of a global that a reached package defines as an accessor (or may: a key, a descriptor or a writer nothing decides) is a site, by the bare name, a member of the global object, `typeof`, or a pattern; a data write is none (it cannot run package code on a read)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gaccmember-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccmember-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccmember-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccbare-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccbare-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccbare-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gacctypeof-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gacctypeof-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gacctypeof-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccpattern-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccpattern-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gaccpattern-root-x-direct-none"
+  ],
+  "rediscovered": "12 grid ids (Chrome confirmed): origin/main (dbb5e7612, release build) 12 false cleans (3 certified: no finding at all), this head (3cb0c69a9) 0; pattern lane `pkgaction/` in Chrome: origin/main fails 4 of 4 (`global-value-bare`, `global-value-destructure`, `global-value-read`, `global-value-typeof`), this head fails 0."
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's row for the read of a getter an installed package declares, through a pattern with a rename, a default or an assignment (`({ now: n } = clock)`, `const { now = 0 } = clock`, a nested default, a shorthand assignment pattern, a parameter pattern), stood at `clock`, the pattern's source, where Chrome reports the call at the pattern's property: a row existed, at the wrong span",
+  "found": "Research B's probes of the head before this work (rel-cmp-t2a, 2026-11-14): pkgaction rb-get-assign-pattern and rb-get-pattern-default, placement defects the pattern lane's exact-start judge reports as misplaced, and the third batch (the row of a getter read through any pattern form); the coordinator's ruling: the row stands at the pattern property, for every form, and the judge does not change",
+  "fixed": "ADR 0974 (`package_action_calls.rs`, the pattern loop and `pattern_keys`): a getter read through an object pattern is a site on the pattern, whatever its property's form (renamed, default, nested, shorthand assignment, rest, the parameter pattern of a function called in the same file), so the row stands where the runtime reports the call",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-getterrename-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-getterrename-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-getterrename-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-getterdefault-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-getterdefault-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-getterdefault-root-x-direct-none"
+  ],
+  "rediscovered": "6 grid ids (Chrome confirmed): origin/main (dbb5e7612, release build) 6 false cleans (none certified), this head (3cb0c69a9) 0; pattern lane `pkgaction/` in Chrome: origin/main fails 6 of 6 (`getter-pattern-rename`, `getter-pattern-default`, `getter-pattern-nested-default`, `getter-pattern-param`, `getter-assign-pattern`, `getter-assign-pattern-short`), this head fails 0."
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, a package component loaded lazily through a module of the project that re-exports it (`lazy(() => import(\"./view\"))` with view.ts `export { default } from \"fz-lazy\"`, and the other forms: `export { X as default } from`, `export *` with `.then(m => ({ default: m.X }))`, `export { X } from` with `.then`, an import followed by `export default`), rendered as `<Lazy />` in a component body, a memo's compute or a `createRoot` body, was certified with no row at all: the origin of the lazy value stopped at the relative module and did not follow its export into the package. Chrome reports ACTION_CALLED_IN_OWNED_SCOPE at the render",
+  "found": "Research B's probe of the head before this work (rel-cmp-t2a, 2026-11-14): pkgaction rb-lazy-reexport, Chrome-confirmed false clean, and the third batch: every re-export form, the row at the `<Lazy />` use site where Chrome reports the call; the coordinator's ruling: follow re-exports, `export *` included, and an unresolved hop is an uncertifiable row",
+  "fixed": "ADR 0974 (`package_action_calls.rs` `lazy_origin`, `relative_module_package`, `any_export_origin`, `module_binding_origin`): the origin of a lazy value follows the project module it loads through its export (`default` through the consumer's export, otherwise any export) and through every re-export form into the package, and an unresolved hop ends in an uncertifiable row; the row stands at the `<Lazy />` use site",
+  "outside": "the `pa-*` cells add only a package's files, no module of the project for the lazy import to load; the pattern lane holds the programs verbatim in Chrome (`pkgaction/lazy-reexport`, `lazy-reexport-star`, `lazy-reexport-named`, `lazy-reexport-then`, `lazy-reexport-import`: the previous head and origin/main fail them, this head passes) and the fixture `action-in-owned-scope-lazy` (`Reexport*`, `LazyReexport*`) pins each form"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site, a call of a global the standard library declares that an installed package replaces after reaching the global object by a route the scan did not record as a hand-off or a write: an alias (`const g = globalThis; g.btoa = wrapped`), code the package builds and runs (`window.eval(\"globalThis.btoa = function (text) { \u2026 }\")`), `defaultView` read off an object that is not `document` (`document.body.ownerDocument.defaultView.btoa = wrapped`), or the global object handed to a helper that defines the member through a writer function it holds under another name (`install(window, \"btoa\", { value })` over `const defineProp = Object.defineProperty`), was certified with no row: the package was a writer of no global, or of one the scan did not name. Chrome reports ACTION_CALLED_IN_OWNED_SCOPE at the call",
+  "found": "the soundness check of ruling (ii) of ADR 0974 (every use of the global object but a spelled member must be recorded, and an escape or generated code must make the package a writer under any name), 2026-11-14: the lane programs `pkgaction/global-write-alias`, `global-write-eval-member`, `global-write-view-of-any` and `global-write-helper-window`, Chrome-confirmed false clean on origin/main (eb0e2dd16)",
+  "fixed": "ADR 0974 (`module_reach.rs` `scan_module`, `route_use`, `escaped`, `code_generated`, `rooted_in_global`): every use of the global object that is not a spelled member read or a writer call judged to the end is a `GlobalObjectEscape`, `defaultView` read off any object that the name walk does not follow, `this` at the top of a script and `window.valueOf()` are routes, code generation (a member of the global object too: `window.eval`) reaches the object, and an escape or generated code makes the package a writer of any global, an accessor under any name included",
+  "outside": "the generators write a package's files but the `pa-*` cells name each route by one shape; the four pattern-lane programs hold the routes verbatim in Chrome (`pkgaction/global-write-alias`, `-eval-member`, `-view-of-any`, `-helper-window`: origin/main fails them, this head passes), `module_reach.rs` unit tests hold every one of the 30 use contexts, and the fixtures `action-in-owned-scope-global-routes` and `-global-writes` hold the rows. `pkgaction/global-route-event-view` (`event.view` handed the window back by a typed DOM member) is an open defect named in ADR 0974",
+  "rediscovered": "pattern lane `pkgaction/` in Chrome: origin/main fails 4 of 4 (`global-write-alias`, `global-write-eval-member`, `global-write-view-of-any`, `global-write-helper-window`), this head fails 0."
  }
 ]

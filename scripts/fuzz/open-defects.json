@@ -624,6 +624,15 @@
     "ACTION_CALLED_IN_OWNED_SCOPE"
    ],
    "certified": false
+  },
+  {
+   "id": "pkgaction/global-route-event-view",
+   "item": "ADR 0974 named premise: the global object handed back by a typed DOM member that no syntax names (`event.view`): a package that writes a global through it is not recorded as a writer",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
   }
  ],
  "notGenerated": [
