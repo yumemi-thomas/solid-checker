@@ -16643,7 +16643,7 @@
    "status": "certified",
    "held": {
     "adr": "0976",
-    "restoredBy": "Prove a call's argument inert from a `let` every write of which is a proven primitive (a timer handle: `undefined` and `setTimeout(...)`)",
+    "restoredBy": "Prove a call's argument inert from a `let` every write of which is a proven primitive (ADR 0976)",
     "why": "certified clean before ADR 0976 made a promise handler's code a site: `clearTimeout(copiedTimer)` in the `.then` handler is a standard call whose argument is a `let` no fact proves primitive (the `ReturnType<typeof setTimeout>` annotation proves nothing and `clearTimeout` coerces its argument), so it keeps an uncertifiable SC1002 `read-after-await-unaccounted` row",
     "expect": [
      {
