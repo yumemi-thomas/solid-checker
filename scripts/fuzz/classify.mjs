@@ -32,6 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
+import { isUnplaceable, placelessExcess, siteKey } from "./site-judge.mjs";
 import { withholdingRules, codeOfLogged, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, inFileOf, isProgramModule, withheldAtStack, withStarts } from "./codes.mjs";
 import { ORDER_LIMIT, hitCount } from "./hits.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
@@ -266,9 +267,14 @@ export function haltPlace(runtime, hitIds) {
  *                   `first`. A report of the rule's code with no authored line may be this finding's: unjudged (`unplaced`), listed.
  *                   The row carries `firstAt`, the frames of that first report that read the finding's source: the read a twin of the
  *                   claim removes (ADR 0953, option c; repeat-twin.mjs).
- * @returns {{ finding: string, verdict: string, why?: string }[]}
+ * A code Chrome cannot place (`placelessCodes`) used to substantiate every violation of its rules in the file, one diagnostic anywhere: a true
+ * violation hid every false one beside it (ADR 0979). It substantiates only as many sites as the run raised diagnostics of it
+ * (site-judge.mjs `placelessExcess`, sites that never ran not counted); `siteFindings` are the violations the caller judged at the row's own
+ * sites, which count as sites too. More sites than diagnostics leaves each of them to the verdicts below: a site that ran with no code of its
+ * rule reported at it is a `false-positive` (`excess`: the code and the counts).
+ * @returns {{ finding: string, verdict: string, why?: string, excess?: string }[]}
  */
-export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
+export function offSiteVerdicts({ findings, built, program, runtime, plan, siteFindings = [] }) {
   // A component's entry at or above `line`: the top-level host of a line no counter sits on.
   const hostEntry = (ledger, line) => (ledger ?? [])
     .filter((row) => row.kind === "entry" && (row.enclosing === null || row.enclosing === undefined) && row.line !== undefined && row.line <= line)
@@ -281,23 +287,43 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
   const registered = program && built?.lineTable ? registrationLines(program, built.lineTable) : () => [];
   const counted = [...(built?.sites ?? []), ...(built?.glue ?? [])].filter((site) => site.hit !== undefined && site.hit !== null);
   const hits = runtime.hits ?? null;
+  // Whether a violation's lines ran, for the placeless count: false only when the ledger shows they did not (a counter on its lines at zero,
+  // or its host never entered); anything unknown counts as a site.
+  const ranState = (finding) => {
+    const on = counted.filter((site) => inSpan(finding, site.line));
+    if (on.length) return on.every((site) => hitCount(hits, site.hit) === 0) ? false : null;
+    const host = hostEntry(built?.ledger, finding.line);
+    return host && hitCount(hits, host.hit) === 0 ? false : null;
+  };
+  const asSite = (finding) => ({ rule: finding.rule, file: "App.tsx", line: finding.line, column: finding.column, finding });
+  // The diagnostics Chrome raised, not merged by stack. None names its file (`loc` carries a path the host chose), so each counts for every file:
+  // the budget is never smaller than the run's.
+  const raised = (runtime.diagnostics ?? []).map((diagnostic) => ({ code: diagnostic.code }));
+  const excess = placelessExcess([...findings, ...siteFindings].map(asSite), raised, { ran: (site) => ranState(site.finding) });
   return findings.map((finding) => {
     const label = `${finding.rule}@${finding.line}`;
     if (!ruleHasRuntimeCounterpart(finding.rule) || finding.runtimeSilent) return { finding: label, verdict: "unjudged", why: "no-counterpart" };
     const codes = codesForRule(finding.rule);
-    const reported = events.filter((event) => codes.includes(event.code));
+    const reportedAll = events.filter((event) => codes.includes(event.code));
     const appLines = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined).map((position) => position.line);
-    const connected = reported.some((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
+    const connected = reportedAll.some((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
     // A placeless code has no line of its own (ASYNC_OUTSIDE_LOADING_BOUNDARY names the first pending effect's owner path): reported
     // anywhere in the file, it is the finding's (ADR 0641).
-    const placeless = [...reported.map((event) => event.code), ...unattributedCodes(runtime).filter((code) => codes.includes(code))].some(isPlacelessCode);
-    if (connected || placeless) return { finding: label, verdict: "substantiated" };
+    const placelessNames = [...reportedAll.map((event) => event.code), ...unattributedCodes(runtime).filter((code) => codes.includes(code))].filter(isPlacelessCode);
+    const unplaceable = placelessNames.filter(isUnplaceable);
+    // ADR 0979: not a violation of a placeless code beyond the diagnostics the run raised of it (site-judge.mjs).
+    const over = [...new Set(unplaceable)].map((name) => ({ name, found: excess.get(`${name}|${asSite(finding).file}`) })).find((one) => one.found?.keys.has(siteKey(asSite(finding))));
+    // LOADING_ON_ACCESSOR is placeless in the recall judges' table but placed in Chrome (site-judge.mjs `unplaceableCodes`): it substantiates a violation only by a frame.
+    if (connected || (unplaceable.length && !over)) return { finding: label, verdict: "substantiated" };
+    // The placeless diagnostics account for nothing here: what is left is judged as if they were not reported.
+    const reported = over ? reportedAll.filter((event) => !isUnplaceable(event.code)) : reportedAll;
+    const unattributed = over ? unattributedCodes(runtime).filter((code) => !isUnplaceable(code)) : unattributedCodes(runtime);
     // A disturbed run: the verdict an undisturbed one would get, then what the disturbance changes (see above).
     const atSpan = events.filter((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
     const first = (atSpan.find((event) => event.source === "thrown") ?? atSpan[0])?.code ?? null;
     // The rule's code reported only off these lines (`unconnected`) does not confirm this finding (coordinator, Part 16): a `repeat`, unless a
     // report of it has no authored line, which may be this finding's (`unplaced`, unjudged).
-    const unplacedRuleCode = reported.some((event) => !appLines(event).length) || unattributedCodes(runtime).some((code) => codes.includes(code));
+    const unplacedRuleCode = reported.some((event) => !appLines(event).length) || unattributed.some((code) => codes.includes(code));
     // Solid reports some codes once (a second untracked read after an await, a second store write): the code elsewhere may be this finding's
     // too. A `repeat` (first = the code reported) scores like a stacked claim: proved only by a pair's twin (stacked.mjs), else false.
     // Review of 1d6abdb80: a twin proves a code reports once per source, not that this finding reads the same one (`await x; a(); b();`
@@ -317,8 +343,11 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
     const matched = reported.find((event) => appLines(event).length && sameFrames(event).length);
     const elsewhere = matched?.code ?? null;
     const firstAt = matched ? sameFrames(matched).map(({ line, column }) => ({ line, column })) : null;
-    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat", firstAt } : { finding: label, verdict: "false-positive", why: "repeat-other-source" });
-    const halted = (verdict, hitIds = []) => {
+    const unconnected = () => (unplacedRuleCode ? { finding: label, verdict: "unjudged", why: "unplaced" } : elsewhere ? { finding: label, verdict: "stacked", first: elsewhere, why: "repeat", firstAt } : { finding: label, verdict: "false-positive", why: over ? "placeless-excess" : "repeat-other-source" });
+    // An excess violation says which code outnumbered its diagnostics (`excess`), for the person reading the candidate (ADR 0979).
+    const note = (verdict) => (over && verdict.verdict === "false-positive" ? { ...verdict, excess: `${over.name}: ${over.found.sites} sites, ${over.found.occurrences} raised` } : verdict);
+    const halted = (verdict, hitIds = []) => note(haltedBase(verdict, hitIds));
+    const haltedBase = (verdict, hitIds = []) => {
       if (!disturbed.length) return verdict;
       // A repeat stays one in a halted run (its pair needs the same twin); a stacked claim needs nothing of the rule reported anywhere.
       if (verdict.verdict === "stacked" || verdict.why === "repeat-other-source") return { ...verdict, why: `disturbed-${verdict.why}` };
@@ -340,13 +369,13 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan }) {
       const entered = hitCount(hits, host.hit);
       if (entered === null) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
       if (entered === 0) return halted({ finding: label, verdict: "unexecuted", why: "host" });
-      if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected(), [host.hit]);
+      if (reported.length || unattributed.some((code) => codes.includes(code))) return halted(unconnected(), [host.hit]);
       return halted({ finding: label, verdict: "false-positive", why: "host-ran" }, [host.hit]);
     }
     const counts = covered.map((site) => hitCount(hits, site.hit));
     if (counts.some((count) => count === null)) return halted({ finding: label, verdict: "unjudged", why: "no-hit-ledger" });
     if (counts.every((count) => count === 0)) return halted({ finding: label, verdict: "unexecuted" });
-    if (reported.length || unattributedCodes(runtime).some((code) => codes.includes(code))) return halted(unconnected(), covered.map((site) => site.hit));
+    if (reported.length || unattributed.some((code) => codes.includes(code))) return halted(unconnected(), covered.map((site) => site.hit));
     return halted({ finding: label, verdict: "false-positive" }, covered.map((site) => site.hit));
   });
 }

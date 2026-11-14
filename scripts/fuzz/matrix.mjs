@@ -147,7 +147,8 @@ function judgeParts(input) {
   // A rule that stands beside the row's code (codes.mjs `besideCode`, ADR 0483) makes a claim the code's throw hides: the runtime stops first.
   const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !(claiming.includes(finding.rule) || standsBeside(input.code, finding, runtime));
   const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && (!inLines(finding, region) || judgedAtSite(finding)));
-  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
+  const siteFindings = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !offSite.includes(finding));
+  const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan, siteFindings }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
   return { verdict, offSite, judged };
 }
 

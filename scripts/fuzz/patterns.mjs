@@ -20,6 +20,7 @@ import { mapPositions } from "./chrome-host.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
 import { patternClaim, stackedProblems } from "./stacked.mjs";
 import { OPEN_DEFECTS, readOpenDefects } from "./open-defects.mjs";
+import { accountViolations, frameAt, isUnplaceable } from "./site-judge.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
@@ -35,22 +36,31 @@ export function patternCases(root = PATTERNS) {
 
 // Each diagnostic and thrown error keeps the case-module frames of its stack as served (`frames`: url, line, column), the oracle's depth
 // (41 frames, chrome-host/runner.tsx); runChrome maps them to source lines (`stacks`), so a withholding covers a code only at its site.
-const ENTRY = (clickAll) => `import { OBSERVE, flush } from "solid-js";
-import { render } from "@solidjs/web";
+//
+// ADR 0979: the entry imports App statically, as the main.tsx the checker models does (`runChecker` writes it). The lane used to mount App
+// through `await import("./App")`, and the await gap let a module-level async source settle before render: Chrome was quiet where a
+// static entry throws (`const [v, setV] = createOptimistic(async () => 1);` at module level, `setV(2)` in App: OPTIMISTIC_WRITE_BEFORE_LOAD),
+// so a correct violation read as a false positive and a real false clean could hide the same way. The recording lives in `entry-record.tsx`,
+// the entry's first import, so it is subscribed before App's module evaluates and a diagnostic raised there is recorded too; a module that
+// fails to load fails the entry, as a static import does.
+export const RECORD = `import { OBSERVE } from "solid-js";
 const rec: any = { diagnostics: [], errors: [], sites: [] };
 (globalThis as any).__log = () => {};
 const frames = (stack: unknown) => String(stack ?? "").split("\\n").flatMap((text) => {
   const match = /(\\/cases\\/[^/]+\\/[^/?:\\s)]+)(?:\\?[^:\\s)]*)?:(\\d+):(\\d+)/.exec(text);
-  return match && !match[1].endsWith("/entry.tsx") ? [{ url: match[1], line: Number(match[2]), column: Number(match[3]) }] : [];
+  return match && !/\\/entry(-record)?\\.tsx$/.test(match[1]) ? [{ url: match[1], line: Number(match[2]), column: Number(match[3]) }] : [];
 });
 const stackHere = () => { const limit = Error.stackTraceLimit; Error.stackTraceLimit = 41; try { return new Error("diagnostic").stack; } finally { Error.stackTraceLimit = limit; } };
-const error = (message: unknown, stack: unknown) => { rec.errors.push(String(message)); rec.sites.push({ message: String(message), frames: frames(stack) }); };
+export const error = (message: unknown, stack: unknown) => { rec.errors.push(String(message)); rec.sites.push({ message: String(message), frames: frames(stack) }); };
 window.addEventListener("error", (e) => error((e as any).error?.message ?? e.message, (e as any).error?.stack));
 window.addEventListener("unhandledrejection", (e: any) => error(e.reason?.message ?? e.reason, e.reason?.stack));
 OBSERVE!.diagnostics.subscribe((ev: any) => { rec.diagnostics.push(ev.code); rec.sites.push({ code: ev.code, frames: frames(stackHere()) }); });
-// Imported after the subscription, so a diagnostic raised while App's module evaluates is recorded too. A module that fails
-// to load fails the entry, as a static import did: the program did not run.
-const mod: any = await import("./App");
+export { rec };
+`;
+export const ENTRY = (clickAll) => `import { flush } from "solid-js";
+import { render } from "@solidjs/web";
+import { rec, error } from "./entry-record";
+import * as mod from "./App";
 try { render(() => <mod.App />, document.getElementById("root")!); } catch (e: any) { error(e.message, e.stack); }
 try { flush(); } catch (e: any) { error(e.message, e.stack); }
 await new Promise((r) => setTimeout(r, 50));
@@ -113,6 +123,7 @@ async function runChrome(cases, root) {
   for (const { id, report, dir } of cases) {
     const target = join(root, "cases", id.replace("/", "--"));
     cpSync(dir, target, { recursive: true });
+    writeFileSync(join(target, "entry-record.tsx"), RECORD);
     writeFileSync(join(target, "entry.tsx"), ENTRY(report === "values"));
   }
   writeFileSync(join(root, "index.html"), `<!doctype html><html><body><div id="root"></div><script type="module">
@@ -147,7 +158,10 @@ import("/cases/" + id + "/entry.tsx").catch((e) => { window.__rec = { errors: ["
         const thrown = rec.errors.map((message) => codeOfLogged(message)).filter(Boolean);
         const entry = rec.errors.find((message) => String(message).startsWith("entry: "));
         const stacks = await mapStacks(server, lookup, join(root, "cases", id.replace("/", "--")), rec);
-        records.set(id, { codes: [...new Set([...rec.diagnostics, ...thrown])], stacks, ...(entry ? { failure: entry.slice(0, 160) } : {}) });
+        // `counts`: the diagnostics of each code Chrome raised, not merged by stack (ADR 0979: a placeless code is judged by count).
+        const counts = {};
+        for (const code of rec.diagnostics) counts[code] = (counts[code] ?? 0) + 1;
+        records.set(id, { codes: [...new Set([...rec.diagnostics, ...thrown])], counts, stacks, ...(entry ? { failure: entry.slice(0, 160) } : {}) });
       } catch (error) { records.set(id, { codes: [], failure: String(error.message).slice(0, 160) }); }
       await context.close();
     }
@@ -212,20 +226,52 @@ export const atRecordedSite = (finding, stacks = [], code = null) => {
   return stacks.some((stack) => withheldAtStack(place, stack.map((frame) => (inFile(place.path, frame.file) ? frame : { file: frame.file, line: -1 })), (frame) => frame.mount === true, code));
 };
 
+/** A checker finding as the shared site judge reads it (site-judge.mjs): its file's path as the checker reported it, its lines, its start. */
+const violationOf = (finding) => {
+  const at = finding.primaryLocation ?? finding;
+  return { rule: finding.rule, file: String(at.path ?? "").replaceAll("\\", "/"), line: at.line, endLine: at.endLine ?? at.line, column: at.column, finding };
+};
+
+/**
+ * One row per diagnostic Chrome raised (site-judge.mjs `accountViolations`): each stack of the record with its frames, then empty rows up to
+ * the number of diagnostics of the code the record counted (`counts`; a record with none counts one per stack, at least one per code), so a
+ * placeless code's occurrences are not merged by stack.
+ */
+const diagnosticRows = ({ codes, counts, stacks }) => [...new Set([...codes, ...Object.keys(stacks)])].flatMap((code) => {
+  const rows = (stacks[code] ?? []).map((stack) => ({ code, frames: stack }));
+  // Padding only for a code Chrome cannot place: a placed code's repeats share a stack, and an empty row of it would read as a diagnostic nothing placed.
+  const raised = isUnplaceable(code) ? Math.max(counts?.[code] ?? 0, rows.length, codes.includes(code) ? 1 : 0) : rows.length;
+  return [...rows, ...Array.from({ length: raised - rows.length }, () => ({ code, frames: [] }))];
+});
+
+/** A frame places a finding when it, or a start it stands for (a compiled call's expression, a call's callee), is on the finding's lines in the finding's file. */
+const placesFinding = (violation, frame) => [frame, ...(frame.starts ?? [])].some((at) => frameAt(violation, { line: at.line, file: frame.file }, (one, other) => inFile(one.file, other.file ?? "App.tsx")));
+
 /**
  * One program's verdict: `{ outcome, codes, certified?, rules? }`. `stacks` (`{ CODE: [[{ file, line, column, mount? }]] }`, innermost
  * first) are the stacks Chrome recorded for each code: a claiming or withholding finding covers a code with a place only at one of them
  * (`atRecordedSite`; review 4c, R5, R8), a placeless code by a claiming finding anywhere and never by a withholding. `positions: false`
  * says the record kept no stacks (the witness rows): a claiming finding then covers anywhere, a withholding only at `stacks`.
+ *
+ * A violation is a false positive when no diagnostic accounts for it (ADR 0979, site-judge.mjs): a frame of a diagnostic of one of its rule's
+ * codes on its lines, or, for a code Chrome cannot place, no more such sites than diagnostics. The code reported elsewhere in the file used
+ * to excuse it (`positions: false` keeps that file test, as the witness rows have no frames). `counts` (`{ CODE: n }`) are the diagnostics of
+ * each code the run raised.
  */
-export function judgePattern({ codes, failure, stacks = {}, positions = true }, findings) {
+export function judgePattern({ codes, counts, failure, stacks = {}, positions = true }, findings) {
   if (failure || findings === null) return { outcome: "no-run", why: failure ?? "no checker report" };
   const relevant = findings.filter((finding) => !ignoredRules.includes(finding.rule));
   const claimed = codes.filter((code) => (codeRules[code] ?? []).length);
   const atSite = (code, finding) => (!positions && (codeRules[code] ?? []).includes(finding.rule)) || atRecordedSite(finding, stacks[code], code);
   const missed = claimed.filter((code) => !relevant.some((finding) => coversCodeAt(code, finding, atSite(code, finding)) || (finding.kind === "violation" && besideCode[code]?.includes(finding.rule))));
-  const contradicted = relevant.filter((finding) => finding.kind === "violation" && ruleHasRuntimeCounterpart(finding.rule) && !finding.runtimeSilent && !finding.claimsSilent && !String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) && !codesForRule(finding.rule).some((code) => codes.includes(code)) && !codes.some((code) => besideCode[code]?.includes(finding.rule)));
-  if (contradicted.length) return { outcome: "false-positive", codes: claimed, rules: [...new Set(contradicted.map((finding) => finding.rule))] };
+  // A violation of a rule whose code Chrome reported and no finding covers is that code's `misplaced` below (the warning in the wrong place), a defect of its own.
+  const misplacesCode = (finding) => positions && missed.some((code) => !isPlacelessCode(code) && codeRules[code].includes(finding.rule));
+  const checked = relevant.filter((finding) => finding.kind === "violation" && !misplacesCode(finding) && ruleHasRuntimeCounterpart(finding.rule) && !finding.runtimeSilent && !finding.claimsSilent && !String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) && !codes.some((code) => besideCode[code]?.includes(finding.rule)));
+  const unaccounted = positions
+    ? accountViolations({ violations: checked.map(violationOf), diagnostics: diagnosticRows({ codes, counts, stacks }), connects: placesFinding }).filter((row) => row.verdict === "unaccounted")
+    : checked.filter((finding) => !codesForRule(finding.rule).some((code) => codes.includes(code))).map((finding) => ({ violation: { rule: finding.rule } }));
+  const contradicted = unaccounted.map((row) => row.violation);
+  if (contradicted.length) return { outcome: "false-positive", codes: claimed, rules: [...new Set(contradicted.map((violation) => violation.rule))], ...(positions ? { unaccounted: unaccounted.map((row) => `${row.violation.rule}@${row.violation.line}${row.why ? `(${row.why}${row.why === "excess" ? ` ${row.code}: ${row.sites} sites, ${row.occurrences} raised` : ""})` : ""}`) } : {}) };
   // R8: a missed code whose claiming rule has a violation elsewhere is `misplaced` (the warning in the wrong place, a defect); one Chrome
   // gave no position with a column is `unplaced` (unjudged, never a pass). Any other miss is a false clean, and decides the outcome.
   const placedOf = (code) => (stacks[code] ?? []).some((stack) => stack.some((frame) => frame.handRead || Number.isInteger(frame.column)));

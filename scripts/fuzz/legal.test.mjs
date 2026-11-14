@@ -84,9 +84,24 @@ describe("judgeLegal", () => {
     const fired = runtime({ diagnostics: [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 10 }] }] });
     expect(judge({ runtime: fired }).outcome).toBe("not-legal");
   });
-  it("is no false positive when the runtime reports one of the rule's codes elsewhere", () => {
+  // ADR 0979: this assertion said the code reported at another line excused a violation at the site (`not.toBe("false-positive")`). A violation at the site is
+  // accounted for at the site; the code reported elsewhere accounts for nothing here, so the row is a false-positive candidate.
+  it("is a false-positive candidate when the runtime reports one of the rule's codes only elsewhere (was: no false positive, ADR 0979)", () => {
     const elsewhere = runtime({ diagnostics: [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 30 }] }] });
-    expect(judgeLegal({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("no-store-mutation-outside-setter", "violation")] }, runtime: elsewhere }).outcome).not.toBe("false-positive");
+    expect(judgeLegal({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("no-store-mutation-outside-setter", "violation")] }, runtime: elsewhere }).outcome).toBe("false-positive");
+  });
+  it("is no false positive when the runtime reports one of the rule's codes at the site, or a frame of its stack is on the site", () => {
+    const at = (positions) => runtime({ diagnostics: [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions }] });
+    const violation = { ok: true, findings: [finding("no-store-mutation-outside-setter", "violation")] };
+    for (const positions of [[{ file: "App.tsx", line: 10 }], [{ file: "App.tsx", line: 30 }, { file: "App.tsx", line: 10 }]]) {
+      expect(judgeLegal({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, checker: violation, runtime: at(positions) }).outcome).not.toBe("false-positive");
+    }
+  });
+  it("accounts for a lone violation of a placeless code by the run's one diagnostic, and flags two sites against one", () => {
+    const flush = runtime({ diagnostics: [{ code: "ASYNC_OUTSIDE_LOADING_BOUNDARY", positions: [{ file: "App.tsx", line: 99 }] }] });
+    const rule = "async-outside-loading-boundary";
+    expect(judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding(rule, "violation")] }, runtime: flush }).outcome).not.toBe("false-positive");
+    expect(judgeLegal({ code: "PENDING_ASYNC_UNTRACKED_READ", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding(rule, "violation"), finding(rule, "violation", 20)] }, runtime: flush }).outcome).toBe("false-positive");
   });
 });
 

@@ -24,6 +24,35 @@ const event = (code, ...lines) => ({ code, message: "m", positions: lines.map((l
 const run = (diagnostics, hits = { h1: 1, h2: 1, h3: 1 }, extra = {}) => ({ diagnostics, errors: [], witnesses: [], hits, ...extra });
 const verdictsOf = (findings, runtime) => offSiteVerdicts({ findings, built, runtime, plan: built.plan }).map((row) => row.verdict + (row.why ? `(${row.why})` : ""));
 
+// ADR 0979: a placeless code substantiates as many violation sites as the run raised diagnostics of it, not every violation of its rules in the file.
+describe("offSiteVerdicts: a code Chrome cannot place is counted, not judged by file", () => {
+  const rule = "async-outside-loading-boundary";
+  // The flush's frames hold no line of the program: one position elsewhere keeps the run undisturbed (`positions: []` is a diagnostic no line could be given for).
+  const flush = (positions = [{ file: "App.tsx", line: 99, column: 1 }]) => ({ code: "ASYNC_OUTSIDE_LOADING_BOUNDARY", message: "m", positions, loc: "App.tsx:9:3" });
+  const siteV = finding(rule, 10);
+  const verdicts = (findings, runtime, siteFindings = []) => offSiteVerdicts({ findings, built, runtime, plan: built.plan, siteFindings }).map((row) => row.verdict + (row.why ? `(${row.why})` : ""));
+  it("keeps a lone off-site violation when the run raised the code once", () => {
+    expect(verdicts([finding(rule, 20)], run([flush()]))).toEqual(["substantiated"]);
+  });
+  it("flags the violation beside the row's own site when one diagnostic is all the run raised (the read a hand-called Loading covers)", () => {
+    const rows = offSiteVerdicts({ findings: [finding(rule, 20)], built, runtime: run([flush()]), plan: built.plan, siteFindings: [siteV] });
+    expect(rows).toEqual([{ finding: `${rule}@20`, verdict: "false-positive", excess: "ASYNC_OUTSIDE_LOADING_BOUNDARY: 2 sites, 1 raised" }]);
+  });
+  it("flags it the same in a run the unplaced diagnostic disturbed (the verdict is the disturbed run's, the excess is noted)", () => {
+    expect(offSiteVerdicts({ findings: [finding(rule, 20)], built, runtime: run([flush([])]), plan: built.plan, siteFindings: [siteV] })).toEqual([{ finding: `${rule}@20`, verdict: "false-positive", why: "disturbed", excess: "ASYNC_OUTSIDE_LOADING_BOUNDARY: 2 sites, 1 raised" }]);
+  });
+  it("keeps both sites when the run raised the code twice", () => {
+    expect(verdicts([finding(rule, 20)], run([flush(), flush()]), [siteV])).toEqual(["substantiated"]);
+  });
+  it("does not count a site the ledger shows never ran: the other violation is the one diagnostic's", () => {
+    expect(verdicts([finding(rule, 20)], run([flush()], { h1: 0, h2: 1, h3: 1 }), [siteV])).toEqual(["substantiated"]);
+    expect(verdicts([finding(rule, 20)], run([flush()], { h1: 1, h2: 0, h3: 1 }), [siteV])).toEqual(["substantiated"]);
+  });
+  it("leaves a violation of a code Chrome places as it was: judged by its frames", () => {
+    expect(verdicts([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 20)]), [finding("strict-read-untracked", 10)])).toEqual(["substantiated"]);
+  });
+});
+
 describe("offSiteVerdicts", () => {
   it("a code of the rule on the finding's lines substantiates it", () => {
     expect(verdictsOf([finding("strict-read-untracked", 20)], run([event("STRICT_READ_UNTRACKED", 20)]))).toEqual(["substantiated"]);
