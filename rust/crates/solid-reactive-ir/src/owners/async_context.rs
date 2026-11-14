@@ -35,11 +35,49 @@ pub(super) fn loading_cover_at(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     visited: &mut HashSet<(String, Span)>,
 ) -> LoadingCover {
+    loading_cover_from(lookup, file, span, None, symbol_names, visited)
+}
+
+/// [`loading_cover_at`], where `outside` is a `Loading` element the walk has already left through its `fallback`: that element does not hold
+/// the position, which is where it stands.
+fn loading_cover_from(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    outside: Option<Span>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    visited: &mut HashSet<(String, Span)>,
+) -> LoadingCover {
     let entities = lookup.entities();
-    if file.ast.jsx_containing(span).any(|element| {
-        jsx_element_is_loading(file, element, entities, symbol_names, lookup.dialect)
-    }) {
-        return LoadingCover::Covered;
+    // ADR 0978: a boundary holds what it renders as `children` and under its `on`, not its `fallback`, which renders outside the hold (rc.21
+    // `Loading`: `createLoadingBoundary(() => props.children, () => props.fallback, ..)`). A read in the `fallback` of a `Loading` the program
+    // writes goes on outward from the element, as one in a hand-called boundary's `fallback` getter does.
+    let mut fallback_of = None;
+    for element in file.ast.jsx_containing(span) {
+        if Some(element.span) == outside
+            || !jsx_element_is_loading(file, element, entities, symbol_names, lookup.dialect)
+        {
+            continue;
+        }
+        let fallback_prop = lookup
+            .dialect
+            .async_boundary_shape()
+            .map(|shape| shape.fallback_prop);
+        let in_fallback = element.attributes.iter().any(|attribute| {
+            attribute.namespace.is_none()
+                && fallback_prop
+                    .is_some_and(|prop| file.source_text(attribute.local_name) == Some(prop))
+                && attribute.span.contains(span)
+        });
+        if !in_fallback {
+            return LoadingCover::Covered;
+        }
+        // Elements come outermost first: the innermost boundary the position is the fallback of is left first, and the walk from it meets
+        // any other (a `Loading` written in that fallback holds it as a child).
+        fallback_of = Some(element.span);
+    }
+    if let Some(element) = fallback_of {
+        return loading_cover_from(lookup, file, element, Some(element), symbol_names, visited);
     }
     // ADR 0668: a component covers a site only as its child, and only where the
     // `Loading` holds what it renders of `children`: `<App />` covers neither its
@@ -140,6 +178,19 @@ pub(super) fn loading_cover_at(
         }
         if function_is_mount_root(lookup, file, function) {
             return LoadingCover::Uncovered;
+        }
+        // ADR 0978: a layer no call edge places. A getter of a hand-called boundary's props or an argument of `createLoadingBoundary` is
+        // run by the boundary (`children` is the hold, `fallback` renders outside it); every other layer a call does not hand (an object's
+        // member, an array element, a class element, a tag function, a closure handed to a call the analysis does not resolve) is run where
+        // the analysis does not see, so a boundary may hold it: never read as uncovered.
+        if let Some(layer) = crate::loading_entries::layer_cover(lookup, file, function) {
+            return match layer {
+                crate::loading_entries::LayerCover::Covered => LoadingCover::Covered,
+                crate::loading_entries::LayerCover::Unresolved => LoadingCover::Unresolved,
+                crate::loading_entries::LayerCover::Outward(at) => {
+                    loading_cover_from(lookup, file, at, None, symbol_names, visited)
+                }
+            };
         }
     }
     LoadingCover::Unresolved

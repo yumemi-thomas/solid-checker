@@ -1209,6 +1209,38 @@
    "to": 23,
    "adr": "ADR 0967",
    "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-loading-on-accessor",
+   "key": "SC5006 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0978",
+   "fact": "SC5006 and SC5007 asked of a call form and an unresolved tag (a hand call with an `on`, an unresolved tag with a spread inside package source): obligations with no children proof"
+  },
+  {
+   "fixture": "reactive-ir/rc21-loading-on-accessor",
+   "key": "SC5006 loading-hold-unproven",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0978",
+   "fact": "SC5006 and SC5007 asked of a call form and an unresolved tag (a hand call with an `on`, an unresolved tag with a spread inside package source): obligations with no children proof"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC5006 package-finding-at-entry",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0978",
+   "fact": "SC5006 and SC5007 asked of a call form and an unresolved tag (a hand call with an `on`, an unresolved tag with a spread inside package source): obligations with no children proof"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC5007 package-finding-at-entry",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0978",
+   "fact": "SC5006 and SC5007 asked of a call form and an unresolved tag (a hand call with an `on`, an unresolved tag with a spread inside package source): obligations with no children proof"
   }
  ]
 }

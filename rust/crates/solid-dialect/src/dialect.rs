@@ -18,6 +18,27 @@ pub(crate) fn shared_owner_requirement_role(primitive: Primitive) -> Option<Owne
     }
 }
 
+/// ADR 0978: [`Dialect::async_boundary_shape`]. The props the boundary
+/// component reads and the primitive it calls, with the position of each
+/// argument that primitive takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AsyncBoundaryShape {
+    /// The prop the component hands as the held content.
+    pub children_prop: &'static str,
+    /// The prop the component hands as the fallback, which renders outside the hold.
+    pub fallback_prop: &'static str,
+    /// The prop that re-arms the boundary.
+    pub on_prop: &'static str,
+    /// The primitive the component calls.
+    pub primitive: Primitive,
+    /// The position of the primitive's held content.
+    pub held_argument: usize,
+    /// The position of the primitive's fallback.
+    pub fallback_argument: usize,
+    /// The position of the primitive's options, where its `on` is.
+    pub options_argument: usize,
+}
+
 /// One Solid language version's vocabulary.
 ///
 /// Implementors are stateless; a dialect is a set of tables, and every method
@@ -1235,6 +1256,18 @@ pub trait Dialect: Sync {
     fn boundary_on_may_hold_outside(&self, primitive: Primitive) -> bool {
         let _ = primitive;
         false
+    }
+
+    /// ADR 0978: how the async boundary component is made of its primitive
+    /// (rc.21's `Loading(props)` is `createLoadingBoundary(() => props.children,
+    /// () => props.fallback, "on" in props ? { on: () => props.on } :
+    /// undefined)`, `solid-js/dist/solid.dev.js`): the props the component
+    /// reads, and the arguments of the primitive it calls. What a read in a
+    /// layer handed to the boundary is held by follows from it: the children
+    /// are the hold, the fallback renders outside it. The default is `None`
+    /// (no such boundary).
+    fn async_boundary_shape(&self) -> Option<AsyncBoundaryShape> {
+        None
     }
 
     /// Whether creating `primitive`'s computation or root with no owner inside

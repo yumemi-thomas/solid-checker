@@ -68,6 +68,7 @@ mod interproc;
 mod late_chunks;
 mod listener_reach;
 mod literal_member_slots;
+mod loading_entries;
 mod loading_hold;
 pub(crate) mod local_access;
 mod name_matcher;

@@ -24,8 +24,12 @@ pub(crate) fn loading_on_outside_hold_obligations(
     lookup: &SemanticLookup<'_>,
 ) -> Vec<StaticViolation> {
     let mut obligations = Vec::new();
+    // The dialect names the boundary's props and primitive (ADR 0978); without an async boundary nothing here is asked.
+    let Some(on) = crate::loading_entries::on_prop(lookup) else {
+        return obligations;
+    };
     for file in crate::base::reads::all_files(facts) {
-        loading_on_accessor_violations(file, lookup, &mut obligations);
+        loading_on_accessor_violations(file, lookup, on, &mut obligations);
         let primitives = lookup.primitives(file);
         for (index, element) in file.ast.jsx_elements.iter().enumerate() {
             if !super::known_primitive(&primitives.jsx[index])
@@ -33,50 +37,149 @@ pub(crate) fn loading_on_outside_hold_obligations(
             {
                 continue;
             }
-            let on = element.attributes.iter().find(|attribute| {
-                attribute.namespace.is_none()
-                    && file.source_text(attribute.local_name) == Some("on")
-            });
-            if on.is_none() && element.spreads.is_empty() {
+            let Some(at) = on_to_hold(file, on, element) else {
                 continue;
-            }
-            // An `on` that names nothing (`on={1}`) has no dependency to
-            // change, so it never re-arms; a spread may still carry another.
-            if element.spreads.is_empty()
-                && on.is_some_and(|attribute| {
-                    attribute.value.is_some_and(|value| {
-                        file.ast.identifiers_within(value).next().is_none()
-                            && file.ast.calls.iter().all(|call| !value.contains(call.span))
-                    })
-                })
-            {
-                continue;
-            }
+            };
             if let Some(reason) = unproven_hold(program, lookup, file, element) {
-                let at = on.map_or(element.name.span, |attribute| attribute.span);
-                obligations.push(StaticViolation {
-                    id: RULE_ID.into(),
-                    rule: RULE_NAME.into(),
-                    message: format!(
-                        "this Loading boundary re-arms when its `on` dependencies change, and {reason}; if a source it waits on is also read outside it in the same flush, the frame waits on that read and the fallback is never seen (Solid warns LOADING_ON_OUTSIDE_HOLD in dev), and whether that happens cannot be proven either way"
-                    ),
-                    hint: "Move the outside read under the boundary so one hold owns the data, or read `latest()` in `on` to show the fallback beside the held frame.".into(),
-                    location: location(file.path.shared(), at),
-                    analysis_context: if reason.contains("not resolved")
-                        || reason.contains("accessor")
-                        || reason.contains("handed")
-                    {
-                        crate::blockers::FUNCTION_RUN_UNPLACED.to_owned()
-                    } else {
-                        String::new()
-                    },
-                    fixes: vec![],
-                    uncertain: true,
-                });
+                obligations.push(hold_obligation(file, at, reason));
+            }
+        }
+        // ADR 0978: the boundary entered other than as a tag. No children proof is built for these forms: each that may pass `on` is an
+        // uncertifiable obligation, never a certified clean.
+        for (index, call) in file.ast.calls.iter().enumerate() {
+            let Some(entry) = crate::loading_entries::entry_call(lookup, file, index) else {
+                continue;
+            };
+            let argument = call.arguments.get(entry.props());
+            let (at, reason) = match crate::loading_entries::props_on(file, on, argument) {
+                crate::loading_entries::PropsOn::Absent => continue,
+                crate::loading_entries::PropsOn::Member(property) => {
+                    // An `on` that names nothing (`on: 1`) never re-arms, as for the tag.
+                    if property.data && names_nothing(file, property.value) {
+                        continue;
+                    }
+                    (property.span, BY_CALL)
+                }
+                crate::loading_entries::PropsOn::Open => (
+                    argument.map_or(call.span, |argument| argument.span),
+                    "its props are not resolved",
+                ),
+            };
+            obligations.push(hold_obligation(file, at, reason));
+        }
+        // `createLoadingBoundary(children, fallback, { on })`: the primitive behind the boundary re-arms through the same `on`.
+        for call in &file.ast.calls {
+            let Some(at) = primitive_on(lookup, file, call) else {
+                continue;
+            };
+            obligations.push(hold_obligation(file, at, BY_CALL));
+        }
+        for at in crate::loading_entries::loading_value_references(lookup, file) {
+            obligations.push(hold_obligation(file, at, AS_VALUE));
+        }
+        for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+            // The syntactic question first: the component is resolved only for a tag that passes `on`.
+            if let Some(at) = on_to_hold(file, on, element)
+                && crate::loading_entries::unresolved_tag(lookup, file, index, element)
+            {
+                obligations.push(hold_obligation(file, at, UNRESOLVED_TAG));
             }
         }
     }
     obligations
+}
+
+/// ADR 0978: why a boundary entered other than as a tag is not proven to hold nothing.
+const BY_CALL: &str = "it is entered by a call, whose children this analysis does not follow";
+const AS_VALUE: &str = "it is named as a value here, so it may be entered where this analysis does not follow it, with an `on` it does not see";
+const UNRESOLVED_TAG: &str =
+    "the component this tag names is not resolved, so it may be the boundary";
+
+/// Where `createLoadingBoundary(children, fallback, options)` is asked about its `on`: the options (argument 2) name one, or may
+/// (a value built elsewhere, a spread). `None` for no options, no `on`, or one that names nothing.
+fn primitive_on(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<Span> {
+    use crate::loading_entries::{PropsOn, props_on};
+    let shape = lookup.dialect.async_boundary_shape()?;
+    if lookup.primitive_at_call(file, call.span) != Some(shape.primitive) {
+        return None;
+    }
+    let argument = call.arguments.get(shape.options_argument);
+    match props_on(file, shape.on_prop, argument) {
+        PropsOn::Absent => None,
+        PropsOn::Member(property) => {
+            (!(property.data && names_nothing(file, property.value))).then_some(property.span)
+        }
+        PropsOn::Open => argument.map(|argument| argument.span),
+    }
+}
+
+/// Whether the tag has an `on` attribute or a spread: the syntactic question before any component is resolved.
+fn passes_on(
+    file: &solid_facts::FileFacts,
+    on_prop: &str,
+    element: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    !element.spreads.is_empty()
+        || element.attributes.iter().any(|attribute| {
+            attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some(on_prop)
+        })
+}
+
+/// Whether `span` names nothing: no identifier, no call.
+fn names_nothing(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast.identifiers_within(span).next().is_none()
+        && file.ast.calls.iter().all(|call| !span.contains(call.span))
+}
+
+/// Where the tag's `on` is asked about, or `None` when it passes none: no `on` and no spread, or an `on` that names nothing (`on={1}`, which
+/// has no dependency to change and never re-arms; a spread may still carry another).
+fn on_to_hold(
+    file: &solid_facts::FileFacts,
+    on_prop: &str,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Option<Span> {
+    let on = element.attributes.iter().find(|attribute| {
+        attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some(on_prop)
+    });
+    if on.is_none() && element.spreads.is_empty() {
+        return None;
+    }
+    if element.spreads.is_empty()
+        && on.is_some_and(|attribute| {
+            attribute
+                .value
+                .is_some_and(|value| names_nothing(file, value))
+        })
+    {
+        return None;
+    }
+    Some(on.map_or(element.name.span, |attribute| attribute.span))
+}
+
+fn hold_obligation(file: &solid_facts::FileFacts, at: Span, reason: &str) -> StaticViolation {
+    StaticViolation {
+        id: RULE_ID.into(),
+        rule: RULE_NAME.into(),
+        message: format!(
+            "this Loading boundary re-arms when its `on` dependencies change, and {reason}; if a source it waits on is also read outside it in the same flush, the frame waits on that read and the fallback is never seen (Solid warns LOADING_ON_OUTSIDE_HOLD in dev), and whether that happens cannot be proven either way"
+        ),
+        hint: "Move the outside read under the boundary so one hold owns the data, or read `latest()` in `on` to show the fallback beside the held frame.".into(),
+        location: location(file.path.shared(), at),
+        analysis_context: if reason.contains("not resolved")
+            || reason.contains("accessor")
+            || reason.contains("handed")
+        {
+            crate::blockers::FUNCTION_RUN_UNPLACED.to_owned()
+        } else {
+            String::new()
+        },
+        fixes: vec![],
+        uncertain: true,
+    }
 }
 
 /// ADR 0624: `LOADING_ON_ACCESSOR`. rc.21 warns once, on the boundary's first
@@ -92,6 +195,7 @@ pub(crate) fn loading_on_outside_hold_obligations(
 fn loading_on_accessor_violations(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
+    on_prop: &str,
     violations: &mut Vec<StaticViolation>,
 ) {
     let primitives = lookup.primitives(file);
@@ -107,32 +211,64 @@ fn loading_on_accessor_violations(
             push_on_verdict(file, at, value, violations);
         }
     }
-    // `Loading({ on, … })`: the component called by hand. Its one argument is
-    // the props object, so the same question is asked of that object.
+    // `Loading({ on, … })`: the component called by hand, and `createComponent(Loading, { on, … })` (ADR 0978). The props object is one
+    // argument, so the same question is asked of that object.
     for (index, call) in file.ast.calls.iter().enumerate() {
-        if !on_boundary(&primitives.calls[index]) {
-            continue;
-        }
-        let Some(argument) = call.arguments.first() else {
+        let Some(entry) = crate::loading_entries::entry_call(lookup, file, index) else {
             continue;
         };
-        if !argument.exact_object_literal {
-            push_on_verdict(file, argument.span, OnValue::Open, violations);
-            continue;
-        }
-        let Some(property) = file
-            .ast
-            .object_properties_within(argument.span)
-            .find(|property| {
-                argument.property_names.contains(&property.key)
-                    && file.source_text(property.key) == Some("on")
-            })
-        else {
+        let Some(argument) = call.arguments.get(entry.props()) else {
             continue;
         };
-        let value = file.ast.peel_ts_sugar_span(property.value);
-        let verdict = on_value(file, lookup, value);
-        push_on_verdict(file, value, verdict, violations);
+        let (at, verdict) = props_on_value(file, lookup, on_prop, argument);
+        if let Some(verdict) = verdict {
+            push_on_verdict(file, at, verdict, violations);
+        }
+    }
+    // ADR 0978: every other way the boundary is entered. A value reference gives the props to code this analysis does not follow, and an
+    // unresolved tag may not be the boundary at all: neither states a violation, only that `on` may be a function there.
+    for at in crate::loading_entries::loading_value_references(lookup, file) {
+        push_on_verdict(file, at, OnValue::Open, violations);
+    }
+    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+        if !passes_on(file, on_prop, element)
+            || !crate::loading_entries::unresolved_tag(lookup, file, index, element)
+        {
+            continue;
+        }
+        if let Some((at, value)) = jsx_on_value(file, lookup, element) {
+            push_on_verdict(file, at, unproven(value), violations);
+        }
+    }
+}
+
+/// A value proven to be a function is no proof where the component may not be the boundary.
+fn unproven(value: OnValue) -> OnValue {
+    match value {
+        OnValue::NotFunction => OnValue::NotFunction,
+        OnValue::Function | OnValue::Open => OnValue::Open,
+    }
+}
+
+/// The `on` a props argument gives: `None` where it gives none. A literal whose property set is closed (`closed_object_literal`: no spread,
+/// no computed key; accessors allowed) states the absence of `on` as well as its value (ADR 0978: a getter-bearing literal is no longer
+/// open merely for being one); a data property is read as the tag's `on` is; a getter or a method is open (its value is not followed); any
+/// other argument is open.
+fn props_on_value(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    on_prop: &str,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> (Span, Option<OnValue>) {
+    use crate::loading_entries::{PropsOn, props_on};
+    match props_on(file, on_prop, Some(argument)) {
+        PropsOn::Absent => (argument.span, None),
+        PropsOn::Open => (argument.span, Some(OnValue::Open)),
+        PropsOn::Member(property) if property.data => {
+            let value = file.ast.peel_ts_sugar_span(property.value);
+            (value, Some(on_value(file, lookup, value)))
+        }
+        PropsOn::Member(property) => (property.span, Some(OnValue::Open)),
     }
 }
 
@@ -421,6 +557,9 @@ fn unproven_hold(
 /// what the value is proven to be (`not-function` is the one answer that states nothing about the rule).
 pub(crate) fn log_candidates(file: &solid_facts::FileFacts, lookup: &SemanticLookup<'_>) {
     use crate::proof_log::{self, CandidateRecord};
+    let Some(on_prop) = crate::loading_entries::on_prop(lookup) else {
+        return;
+    };
     let primitives = lookup.primitives(file);
     let on_boundary = |primitive| {
         super::known_primitive(primitive)
@@ -461,27 +600,15 @@ pub(crate) fn log_candidates(file: &solid_facts::FileFacts, lookup: &SemanticLoo
         }
     }
     for (index, call) in file.ast.calls.iter().enumerate() {
-        if !on_boundary(&primitives.calls[index]) {
-            continue;
-        }
-        let Some(argument) = call.arguments.first() else {
+        let Some(entry) = crate::loading_entries::entry_call(lookup, file, index) else {
             continue;
         };
-        let (at, value) = if argument.exact_object_literal {
-            let Some(property) =
-                file.ast
-                    .object_properties_within(argument.span)
-                    .find(|property| {
-                        argument.property_names.contains(&property.key)
-                            && file.source_text(property.key) == Some("on")
-                    })
-            else {
-                continue;
-            };
-            let value = file.ast.peel_ts_sugar_span(property.value);
-            (value, on_value(file, lookup, value))
-        } else {
-            (argument.span, OnValue::Open)
+        let Some(argument) = call.arguments.get(entry.props()) else {
+            continue;
+        };
+        let (at, value) = props_on_value(file, lookup, on_prop, argument);
+        let Some(value) = value else {
+            continue;
         };
         proof_log::candidate(&CandidateRecord {
             rule: "SC5007",
@@ -491,5 +618,98 @@ pub(crate) fn log_candidates(file: &solid_facts::FileFacts, lookup: &SemanticLoo
             alternates: &[],
             facts: &[("value", named(value)), ("form", "call")],
         });
+    }
+    // ADR 0978: the sites of the other entries, as the producers ask them (SC5006's, then SC5007's).
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        let Some(entry) = crate::loading_entries::entry_call(lookup, file, index) else {
+            continue;
+        };
+        let argument = call.arguments.get(entry.props());
+        let at = match crate::loading_entries::props_on(file, on_prop, argument) {
+            crate::loading_entries::PropsOn::Absent => continue,
+            crate::loading_entries::PropsOn::Member(property) => {
+                if property.data && names_nothing(file, property.value) {
+                    continue;
+                }
+                property.span
+            }
+            crate::loading_entries::PropsOn::Open => {
+                argument.map_or(call.span, |argument| argument.span)
+            }
+        };
+        proof_log::candidate(&CandidateRecord {
+            rule: RULE_ID,
+            table: "loading-on",
+            path,
+            at,
+            alternates: &[],
+            facts: &[("on", "call")],
+        });
+    }
+    for call in &file.ast.calls {
+        if let Some(at) = primitive_on(lookup, file, call) {
+            proof_log::candidate(&CandidateRecord {
+                rule: RULE_ID,
+                table: "loading-on",
+                path,
+                at,
+                alternates: &[],
+                facts: &[("on", "primitive")],
+            });
+        }
+    }
+    for at in crate::loading_entries::loading_value_references(lookup, file) {
+        proof_log::candidate(&CandidateRecord {
+            rule: RULE_ID,
+            table: "loading-on",
+            path,
+            at,
+            alternates: &[],
+            facts: &[("on", "reference")],
+        });
+    }
+    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+        if let Some(at) = on_to_hold(file, on_prop, element)
+            && crate::loading_entries::unresolved_tag(lookup, file, index, element)
+        {
+            proof_log::candidate(&CandidateRecord {
+                rule: RULE_ID,
+                table: "loading-on",
+                path,
+                at,
+                alternates: &[],
+                facts: &[("on", "unresolved-tag")],
+            });
+        }
+    }
+    for at in crate::loading_entries::loading_value_references(lookup, file) {
+        proof_log::candidate(&CandidateRecord {
+            rule: "SC5007",
+            table: "loading-on-value",
+            path,
+            at,
+            alternates: &[],
+            facts: &[("value", "open"), ("form", "reference")],
+        });
+    }
+    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+        if !passes_on(file, on_prop, element)
+            || !crate::loading_entries::unresolved_tag(lookup, file, index, element)
+        {
+            continue;
+        }
+        if let Some((at, value)) = jsx_on_value(file, lookup, element) {
+            proof_log::candidate(&CandidateRecord {
+                rule: "SC5007",
+                table: "loading-on-value",
+                path,
+                at,
+                alternates: &[],
+                facts: &[
+                    ("value", named(unproven(value))),
+                    ("form", "unresolved-tag"),
+                ],
+            });
+        }
     }
 }

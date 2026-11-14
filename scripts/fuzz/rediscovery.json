@@ -21722,5 +21722,85 @@
   "fixed": "ADR 0967 amended (`package_reach/prototype.rs`, a walk of each imported package's whole closure beside the action walk, `PackageReachIndex::unseen_code` and `reads_receiver`): a package that names `Object.prototype`, builds code as a string or is not read to its end is touched with unreadable receivers, and a package read to its end that holds a `this` or a `super` reads any key where a file of the program can name the prototype",
   "outside": "the generators write one project file and import one package (`fz-step`, written by the lane); a package that writes `Object.prototype` is a second package of the program. The nine programs of the pattern lane rediscover it (`pkghand/objproto-package-*-step`, held by the lane's judge), and the backend's unit tests (`package_reach/prototype.rs`) hold each closure shape",
   "rediscovered": "Mac 7b (2026-11-14, release builds: the pushed head a59025c35's b15r against the merged head db5e190cd; `--contexts` the 240 `ph-op*` contexts, which are the 19 routes of the Fable re-check, 16 of the second round and 7 of Research B's code-building sinks, three of them on the step host only; mx-recall and lg-recall, the three flush codes; the Chrome oracle agrees on every compared program): the pushed head fails `make fuzz-focus` on all 120 misuse programs (120 false clean, each certified with no finding at all; their 120 twins clean); this head passes (120 recall-gap, the 120 twins uncertifiable: the named cost; 0 inconclusive, nothing needs a look). Pattern lane in Chrome: the 63 `pkghand/objproto-*-step` programs are all false clean on the pushed head and all fine here; the reviewer's own 136 lane programs (their 19 false cleans, 116 fine on the pushed head) are 135 fine here, and P33 does not run on either build. Corpus (rc.21, 34 projects, release, main dfa6c5dec's verified build to this head): standard 190,085 to 190,100 uncertifiable (+15), development 210,097 to 210,865 (+768), violations 218 and 212 unchanged, summed time 140.8 s to 139.2 s and 216.2 s on both. Coverage 1,234 fixture projects and 31,341 findings, ownership gate 96 cases."
+ },
+ {
+  "finding": "SC5006 was asked only of the JSX tag: `Loading` entered by a call (`Loading(props)`, an import alias, a namespace member, a wrapper, an immediately invoked function, `createComponent(Loading, props)`, `Loading.call(null, props)`, `[Loading][0](props)`), by `createLoadingBoundary(children, fallback, { on })`, as a value (`dynamicComponent(() => Loading)`, `<Dynamic component={Loading}>`) or by a tag a parameter holds had no row where Chrome warns LOADING_ON_OUTSIDE_HOLD (ADR 0978)",
+  "found": "Research B's L01-L14 and the coordinator's o12 program (Chrome, rc.21, 2026-11-14), then `createLoadingBoundary(.., { on })` by the implementer's own probe",
+  "fixed": "ADR 0978 (`loading_entries.rs`, `loading_hold.rs`, `owners/async_context.rs`)",
+  "grid": "mx-recall",
+  "code": "LOADING_ON_OUTSIDE_HOLD",
+  "ids": [
+   "mx-loading-on-outside-hold-lf-hand-x-direct-none",
+   "mx-loading-on-outside-hold-lf-alias-hand-x-direct-none",
+   "mx-loading-on-outside-hold-lf-ns-hand-x-direct-none",
+   "mx-loading-on-outside-hold-lf-wrapper-hand-x-direct-none",
+   "mx-loading-on-outside-hold-lf-createcomponent-x-direct-none",
+   "mx-loading-on-outside-hold-lf-dotcall-x-direct-none",
+   "mx-loading-on-outside-hold-lf-array-x-direct-none",
+   "mx-loading-on-outside-hold-lf-iife-x-direct-none",
+   "mx-loading-on-outside-hold-lf-dynamic-x-direct-none",
+   "mx-loading-on-outside-hold-lf-dynamic-el-x-direct-none",
+   "mx-loading-on-outside-hold-lf-unresolved-param-x-direct-none",
+   "mx-loading-on-outside-hold-lf-clb-on-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-14): `focus.mjs --grids mx-recall,lg-recall --codes LOADING_ON_OUTSIDE_HOLD,LOADING_ON_ACCESSOR,ASYNC_OUTSIDE_LOADING_BOUNDARY` on origin/main eb0e2dd16 exits 1 (31 false cleans in mx-recall, 9 false positives in lg-recall); on the fix it exits 0 with nothing to look at"
+ },
+ {
+  "finding": "SC5007 was asked of the JSX tag and the direct hand call only: an accessor handed as `on` through `createComponent(Loading, props)`, `Loading.call(null, props)`, `[Loading][0](props)`, `dynamicComponent(() => Loading)`, `<Dynamic component={Loading}>` or a tag a parameter holds had no row (ADR 0978)",
+  "found": "Research B's a01-a12 and o12 programs (Chrome, rc.21, 2026-11-14)",
+  "fixed": "ADR 0978 (`loading_entries.rs`, `loading_hold.rs`, `owners/async_context.rs`)",
+  "grid": "mx-recall",
+  "code": "LOADING_ON_ACCESSOR",
+  "ids": [
+   "mx-loading-on-accessor-lf-acc-createcomponent-accessor-direct-none",
+   "mx-loading-on-accessor-lf-acc-createcomponent-memo-direct-none",
+   "mx-loading-on-accessor-lf-acc-createcomponent-arrow-direct-none",
+   "mx-loading-on-accessor-lf-acc-dotcall-accessor-direct-none",
+   "mx-loading-on-accessor-lf-acc-dotcall-memo-direct-none",
+   "mx-loading-on-accessor-lf-acc-dotcall-arrow-direct-none",
+   "mx-loading-on-accessor-lf-acc-array-accessor-direct-none",
+   "mx-loading-on-accessor-lf-acc-array-memo-direct-none",
+   "mx-loading-on-accessor-lf-acc-array-arrow-direct-none",
+   "mx-loading-on-accessor-lf-acc-dynamic-accessor-direct-none",
+   "mx-loading-on-accessor-lf-acc-dynamic-memo-direct-none",
+   "mx-loading-on-accessor-lf-acc-dynamic-arrow-direct-none",
+   "mx-loading-on-accessor-lf-acc-dynamic-el-accessor-direct-none",
+   "mx-loading-on-accessor-lf-acc-dynamic-el-memo-direct-none",
+   "mx-loading-on-accessor-lf-acc-dynamic-el-arrow-direct-none",
+   "mx-loading-on-accessor-lf-acc-unresolved-param-accessor-direct-none",
+   "mx-loading-on-accessor-lf-acc-unresolved-param-memo-direct-none",
+   "mx-loading-on-accessor-lf-acc-unresolved-param-arrow-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-14): `focus.mjs --grids mx-recall,lg-recall --codes LOADING_ON_OUTSIDE_HOLD,LOADING_ON_ACCESSOR,ASYNC_OUTSIDE_LOADING_BOUNDARY` on origin/main eb0e2dd16 exits 1 (31 false cleans in mx-recall, 9 false positives in lg-recall); on the fix it exits 0 with nothing to look at"
+ },
+ {
+  "finding": "The JSX `fallback` of a `Loading` was read as covered by the boundary: `<Loading fallback={<p>{other()}</p>}>` held a pending read that renders outside the hold, silent where Chrome warns ASYNC_OUTSIDE_LOADING_BOUNDARY (ADR 0978)",
+  "found": "the implementer's probe fb1 (Chrome, rc.21, 2026-11-14)",
+  "fixed": "ADR 0978 (`loading_entries.rs`, `loading_hold.rs`, `owners/async_context.rs`)",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-lf-fb-jsx-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-14): `focus.mjs --grids mx-recall,lg-recall --codes LOADING_ON_OUTSIDE_HOLD,LOADING_ON_ACCESSOR,ASYNC_OUTSIDE_LOADING_BOUNDARY` on origin/main eb0e2dd16 exits 1 (31 false cleans in mx-recall, 9 false positives in lg-recall); on the fix it exits 0 with nothing to look at"
+ },
+ {
+  "finding": "A read in the `children` getter of a hand-called `Loading` (alias, namespace member, immediately invoked function, `createComponent(Loading, props)`, `.call`, array element, a wrapper's props) or in the first argument of `createLoadingBoundary` was read as outside the boundary: a violation of ASYNC_OUTSIDE_LOADING_BOUNDARY where Chrome is quiet, a false positive found by the pattern lane's judge only per file (ADR 0978)",
+  "found": "the implementer's cv02-cv09 and lb1 programs (Chrome, rc.21, 2026-11-14), after the coordinator's runner fix showed the mount",
+  "fixed": "ADR 0978 (`loading_entries.rs`, `loading_hold.rs`, `owners/async_context.rs`)",
+  "grid": "lg-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "lg-async-outside-loading-boundary-lf-cover-hand-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-alias-hand-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-ns-hand-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-wrapper-hand-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-createcomponent-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-dotcall-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-array-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-iife-x-direct-none",
+   "lg-async-outside-loading-boundary-lf-cover-clb-x-direct-none"
+  ],
+  "rediscovered": "locally (2026-11-14): `focus.mjs --grids mx-recall,lg-recall --codes LOADING_ON_OUTSIDE_HOLD,LOADING_ON_ACCESSOR,ASYNC_OUTSIDE_LOADING_BOUNDARY` on origin/main eb0e2dd16 exits 1 (31 false cleans in mx-recall, 9 false positives in lg-recall); on the fix it exits 0 with nothing to look at"
  }
 ]
