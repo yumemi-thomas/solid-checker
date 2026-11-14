@@ -97,12 +97,15 @@ fn is_timer_value(ctx: &AnalysisContext<'_>, file: &FileFacts, value: Span) -> b
     let Some(value) = file.peel_parentheses(value) else {
         return false;
     };
-    if file.source_text(value) == Some("undefined") && file.ast.reference_declaration(value).is_none() {
+    // The unshadowed `undefined`: no declaration of the program binds the name.
+    if matches!(file.source_text(value), Some("undefined"))
+        && file.ast.reference_declaration(value).is_none()
+    {
         return true;
     }
-    file.ast
-        .call_at(value)
-        .is_some_and(|call| !call.construct && standard_call_of(ctx, file, call, &["setTimeout", "setInterval"]))
+    file.ast.call_at(value).is_some_and(|call| {
+        !call.construct && standard_call_of(ctx, file, call, &["setTimeout", "setInterval"])
+    })
 }
 
 /// Whether the reference at `at` is the sole argument of a standard `clearTimeout` or `clearInterval` call.

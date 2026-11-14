@@ -2151,7 +2151,7 @@
     "proved": "uncertifiable-repro/sc4001-clean",
     "open": "reactive-ir/after-await-timer-handle"
    },
-   "note": "`clearTimeout(copiedTimer)` in a `.then` handler, `copiedTimer` a `let` written only by `setTimeout(…)` and read only by `clearTimeout`, in a browser: every reference is a proven write or a clear, so the argument is inert and the call ends in no row. The case `clean-copied-timer` (the held case of ADR 0976) moved to its own project `uncertifiable-repro/sc4001-clean-browser`, which declares the browser runtime the proof needs (`.solid-checker/runtime.json`) and is certified; the same shape keeps its row in `reactive-ir/after-await-timer-handle`'s `Kept` functions, in `-patched` and in `-node`"
+   "note": "`clearTimeout(copiedTimer)` in a `.then` handler, `copiedTimer` a `let` written only by `setTimeout(…)` and read only by `clearTimeout`, in a browser: every reference is a proven write or a clear, so the argument is inert and the call ends in no row. The case `clean-copied-timer` (the held case of ADR 0976) stays in `uncertifiable-repro/sc4001-clean`, which now declares the browser runtime the proof needs (`.solid-checker/runtime.json`, the corpus configuration the case was taken under; its other six cases are certified under it as before) and is certified; the same shape keeps its row in `reactive-ir/after-await-timer-handle`'s `Kept` functions, in `-patched` and in `-node`"
   }
  ],
  "renames": []
