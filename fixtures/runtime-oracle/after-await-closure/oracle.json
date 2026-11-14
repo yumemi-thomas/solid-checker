@@ -1,0 +1,1 @@
+{"note": "slice 9B (ADR 0973), the review of #233's B1: a store read through an alias, a stored generator stepped by a spread, a Proxy trap and a getter installed by reference, a props alias: a callee whose closure lists no read still runs one. There is no callee reason; the call keeps SC1002's uncertifiable row (covered-uncertifiable, never a clean)"}

@@ -923,9 +923,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // ADR 0936: every site of the universe ends in a row, a census obligation,
     // the compiler's discard or a silence its producer named, or gets an
     // uncertifiable row; before the reach queries over the rows below.
-    crate::site_accounting::account(&analysis, &mut program, &site_ends);
+    let universe = crate::site_accounting::account(&analysis, &mut program, &site_ends);
     // Batch 11 (slice 5): every flush site ends, per code, in a row, an SC9012, the discard or a typed reason, or gets the code's uncertifiable row.
     crate::flush_accounting::account(&analysis, &mut program);
+    // Batch 11 (slice 9B, ADR 0973): every read and project call written after an async function's own suspension ends in a row of SC1002, an SC9012, the
+    // discard or a typed reason, or gets SC1002's uncertifiable row.
+    crate::after_await_accounting::account(&analysis, &universe, &mut program);
     // ADR 0458: after every producer and gate, over the rows that may be
     // reported, while the lookup's memos are still open.
     program.unreached_sites = crate::execution_role::unreached_report_sites(

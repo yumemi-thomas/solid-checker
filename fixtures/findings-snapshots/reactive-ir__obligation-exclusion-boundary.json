@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 445,
+      "end": 452,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 745,
+      "end": 752,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -54,6 +76,28 @@
       "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
       "start": 1793,
       "end": 1799,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 2114,
+      "end": 2121,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 2402,
+      "end": 2409,
       "fixes": 0
     },
     {
@@ -178,6 +222,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 4989,
+      "end": 4996,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -186,6 +241,28 @@
       "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
       "start": 5088,
       "end": 5094,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 5169,
+      "end": 5174,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 5195,
+      "end": 5202,
       "fixes": 0
     },
     {
@@ -200,6 +277,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 5380,
+      "end": 5387,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -208,6 +296,17 @@
       "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
       "start": 5455,
       "end": 5461,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 5593,
+      "end": 5600,
       "fixes": 0
     },
     {
@@ -222,6 +321,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 5866,
+      "end": 5873,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -230,6 +340,17 @@
       "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
       "start": 5957,
       "end": 5963,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 6113,
+      "end": 6120,
       "fixes": 0
     },
     {

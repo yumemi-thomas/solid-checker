@@ -2179,6 +2179,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 9372,
+      "end": 9375,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -2275,6 +2286,17 @@
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
       "start": 9981,
       "end": 9989,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
+      "start": 10026,
+      "end": 10028,
       "fixes": 0
     },
     {
