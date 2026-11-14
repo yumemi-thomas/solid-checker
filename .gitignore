@@ -1515,6 +1515,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-patterns/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-object-prototype/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-object-prototype/node_modules/**
+!fixtures/reactive-ir/flush-universe-package-hand-off-package-computed-key/node_modules/
+!fixtures/reactive-ir/flush-universe-package-hand-off-package-computed-key/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key-source/node_modules/
