@@ -742,8 +742,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                         }
                     }
                     GlobalUse::Escape { path, at } => {
-                        hazard(ModuleHazardKind::GlobalObjectEscape, &path);
                         if !call_writes(scoping, nodes, at, &mut writes) {
+                            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
                             escaped(&mut writes);
                         }
                     }
@@ -778,8 +778,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                         }
                         GlobalUse::Reassigned | GlobalUse::Inert => {}
                         GlobalUse::Escape { path, at } => {
-                            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
                             if !call_writes(scoping, nodes, at, &mut writes) {
+                                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
                                 escaped(&mut writes);
                             }
                         }
@@ -1367,7 +1367,8 @@ fn call_writes(
     };
     if !matches!(
         callee.object.get_inner_expression(),
-        Expression::Identifier(object) if object.name == "Object" || object.name == "Reflect"
+        Expression::Identifier(object)
+            if names_global(scoping, object, "Object") || names_global(scoping, object, "Reflect")
     ) {
         return false;
     }
@@ -1551,8 +1552,8 @@ fn route_use(
         }
         GlobalUse::Written { keys, path, read } => written(hazard, writes, keys, &path, read),
         GlobalUse::Escape { path, at } => {
-            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
             if !call_writes(scoping, nodes, at, writes) {
+                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
                 escaped(writes);
             }
         }
@@ -2966,6 +2967,24 @@ mod tests {
         let found = scan("Object.defineProperty(globalThis, 'now', { value: f });").global_writes;
         assert_eq!(found.names, ["now"]);
         assert!(!found.any_name && !found.accessors_any_name);
+        // A name that is not the global `Object` is no writer: the object goes to code the file holds.
+        let found = scan(
+            "const Object = { defineProperty() {} }; Object.defineProperty(window, 'k', { value: 1 });",
+        );
+        assert!(
+            kinds(&found)
+                .iter()
+                .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape)
+        );
+        assert!(found.global_writes.any_name);
+        // Judged to the end, the object goes to the writer and nowhere else: no hazard either (a polyfill is no undecided package).
+        assert!(
+            !kinds(&scan(
+                "Object.defineProperty(globalThis, 'now', { value: f });"
+            ))
+            .iter()
+            .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape)
+        );
         let found =
             scan("Reflect.set(window, 'k', 1); Object.assign(self, { a: 1 });").global_writes;
         assert!(!found.any_name && !found.accessors_any_name, "{found:?}");
