@@ -900,6 +900,22 @@ pub(crate) fn unplaced_run(
         || crate::local_access::function_escapes_unfollowed(file, span, lookup)
 }
 
+/// ADR 0976, R6: [`runs_implicitly`], and a generator's body: it runs when its object is stepped, by a call on a member or by an iteration no call shows (a stored generator
+/// spread, iterated or destructured). The read after an await asks this ([`crate::static_api::unplaced_member_or_generator_blocker`]); the other rules' member nets do not (no
+/// Chrome program shows a generator's body missed there).
+pub(crate) fn runs_implicitly_or_generator(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    runs_implicitly(file, span, lookup)
+        || (!matches!(SiteReach::new(lookup).site(file, span), Reach::Unreached(_))
+            && file
+                .ast
+                .functions_owning(span)
+                .any(|function| function.generator))
+}
+
 /// ADR 0963: whether the code at `span` is run by a route no call shows and no walk that follows calls can name, so that the
 /// rule asking is not answered by the call it would follow: written in a class element (a constructor, a method, an accessor, a
 /// field's initializer, a static block), in a function that is an object literal's accessor or method (a getter or setter, a

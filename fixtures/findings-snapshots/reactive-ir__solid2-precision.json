@@ -27,6 +27,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 1421,
+      "end": 1434,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
@@ -98,6 +109,28 @@
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 2046,
       "end": 2056,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 2121,
+      "end": 2136,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 2121,
+      "end": 2149,
       "fixes": 0
     },
     {
@@ -295,6 +328,17 @@
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 3223,
       "end": 3233,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 3298,
+      "end": 3311,
       "fixes": 0
     },
     {

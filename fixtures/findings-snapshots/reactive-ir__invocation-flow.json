@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 1506,
+      "end": 1521,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -255,6 +266,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 1882,
+      "end": 1886,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 1906,
+      "end": 1912,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -328,6 +361,17 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 3131,
       "end": 3138,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 3174,
+      "end": 3219,
       "fixes": 0
     },
     {
@@ -595,6 +639,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 7170,
+      "end": 7178,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -647,6 +702,28 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 7942,
       "end": 7950,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/navigation.ts",
+      "start": 373,
+      "end": 389,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/navigation.ts",
+      "start": 401,
+      "end": 415,
       "fixes": 0
     },
     {

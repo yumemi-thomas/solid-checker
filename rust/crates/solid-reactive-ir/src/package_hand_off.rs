@@ -1701,6 +1701,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     /// receiver where a member of that object is read, and no object is provably no receiver (the review of #232, S3). What a file names is read as `object_prototype`
     /// does, with the polarity "touched unless the use provably gives nothing out"; and so is a package the build does not read to its end, or one a file of whose closure
     /// does ([`Self::packages_run_unseen_code`]): unavailable source is no evidence.
+    pub(crate) fn object_prototype_touched(&self) -> bool {
+        self.object_prototype_written()
+    }
+
     fn object_prototype_written(&self) -> bool {
         *self
             .object_prototype_written

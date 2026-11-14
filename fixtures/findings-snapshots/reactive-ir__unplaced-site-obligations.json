@@ -37,6 +37,28 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 570,
+      "end": 591,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 571,
+      "end": 583,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
@@ -174,6 +196,17 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
       "start": 1236,
       "end": 1242,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1236,
+      "end": 1256,
       "fixes": 0
     },
     {

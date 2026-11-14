@@ -33,6 +33,28 @@
       "start": 209,
       "end": 216,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-budget-dynamic/App.tsx",
+      "start": 232,
+      "end": 240,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-budget-dynamic/App.tsx",
+      "start": 241,
+      "end": 251,
+      "fixes": 0
     }
   ]
 }
