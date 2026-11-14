@@ -545,16 +545,19 @@ fn file_sites(
     // The global object handed to a call (`read(window)`, `Object.entries(globalThis)`, `new Reader(self)`): what the callee reads off it is not followed (the package side's
     // `GlobalObjectEscape`), so it may read any global, or call one: a route that is not decided is a read of any name. The row stands at the call that receives it, where a throw
     // inside the callee has its project frame.
-    for call in &file.ast.calls {
-        for argument in &call.arguments {
-            let at = file.ast.peel_ts_sugar_span(argument.span);
-            if !followable_root(ctx, file, &bound, at) {
-                continue;
-            }
-            if let Origin::GlobalObject = origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
-                && let Origin::Package(origin) = unspelled_origin(ctx)
-            {
-                push(call.span, at, Entry::Value, Some(origin));
+    // It is a site only where a package that may reach a Solid action writes a global under a key nothing decides: where none does, no argument is asked.
+    if let Origin::Package(origin) = unspelled_origin(ctx) {
+        for call in &file.ast.calls {
+            for argument in &call.arguments {
+                let at = file.ast.peel_ts_sugar_span(argument.span);
+                if !followable_root(ctx, file, &bound, at) {
+                    continue;
+                }
+                if let Origin::GlobalObject =
+                    origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
+                {
+                    push(call.span, at, Entry::Value, Some(origin.clone()));
+                }
             }
         }
     }
