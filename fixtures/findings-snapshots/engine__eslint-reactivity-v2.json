@@ -25,6 +25,17 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-both-branches.tsx",
+      "start": 198,
+      "end": 213,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-both-branches.tsx",
@@ -84,6 +95,28 @@
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-loop-reentry.tsx",
       "start": 277,
       "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-loop-reentry.tsx",
+      "start": 296,
+      "end": 311,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-loop-reentry.tsx",
+      "start": 495,
+      "end": 510,
       "fixes": 0
     },
     {
@@ -222,6 +255,17 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-stepped-generator.tsx",
+      "start": 298,
+      "end": 351,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-stepped-generator.tsx",
       "start": 299,
       "end": 343,
       "fixes": 0
@@ -246,6 +290,17 @@
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-stepped-generator.tsx",
       "start": 506,
       "end": 537,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-try-finally.tsx",
+      "start": 177,
+      "end": 188,
       "fixes": 0
     },
     {
@@ -999,6 +1054,28 @@
       "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-flush.tsx",
       "start": 84,
       "end": 91,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/loop-await-accessor.tsx",
+      "start": 141,
+      "end": 152,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/loop-await-accessor.tsx",
+      "start": 168,
+      "end": 183,
       "fixes": 0
     },
     {

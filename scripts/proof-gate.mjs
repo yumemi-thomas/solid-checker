@@ -4,7 +4,11 @@
 //
 // A site of the independent universe (rust/crates/solid-reactive-ir/src/proof_universe.rs) must end in a row, a census obligation,
 // a compiler discard or a named silence; a reporting row must end in a finding or a typed drop; a silent row's role must come from
-// a tagged, non-default arm of the classifier (scripts/lib/proof-log.mjs describes C1, C2 and C3).
+// a tagged, non-default arm of the classifier (scripts/lib/proof-log.mjs describes C1, C2, C3 and C4). C4 (ADR 0982): a site ended by a
+// finding (`by: "rule:<R>"`) must still have a finding that credits its code in the final report, or the pass that dropped the finding is one the
+// gate accepts (ExecutionPaths, AbsentProp, RuleDisabled and HostSuppression with their typed premise; DependencySource with its `attributed` line;
+// OwnedByEnabledRule with a confirmed `PendingThrowsFirst`); accounting decides each ending before those passes run, so this is the check that the
+// ending is still true.
 //
 //   bun scripts/proof-gate.mjs                     compare against the gap file (exit 1 on a new, stale or invalid entry)
 //   bun scripts/proof-gate.mjs --list              print every hit, grouped, with its line and column
@@ -14,8 +18,8 @@
 //   --only <text> only the projects whose id contains the text (repeatable)
 //   --prune-candidates  remove the candidate entries this run has no hit for (the fix that cleared a site), then compare as usual
 //
-// The gap file only shrinks: a hit it does not list fails, and an entry no hit matches fails. A C2 hit (a reporting decision or
-// row with nothing ending it) is a false-clean candidate and is never accepted as a gap; fixtures/proof-log/candidates.json lists
+// The gap file only shrinks: a hit it does not list fails, and an entry no hit matches fails. A C2 or C4 hit (a reporting decision or
+// row with nothing ending it; a site ended by a finding the report dropped) is a false-clean candidate and is never accepted as a gap; fixtures/proof-log/candidates.json lists
 // the ones under review, each naming who fixes it. The gate runs the checker one-shot (SOLID_CHECKER_DAEMON=0): the proof log is
 // exact for a fresh build, not for a retained daemon's reused computations.
 import { execFile } from "node:child_process";

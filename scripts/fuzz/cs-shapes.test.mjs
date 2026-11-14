@@ -29,9 +29,10 @@ describe("the cs contexts", () => {
   it("are the hidden starts on two hosts and two routes, and the review's routes over one start, each with its two twins, each name parsed back", () => {
     expect(CS_FORM_NAMES).toEqual(["wrapper", "call", "reflect", "element"]);
     expect(CS_HOSTS).toEqual(["memo", "effect"]);
-    expect(CS_ROUTE_NAMES).toEqual(["getter", "ns-method", "ns-arrow", "ns-computed", "ns-optional", "dotcall", "apply", "reflect", "iife", "iife-fn", "iife-async", "gen", "proxy-ref", "defprop-ref"]);
-    // 4 starts x 2 routes (none, getter), 10 routes over the wrapper (B2, B3), 3 routes over the recognized start (B1), each on two hosts, each with its two twins
-    expect(CS_CONTEXT_NAMES).toHaveLength((CS_FORM_NAMES.length * 2 + 10 + 3) * CS_HOSTS.length * 3);
+    expect(CS_ROUTE_NAMES).toEqual(["getter", "ns-method", "ns-arrow", "ns-computed", "ns-optional", "dotcall", "apply", "reflect", "iife", "iife-fn", "iife-async", "gen", "proxy-ref", "defprop-ref", "setter", "setter-ref", "dispatch", "click", "abort", "next-arg", "iterator", "map-sub", "foreach", "from", "executor", "construct-arg", "owner-null", "net-getter", "net-coerce", "net-destructure", "net-forof", "net-new", "net-tag", "net-proxy", "net-stored-spread", "net-stored-loop", "net-stored-pattern"]);
+    // 4 starts x 2 routes (none, getter), 10 routes over the wrapper (B2, B3), 3 routes over the recognized start (B1), 13 library routes over the wrapper (ADR 0976: R1 to R5, S2, N1)
+    // and 4 of them over the recognized start too, 10 routes of the member-route net over the wrapper (S1, R6) and 3 of them over the recognized start too, each on two hosts, each with its two twins
+    expect(CS_CONTEXT_NAMES).toHaveLength((CS_FORM_NAMES.length * 2 + 10 + 3 + 13 + 4 + 10 + 3) * CS_HOSTS.length * 3);
     for (const name of CS_CONTEXT_NAMES) {
       const parts = csParts(name);
       expect(parts, name).not.toBeNull();
@@ -39,11 +40,14 @@ describe("the cs contexts", () => {
       expect(name).toBe(`cs-${parts.form}-${parts.host}${parts.route ? `-${parts.route}` : ""}${parts.never ? "-never" : ""}${parts.before ? "-before" : ""}`);
     }
     // an unknown form, host or route, a twin suffix twice, the route after a twin suffix, a route over a start it is not crossed with, another axis's name
-    for (const other of ["cs-getter-memo", "cs-call-apply", "cs-call-memo-never-before", "cs-call-memo-after", "cs-call-memo-never-getter", "cs-wrapper-memo-nothing", "cs-call-memo-iife", "cs-rec-memo-getter", "cs-wrapper-memo-gen", "cs-reflect-memo-reflect", "sf-foreach-memo-async", "memo-async"]) expect(csParts(other), other).toBeNull();
+    for (const other of ["cs-getter-memo", "cs-call-apply", "cs-call-memo-never-before", "cs-call-memo-after", "cs-call-memo-never-getter", "cs-wrapper-memo-nothing", "cs-call-memo-iife", "cs-rec-memo-getter", "cs-wrapper-memo-gen", "cs-reflect-memo-reflect", "cs-call-memo-setter", "cs-rec-memo-setter", "cs-rec-memo-foreach", "cs-wrapper-memo-owner", "sf-foreach-memo-async", "memo-async"]) expect(csParts(other), other).toBeNull();
     // `reflect` is both a start and a route: the position says which
     expect(csParts("cs-wrapper-memo-reflect")).toMatchObject({ form: "wrapper", route: "reflect" });
     expect(csParts("cs-reflect-memo")).toMatchObject({ form: "reflect", route: "" });
     expect(csParts("cs-rec-effect-proxy-ref-never")).toMatchObject({ form: CS_RECOGNIZED, host: "effect", route: "proxy-ref", never: true });
+    // `setter` is the prefix of `setter-ref`: the longer name wins
+    expect(csParts("cs-rec-memo-setter-ref")).toMatchObject({ form: CS_RECOGNIZED, route: "setter-ref" });
+    expect(csParts("cs-wrapper-memo-setter-never")).toMatchObject({ form: "wrapper", route: "setter", never: true });
   });
   it("are placed for SC1002 and for no other code", () => {
     const placement = csPlacement();
@@ -176,6 +180,100 @@ describe("the cs programs", () => {
         const at = before.indexOf("async function work1() {");
         expect(before[at + 1], `${route}/${host}`).toBe(open);
         expect(before[at + 4], `${route}/${host}`).toBe("await Promise.resolve();");
+      }
+    }
+  });
+  it("write the library call of each route after the `await` of a hidden start, the site in the function the library or the setter runs (ADR 0976)", () => {
+    // [route, the module-scope lines that hold the site, the call the started function writes]
+    for (const [route, helper, calls] of [
+      ["setter", [], "setCount1(() => {"],
+      ["setter-ref", ["function reader1() {", "r1();", "return 1;"], "setCount1(reader1);"],
+      ["dispatch", ["const target1 = new EventTarget();", 'target1.addEventListener("x", () => {', "r1();"], 'target1.dispatchEvent(new Event("x"));'],
+      ["click", ['const button1 = document.createElement("button");', 'button1.addEventListener("click", () => {', "r1();"], "button1.click();"],
+      ["abort", ["const controller1 = new AbortController();", 'controller1.signal.addEventListener("abort", () => {', "r1();"], "controller1.abort();"],
+      ["next-arg", ["function* numbers1(): Generator<number, void, number> {", "r1();", "yield 1;", "const stored1 = numbers1();"], "stored1.next(1);"],
+      ["iterator", ["const iterator1: Iterator<number> = { next() {", "r1();", "return { done: true, value: 1 };"], "iterator1.next(undefined);"],
+      ["map-sub", ["class Counts1 extends Map<string, number> { get(key: string) {", "r1();", "return super.get(key);", "const counts1: Map<string, number> = new Counts1();"], 'counts1.get("x");'],
+      ["foreach", [], "[1].forEach(() => {"],
+      ["from", ["function reader1() {", "r1();", "return 1;"], "Array.from([1], reader1);"],
+      ["executor", [], "new Promise<number>((done) => {"],
+      ["construct-arg", ["function reader1() {", "r1();", "return 1;", "class Wraps1 { constructor(callback: () => number) { callback(); } };"], "new Wraps1(reader1);"],
+      ["owner-null", [], "runWithOwner(null, () => {"],
+    ]) {
+      for (const host of CS_HOSTS) {
+        const lines = run(`cs-wrapper-${host}-${route}`);
+        const declared = lines.indexOf("async function work1() {");
+        expect(lines[declared + 1], `${route}/${host}`).toBe("await Promise.resolve();");
+        expect(lines[declared + 2], `${route}/${host}`).toBe(calls);
+        for (const line of helper) {
+          const at = lines.indexOf(line);
+          expect(at, `${route}/${host}: ${line}`).toBeGreaterThanOrEqual(0);
+          // module scope, ahead of the started function
+          expect(at, `${route}/${host}: ${line}`).toBeLessThan(declared);
+        }
+        expect(lines, `${route}/${host}`).toContain("track1(work1);");
+        // the twin starts nothing (the names stay used); the other reads ahead of the await
+        expect(run(`cs-wrapper-${host}-${route}-never`), `${route}/${host}`).toContain("void work1;");
+        const before = run(`cs-wrapper-${host}-${route}-before`);
+        const at = before.indexOf("async function work1() {");
+        expect(before[at + 1], `${route}/${host}`).toBe(calls);
+        expect(before.indexOf("await Promise.resolve();", at), `${route}/${host}`).toBeGreaterThan(at + 1);
+      }
+    }
+    // a recognized computation too, where the review found it silent: a function handed to a setter and a listener's dispatch
+    for (const [route, calls] of [["setter-ref", "setCount1(reader1);"], ["dispatch", 'target1.dispatchEvent(new Event("x"));'], ["click", "button1.click();"], ["abort", "controller1.abort();"]]) {
+      for (const host of CS_HOSTS) {
+        const primitive = host === "memo" ? "createMemo" : "createEffect";
+        const text = run(`cs-${CS_RECOGNIZED}-${host}-${route}`);
+        const start = text.findIndex((line) => line.includes(`${primitive}(async () => {`));
+        expect(start, `${route}/${host}`).toBeGreaterThanOrEqual(0);
+        expect(text[start + 1], `${route}/${host}`).toBe("await Promise.resolve();");
+        expect(text[start + 2], `${route}/${host}`).toBe(calls);
+        expect(text.some((line) => line.startsWith("function track1")), `${route}/${host}`).toBe(false);
+      }
+    }
+  });
+  it("write the member the continuation runs without a call, and the stored generator it steps without one, after the `await` of a hidden start (ADR 0976: S1, R6)", () => {
+    // [route, the module-scope lines that hold the site, the lines the started function writes after its await]
+    for (const [route, helper, calls] of [
+      ["net-getter", ["const holder1 = { get value() {", "r1();", "return 1;"], ["void holder1.value;"]],
+      ["net-coerce", ["const coerced1 = { toString() {", "r1();", 'return "x";'], ["void `${coerced1}`;"]],
+      ["net-destructure", ["const holder1 = { get value() {", "r1();", "return 1;"], ["const { value } = holder1;", "void value;"]],
+      ["net-forof", ["const iterable1 = { *[Symbol.iterator]() {", "r1();", "yield 1;"], ["for (const item of iterable1) void item;"]],
+      ["net-new", ["class Reads1 { value: number; constructor() {", "r1();", "this.value = 1;"], ["void new Reads1().value;"]],
+      ["net-tag", ["function tag1(parts: TemplateStringsArray) {", "r1();", "return parts.length;"], ["void tag1`x`;"]],
+      ["net-proxy", ["const proxy1: any = new Proxy({}, { get: () => {", "r1();", "return 1;"], ["void proxy1.x;"]],
+      ["net-stored-spread", ["function* numbers1() {", "r1();", "yield 1;", "const stored1 = numbers1();"], ["void [...stored1][0];"]],
+      ["net-stored-loop", ["function* numbers1() {", "r1();", "yield 1;", "const stored1 = numbers1();"], ["for (const item of stored1) void item;"]],
+      ["net-stored-pattern", ["function* numbers1() {", "r1();", "yield 1;", "const stored1 = numbers1();"], ["const [first] = stored1;", "void first;"]],
+    ]) {
+      for (const host of CS_HOSTS) {
+        const lines = run(`cs-wrapper-${host}-${route}`);
+        const declared = lines.indexOf("async function work1() {");
+        expect(lines[declared + 1], `${route}/${host}`).toBe("await Promise.resolve();");
+        calls.forEach((call, index) => expect(lines[declared + 2 + index], `${route}/${host}`).toBe(call));
+        for (const line of helper) {
+          const at = lines.indexOf(line);
+          expect(at, `${route}/${host}: ${line}`).toBeGreaterThanOrEqual(0);
+          expect(at, `${route}/${host}: ${line}`).toBeLessThan(declared);
+        }
+        expect(lines, `${route}/${host}`).toContain("track1(work1);");
+        expect(run(`cs-wrapper-${host}-${route}-never`), `${route}/${host}`).toContain("void work1;");
+        const before = run(`cs-wrapper-${host}-${route}-before`);
+        const at = before.indexOf("async function work1() {");
+        expect(before[at + 1], `${route}/${host}`).toBe(calls[0]);
+        expect(before.indexOf("await Promise.resolve();", at), `${route}/${host}`).toBeGreaterThan(at + calls.length);
+      }
+    }
+    // the stored generator in a recognized computation too
+    for (const route of ["net-stored-spread", "net-stored-loop", "net-stored-pattern"]) {
+      for (const host of CS_HOSTS) {
+        const primitive = host === "memo" ? "createMemo" : "createEffect";
+        const text = run(`cs-${CS_RECOGNIZED}-${host}-${route}`);
+        const start = text.findIndex((line) => line.includes(`${primitive}(async () => {`));
+        expect(start, `${route}/${host}`).toBeGreaterThanOrEqual(0);
+        expect(text[start + 1], `${route}/${host}`).toBe("await Promise.resolve();");
+        expect(text.some((line) => line.startsWith("function track1")), `${route}/${host}`).toBe(false);
       }
     }
   });

@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are one hundred and sixty-three routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"]);
+  it("are one hundred and seventy-nine routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "putalias", "putaliaslet", "putinner", "putreassign", "putdefault", "putspread", "putmethod", "aliasstore", "aliasgetter", "aliascomputed", "aliasclass", "aliassequence", "aliascond", "aliasnullish", "aliasdestrlit", "aliasproxy", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(914);
+    expect(PH_CONTEXT_NAMES).toHaveLength(1010);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -307,6 +307,34 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(chain.some((line) => /^put\d+\(holder\);$/.test(line))).toBe(true);
     expect(chain.some((line) => /^outer\d+\(o\d+\);$/.test(line))).toBe(true);
     expect(textOf("FLUSH_IN_ACTION", "ph-putparam-step-never")).toContain("skipRun(() => {");
+  });
+  it("print the routes of ADR 0980: a store through another name of the object, or through a parameter whose callers are not one name's direct calls", () => {
+    const alias = textOf("FLUSH_IN_ACTION", "ph-putalias-step");
+    expect(alias.some((line) => /^const a\d+ = o\d+;$/.test(line))).toBe(true);
+    expect(alias.some((line) => /^put\d+\(a\d+\);$/.test(line))).toBe(true);
+    expect(alias.some((line) => /^o\d+\.m\d+\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-putaliaslet-step").some((line) => /^a\d+ = o\d+;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-putinner-step").some((line) => /^const s = target;$/.test(line))).toBe(true);
+    const reassign = textOf("FLUSH_IN_EFFECT_CALLBACK", "ph-putreassign-apply");
+    expect(reassign.some((line) => /^target = other;$/.test(line))).toBe(true);
+    expect(reassign.some((line) => /^put\d+\(\{\}, o\d+\);$/.test(line))).toBe(true);
+    const fallback = textOf("FLUSH_IN_ACTION", "ph-putdefault-step");
+    expect(fallback.some((line) => /^function put\d+\(target: any = shared\d+\) \{$/.test(line))).toBe(true);
+    expect(fallback.some((line) => /^put\d+\(\);$/.test(line))).toBe(true);
+    expect(fallback.some((line) => /^shared\d+\.m\d+\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-putspread-step").some((line) => /^put\d+\(\.\.\.args\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ph-putmethod-leaf").some((line) => /^api\d+\.put\d+\(o\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliasstore-step").some((line) => /^a\d+\.m\d+ = function \(\) \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliasgetter-step").some((line) => /^box\d+\.a\d+\.m\d+ = function \(\) \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliascomputed-step").some((line) => /^a\d+\["m\d+"\] = function \(\) \{$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliasclass-step").some((line) => /^const o\d+ = new K\d+\(\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliassequence-step").some((line) => /^const a\d+ = \(0, o\d+\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliascond-step").some((line) => /^const a\d+: any = Math\.random\(\) < 2 \? o\d+ : null;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliasnullish-step").some((line) => /^const a\d+: any = o\d+ \?\? null;$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliasdestrlit-step").some((line) => /^const \{ o\d+: a\d+ \} = \{ o\d+ \};$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliasproxy-step").some((line) => /^const a\d+: any = new Proxy\(o\d+, \{\}\);$/.test(line))).toBe(true);
+    expect(textOf("FLUSH_IN_ACTION", "ph-aliasstore-step-never")).toContain("skipRun(() => {");
+    expect(textOf("FLUSH_IN_ACTION", "ph-putalias-step-never")).toContain("skipRun(() => {");
   });
   it("print the review of #232's routes: what the strict prefilter gives out, how a key is spelled, what a pattern parameter is, a write through the receiver, a symbol rewritten, Object.prototype", () => {
     const rest = textOf("FLUSH_IN_ACTION", "ph-restcopy-step");

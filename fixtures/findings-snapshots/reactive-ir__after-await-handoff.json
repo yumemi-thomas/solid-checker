@@ -945,6 +945,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 3406,
+      "end": 3416,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1041,6 +1052,17 @@
       "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
       "start": 3640,
       "end": 3641,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-handoff/App.tsx",
+      "start": 3663,
+      "end": 3673,
       "fixes": 0
     },
     {

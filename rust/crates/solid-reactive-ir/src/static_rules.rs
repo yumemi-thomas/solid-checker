@@ -896,21 +896,25 @@ pub(crate) fn unresolved_invocation_shaped(
     after_await::unresolved_invocation_shaped(ctx, file, call)
 }
 
-/// See [`after_await::callee_declared_outside_project`].
-pub(crate) fn callee_declared_outside_project(
+pub(crate) use after_await::CalleeHome;
+
+/// See [`after_await::callee_home`].
+pub(crate) fn callee_home(
     ctx: &AnalysisContext<'_>,
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
-) -> Option<bool> {
-    after_await::callee_declared_outside_project(ctx, file, call)
+) -> Option<CalleeHome> {
+    after_await::callee_home(ctx, file, call)
 }
+
+pub(crate) use after_await::SolidCall;
 
 /// See [`after_await::solid_owned_call`].
 pub(crate) fn solid_owned_call(
     ctx: &AnalysisContext<'_>,
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
-) -> bool {
+) -> Option<SolidCall> {
     after_await::solid_owned_call(ctx, file, call)
 }
 

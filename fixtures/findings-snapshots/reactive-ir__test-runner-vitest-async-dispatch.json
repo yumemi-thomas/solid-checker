@@ -26,6 +26,28 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-dispatch/App.test.tsx",
+      "start": 735,
+      "end": 755,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-dispatch/App.test.tsx",
+      "start": 1036,
+      "end": 1054,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-dispatch/App.test.tsx",

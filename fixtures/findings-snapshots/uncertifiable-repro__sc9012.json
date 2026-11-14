@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/escaped-spread-use.tsx",
+      "start": 571,
+      "end": 586,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -376,6 +387,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-fn-api.ts",
+      "start": 362,
+      "end": 373,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-fn-api.ts",
+      "start": 406,
+      "end": 419,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -472,6 +505,17 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-function.tsx",
       "start": 465,
       "end": 488,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/leaf-project-function.tsx",
+      "start": 499,
+      "end": 513,
       "fixes": 0
     },
     {
@@ -860,6 +904,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-forwarded.tsx",
+      "start": 811,
+      "end": 822,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -868,6 +923,28 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-forwarded.tsx",
       "start": 840,
       "end": 857,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-mutation-client.tsx",
+      "start": 873,
+      "end": 881,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-mutation-client.tsx",
+      "start": 1044,
+      "end": 1053,
       "fixes": 0
     },
     {
@@ -1055,6 +1132,17 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
       "start": 433,
       "end": 443,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-member-targets-diverge.tsx",
+      "start": 772,
+      "end": 785,
       "fixes": 0
     },
     {
@@ -1322,6 +1410,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-use-primitive.tsx",
+      "start": 602,
+      "end": 617,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1330,6 +1429,17 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/param-use-primitive.tsx",
       "start": 851,
       "end": 860,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/param-use-primitive.tsx",
+      "start": 875,
+      "end": 885,
       "fixes": 0
     },
     {

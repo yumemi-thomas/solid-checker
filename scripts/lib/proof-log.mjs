@@ -29,12 +29,21 @@
 // the projection removed stands no more: it ends the site only where the log shows a `drop` of the ExecutionPaths pass for that row (its code, its `uncertifiable` kind, its blocker) with its
 // typed `ClientRuntimeReach` premise (gate change, batch 11, B2: the arm of an `isServer` ternary a browser build never runs); an untyped drop or another pass ends nothing.
 //
-// C2, a label-only end and an unconfirmed premise are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a
+//   C4  a site ended by a finding (`by: "rule:<R>[:u]"`) whose finding a later pass dropped (ADR 0982): accounting decides each (site, code) ending before the passes that can remove
+//       the finding that ended it, and the final report is the claim. A crediting verdict (a rule the dialect's code policy says claims the code, or an obligation of a rule that
+//       declines it) must stand at the site's span or one of its `alt` spans. If none does, the last `drop` of that finding (its rule, at those spans) must be an accepted pass:
+//       ExecutionPaths, AbsentProp, RuleDisabled and HostSuppression with their typed premise, DependencySource with its C2(c) `attributed` line, and OwnedByEnabledRule with
+//       a `PendingThrowsFirst` premise the final list confirms (an SC5001 violation at the span: the run throws before it would warn; ADR 0982). SupersededByViolation,
+//       EqualFinding and the rest are accepted only while another crediting verdict remains, which is the case that did not reach here, and an unnamed or missing drop is a
+//       hit (`ended-by-dropped-finding`). Exact span keys, never ranges or nearby spans; a code is credited through the code policy, never by a rule's spelling.
+//
+// C2, C4, a label-only end and an unconfirmed premise are never accepted as gaps; C1 and C3 are, in fixtures/proof-log/gaps.json, each with a
 // stated reason.
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { codeRules, declinesCode } from "../fuzz/codes.mjs";
 
-export const CHECKS = ["C1", "C2", "C3"];
+export const CHECKS = ["C1", "C2", "C3", "C4"];
 
 /** The decision kinds that answer for a universe site of each table. */
 const DECISION_KIND = { read: "read", write: "write", action: "action" };
@@ -70,9 +79,27 @@ export const OWNER_CALL_DROP = { pass: "ExecutionPaths", premise: "ClientRuntime
  * throws first (ADR 0932) has the SC2001 violation of its call in the final list, at the span the premise names, in the end's file.
  */
 const PREMISE_CONFIRMED = {
+  // ADR 0982: the strict read an SC5001 violation owns is dropped because the pending read throws before it warns; the violation stands in the final list at the span.
+  PendingThrowsFirst: (premise, verdicts) =>
+    premise.in === undefined && (verdicts.get(`${premise.at[0]}:${premise.at[1]}`) ?? []).some((v) => v.code === "SC5001" && v.kind === "violation"),
   SetterGuardThrowsFirst: (premise, verdicts) =>
     premise.in === undefined && (verdicts.get(`${premise.at[0]}:${premise.at[1]}`) ?? []).some((v) => v.code === "SC2001" && v.kind === "violation"),
 };
+
+/**
+ * The passes whose drop of a finding ends a site for every code (C4, ADR 0982), each with the one typed premise its line must carry. DependencySource also needs its C2(c)
+ * `attributed` line; OwnedByEnabledRule is no entry here (it is accepted only with a confirmed `PendingThrowsFirst`); a pass that is no entry ends nothing.
+ */
+export const C4_DROPS = {
+  ExecutionPaths: "ClientRuntimeReach",
+  AbsentProp: "SiteReachAbsentProp",
+  RuleDisabled: "UserRuleOption",
+  HostSuppression: "SuppressionComment",
+  DependencySource: "DependencySourceRoot",
+};
+
+/** Whether a verdict credits a Chrome code under the dialect's code policy: a rule that claims it, or an obligation of a rule that declines it. Never by a name's spelling. */
+const creditsCode = (code, verdict) => (codeRules[code] ?? []).includes(verdict.rule) || declinesCode(code, verdict);
 
 const logFiles = (path) =>
   statSync(path).isDirectory()
@@ -235,7 +262,16 @@ export function proofHits(lines) {
       // codes it lists: a line with no `codes`, one of another pass, and a site line with no `code` end nothing (fail closed: the checker ends none of them and files the code's row).
       const spans = [spanKey(site), ...(site.alt ?? []).map(([s, e]) => `${s}:${e}`)];
       const silencedFor = (key) => (silents.get(key) ?? []).some((silent) => silent.rule === "end" && site.code !== undefined && Array.isArray(silent.codes) && silent.codes.includes(site.code));
-      if (site.end !== "none" || spans.some(silencedFor)) continue;
+      if (site.end !== "none") {
+        // C4 (ADR 0982): a site a finding ended must still have a crediting finding in the final report, or the pass that dropped it is one the gate accepts.
+        const ruleName = typeof site.by === "string" ? /^rule:(.+?)(?::u)?$/.exec(site.by)?.[1] : undefined;
+        if (ruleName !== undefined && site.credited !== false && site.code !== undefined) {
+          const dropped = endedByDroppedFinding(site, ruleName, spans, verdicts, t.drop, attributedAt);
+          if (dropped !== null) hit("C4", "ended-by-dropped-finding", site, site.t, dropped);
+        }
+        continue;
+      }
+      if (spans.some(silencedFor)) continue;
       // An owner-call site (batch 11, slice 6; coordinator-approved, owner delegated) whose proofs are not all in reach ends in the code's home uncertifiable row. That fail-closed ending is
       // accepted only where it is named: the row stands at one of the site's spans AND a typed `declined` line at one of them lists the code (why no silence applies). Either alone is a
       // hit, a decline ends no other table's site, and a line that lists no code names none.
@@ -294,6 +330,29 @@ export function proofHits(lines) {
     }
   }
   return hits;
+}
+
+/**
+ * C4 (ADR 0982): `null` when the finding of rule `ruleName` that ended `site` still stands as a crediting verdict at one of its spans, or its last drop is an accepted pass;
+ * else what the hit says (code, rule, pass, spans). The drops are in log order, so the last one at the spans for that rule is the pass that removed it.
+ */
+function endedByDroppedFinding(site, ruleName, spans, verdicts, drops, attributedAt) {
+  const standing = spans.some((key) => (verdicts.get(key) ?? []).some((verdict) => creditsCode(site.code, verdict)));
+  if (standing) return null;
+  const mine = drops.filter((drop) => drop.rule === ruleName && spans.includes(spanKey(drop)));
+  const last = mine.at(-1);
+  const detail = { code: site.code, rule: ruleName, pass: last?.pass ?? null, spans };
+  if (last === undefined) return detail;
+  const typed = (kind) => (last.premises ?? []).some((premise) => premise.kind === kind && Array.isArray(premise.at));
+  if (last.pass === "OwnedByEnabledRule") {
+    const confirmed = (last.premises ?? []).some((premise) => premise.kind === "PendingThrowsFirst" && Array.isArray(premise.at) && PREMISE_CONFIRMED.PendingThrowsFirst(premise, verdicts) === true);
+    return confirmed ? null : detail;
+  }
+  const premise = C4_DROPS[last.pass];
+  if (premise === undefined || !typed(premise)) return detail;
+  // The dependency-source drop discards a package's finding: it ends a project site only where the finding stands again at a project site.
+  if (last.pass === "DependencySource" && !(attributedAt.get(spanKey(last)) ?? []).some((line) => Array.isArray(line.to) && line.to.length > 0)) return detail;
+  return null;
 }
 
 /**
@@ -361,8 +420,8 @@ export function hitKey(fixture, relativeFile, hit) {
   return `${fixture}|${relativeFile}|${hit.s}-${hit.e}|${hit.check}/${hit.kind}`;
 }
 
-/** A hit no gap entry may accept: a false-clean candidate, and a named end that is a label rather than a fact, or a claim the log refutes. */
-export const neverAccepted = (check, kind) => check === "C2" || kind === "label-only-end" || kind === "premise-unconfirmed";
+/** A hit no gap entry may accept: a false-clean candidate (C2, C4: a site ended by a finding the report no longer holds), and a named end that is a label rather than a fact, or a claim the log refutes. */
+export const neverAccepted = (check, kind) => check === "C2" || check === "C4" || kind === "label-only-end" || kind === "premise-unconfirmed";
 
 /**
  * The candidate entries a run still has a hit for (`kept`) and those it has none for (`removed`). The branch that fixes a site
@@ -398,7 +457,7 @@ export function gapProblems(hitsByKey, gaps, candidates = {}) {
     }
     const hitKind = key.slice(key.lastIndexOf("/") + 1);
     if (neverAccepted(entry.check, hitKind)) {
-      problems.push({ kind: "invalid", key, message: "a C2 hit is a false-clean candidate, a label-only end is no fact and an unconfirmed premise is refuted by the log: never an accepted gap" });
+      problems.push({ kind: "invalid", key, message: "a C2 or C4 hit is a false-clean candidate, a label-only end is no fact and an unconfirmed premise is refuted by the log: never an accepted gap" });
     }
     if (typeof entry.why !== "string" || EMPTY_REASONS.test(entry.why.trim()) || entry.why.trim().length < 20) {
       problems.push({ kind: "invalid", key, message: "why must state the fact that makes the silence sound (not empty, 'known' or 'harmless')" });

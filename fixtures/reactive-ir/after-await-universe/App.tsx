@@ -1,4 +1,16 @@
-import { createEffect, createMemo, createSignal, createStore } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createRoot,
+  createSignal,
+  createStore,
+  getOwner,
+  runWithOwner,
+  runWithOwner as withOwner,
+  untrack,
+} from "solid-js";
+import type { Owner } from "solid-js";
+import * as solid from "solid-js";
 import * as helpers from "./helpers";
 
 const [count, setCount] = createSignal(0);
@@ -196,12 +208,103 @@ export function Starts() {
   return <div />;
 }
 
-// What stays without a row, each named in `docs/open-work.md` (the review's S1 to S3): a call into the standard library (it runs project code only through a callback or a
-// protocol the project's objects implement), a setter (its own rules) and a construct (a constructor runs where no call shows).
+// ADR 0976 (the follow-up to the reviews of #233: S2 and R1 to R4): a call into code outside the project is a site, and ends only where a typed fact shows it runs no project
+// code. Each call below was silent: it left the pass through the arm that skipped the standard library, Solid's setters and actions, and constructs. Chrome rc.21 reports
+// UNTRACKED_READ_AFTER_AWAIT under each (the oracle case `after-await-library`).
+const target = new EventTarget();
+target.addEventListener("x", () => {
+  count();
+});
+const button = document.createElement("button");
+button.addEventListener("click", () => {
+  count();
+});
+const controller = new AbortController();
+controller.signal.addEventListener("abort", () => {
+  count();
+});
+const iterator: Iterator<number> = {
+  next() {
+    count();
+    return { done: true, value: 1 };
+  },
+};
+class Counts extends Map<string, number> {
+  get(key: string) {
+    count();
+    return super.get(key);
+  }
+}
+const counts: Map<string, number> = new Counts();
+class Reads {
+  value = count();
+}
+class Wraps {
+  constructor(callback: () => number) {
+    callback();
+  }
+}
+export async function Library() {
+  await pause();
+  [1].forEach(() => {
+    count();
+  });
+  Array.from([1], reader);
+  new Promise<number>((done) => done(count()));
+  setCount(() => count());
+  setCount(reader);
+  target.dispatchEvent(new Event("x"));
+  button.click();
+  controller.abort();
+  stored.next(1);
+  iterator.next(undefined);
+  counts.get("x");
+  new Reads();
+  new Wraps(reader);
+}
+
+// R5: `runWithOwner`'s callback runs on this stack and keeps the after-await flag (the dialect's `callback_keeps_after_await_flag`; Chrome rc.21 reports a read there for a null
+// owner or one taken after the suspension, and none for an owner captured before it, for `untrack` or for `createRoot`). The call is a site, ended only by an owner the function
+// captured before its first suspension.
+export async function Primitives(unproven: Owner | null) {
+  const captured = getOwner();
+  await pause();
+  runWithOwner(captured, () => count());
+  runWithOwner(null, () => count());
+  runWithOwner(getOwner(), () => count());
+  runWithOwner(unproven, () => count());
+  untrack(() => count());
+  createRoot(() => count());
+}
+// The same call spelled through a namespace import and an alias, and a project function of the same name in an inner scope (a call of a project function, whose row no
+// primitive's reason ends).
+export async function Spelled() {
+  const owner = getOwner();
+  await pause();
+  solid.runWithOwner(null, () => count());
+  withOwner(null, () => count());
+  solid.runWithOwner(owner, () => count());
+  withOwner(owner, () => count());
+}
+export async function Shadowed() {
+  const runWithOwner = (owner: unknown, fn: () => number) => fn();
+  const owner = getOwner();
+  await pause();
+  runWithOwner(owner, () => count());
+}
+
+// What stays without a row (`Outside`, each call an exactly resolved standard-library or Solid call whose receiver and arguments are proven inert, ADR 0976): a call with a
+// literal or an exact data literal as its argument, a setter given a literal, a construct with none, an ECMAScript global's member, and a timer's callback (it runs on a task of
+// its own: another stack). The process test `a_library_call_that_runs_no_project_code_is_no_site` pins them and the mutation test of `library-runs-nothing` files exactly them.
 export async function Outside() {
   await pause();
   JSON.stringify({ n: 1 });
   Promise.resolve(1);
   setCount(1);
   new Date();
+  Math.max(1, 2);
+  Object.keys({ a: 1 });
+  setTimeout(() => {
+    count();
+  }, 0);
 }

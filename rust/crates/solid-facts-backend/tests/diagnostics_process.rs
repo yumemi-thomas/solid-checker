@@ -2004,7 +2004,9 @@ fn solid2_precision_corrections_are_end_to_end() {
     for (rule, expected) in [
         // ADR 0973: the accounting's uncertifiable rows, `read-after-await-unaccounted`: one at a method of a `const` object literal called after the await (`App.tsx:78`) and two at
         // calls of project functions (`result.filter(makePredicate(…))`, `invoke(result, …)`: no callee reason ends a call, the review of #233's B1).
-        ("reactive-read-after-await", 10),
+        // ADR 0976: four more, library calls the standard library runs a callback in, after the await of a recognized memo: `result.filter((post) => post.includes(id()))` and
+        // `result.filter((post) => post === selection.id)`, and `Promise.resolve(result).then(…)` (two sites: the inner call and the chained one, spans 2121-2136 and 2121-2149).
+        ("reactive-read-after-await", 14),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and
@@ -2580,7 +2582,9 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             owner.iter().all(|finding| owner_entry_row(finding)),
             "{owner:#?}"
         );
-        assert_eq!(findings.len(), 4 + 16 + 15 + 6, "{findings:#?}");
+        // ADR 0976: and one uncertifiable `read-after-await-unaccounted` row, at `setUser(current)` after `await resolve(…)`: a setter given a value no fact proves (it may be an
+        // updater function).
+        assert_eq!(findings.len(), 4 + 16 + 15 + 6 + 1, "{findings:#?}");
     }
     if let Some(findings) = diagnostic_fixture("rc9-until-scope") {
         // rc.9's `until` carries resolve's observer guard, so the same four
@@ -2687,7 +2691,9 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             "rc9-flush-in-action",
             &[14_u64, 20, 27, 32, 39, 44, 97][..],
             &[51_u64, 56, 62, 70, 77, 84, 106, 112, 125, 134][..],
-            34,
+            // ADR 0976 (R6): two more of `beside`, uncertifiable SC1002 `unresolved-invocation` rows of the read-after-await net in generator bodies a stepped route
+            // runs: `yield* inner()` (line 69, a parameter called in an async generator) and `flush()` (line 119, a parameter called in a generator an action runs).
+            36,
             1,
         ),
         // ADR 0966: rc.8's `asyncAfterAwait` flush (23, a generator body the census's continuation class excludes) is one uncertifiable
@@ -3565,13 +3571,12 @@ fn receiver_value_uses_keep_their_rows() {
     assert_flush_sites(
         &findings,
         source,
-        &[],
+        // ADR 0980: `twinPattern` is `Object.create(null)`, a call's result, no fresh object the program writes, so its store is handed (the option-A cost).
+        &["twinPattern.twinPatternM = function () {\n  flush();"],
         &[
             "twinEscape.twinEscapeM = function () {\n  flush();",
             "twinRead.twinReadM = function () {\n  flush();",
             "const twinKeyBase = {\n  get g(): number {\n    flush();",
-            // The review of #232 (B3): a pattern parameter of a function nothing hands a package reads a key where it runs.
-            "twinPattern.twinPatternM = function () {\n  flush();",
         ],
     );
 }

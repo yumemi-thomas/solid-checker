@@ -1902,6 +1902,29 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` runs on the stack of the call that hands it over, and a read in it after an `await` of the async computation that makes the call still
+    /// raises UNTRACKED_READ_AFTER_AWAIT: the primitive does not clear the after-await flag the way an explicit opt-out does. ADR 0976 (R5 of the follow-up to #233's re-check),
+    /// probed on the pinned rc.21: `runWithOwner(null, () => read())` in a computation's continuation raises it, while `untrack(…)` and `createRoot(…)` do not. The default claims
+    /// none, which only withholds sites.
+    fn callback_keeps_after_await_flag(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether a call of `primitive` returns the owner the code runs under (`getOwner()`). ADR 0976 (R5): a program that captures it ahead of an async function's first suspension
+    /// and hands it back later has an owner the continuation can use. The default claims none, which only withholds sites.
+    fn returns_current_owner(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// The index of the options argument of a call of `primitive` that creates a writable signal and returns its setter (`createSignal(initial, options)`), when this dialect has
+    /// one. ADR 0976: the setter's `equals` option is a function the setter runs, so the accounting reads it from this exact call. The default has none, which only withholds sites.
+    fn signal_creation_options(&self, primitive: Primitive) -> Option<usize> {
+        let _ = primitive;
+        None
+    }
+
     /// The member a context must be accessed through to act as a provider,
     /// if this dialect has one. Solid 1.x exposes `.Provider`, whose value
     /// getter runs untracked; Solid 2.0 makes the context itself the

@@ -2333,6 +2333,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 766,
+      "end": 773,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -2429,6 +2440,17 @@
       "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
       "start": 1015,
       "end": 1024,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "unresolved-invocation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 1147,
+      "end": 1154,
       "fixes": 0
     },
     {

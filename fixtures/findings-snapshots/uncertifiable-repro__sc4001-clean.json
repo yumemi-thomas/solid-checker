@@ -1,4 +1,16 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001-clean/src/clean-copied-timer.tsx",
+      "start": 610,
+      "end": 622,
+      "fixes": 0
+    }
+  ]
 }
