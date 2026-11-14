@@ -66,6 +66,11 @@ pub const WRITE_PREFIX: &str = "global-write:";
 /// run, and the row says the package may write it, not that it does.
 pub const WRITE_ANY_PREFIX: &str = "global-write-any:";
 
+/// The prefix of a site's pseudo-path for a member of the global object read by a key the program does not spell (`window[key]`, `const { [key]: value } = window`, a rest
+/// element of a destructuring of it): any global may be the one read, so the code is that of a package that writes any (`global-read-any:<writer root>`). Its verdict is the
+/// writer's (ADR 0973).
+pub const READ_ANY_PREFIX: &str = "global-read-any:";
+
 /// The prefix of a site's pseudo-path for a value whose origin the walk could not follow to its end: it stopped at a limit (`origin-limit:array of more than 256 elements`),
 /// so what runs for the value is not decided (ADR 0973).
 pub const LIMIT_PREFIX: &str = "origin-limit:";
@@ -176,6 +181,12 @@ pub struct PackageReachIndex {
     /// The packages whose closure writes a global under a key nothing in the file decides (`window[key] = v` with a key from a call or a parameter,
     /// `Object.assign(globalThis, source)` of a source the file does not hold): any global may be one of theirs (see [`PackageReachIndex::global_writers_of`]).
     pub global_writers_any: std::collections::BTreeSet<String>,
+    /// The packages whose closure defines an accessor (a getter or a setter, or a descriptor the scan does not read) on the global object under each name
+    /// (`Object.defineProperty(window, "devicePixelRatio", { get })`), by root: a read of that global runs their code, which a data write does not.
+    pub global_accessor_writers: BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// The packages whose closure may define an accessor on the global object under a name nothing in the file decides, or change its prototype: a read of any global
+    /// may run their code (see [`PackageReachIndex::global_accessor_writers_of`]).
+    pub global_accessor_writers_any: std::collections::BTreeSet<String>,
 }
 
 impl PackageReachIndex {
@@ -238,6 +249,63 @@ impl PackageReachIndex {
             .map(|(root, named)| (root.as_str(), named))
     }
 
+    /// The roots of the installed packages whose closure may define an accessor on the global object under `name` and may reach a Solid action, with whether each does
+    /// it under that name (the names its constants decide included) or under a key nothing decides: a read of the global (a member of the global object, a bare name, a
+    /// pattern key, `typeof`) runs the code of the first, by name then by root. Empty when no installed package the program loads defines one, or each that does is clear.
+    pub fn global_accessor_writers_of<'a>(
+        &'a self,
+        name: &str,
+    ) -> impl Iterator<Item = (&'a str, bool)> + 'a {
+        let by_name = self.global_accessor_writers.get(name);
+        let any = self
+            .global_accessor_writers_any
+            .iter()
+            .filter(move |root| !by_name.is_some_and(|roots| roots.contains(*root)));
+        by_name
+            .into_iter()
+            .flatten()
+            .map(|root| (root, true))
+            .chain(any.map(|root| (root, false)))
+            .filter(|(root, _)| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(|(root, named)| (root.as_str(), named))
+    }
+
+    /// The roots of the installed packages whose closure writes any global and may reach a Solid action, by whatever name: the packages a call of the global object's
+    /// member under a key the program does not spell (`window[key]()`, a pattern key that is computed, a rest) may run the code of. A clear package is silent.
+    pub fn global_writers_of_unspelled<'a>(&'a self) -> impl Iterator<Item = &'a str> + 'a {
+        self.global_writers
+            .values()
+            .flatten()
+            .chain(self.global_writers_any.iter())
+            .filter(|root| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(String::as_str)
+    }
+
+    /// The roots of the installed packages whose closure may define an accessor on the global object under any name and may reach a Solid action: the packages a read
+    /// of the global object's member under a key the program does not spell may run the code of.
+    pub fn global_accessor_writers_of_unspelled<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = &'a str> + 'a {
+        self.global_accessor_writers
+            .values()
+            .flatten()
+            .chain(self.global_accessor_writers_any.iter())
+            .filter(|root| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(String::as_str)
+    }
+
     /// Where the closure of the package a declaration at `path` describes may define an accessor. A path the backend did not decide, and a pseudo-path of a site
     /// ([`AMBIENT_PREFIX`], [`COMPUTED_LOAD_PREFIX`]), is open: any member may be one.
     #[must_use]
@@ -247,6 +315,7 @@ impl PackageReachIndex {
             || path.starts_with(LIMIT_PREFIX)
             || path.starts_with(WRITE_PREFIX)
             || path.starts_with(WRITE_ANY_PREFIX)
+            || path.starts_with(READ_ANY_PREFIX)
             || self.project_js.contains(path)
         {
             return AccessorFacts::open();
@@ -279,6 +348,16 @@ impl PackageReachIndex {
                     detail: format!(
                         "{root} writes the global {name}, and no verdict is recorded for it"
                     ),
+                },
+            };
+        }
+        if let Some(root) = path.strip_prefix(READ_ANY_PREFIX) {
+            // `global-read-any:<writer root>`: the writer's closure decides.
+            return match self.by_root.get(root) {
+                Some(reach) => reach.clone(),
+                None => PackageReach::Undecided {
+                    blocker: ReachBlocker::UnknownGlobal,
+                    detail: format!("{root} writes globals, and no verdict is recorded for it"),
                 },
             };
         }

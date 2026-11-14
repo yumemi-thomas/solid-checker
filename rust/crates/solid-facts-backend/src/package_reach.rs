@@ -226,6 +226,16 @@ pub fn package_reach_index(
             if closure.global_writes.any_name {
                 index.global_writers_any.insert(root.clone());
             }
+            for defined in &closure.global_writes.accessor_names {
+                index
+                    .global_accessor_writers
+                    .entry(defined.clone())
+                    .or_default()
+                    .insert(root.clone());
+            }
+            if closure.global_writes.accessors_any_name {
+                index.global_accessor_writers_any.insert(root.clone());
+            }
         }
         if let Some(name) = manifest(Path::new(&root))
             .ok()
@@ -765,6 +775,8 @@ fn package_reach(
         accessors_any_name: false,
         written: BTreeSet::new(),
         written_any: false,
+        accessors_written: BTreeSet::new(),
+        accessors_written_any: false,
     };
     walk.run(root, demand, extra_entries);
     let problems = walk
@@ -787,6 +799,8 @@ fn package_reach(
         global_writes: solid_facts::module_reach::GlobalWrites {
             names: walk.written.into_iter().collect(),
             any_name: walk.written_any,
+            accessor_names: walk.accessors_written.into_iter().collect(),
+            accessors_any_name: walk.accessors_written_any,
         },
     }
 }
@@ -1187,6 +1201,9 @@ struct Walk<'s, 'd, 'm> {
     /// The globals the files read write (ADR 0973), and whether any is written under a name the syntax does not fix.
     written: BTreeSet<String>,
     written_any: bool,
+    /// The globals the files read may define an accessor for on the global object, and whether one may be defined under a name the syntax does not fix.
+    accessors_written: BTreeSet<String>,
+    accessors_written_any: bool,
 }
 
 impl Walk<'_, '_, '_> {
@@ -1272,6 +1289,11 @@ impl Walk<'_, '_, '_> {
             self.accessors_any_name |= scan.accessors.any_name;
             extend(&mut self.written, &scan.global_writes.names);
             self.written_any |= scan.global_writes.any_name;
+            extend(
+                &mut self.accessors_written,
+                &scan.global_writes.accessor_names,
+            );
+            self.accessors_written_any |= scan.global_writes.accessors_any_name;
         }
         for step in &visit.steps {
             match *step {
@@ -2579,6 +2601,41 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// ADR 0973: a closure's global writes are the union of its files', and so are the accessors it may define on the global object (a read of such a global runs the
+    /// package's code, a read of a data one does not).
+    #[test]
+    fn a_closure_unites_the_globals_its_files_write_and_the_accessors_they_define() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/glob/package.json",
+            r#"{"name":"glob","main":"index.js"}"#,
+        );
+        write(
+            root,
+            "node_modules/glob/index.js",
+            "import './more.js'; window.plain = 1; Object.defineProperty(window, 'ratio', { get() { return 1; } });",
+        );
+        write(
+            root,
+            "node_modules/glob/more.js",
+            "globalThis.other ||= 2; Object.defineProperty(globalThis, 'data', { value: 1 });",
+        );
+        let found = closure(root, "glob").global_writes;
+        assert_eq!(found.names, ["data", "other", "plain", "ratio"]);
+        assert_eq!(found.accessor_names, ["ratio"]);
+        assert!(!found.any_name && !found.accessors_any_name, "{found:?}");
+        // A file whose writer is used where its target is not seen makes the package a writer of any global, and of an accessor under any name.
+        write(
+            root,
+            "node_modules/glob/more.js",
+            "const define = Object.defineProperty; export const f = (target) => define(target, 'x', { get() {} });",
+        );
+        let found = closure(root, "glob").global_writes;
+        assert!(found.any_name && found.accessors_any_name, "{found:?}");
     }
 
     /// ADR 0973: where a package's closure may define an accessor, read from the whole closure; a closure not read whole answers for every name.

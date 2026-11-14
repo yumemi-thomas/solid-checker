@@ -1435,6 +1435,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/action-in-owned-scope-global-writes-any/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-global-writes/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-global-writes/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-global-routes/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-global-routes/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-writer-functions/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-writer-functions/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-writer-functions-fresh/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-writer-functions-fresh/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-getters/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-getters/node_modules/**
 !fixtures/reactive-ir/reviewed-vitest-4-1/node_modules/

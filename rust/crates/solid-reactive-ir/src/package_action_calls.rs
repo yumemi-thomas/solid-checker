@@ -27,9 +27,11 @@
 use crate::{HashMap, HashSet};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
+use solid_facts::module_reach::is_global_object_name;
 use solid_facts::package_reach::{
-    AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, LIMIT_PREFIX, PackageReach, ReachBlocker,
-    WRITE_ANY_PREFIX, WRITE_PREFIX, is_declaration_file, package_label, package_root_of,
+    AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, LIMIT_PREFIX, PackageReach,
+    READ_ANY_PREFIX, ReachBlocker, WRITE_ANY_PREFIX, WRITE_PREFIX, is_declaration_file,
+    package_label, package_root_of,
 };
 
 use crate::execution_role::RootBodyGuard;
@@ -96,6 +98,9 @@ pub(crate) enum Provider {
     Written,
     /// A global the standard library declares that an installed package may write at run time, under a key the scan does not decide ([`WRITE_ANY_PREFIX`]).
     WrittenAny,
+    /// A member of the global object read by a key the program does not spell ([`READ_ANY_PREFIX`]): any global may be the one, so the code is that of a package that
+    /// writes one.
+    Unspelled,
 }
 
 /// How a site's callee is resolved to the code it enters.
@@ -220,6 +225,10 @@ fn file_sites(
             .strip_prefix(WRITE_PREFIX)
             .or_else(|| declaration.path.strip_prefix(WRITE_ANY_PREFIX))
         {
+            // `global-read-any:<writer root>`: a member of the global object under a key the program does not spell.
+            _ if declaration.path.starts_with(READ_ANY_PREFIX) => {
+                "a global read by a computed key".to_owned()
+            }
             // `global-write:<name>:<writer root>`: the global the call is of; the closure the row names is the writer's.
             Some(written) => written
                 .split_once(':')
@@ -251,6 +260,8 @@ fn file_sites(
                 Provider::Written
             } else if declaration.path.starts_with(WRITE_ANY_PREFIX) {
                 Provider::WrittenAny
+            } else if declaration.path.starts_with(READ_ANY_PREFIX) {
+                Provider::Unspelled
             } else {
                 Provider::Package
             },
@@ -364,6 +375,20 @@ fn file_sites(
         if !value && !evaluated_member(file, member.span) {
             continue;
         }
+        // A member of the global object read for its value (`void window.devicePixelRatio`, `typeof self.x`, `globalThis["x"]`) runs the accessor a package defined for
+        // that global; a key the program does not spell may be any of them.
+        if evaluated_member(file, member.span)
+            && matches!(
+                origin_of(ctx, analyzed, file, &bound, member.object, ORIGIN_DEPTH),
+                Origin::GlobalObject
+            )
+        {
+            let accessor = match member_key(ctx, file, member) {
+                Key::Name(name) => global_accessor(ctx, &name),
+                Key::Unspelled => unspelled_accessor(ctx),
+            };
+            push(member.span, member.span, Entry::Read, accessor);
+        }
         let (Origin::Package(origin) | Origin::Lazy(origin)) =
             origin_of(ctx, analyzed, file, &bound, member.span, ORIGIN_DEPTH)
         else {
@@ -384,35 +409,100 @@ fn file_sites(
             push(member.span, member.span, Entry::Read, Some(origin));
         }
     }
+    // A global a package defines an accessor for runs the accessor where the name is read: `void devicePixelRatio`, `typeof devicePixelRatio`, `[devicePixelRatio]`. A call of
+    // it is the call's site, a member read of it the member's.
+    for identifier in &file.ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+            || file.ast.reference_declaration(identifier.span).is_some()
+            || !evaluated_reference(file, identifier.span)
+        {
+            continue;
+        }
+        let Some(name) = file.source_text(identifier.span) else {
+            continue;
+        };
+        push(
+            identifier.span,
+            identifier.span,
+            Entry::Read,
+            global_accessor(ctx, name),
+        );
+    }
     // A getter a package declares runs where an object pattern reads it too: `const { now } = clock` and `({ now } = clock)` read each key the pattern names off the
     // value, a computed key or a rest element reads any (ADR 0973). An array pattern reads the iterator, which is not followed.
-    let mut pattern_slots = None::<HashMap<Span, Vec<&solid_facts::ast::PatternElementFact>>>;
-    for &(pattern, value) in &file.ast.pattern_values {
+    let slots = {
+        let mut slots = HashMap::<Span, Vec<&solid_facts::ast::PatternElementFact>>::default();
+        for element in &file.ast.pattern_elements {
+            slots.entry(element.pattern).or_default().push(element);
+        }
+        slots
+    };
+    // A pattern written as a parameter reads each key it names off the argument the call passes (`(({ now = 0 }) => now)(clock)`, `show(clock)` with `function show({ now })`):
+    // the same read, at the parameter's pattern. The function and the call are in this file; a function of another file reads its parameters where that file's own sites are found.
+    let mut parameter_values = Vec::<(Span, Span)>::new();
+    for call in &file.ast.calls {
+        let Some((function_file, function)) = lookup
+            .function_called_at(file.path.as_str(), call.callee)
+            .or_else(|| lookup.object_member_function(file, call.callee))
+            // A function written where it is called: `(({ now }) => now)(clock)`.
+            .or_else(|| {
+                file.ast
+                    .function_at(file.ast.peel_ts_sugar_span(call.callee))
+                    .map(|function| (file, function))
+            })
+        else {
+            continue;
+        };
+        if !std::ptr::eq(function_file, file) {
+            continue;
+        }
+        for (index, argument) in call.arguments.iter().enumerate() {
+            let Some(parameter) = function.parameters.get(index) else {
+                break;
+            };
+            if argument.spread {
+                break;
+            }
+            if slots.contains_key(&parameter.pattern) {
+                parameter_values.push((parameter.pattern, argument.span));
+            }
+        }
+    }
+    for &(pattern, value) in file.ast.pattern_values.iter().chain(&parameter_values) {
         let at = file.ast.peel_ts_sugar_span(value);
         if !followable_root(ctx, file, &bound, at) {
             continue;
         }
-        let Origin::Package(origin) = origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
-        else {
+        let origin = origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH);
+        // The pattern reads each key it names off the global object (`const { devicePixelRatio: ratio } = window`): the keys the pattern spells at its own level are
+        // globals, the keys below are members of what those hold; a computed key or a rest element reads any global.
+        if matches!(origin, Origin::GlobalObject) {
+            let mut accessor = None;
+            for element in slots.get(&pattern).into_iter().flatten() {
+                accessor = accessor.or_else(|| match &element.slot {
+                    solid_facts::ast::PatternSlot::Key(name) => global_accessor(ctx, name),
+                    solid_facts::ast::PatternSlot::ComputedKey
+                    | solid_facts::ast::PatternSlot::Rest => unspelled_accessor(ctx),
+                    solid_facts::ast::PatternSlot::Index(_) => None,
+                });
+            }
+            push(pattern, pattern, Entry::Read, accessor);
+            continue;
+        }
+        let Origin::Package(origin) = origin else {
             continue;
         };
         if is_pseudo(&origin.path) {
             continue;
         }
-        let slots = pattern_slots.get_or_insert_with(|| {
-            let mut slots = HashMap::<Span, Vec<_>>::default();
-            for element in &file.ast.pattern_elements {
-                slots.entry(element.pattern).or_default().push(element);
-            }
-            slots
-        });
         let mut names = Vec::<Option<&str>>::new();
-        // The getter runs where the pattern reads the key (`{ now }`: the runtime reports the pattern's start), not where the value was named.
-        if pattern_keys(slots, pattern, &mut names, 0)
+        // The getter runs where the pattern reads the key (`{ now }`: the runtime reports the pattern's start), not where the value was named; the pattern is the
+        // site's own place, so a hand-off of the value it destructures (an import that may be a function) is another row, not this one.
+        if pattern_keys(&slots, pattern, &mut names, 0)
             && !names.is_empty()
             && accessor_facts(ctx, &origin.path).may_run(&names)
         {
-            push(pattern, at, Entry::Read, Some(origin));
+            push(pattern, pattern, Entry::Read, Some(origin));
         }
     }
     for property in &file.ast.object_properties {
@@ -430,6 +520,23 @@ fn file_sites(
         };
         if import.namespace || may_be_function(ctx, file, property.value, binding) {
             push(property.value, property.value, Entry::Value, Some(origin));
+        }
+    }
+    // The global object handed to a call (`read(window)`, `Object.entries(globalThis)`, `new Reader(self)`): what the callee reads off it is not followed (the package side's
+    // `GlobalObjectEscape`), so it may read any global, or call one: a route that is not decided is a read of any name. The row stands at the call that receives it, where a throw
+    // inside the callee has its project frame.
+    for call in &file.ast.calls {
+        for argument in &call.arguments {
+            let at = file.ast.peel_ts_sugar_span(argument.span);
+            if !followable_root(ctx, file, &bound, at) {
+                continue;
+            }
+            if let Origin::GlobalObject =
+                origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
+                && let Origin::Package(origin) = unspelled_origin(ctx)
+            {
+                push(call.span, at, Entry::Value, Some(origin));
+            }
         }
     }
     // A call's result handed on as an argument (`[…].forEach(pick())`): the call that receives it runs it, and the value is what the inner call made.
@@ -493,13 +600,18 @@ fn accessor_facts(ctx: &AnalysisContext<'_>, path: &str) -> AccessorFacts {
 /// import, export or type position, or an element's name. A getter runs where the member is evaluated, so a value handed to a scheduler, or an intrinsic element's event
 /// attribute, is still a read: [`handed_as_value`]'s exemptions are for where a handed *function* runs.
 fn evaluated_member(file: &FileFacts, span: Span) -> bool {
+    file.ast.members_with_peeled_object(span).next().is_none() && evaluated_reference(file, span)
+}
+
+/// Whether the expression at `span` is evaluated for its value where it stands: not a callee, a tag, an import, export or type position, or an element's name. The object of
+/// a longer chain is evaluated (`window` of `window.innerWidth` is read), though the chain's last member is the read [`evaluated_member`] asks about.
+fn evaluated_reference(file: &FileFacts, span: Span) -> bool {
     let ast = &file.ast;
     if ast.calls_with_peeled_callee(span).next().is_some()
         || ast
             .tagged_templates
             .iter()
             .any(|template| ast.peel_ts_sugar_span(template.tag) == span)
-        || ast.members_with_peeled_object(span).next().is_some()
         || ast.imports.iter().any(|import| import.span.contains(span))
         || ast.exports.iter().any(|export| {
             (export.module.is_some() && export.span.contains(span))
@@ -737,6 +849,7 @@ fn is_pseudo(path: &str) -> bool {
         || path.starts_with(COMPUTED_LOAD_PREFIX)
         || path.starts_with(WRITE_PREFIX)
         || path.starts_with(WRITE_ANY_PREFIX)
+        || path.starts_with(READ_ANY_PREFIX)
 }
 
 /// Where the value an expression names came from.
@@ -752,6 +865,10 @@ enum Origin {
     Host,
     /// The dialect's runtime or a `node:` builtin: its catalog answers for it and for its members.
     Runtime,
+    /// The global object itself (`window`, `self`, `globalThis`, `top`, `parent`, `frames`, `global`, `window.self`, `document.defaultView`) or a value that may be it (a name
+    /// it is bound to, an operand of a conditional, an element of an array): what a member of it, a pattern key of it or a call of that member is, is a global of that name
+    /// ([`global_member_origin`]), or of any name where the key is not spelled.
+    GlobalObject,
     /// The namespace of a module of the project (`import * as re from "./re"`, `export * as ns from "./re"`, `const r = re`): the path of its file. What a member of it is
     /// comes from what the module exports under that name ([`export_origin`]).
     Namespace(String),
@@ -828,7 +945,7 @@ fn origin_of(
             Origin::Lazy(declaration) => Origin::Package(declaration),
             Origin::Host => host_call_origin(ctx, analyzed, file, bound, call, true, depth - 1),
             Origin::Runtime => host_call_origin(ctx, analyzed, file, bound, call, false, depth - 1),
-            Origin::Namespace(_) => Origin::Unknown,
+            Origin::Namespace(_) | Origin::GlobalObject => Origin::Unknown,
             Origin::Unknown => function_return_origin(ctx, analyzed, file, bound, call, depth - 1),
         };
     }
@@ -837,15 +954,19 @@ fn origin_of(
             Origin::Package(declaration) => Origin::Package(declaration),
             // `Lazy.preload` is the dialect's wrapper, not the package's component.
             Origin::Lazy(_) | Origin::Runtime => Origin::Runtime,
+            // A member of the global object is the global of that name, whatever route the object came by and however the key is spelled.
+            Origin::GlobalObject => global_member_origin(ctx, analyzed, file, member),
             // A member of a global the standard library declares is the host's where the library alone declares the member, and code something else provides
             // where a package or a declaration file adds it (`window.__act`).
+            Origin::Host if is_document_default_view(file, member) => Origin::GlobalObject,
             Origin::Host => host_member_origin(
                 ctx,
                 analyzed,
                 file,
                 member.span,
-                member.object,
                 member.property,
+                None,
+                false,
             ),
             // A member of a project module's namespace is what the module exports under that name.
             Origin::Namespace(path) => {
@@ -859,20 +980,22 @@ fn origin_of(
         };
     }
     if let Some(array) = ast.array_literal_at(span) {
+        let mut held = Origin::Unknown;
         for element in array.elements.iter().take(ORIGIN_WIDTH) {
             if element.kind == solid_facts::ast::ArrayElementKind::Hole {
                 continue;
             }
-            if let Origin::Package(declaration) =
-                origin_of(ctx, analyzed, file, bound, element.span, depth - 1)
-            {
-                return Origin::Package(declaration);
+            match origin_of(ctx, analyzed, file, bound, element.span, depth - 1) {
+                Origin::Package(declaration) => return Origin::Package(declaration),
+                // An element may be the global object (`[window][0].btoa(x)`), read by a member of the array's own element.
+                Origin::GlobalObject => held = Origin::GlobalObject,
+                _ => {}
             }
         }
         return if array.elements.len() > ORIGIN_WIDTH {
             limit(&format!("an array of more than {ORIGIN_WIDTH} elements"))
         } else {
-            Origin::Unknown
+            held
         };
     }
     // One of the operands: `flag ? () => {} : makeVoid()`, `cb ?? makeVoid()`, `(0, makeVoid())`.
@@ -920,6 +1043,11 @@ fn origin_of(
             None => Origin::Namespace(path),
         },
         Origin::Namespace(_) => Origin::Unknown,
+        // `const { btoa: enc } = window`: each slot reads one member of the global object, `{ [key]: enc }` and a rest read any.
+        Origin::GlobalObject if std::ptr::eq(next, file) => {
+            global_slot_origin(ctx, file, declaration)
+        }
+        Origin::GlobalObject => Origin::Unknown,
         other => other,
     }
 }
@@ -950,8 +1078,10 @@ fn lazy_origin(
             None => Some(DeclarationAt {
                 path: format!("{COMPUTED_LOAD_PREFIX}import()"),
             }),
-            // The project's own module, unless JavaScript the program does not analyze stands behind it (a shim); a rooted specifier names a path only the bundler resolves.
-            Some(module) if module.starts_with('.') => unanalyzed_project_js(ctx, file, module),
+            // The project's own module, unless JavaScript the program does not analyze stands behind it (a shim) or the module hands on a package's export (a re-export of
+            // any form); a rooted specifier names a path only the bundler resolves.
+            Some(module) if module.starts_with('.') => unanalyzed_project_js(ctx, file, module)
+                .or_else(|| relative_module_package(ctx, analyzed, file, load, module)),
             Some(module) if module.starts_with('/') => Some(DeclarationAt {
                 path: format!("{COMPUTED_LOAD_PREFIX}{module}"),
             }),
@@ -989,6 +1119,116 @@ fn lazy_origin(
     chosen.map_or(Origin::Runtime, Origin::Lazy)
 }
 
+/// The package whose component a project module hands `lazy` when the loader imports the module (`lazy(() => import("./view"))`): the module's `default` export where `lazy`
+/// reads only that (the facts name the one export), any export of it where the loader reads the result another way (`.then((m) => ({ default: m.View }))`), each followed through
+/// the module's own declarations and every re-export: `export { default } from "pkg"`, `export { View as default } from "pkg"`, `export * from "pkg"`,
+/// `import View from "pkg"; export default View`. `None` where no export of it is a package's.
+fn relative_module_package(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    load: &solid_facts::ast::ModuleLoadFact,
+    module: &str,
+) -> Option<DeclarationAt> {
+    // A module the compiler did not attest, or the program does not analyze, exports what nobody read: the loader may hand `lazy` a package's component, so the row
+    // stands (an unresolved hop is an uncertifiable row, never silence).
+    let Some(target) =
+        landing_file(ctx, file, load.specifier_span.unwrap_or(load.span), module)
+    else {
+        return Some(unresolved_hop(module));
+    };
+    let origin = match &load.consumer {
+        Some(solid_facts::ast::ModuleLoadConsumer::Lazy { export, .. }) => {
+            export_origin(ctx, analyzed, target, export, ORIGIN_DEPTH)
+        }
+        _ => any_export_origin(ctx, analyzed, target, ORIGIN_DEPTH),
+    };
+    match origin {
+        Origin::Package(declaration) | Origin::Lazy(declaration) => Some(declaration),
+        _ => None,
+    }
+}
+
+/// The first package origin among the exports of the project module `module`, `default` included: the names it exports, and what each `export * from` brings (a package's
+/// namespace is any of its exports, a project module's are its own).
+fn any_export_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    module: &FileFacts,
+    depth: usize,
+) -> Origin {
+    if depth == 0 {
+        return limit(&format!("a chain of more than {ORIGIN_DEPTH} re-exports"));
+    }
+    if !spend() {
+        return limit(&format!("a question of more than {ORIGIN_STEPS} steps"));
+    }
+    let mut names = vec!["default".to_owned()];
+    let mut stars = Vec::new();
+    for export in module
+        .ast
+        .module_level_exports()
+        .filter(|export| !export.type_only)
+    {
+        names.extend(
+            export
+                .declarations
+                .iter()
+                .filter(|declaration| !declaration.type_only)
+                .map(|declaration| declaration.exported.to_string()),
+        );
+        names.extend(
+            export
+                .specifiers
+                .iter()
+                .filter(|specifier| !specifier.type_only)
+                .map(|specifier| specifier.exported.to_string()),
+        );
+        names.extend(export.namespace.iter().map(ToString::to_string));
+        if export.kind == solid_facts::ast::ExportKind::All
+            && export.namespace.is_none()
+            && export.module.is_some()
+        {
+            stars.push(export);
+        }
+    }
+    names.sort();
+    names.dedup();
+    for name in names.iter().take(ORIGIN_WIDTH) {
+        if let Origin::Package(declaration) | Origin::Lazy(declaration) =
+            export_origin(ctx, analyzed, module, name, depth - 1)
+        {
+            return Origin::Package(declaration);
+        }
+    }
+    for export in stars.iter().take(ORIGIN_WIDTH) {
+        let Some(from) = export.module.as_deref() else {
+            continue;
+        };
+        let found = if from.starts_with('.') || from.starts_with('/') {
+            match landing_file(ctx, module, export.span, from) {
+                Some(target) => {
+                    let key = format!("any-export:{}", target.path);
+                    walking(key, || any_export_origin(ctx, analyzed, target, depth - 1))
+                }
+                None => unanalyzed_project_js(ctx, module, from)
+                    .map_or_else(|| Origin::Package(unresolved_hop(from)), Origin::Package),
+            }
+        } else {
+            reexport_origin(ctx, analyzed, module, export.span, from, None, depth - 1)
+        };
+        if let Origin::Package(declaration) = found {
+            return Origin::Package(declaration);
+        }
+    }
+    if names.len() > ORIGIN_WIDTH || stars.len() > ORIGIN_WIDTH {
+        return limit(&format!(
+            "a module with more than {ORIGIN_WIDTH} exports or `export *`"
+        ));
+    }
+    Origin::Unknown
+}
+
 /// Where a global (a name no binding of the file declares) came from, by where the compiler says it is declared: the standard library's is the host's, and a package that
 /// declares an overload of it (`declare global { function setTimeout(cb: () => void, fz: "fz"): number }`) answers for the calls that resolve to its overload, which
 /// [`package_declaration`] asks of the signature the compiler chose (every global `@types/node` declares again is a declaration of it too, and its calls resolve to the
@@ -1001,10 +1241,19 @@ fn global_origin(
     file: &FileFacts,
     span: Span,
 ) -> Origin {
+    // The global object goes by several names, whatever the library declares them as.
+    if file.source_text(span).is_some_and(is_global_object_name) {
+        return Origin::GlobalObject;
+    }
     // A name the compiler resolves to nothing at all is unknown; one it resolves to a symbol no file declares is the language's own (`globalThis`, `undefined`):
     // the host's.
     let Some(declarations) = ctx.semantic_lookup.alias_root_declarations(file, span) else {
-        return Origin::Unknown;
+        // No fact says where the name is declared (the demand plan asks for the symbols of callees and arguments): a package that writes a global of this name is the code
+        // an unbound reference runs, whether or not the compiler was asked.
+        return file
+            .source_text(span)
+            .and_then(|name| written_global(ctx, name))
+            .unwrap_or(Origin::Unknown);
     };
     let paths = declaration_paths_of(declarations);
     if paths.is_empty() || paths.iter().any(|path| path.starts_with("bundled:")) {
@@ -1015,6 +1264,35 @@ fn global_origin(
             .unwrap_or(Origin::Host);
     }
     declarations_origin(ctx, analyzed, &paths).unwrap_or(Origin::Unknown)
+}
+
+/// The origin of a read of the global `name` (a member of the global object, a bare name, a pattern key, an operand of `typeof`) when some installed package the program
+/// loads may define an accessor for it on the global object and may reach a Solid action: the accessor runs where the global is read. A data write is not one (a read of
+/// it runs no code); a package that defines an accessor under a key nothing decides answers for a name the others do not define ([`WRITE_ANY_PREFIX`]).
+fn global_accessor(ctx: &AnalysisContext<'_>, name: &str) -> Option<DeclarationAt> {
+    // `undefined`, `NaN` and `Infinity` are properties of the global object that cannot be redefined.
+    if matches!(name, "undefined" | "NaN" | "Infinity") {
+        return None;
+    }
+    let (root, named) = ctx.package_reach?.global_accessor_writers_of(name).next()?;
+    let prefix = if named {
+        WRITE_PREFIX
+    } else {
+        WRITE_ANY_PREFIX
+    };
+    Some(DeclarationAt {
+        path: format!("{prefix}{name}:{root}"),
+    })
+}
+
+/// [`global_accessor`] for a global the program reads by a key it does not spell: the accessor of any package that may define one.
+fn unspelled_accessor(ctx: &AnalysisContext<'_>) -> Option<DeclarationAt> {
+    ctx.package_reach?
+        .global_accessor_writers_of_unspelled()
+        .next()
+        .map(|root| DeclarationAt {
+            path: format!("{READ_ANY_PREFIX}{root}"),
+        })
 }
 
 /// The origin of a global the standard library declares that some installed package the program loads writes at run time and may reach a Solid action there
@@ -1033,28 +1311,151 @@ fn written_global(ctx: &AnalysisContext<'_>, name: &str) -> Option<Origin> {
     }))
 }
 
-/// Whether `span` is the global object: an unbound `window`, `self`, `globalThis`, … or a member of it that gives it back (`window.self`, `document.defaultView`).
-fn is_global_object(file: &FileFacts, span: Span) -> bool {
+/// Whether the member is `document.defaultView`, the global object, of the unbound global `document`.
+fn is_document_default_view(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> bool {
     let ast = &file.ast;
-    let span = ast.peel_ts_sugar_span(span);
-    if let Some(member) = ast.member_at(span) {
-        if ast.computed_members.binary_search(&span).is_ok() {
-            return false;
+    let object = ast.peel_ts_sugar_span(member.object);
+    ast.reference_declaration(object).is_none()
+        && file.source_text(object) == Some("document")
+        && match member_key_text(file, member) {
+            Some(name) => name == "defaultView",
+            None => false,
         }
-        let Some(name) = file.source_text(member.property) else {
-            return false;
-        };
-        let object = ast.peel_ts_sugar_span(member.object);
-        return (solid_facts::module_reach::is_global_object_name(name)
-            && is_global_object(file, object))
-            || (matches!(name, "defaultView")
-                && ast.reference_declaration(object).is_none()
-                && matches!(file.source_text(object), Some("document")));
+}
+
+/// How a member of the global object is keyed: a name the program spells, or a key it does not.
+enum Key {
+    Name(String),
+    Unspelled,
+}
+
+/// The name a member spells: a static property name, or a string-literal key (`window["btoa"]`).
+fn member_key_text(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Option<String> {
+    let ast = &file.ast;
+    if ast.computed_members.binary_search(&member.span).is_err() {
+        return file.source_text(member.property).map(str::to_owned);
     }
-    ast.reference_declaration(span).is_none()
-        && file
-            .source_text(span)
-            .is_some_and(solid_facts::module_reach::is_global_object_name)
+    ast.literal_computed_members
+        .binary_search_by_key(&member.span, |known| known.span)
+        .ok()
+        .map(|at| ast.literal_computed_members[at].key.to_string())
+}
+
+/// The key a member reads: its spelled name, or the string a `const` of the program holds (`const k = "btoa"; window[k]`, through the bindings that only name one);
+/// anything else is not spelled.
+fn member_key(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    member: &solid_facts::ast::MemberFact,
+) -> Key {
+    if let Some(name) = member_key_text(file, member) {
+        return Key::Name(name);
+    }
+    constant_string(ctx, file, member.property, ALIAS_DEPTH).map_or(Key::Unspelled, Key::Name)
+}
+
+/// The string the expression at `span` is where the program fixes it: a string literal or a template without substitutions, or a name that only holds one.
+fn constant_string(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    span: Span,
+    depth: usize,
+) -> Option<String> {
+    if depth == 0 {
+        return None;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    let text = file.source_text(span)?.trim();
+    if let Some(literal) = string_literal(text) {
+        return Some(literal);
+    }
+    file.ast.reference_declaration(span)?;
+    let (next, initializer) = value_initializer(ctx.semantic_lookup, file, span)?;
+    constant_string(ctx, next, initializer, depth - 1)
+}
+
+/// The text of a string literal or a template literal without substitutions, with no escape in it; `None` for any other source text.
+fn string_literal(text: &str) -> Option<String> {
+    let quote = text.chars().next()?;
+    let inner = text.get(1..text.len().checked_sub(1)?)?;
+    ((quote == '"' || quote == '\'' || quote == '`')
+        && text.len() >= 2
+        && text.ends_with(quote)
+        && !inner.contains(['\\', '\n', quote])
+        && !(quote == '`' && inner.contains("${")))
+    .then(|| inner.to_owned())
+}
+
+/// What a member of the global object is, by the key it is read with: the global of that name (the global object again for a name it goes by), or, where the key is not
+/// spelled, any global ([`unspelled_origin`]).
+fn global_member_origin(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+    member: &solid_facts::ast::MemberFact,
+) -> Origin {
+    match member_key(ctx, file, member) {
+        Key::Name(name) if is_global_object_name(&name) => Origin::GlobalObject,
+        Key::Name(name) => host_member_origin(
+            ctx,
+            analyzed,
+            file,
+            member.span,
+            member.property,
+            Some(&name),
+            file.ast.computed_members.binary_search(&member.span).is_ok(),
+        ),
+        Key::Unspelled => unspelled_origin(ctx),
+    }
+}
+
+/// What a value is that is read off the global object by a key the program does not spell: the code of a package that writes any global, which a call of it runs
+/// ([`READ_ANY_PREFIX`]); not followed where no package that may reach a Solid action writes one.
+fn unspelled_origin(ctx: &AnalysisContext<'_>) -> Origin {
+    ctx.package_reach
+        .and_then(|index| index.global_writers_of_unspelled().next())
+        .map_or(Origin::Unknown, |root| {
+            Origin::Package(DeclarationAt {
+                path: format!("{READ_ANY_PREFIX}{root}"),
+            })
+        })
+}
+
+/// The global object's slot a destructured binding reads: the key of each pattern level from the outermost, so `const { document: { defaultView: { btoa: enc } } } = window`
+/// reads `document`, then `defaultView`, then `btoa`. The origin the walk ends on; a key that is computed, a rest element and a binding no pattern declares read any global.
+fn global_slot_origin(ctx: &AnalysisContext<'_>, file: &FileFacts, declaration: Span) -> Origin {
+    use solid_facts::ast::PatternSlot;
+    let elements = &file.ast.pattern_elements;
+    // The slots from the binding out to the pattern the initializer destructures.
+    let mut chain = Vec::new();
+    let mut target = declaration;
+    for _ in 0..ORIGIN_DEPTH {
+        let Some(element) = elements.iter().find(|element| element.target == target) else {
+            break;
+        };
+        chain.push(&element.slot);
+        target = element.pattern;
+    }
+    if chain.is_empty() {
+        // A name the initializer is bound to whole: the global object itself.
+        return Origin::GlobalObject;
+    }
+    let mut origin = Origin::GlobalObject;
+    for slot in chain.into_iter().rev() {
+        origin = match (origin, slot) {
+            (Origin::GlobalObject, PatternSlot::Key(name)) => {
+                if is_global_object_name(name) {
+                    Origin::GlobalObject
+                } else {
+                    written_global(ctx, name).unwrap_or(Origin::Host)
+                }
+            }
+            (Origin::GlobalObject, _) => unspelled_origin(ctx),
+            // A member of a package's value, the host's or anything else stays what it was.
+            (other, _) => other,
+        };
+    }
+    origin
 }
 
 /// Where a member read off a global the standard library declares came from, by where the compiler says the member itself is declared (the symbol of its property
@@ -1068,18 +1469,19 @@ fn host_member_origin(
     analyzed: &HashSet<&str>,
     file: &FileFacts,
     member: Span,
-    object: Span,
     property: Span,
+    global: Option<&str>,
+    computed: bool,
 ) -> Origin {
     let lookup = ctx.semantic_lookup;
-    // A member of the global object is a global: one an installed package writes at run time is that package's code, whatever the library's declaration says.
-    let written = || {
-        is_global_object(file, object)
-            .then(|| file.source_text(property))
-            .flatten()
-            .and_then(|name| written_global(ctx, name))
-    };
-    let paths = match lookup.alias_root_declarations(file, property) {
+    // A member of the global object (`global` is the name it is read by) is a global: one an installed package writes at run time is that package's code, whatever the
+    // library's declaration says.
+    let written = || global.and_then(|name| written_global(ctx, name));
+    // The span of a computed key is the key's expression, whose symbol (a `const k`) is not the member's.
+    let paths = match lookup
+        .alias_root_declarations(file, property)
+        .filter(|_| !computed)
+    {
         Some(declarations) => declaration_paths_of(declarations),
         None => match lookup
             .resolved_callee_call(file, member)
@@ -1104,6 +1506,12 @@ fn host_member_origin(
     // signature the call resolves to says whose it is ([`package_declaration`]).
     if paths.iter().any(|path| path.starts_with("bundled:")) {
         return Origin::Unknown;
+    }
+    // No fact says where the member is declared (a member read that is no call's callee): the global of that name is what a package that writes it replaced.
+    if paths.is_empty()
+        && let Some(origin) = written()
+    {
+        return origin;
     }
     declarations_origin(ctx, analyzed, &paths).unwrap_or(Origin::Unknown)
 }
@@ -1185,6 +1593,8 @@ fn combine(left: Origin, right: Origin) -> Origin {
         (Origin::Package(a) | Origin::Lazy(a), _) | (_, Origin::Package(a) | Origin::Lazy(a)) => {
             Origin::Package(a)
         }
+        // Either operand may be the global object, and a member read off the whole is a member read off it.
+        (Origin::GlobalObject, _) | (_, Origin::GlobalObject) => Origin::GlobalObject,
         (Origin::Host, Origin::Host) => Origin::Host,
         (Origin::Runtime, Origin::Runtime) => Origin::Runtime,
         _ => Origin::Unknown,
@@ -1357,11 +1767,13 @@ fn function_returns(
         .chain(function.expression_return.iter())
         .filter_map(|returned| returned.argument)
         .collect::<Vec<_>>();
+    // A function that returns the global object, or one of its names, makes a call of it the global object.
+    let mut held = Origin::Unknown;
     for value in returned.iter().copied().take(ORIGIN_WIDTH) {
-        if let Origin::Package(declaration) =
-            origin_of(ctx, analyzed, function_file, &table, value, depth)
-        {
-            return Origin::Package(declaration);
+        match origin_of(ctx, analyzed, function_file, &table, value, depth) {
+            Origin::Package(declaration) => return Origin::Package(declaration),
+            Origin::GlobalObject => held = Origin::GlobalObject,
+            _ => {}
         }
         // A returned parameter is what the call passed (`function id(f) { return f; }`, `id(makeVoid())`).
         let value = ast.peel_ts_sugar_span(value);
@@ -1387,7 +1799,7 @@ fn function_returns(
     if returned.len() > ORIGIN_WIDTH {
         return limit(&format!("a function with more than {ORIGIN_WIDTH} returns"));
     }
-    Origin::Unknown
+    held
 }
 
 /// The project file a relative import or re-export written in `file` at `span` lands on, when the program analyzes it: the compiler's attested resolution, else the path
@@ -1565,15 +1977,21 @@ fn module_binding_origin(
     local: Span,
     depth: usize,
 ) -> Origin {
-    module
+    let binding = module
         .ast
         .bindings
         .iter()
-        .find(|binding| binding.names.iter().any(|name| name.span == local))
-        .and_then(|binding| binding.initializer.filter(|_| binding.immutable))
-        .map_or(Origin::Unknown, |initializer| {
-            origin_of(ctx, analyzed, module, table, initializer, depth)
-        })
+        .find(|binding| binding.names.iter().any(|name| name.span == local));
+    match binding {
+        Some(binding) => binding
+            .initializer
+            .filter(|_| binding.immutable)
+            .map_or(Origin::Unknown, |initializer| {
+                origin_of(ctx, analyzed, module, table, initializer, depth)
+            }),
+        // `export default View`, `export default makeView()`: no name is declared, the exported expression is what is followed.
+        None => origin_of(ctx, analyzed, module, table, local, depth),
+    }
 }
 
 /// The origin of the module-level binding named `name` in `module`: an import's, or what a `const`'s initializer is (`import { a } from "m"; export { a as b }`).
@@ -1636,7 +2054,8 @@ fn reexport_origin(
                 None => Origin::Namespace(target.path.to_string()),
             };
         }
-        return unanalyzed_project_js(ctx, module, from).map_or(Origin::Unknown, Origin::Package);
+        return unanalyzed_project_js(ctx, module, from)
+            .map_or_else(|| Origin::Package(unresolved_hop(from)), Origin::Package);
     }
     if from.starts_with("node:") || is_runtime_module(ctx, from) {
         return Origin::Runtime;
@@ -1860,6 +2279,14 @@ fn namespace_member_origin(
         })
 }
 
+/// A relative module a hop of the origin walk could not land on (the compiler did not attest the specifier, or the program does not analyze the file): what it exports is not
+/// decided, so a value that comes through it is a site (`computed-load:`, undecided `dynamic-load`), never silence.
+fn unresolved_hop(module: &str) -> DeclarationAt {
+    DeclarationAt {
+        path: format!("{COMPUTED_LOAD_PREFIX}{module}"),
+    }
+}
+
 /// The JavaScript a relative specifier names that the program does not analyze (a declaration file or an ambient wildcard module stands for it): the bundler loads it, so
 /// its code runs where the importing module's value does.
 fn unanalyzed_project_js(
@@ -2022,7 +2449,7 @@ fn package_declaration(
             }
         }
         Origin::Runtime => return None,
-        Origin::Namespace(_) | Origin::Unknown => {}
+        Origin::Namespace(_) | Origin::GlobalObject | Origin::Unknown => {}
     }
     let mut paths = Vec::<String>::new();
     if resolve == Resolve::Call
@@ -2274,7 +2701,20 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         Entry::Call => "this call runs code of",
         Entry::Tag => "this tagged template runs code of",
         Entry::Render => "this element renders a component of",
+        // The global object handed on: the callee may read any global off it.
+        Entry::Value if site.provider == Provider::Unspelled => {
+            "this hands the global object on, where any global may be read, to code of"
+        }
         Entry::Value => "this hands on a function of",
+        // A global read runs the accessor a package defined for it.
+        Entry::Read
+            if matches!(
+                site.provider,
+                Provider::Written | Provider::WrittenAny | Provider::Unspelled
+            ) =>
+        {
+            "this read runs an accessor of"
+        }
         Entry::Read => "this reads a member of an object of",
     };
     crate::StaticViolation {
@@ -2289,6 +2729,7 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
                 Provider::Limit => "a value whose origin this build's walk could not follow to its end",
                 Provider::Written => "a global the standard library declares, which an installed package this build does not read as source writes at run time",
                 Provider::WrittenAny => "a global the standard library declares, which an installed package this build does not read as source may write at run time (it writes globals under a key the scan does not decide)",
+                Provider::Unspelled => "a member of the global object that this build cannot name (the key is computed), which an installed package this build does not read as source may have written at run time",
                 Provider::Package => "a package this build does not read as source",
             },
             site.reach.describe()

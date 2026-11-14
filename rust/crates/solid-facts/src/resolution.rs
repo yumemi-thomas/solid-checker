@@ -119,7 +119,26 @@ impl AttestedImportIndex {
     /// never answered for".
     pub fn insert_file(&mut self, path: impl Into<Arc<str>>, mut imports: Vec<AttestedImport>) {
         imports.sort_by_key(|import| (import.span.start, import.span.end));
-        self.by_file.insert(path.into(), imports);
+        // TEMP-SWITCH (measurement only): the attestation as it was before the fix.
+        if std::env::var_os("SC_NO_ATTEST_DEDUPE").is_some() {
+            self.by_file.insert(path.into(), imports);
+            return;
+        }
+        // The producer lists a dynamic import's specifier once for every `import` or `require` its own text holds (`import("./view-import")` and
+        // `import("./required")` are each listed twice, the row said again). A row said twice is one row; two rows on one span that differ stay two, and
+        // [`Self::specifier`] answers unattested for them.
+        let mut kept = Vec::<AttestedImport>::with_capacity(imports.len());
+        for import in imports {
+            let said_already = kept
+                .iter()
+                .rev()
+                .take_while(|held| held.span == import.span)
+                .any(|held| *held == import);
+            if !said_already {
+                kept.push(import);
+            }
+        }
+        self.by_file.insert(path.into(), kept);
     }
 
     /// The number of importing files the answer covered.
@@ -262,6 +281,34 @@ mod tests {
         );
         assert_eq!(
             index.specifier("/p/a.ts", Span::new(0, 40), "pkg"),
+            SpecifierAttestation::Unattested
+        );
+    }
+
+    #[test]
+    fn a_row_the_producer_says_twice_is_one_row() {
+        // `import("./view-import")`: the literal is listed once for the dynamic import and again for the `import` its own text holds.
+        let mut index = AttestedImportIndex::default();
+        index.insert_file(
+            "/p/a.ts",
+            vec![import(20, 25, "pkg"), import(20, 25, "pkg")],
+        );
+        assert_eq!(index.specifiers(), 1);
+        assert!(matches!(
+            index.specifier("/p/a.ts", Span::new(0, 26), "pkg"),
+            SpecifierAttestation::Attested(row) if row.span == Span::new(20, 25)
+        ));
+    }
+
+    #[test]
+    fn two_rows_on_one_span_that_differ_refuse_rather_than_guess() {
+        let mut index = AttestedImportIndex::default();
+        let mut other = import(20, 25, "pkg");
+        other.resolved_path = "/p/node_modules/other/index.d.ts".into();
+        index.insert_file("/p/a.ts", vec![import(20, 25, "pkg"), other]);
+        assert_eq!(index.specifiers(), 2);
+        assert_eq!(
+            index.specifier("/p/a.ts", Span::new(0, 26), "pkg"),
             SpecifierAttestation::Unattested
         );
     }

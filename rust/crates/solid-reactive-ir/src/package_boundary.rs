@@ -337,6 +337,16 @@ impl PackageBoundary {
                 folded.global_writers.entry(name).or_default().extend(roots);
             }
             folded.global_writers_any.extend(index.global_writers_any);
+            for (name, roots) in index.global_accessor_writers {
+                folded
+                    .global_accessor_writers
+                    .entry(name)
+                    .or_default()
+                    .extend(roots);
+            }
+            folded
+                .global_accessor_writers_any
+                .extend(index.global_accessor_writers_any);
             for (root, ids) in index.reviewed {
                 folded.reviewed.entry(root).or_default().extend(ids);
             }
@@ -394,7 +404,7 @@ impl PackageBoundary {
         }
         // ADR 0972: an absent index adds nothing, so the digest of a boundary without one is unchanged.
         if let Some(index) = &self.package_reach {
-            hash.update(b"package-reach-v3");
+            hash.update(b"package-reach-v4");
             hash.update((index.by_root.len() as u64).to_be_bytes());
             for (root, reach) in &index.by_root {
                 text(hash, root);
@@ -431,6 +441,19 @@ impl PackageBoundary {
             }
             hash.update((index.global_writers_any.len() as u64).to_be_bytes());
             for root in &index.global_writers_any {
+                text(hash, root);
+            }
+            // The packages that define an accessor on the global object, by name.
+            hash.update((index.global_accessor_writers.len() as u64).to_be_bytes());
+            for (name, roots) in &index.global_accessor_writers {
+                text(hash, name);
+                hash.update((roots.len() as u64).to_be_bytes());
+                for root in roots {
+                    text(hash, root);
+                }
+            }
+            hash.update((index.global_accessor_writers_any.len() as u64).to_be_bytes());
+            for root in &index.global_accessor_writers_any {
                 text(hash, root);
             }
             // ADR 0973: where each closure may define an accessor.

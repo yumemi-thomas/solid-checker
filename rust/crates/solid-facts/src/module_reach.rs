@@ -107,9 +107,9 @@ impl AccessorScan {
     }
 }
 
-/// The members of the global object a file writes at run time (ADR 0973): `window.x = …`, `globalThis["x"] = …`, `Object.defineProperty(globalThis, "x", …)`,
-/// `Object.assign(window, { x })`, `Reflect.set`, an unbound `x = …`. A call of a global some installed package writes runs that package's code, whatever type
-/// the library declares the global with.
+/// The members of the global object a file writes at run time (ADR 0973): `window.x = …` (any assignment operator), `globalThis["x"] = …`, `Object.defineProperty(globalThis, "x", …)`,
+/// `Object.assign(window, { x })`, `Reflect.set`, an unbound `x = …`, and a writer function (`Object.assign`, `Reflect.defineProperty`, …) used where the target is not seen.
+/// A call of a global some installed package writes runs that package's code, whatever type the library declares it with.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct GlobalWrites {
     /// The names written, sorted and distinct.
@@ -118,19 +118,30 @@ pub struct GlobalWrites {
     /// A key the file's own constants decide is a name (`const KEY = "x"`, `for (const k of ["a", "b"])`, `Object.assign(globalThis, table)` over a `const` object literal),
     /// and a key that is a symbol writes no name.
     pub any_name: bool,
+    /// The names the file defines an accessor (a getter or a setter) under on the global object, or may: a descriptor the syntax does not read is one that may be. A read of
+    /// such a global runs the file's code, which a data write does not (sorted and distinct).
+    pub accessor_names: Vec<String>,
+    /// An accessor may be defined on the global object under a name nothing fixes: a key the syntax does not decide, a change of its prototype (`Object.setPrototypeOf`,
+    /// `globalThis.__proto__ = p`: the members of `p` become globals), a writer that is not seen to be given a fresh object.
+    pub accessors_any_name: bool,
 }
 
 impl GlobalWrites {
     /// Whether the file writes no global at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.names.is_empty() && !self.any_name
+        self.names.is_empty()
+            && !self.any_name
+            && self.accessor_names.is_empty()
+            && !self.accessors_any_name
     }
 
     fn name(&mut self, name: &str) {
-        // `globalThis.__proto__ = p` makes the members of `p` globals (an unbound name is looked up through the global object's prototype chain): any name.
+        // `globalThis.__proto__ = p` makes the members of `p` globals (an unbound name is looked up through the global object's prototype chain): any name, and any of them
+        // may be an accessor.
         if name == "__proto__" {
             self.any_name = true;
+            self.accessors_any_name = true;
             return;
         }
         self.names.push(name.to_owned());
@@ -138,15 +149,32 @@ impl GlobalWrites {
 
     /// The writes a key decides: its names, nothing for a symbol, any for a key that is not known.
     fn keys(&mut self, keys: Keys) {
+        self.define(keys, false);
+    }
+
+    /// The writes a key decides; `accessor` where the write may define a getter or a setter, which a read of the global then runs.
+    fn define(&mut self, keys: Keys, accessor: bool) {
         match keys {
             Keys::Names(names) => {
                 for name in names {
                     self.name(&name);
+                    if accessor && name != "__proto__" {
+                        self.accessor_names.push(name);
+                    }
                 }
             }
             Keys::Symbol => {}
-            Keys::Unknown => self.any_name = true,
+            Keys::Unknown => {
+                self.any_name = true;
+                self.accessors_any_name |= accessor;
+            }
         }
+    }
+
+    /// A write whose target or key nothing decides: any global, an accessor under any name where the writer defines accessors.
+    fn undecided(&mut self, accessor: bool) {
+        self.any_name = true;
+        self.accessors_any_name |= accessor;
     }
 }
 
@@ -518,9 +546,62 @@ pub fn is_known_global(name: &str) -> bool {
     .contains(name)
 }
 
+/// How the scan answers the questions ADR 0973 measures before it rules on them (TEMPORARY: the answers chosen become the only behavior and this type goes). `Default` is the
+/// behavior the tree had when they were asked; `SC_MODE` (comma-separated: `decided`, `escape`, `this`, `lookup`) selects the others for a measurement run.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ScanMode {
+    /// A writer called through a name, `.bind`, `.call`, `.apply` or `Reflect.apply` is judged as a direct call is: a write where its target names the global object, none where the target
+    /// is readable and names something else, any global only where nothing reads the target.
+    pub decided: bool,
+    /// An escape of the global object, and code generation (which can reach it by `Function("return this")()`), is a writer under any name that may define accessors: the object
+    /// may have been handed to code that writes it.
+    pub escape_any: bool,
+    /// `this` at the top of a file with no module syntax (a script, where it is the global object) is a route to the global object: handed on, it escapes.
+    pub this_route: bool,
+    /// A member read off such a `this` is a lookup of a global, as `window.x` is.
+    pub this_lookup: bool,
+    /// Members of the global object that run or hand back what the unbound names do: `window.eval(…)`, `globalThis.Function("return this")`, `self.setTimeout("code")` generate code,
+    /// `window.valueOf()` returns the global object.
+    pub member_routes: bool,
+    /// `defaultView` read off any object (`el.ownerDocument.defaultView`, `event.target.ownerDocument.defaultView`) is the global object, as `document.defaultView` is.
+    pub dom_routes: bool,
+}
+
+impl ScanMode {
+    /// The mode `SC_MODE` names (read once).
+    #[must_use]
+    pub fn from_env() -> Self {
+        static MODE: OnceLock<ScanMode> = OnceLock::new();
+        *MODE.get_or_init(|| {
+            let mut mode = ScanMode::default();
+            for word in std::env::var("SC_MODE").unwrap_or_default().split(',') {
+                match word.trim() {
+                    "decided" => mode.decided = true,
+                    "escape" => mode.escape_any = true,
+                    "this" => mode.this_route = true,
+                    "lookup" => {
+                        mode.this_route = true;
+                        mode.this_lookup = true;
+                    }
+                    "member" => mode.member_routes = true,
+                    "dom" => mode.dom_routes = true,
+                    _ => {}
+                }
+            }
+            mode
+        })
+    }
+}
+
 /// Scans one runtime file (`path` decides the source type: `.mjs` is a module, `.cjs` CommonJS, `.js`/`.jsx` either by its syntax).
 #[must_use]
 pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
+    scan_module_with(path, source, ScanMode::from_env())
+}
+
+/// [`scan_module`] under `mode`.
+#[must_use]
+pub fn scan_module_with(path: &Path, source: &str, mode: ScanMode) -> ModuleScan {
     let mut scan = ModuleScan::default();
     let unparseable = |scan: &mut ModuleScan, detail: &str| {
         scan.hazards.push(ModuleHazard {
@@ -672,16 +753,21 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     }
                     _ => hazard(ModuleHazardKind::DynamicLoad, "require"),
                 },
-                "eval" => hazard(ModuleHazardKind::CodeGeneration, "eval"),
+                "eval" => {
+                    hazard(ModuleHazardKind::CodeGeneration, "eval");
+                    code_generated(&mut writes, mode);
+                }
                 // A timer given a string evaluates it (`setTimeout("code", 0)`): as `eval`. A function or a name is the timer's ordinary use.
                 "setTimeout" | "setInterval" | "setImmediate" | "execScript"
                     if string_timer(nodes, id) =>
                 {
                     hazard(ModuleHazardKind::CodeGeneration, name);
+                    code_generated(&mut writes, mode);
                 }
                 "Function" => {
                     if !function_use_is_inert(nodes, id) {
                         hazard(ModuleHazardKind::CodeGeneration, "Function");
+                        code_generated(&mut writes, mode);
                     }
                 }
                 "exports" | "__filename" | "__dirname" | "undefined" | "NaN" | "Infinity"
@@ -696,46 +782,110 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                 }
                 // `document.defaultView` is the global object, so `document` is followed too; any other use of `document` holds no global object.
                 "document" => match global_use(scoping, nodes, id, name, Holder::Document) {
-                    GlobalUse::Member { name: member, path } if !is_known_global(&member) => {
-                        hazard(ModuleHazardKind::UnknownGlobal, &path);
+                    GlobalUse::Member {
+                        name: member,
+                        path,
+                        at,
+                    } => {
+                        defined_by_receiver(scoping, nodes, &member, at, &mut writes);
+                        if mode.member_routes
+                            && generates_code_by_member(nodes, &member, at)
+                        {
+                            hazard(ModuleHazardKind::CodeGeneration, &path);
+                            code_generated(&mut writes, mode);
+                        }
+                        if !is_known_global(&member) {
+                            hazard(ModuleHazardKind::UnknownGlobal, &path);
+                        }
                     }
                     GlobalUse::Escape { path, at } => {
                         hazard(ModuleHazardKind::GlobalObjectEscape, &path);
                         call_writes(scoping, nodes, at, &mut writes);
+                        escaped(&mut writes, mode);
                     }
                     // `document.defaultView.x = …` writes the global `x`.
-                    GlobalUse::Written { keys, path } => {
-                        if matches!(keys, Keys::Unknown) {
-                            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                        }
-                        writes.keys(keys);
+                    GlobalUse::Written { keys, path, read } => {
+                        written(&mut hazard, &mut writes, keys, &path, read);
                     }
-                    GlobalUse::Reassigned | GlobalUse::Member { .. } | GlobalUse::Inert => {}
+                    GlobalUse::Reassigned | GlobalUse::Inert => {}
                 },
                 _ if GLOBAL_OBJECTS.contains(&name) => {
                     match global_use(scoping, nodes, id, name, Holder::Global) {
-                        GlobalUse::Member { name: member, .. } if is_known_global(&member) => {}
-                        GlobalUse::Member { path, .. } => {
-                            hazard(ModuleHazardKind::UnknownGlobal, &path);
-                        }
-                        // A write reads nothing, but it installs a global: the name, the names the key's constants decide, none for a symbol, or any where the key is
-                        // not known (which also hands the object on).
-                        GlobalUse::Written { keys, path } => {
-                            if matches!(keys, Keys::Unknown) {
-                                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                        GlobalUse::Member {
+                            name: member,
+                            path,
+                            at,
+                        } => {
+                            defined_by_receiver(scoping, nodes, &member, at, &mut writes);
+                            if mode.member_routes
+                                && generates_code_by_member(nodes, &member, at)
+                            {
+                                hazard(ModuleHazardKind::CodeGeneration, &path);
+                                code_generated(&mut writes, mode);
                             }
-                            writes.keys(keys);
+                            if mode.member_routes && member == "valueOf" {
+                                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                                escaped(&mut writes, mode);
+                            }
+                            if !is_known_global(&member) {
+                                hazard(ModuleHazardKind::UnknownGlobal, &path);
+                            }
+                        }
+                        // A write reads nothing (a compound operator reads the member first), but it installs a global: the name, the names the key's constants decide,
+                        // none for a symbol, or any where the key is not known (which also hands the object on).
+                        GlobalUse::Written { keys, path, read } => {
+                            written(&mut hazard, &mut writes, keys, &path, read);
                         }
                         GlobalUse::Reassigned | GlobalUse::Inert => {}
                         GlobalUse::Escape { path, at } => {
                             hazard(ModuleHazardKind::GlobalObjectEscape, &path);
                             call_writes(scoping, nodes, at, &mut writes);
+                            escaped(&mut writes, mode);
                         }
                     }
                 }
                 _ if is_known_global(name) => {}
                 _ if !read => {}
                 _ => hazard(ModuleHazardKind::UnknownGlobal, name),
+            }
+        }
+    }
+    // `this` at the top of a script is the global object, and `defaultView` read off any object is (ADR 0973).
+    if mode.this_route && !has_module_syntax(&program) {
+        for node in nodes.iter() {
+            if matches!(node.kind(), AstKind::ThisExpression(_))
+                && is_script_top_this(nodes, node.id())
+                && !this_never_flows(nodes, node.id())
+            {
+                route_use(
+                    scoping,
+                    nodes,
+                    node.id(),
+                    "this",
+                    mode.this_lookup,
+                    mode,
+                    &mut hazard,
+                    &mut writes,
+                );
+            }
+        }
+    }
+    if mode.dom_routes {
+        for node in nodes.iter() {
+            if let AstKind::StaticMemberExpression(member) = node.kind()
+                && member.property.name == "defaultView"
+                && !rooted_in_global(scoping, &member.object)
+            {
+                route_use(
+                    scoping,
+                    nodes,
+                    node.id(),
+                    "defaultView",
+                    false,
+                    mode,
+                    &mut hazard,
+                    &mut writes,
+                );
             }
         }
     }
@@ -751,6 +901,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
         }
         if constructor_generates_code(nodes, node.id(), member) {
             hazard(ModuleHazardKind::CodeGeneration, ".constructor");
+            code_generated(&mut writes, mode);
         }
     }
     loads.sort();
@@ -760,8 +911,12 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     scan.loads = loads;
     scan.hazards = hazards;
     scan.accessors = scan_accessors(nodes);
+    // The writer functions used where the global object they write is not named (ADR 0973).
+    indirect_writers(scoping, nodes, &mut writes, mode);
     writes.names.sort();
     writes.names.dedup();
+    writes.accessor_names.sort();
+    writes.accessor_names.dedup();
     scan.global_writes = writes;
     scan
 }
@@ -1031,11 +1186,21 @@ enum Holder {
 }
 
 enum GlobalUse {
-    /// A member of the global object read by a static name or a string literal key: its name, and the chain as it was spelled (`window.self.solid`).
-    Member { name: String, path: String },
-    /// A member of the global object assigned (`window.x = …`, `window["x"] = …`): nothing is read, and the global `x` is installed; `keys` is what the key is where it is not a
-    /// name the syntax fixes (`window[k] = …`: the names the file's constants say, a symbol, or nothing known, where any global may be). The chain as it was spelled.
-    Written { keys: Keys, path: String },
+    /// A member of the global object read by a static name or a string literal key: its name, the chain as it was spelled (`window.self.solid`), and the node of the member
+    /// at the chain's end.
+    Member {
+        name: String,
+        path: String,
+        at: NodeId,
+    },
+    /// A member of the global object assigned (`window.x = …`, `window["x"] = …`, `window.x ||= …`, any assignment operator): the global `x` is installed; `keys` is what the
+    /// key is where it is not a name the syntax fixes (`window[k] = …`: the names the file's constants say, a symbol, or nothing known, where any global may be). The chain as
+    /// it was spelled. A plain assignment reads nothing; `read` is whether the operator reads the member first (`+=`, `&&=`, `||=`, `??=`).
+    Written {
+        keys: Keys,
+        path: String,
+        read: bool,
+    },
     /// The global object's own name assigned (sloppy code): nothing is read.
     Reassigned,
     /// Anything else done with the global object: a computed key read, an alias, an argument. The chain as it was spelled, and the node whose value is used.
@@ -1056,21 +1221,21 @@ fn global_use(
 ) -> GlobalUse {
     // `window.x = …` writes the member and reads nothing of it; so does a destructuring target (`[window.x] = list`, `({ k: self.y } = o)`, `[globalThis.z = 1] = []`) and a
     // loop head (`for (window.k of keys)`).
+    // `Some(reads)` when the member is the target of an assignment of any operator: `reads` where the operator reads the member before it writes it (`+=`, `&&=`, `||=`, `??=`).
     let assigned = |member: NodeId| {
         let (member_child, member_parent) = parent_past_wrappers(nodes, member);
         let span = nodes.get_node(member_child).kind().span();
         match nodes.get_node(member_parent).kind() {
-            AstKind::AssignmentExpression(assignment) => {
-                assignment.operator == oxc_syntax::operator::AssignmentOperator::Assign
-                    && assignment.left.span() == span
+            AstKind::AssignmentExpression(assignment) if assignment.left.span() == span => {
+                Some(assignment.operator != oxc_syntax::operator::AssignmentOperator::Assign)
             }
             AstKind::ArrayAssignmentTarget(_)
             | AstKind::AssignmentTargetWithDefault(_)
             | AstKind::AssignmentTargetPropertyProperty(_)
-            | AstKind::AssignmentTargetRest(_) => true,
-            AstKind::ForInStatement(each) => each.left.span() == span,
-            AstKind::ForOfStatement(each) => each.left.span() == span,
-            _ => false,
+            | AstKind::AssignmentTargetRest(_) => Some(false),
+            AstKind::ForInStatement(each) if each.left.span() == span => Some(false),
+            AstKind::ForOfStatement(each) if each.left.span() == span => Some(false),
+            _ => None,
         }
     };
     let mut at = id;
@@ -1097,7 +1262,10 @@ fn global_use(
         // The value itself is used, or read by a key the syntax does not fix: the global object escapes, `document` holds no global object. A key the syntax does not
         // fix that is assigned writes what the key is: the names the file's constants decide, a symbol, or any global.
         let Some(Some(name)) = member else {
-            if computed && assigned(parent) && holder == Holder::Global {
+            if computed
+                && holder == Holder::Global
+                && let Some(read) = assigned(parent)
+            {
                 let keys = match nodes.get_node(parent).kind() {
                     AstKind::ComputedMemberExpression(member) => {
                         key_of(scoping, nodes, &member.expression, KEY_DEPTH)
@@ -1107,6 +1275,7 @@ fn global_use(
                 return GlobalUse::Written {
                     keys,
                     path: format!("{path}[…]"),
+                    read,
                 };
             }
             return match holder {
@@ -1114,7 +1283,7 @@ fn global_use(
                 Holder::Document => GlobalUse::Inert,
             };
         };
-        if assigned(parent) {
+        if let Some(read) = assigned(parent) {
             // `window.document.title = …` writes `document`'s member, no global.
             if holder == Holder::Document {
                 return GlobalUse::Inert;
@@ -1122,6 +1291,7 @@ fn global_use(
             return GlobalUse::Written {
                 keys: Keys::Names(vec![name.clone()]),
                 path: format!("{path}.{name}"),
+                read,
             };
         }
         path = format!("{path}.{name}");
@@ -1130,9 +1300,64 @@ fn global_use(
             Holder::Document => return GlobalUse::Inert,
             Holder::Global if GLOBAL_OBJECTS.contains(&name.as_str()) => {}
             Holder::Global if name == "document" => holder = Holder::Document,
-            Holder::Global => return GlobalUse::Member { name, path },
+            Holder::Global => {
+                return GlobalUse::Member {
+                    name,
+                    path,
+                    at: parent,
+                };
+            }
         }
         at = parent;
+    }
+}
+
+/// A member of the global object written under `keys`: the global is installed, a key nothing decides hands the object on, and an operator that reads the member first
+/// (`window.x += 1`, `window.x ||= f`) looks the name up too.
+fn written(
+    hazard: &mut impl FnMut(ModuleHazardKind, &str),
+    writes: &mut GlobalWrites,
+    keys: Keys,
+    path: &str,
+    read: bool,
+) {
+    if matches!(keys, Keys::Unknown) {
+        hazard(ModuleHazardKind::GlobalObjectEscape, path);
+    }
+    if read
+        && let Keys::Names(names) = &keys
+        && names.iter().any(|name| !is_known_global(name))
+    {
+        hazard(ModuleHazardKind::UnknownGlobal, path);
+    }
+    writes.keys(keys);
+}
+
+/// A call of the global object's own `__defineGetter__` or `__defineSetter__` (`window.__defineGetter__("x", get)`, the member at `at`) defines an accessor global under
+/// its first argument; the member used any other way (`.call`, an alias) defines one under a name nothing fixes.
+fn defined_by_receiver(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    member: &str,
+    at: NodeId,
+    writes: &mut GlobalWrites,
+) {
+    if !matches!(member, "__defineGetter__" | "__defineSetter__") {
+        return;
+    }
+    let (child, parent) = parent_past_wrappers(nodes, at);
+    match nodes.get_node(parent).kind() {
+        AstKind::CallExpression(call)
+            if call.callee.get_inner_expression().span() == nodes.get_node(child).kind().span() =>
+        {
+            let keys = call
+                .arguments
+                .first()
+                .and_then(Argument::as_expression)
+                .map_or(Keys::Unknown, |key| key_of(scoping, nodes, key, KEY_DEPTH));
+            writes.define(keys, true);
+        }
+        _ => writes.undecided(true),
     }
 }
 
@@ -1161,17 +1386,66 @@ fn call_writes(scoping: &Scoping, nodes: &AstNodes<'_>, at: NodeId, writes: &mut
         return;
     }
     let argument = |index: usize| call.arguments.get(index).and_then(Argument::as_expression);
+    let key = || argument(1).map_or(Keys::Unknown, |key| key_of(scoping, nodes, key, KEY_DEPTH));
     match callee.property.name.as_str() {
-        "defineProperty" | "set" => writes
-            .keys(argument(1).map_or(Keys::Unknown, |key| key_of(scoping, nodes, key, KEY_DEPTH))),
-        "defineProperties" => source_writes(scoping, nodes, argument(1), writes),
+        // A descriptor that names a get or a set, or that the syntax does not read, may define an accessor, which a read of the global runs.
+        "defineProperty" => writes.define(
+            key(),
+            argument(2)
+                .is_none_or(|descriptor| descriptor_defines_accessor(descriptor) != Some(false)),
+        ),
+        "set" => writes.keys(key()),
+        "defineProperties" => descriptor_writes(scoping, nodes, argument(1), writes),
         "assign" => {
             for source in call.arguments.iter().skip(1) {
                 source_writes(scoping, nodes, source.as_expression(), writes);
             }
         }
-        "setPrototypeOf" => writes.any_name = true,
+        // The members of the new prototype become globals, any of them an accessor.
+        "setPrototypeOf" => writes.undecided(true),
         _ => {}
+    }
+}
+
+/// The globals `Object.defineProperties(globalThis, descriptors)` defines: the keys of an object literal, each an accessor where its descriptor names a get or a set or is not
+/// a literal; a source the syntax does not read to its descriptors defines each name its constants decide, possibly an accessor, and anything else any.
+fn descriptor_writes(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    expression: Option<&Expression<'_>>,
+    writes: &mut GlobalWrites,
+) {
+    if let Some(Expression::ObjectExpression(object)) =
+        expression.map(Expression::get_inner_expression)
+    {
+        for property in &object.properties {
+            match property {
+                ObjectPropertyKind::ObjectProperty(property) => {
+                    let keys = match key_name(&property.key) {
+                        Some(Some(name)) => Keys::Names(vec![name]),
+                        Some(None) => Keys::Symbol,
+                        None => property
+                            .key
+                            .as_expression()
+                            .map_or(Keys::Unknown, |key| key_of(scoping, nodes, key, KEY_DEPTH)),
+                    };
+                    writes.define(
+                        keys,
+                        descriptor_defines_accessor(&property.value) != Some(false),
+                    );
+                }
+                ObjectPropertyKind::SpreadProperty(_) => writes.undecided(true),
+            }
+        }
+        return;
+    }
+    match expression.and_then(|source| literal_names(scoping, nodes, source, KEY_DEPTH)) {
+        Some(names) => {
+            for name in names {
+                writes.define(Keys::Names(vec![name]), true);
+            }
+        }
+        None => writes.undecided(true),
     }
 }
 
@@ -1190,6 +1464,606 @@ fn source_writes(
             }
         }
         None => writes.any_name = true,
+    }
+}
+
+/// What a function of the writer family does to the object it is given.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Writer {
+    /// `Object.assign`, `Reflect.set`: data written to the target, the first argument.
+    Data,
+    /// `Object.defineProperty`, `Object.defineProperties`, `Object.setPrototypeOf`, `Reflect.defineProperty`, `Reflect.setPrototypeOf`: an accessor may be defined on the
+    /// target, the first argument.
+    Define,
+    /// `Object.prototype.__defineGetter__` and `__defineSetter__`: an accessor defined on the receiver (`this`).
+    Receiver,
+}
+
+/// Whether `identifier` names the global `name`: no binding of the file declares it.
+fn names_global(
+    scoping: &Scoping,
+    identifier: &oxc_ast::ast::IdentifierReference<'_>,
+    name: &str,
+) -> bool {
+    identifier.name == name
+        && identifier
+            .reference_id
+            .get()
+            .is_some_and(|id| scoping.get_reference(id).symbol_id().is_none())
+}
+
+/// The object and the property a member expression names, the property by a static name or a string-literal key.
+fn member_parts<'a>(expression: &'a Expression<'a>) -> Option<(&'a Expression<'a>, String)> {
+    match expression.get_inner_expression() {
+        Expression::StaticMemberExpression(member) => {
+            Some((&member.object, member.property.name.to_string()))
+        }
+        Expression::ComputedMemberExpression(member) => {
+            Some((&member.object, literal_specifier(&member.expression)?))
+        }
+        _ => None,
+    }
+}
+
+/// How the global object is used at a node the scan reaches by a route that is no unbound name (`this` at the top of a script, `defaultView` of any object), as a name is.
+#[allow(clippy::too_many_arguments)]
+fn route_use(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    id: NodeId,
+    root: &str,
+    lookup: bool,
+    mode: ScanMode,
+    hazard: &mut impl FnMut(ModuleHazardKind, &str),
+    writes: &mut GlobalWrites,
+) {
+    match global_use(scoping, nodes, id, root, Holder::Global) {
+        GlobalUse::Member { name, path, at } => {
+            defined_by_receiver(scoping, nodes, &name, at, writes);
+            if mode.member_routes && generates_code_by_member(nodes, &name, at) {
+                hazard(ModuleHazardKind::CodeGeneration, &path);
+                code_generated(writes, mode);
+            }
+            if lookup && !is_known_global(&name) {
+                hazard(ModuleHazardKind::UnknownGlobal, &path);
+            }
+        }
+        GlobalUse::Written { keys, path, read } => written(hazard, writes, keys, &path, read),
+        GlobalUse::Escape { path, at } => {
+            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+            call_writes(scoping, nodes, at, writes);
+            escaped(writes, mode);
+        }
+        GlobalUse::Reassigned | GlobalUse::Inert => {}
+    }
+}
+
+/// Whether the member `name` of the global object at `at` generates code where it is used: `window.eval(…)`, `globalThis.Function(…)`, a timer handed a string.
+fn generates_code_by_member(nodes: &AstNodes<'_>, name: &str, at: NodeId) -> bool {
+    match name {
+        "eval" => true,
+        "Function" => !function_use_is_inert(nodes, at),
+        "setTimeout" | "setInterval" | "setImmediate" | "execScript" => string_timer(nodes, at),
+        _ => false,
+    }
+}
+
+/// Whether `expression` is the global object's name, or a member chain that starts from one or from `document` (those chains are followed from their name).
+fn rooted_in_global(scoping: &Scoping, expression: &Expression<'_>) -> bool {
+    match expression.get_inner_expression() {
+        Expression::Identifier(identifier) => {
+            names_global(scoping, identifier, "document")
+                || GLOBAL_OBJECTS
+                    .iter()
+                    .any(|name| names_global(scoping, identifier, name))
+        }
+        Expression::StaticMemberExpression(member) => rooted_in_global(scoping, &member.object),
+        Expression::ComputedMemberExpression(member) => rooted_in_global(scoping, &member.object),
+        _ => false,
+    }
+}
+
+/// The global object was handed on (an argument, an assignment, a return, an element, a branch of a conditional): the code that has it may write any global, defining accessors
+/// under any name (ADR 0973; measured under [`ScanMode::escape_any`]).
+fn escaped(writes: &mut GlobalWrites, mode: ScanMode) {
+    if mode.escape_any {
+        writes.undecided(true);
+    }
+}
+
+/// Code is generated at run time (`eval`, `Function(…)`, a string timer, `.constructor("…")`): it can reach the global object (`Function("return this")()`) and write it.
+fn code_generated(writes: &mut GlobalWrites, mode: ScanMode) {
+    if mode.escape_any {
+        writes.undecided(true);
+    }
+}
+
+/// Whether the file has module syntax (`import`, `export`): its top-level `this` is `undefined`. A file without is a script or CommonJS, where it may be the global object.
+fn has_module_syntax(program: &oxc_ast::ast::Program<'_>) -> bool {
+    program.body.iter().any(|statement| {
+        matches!(
+            statement,
+            Statement::ImportDeclaration(_)
+                | Statement::ExportAllDeclaration(_)
+                | Statement::ExportDefaultDeclaration(_)
+                | Statement::ExportNamedDeclaration(_)
+        )
+    })
+}
+
+/// Whether the `this` at `id` is the script's own: no function (an arrow function takes its enclosing `this`), class member or static block holds it.
+fn is_script_top_this(nodes: &AstNodes<'_>, id: NodeId) -> bool {
+    for kind in nodes.ancestor_kinds(id) {
+        match kind {
+            AstKind::Function(_)
+            | AstKind::Class(_)
+            | AstKind::StaticBlock(_)
+            | AstKind::PropertyDefinition(_)
+            | AstKind::AccessorProperty(_) => return false,
+            AstKind::Program(_) => return true,
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Whether the value of the `this` at `id` goes nowhere: the test of a condition, the left of `&&` (a truthy object is dropped for the right), `!this`, a comparison with `null`
+/// or `undefined`, `typeof this`, `this instanceof C`, `"x" in this`. `(this && this.__assign) || function …` is TypeScript's own helper idiom.
+fn this_never_flows(nodes: &AstNodes<'_>, id: NodeId) -> bool {
+    let (child, parent) = parent_past_wrappers(nodes, id);
+    let span = nodes.get_node(child).kind().span();
+    match nodes.get_node(parent).kind() {
+        AstKind::LogicalExpression(logical) => {
+            logical.operator == oxc_syntax::operator::LogicalOperator::And
+                && logical.left.get_inner_expression().span() == span
+        }
+        AstKind::ConditionalExpression(conditional) => {
+            conditional.test.get_inner_expression().span() == span
+        }
+        AstKind::IfStatement(statement) => statement.test.get_inner_expression().span() == span,
+        AstKind::WhileStatement(statement) => statement.test.get_inner_expression().span() == span,
+        AstKind::UnaryExpression(unary) => matches!(
+            unary.operator,
+            UnaryOperator::LogicalNot | UnaryOperator::Typeof | UnaryOperator::Void
+        ),
+        AstKind::BinaryExpression(binary) => {
+            use oxc_syntax::operator::BinaryOperator;
+            match binary.operator {
+                BinaryOperator::Equality
+                | BinaryOperator::Inequality
+                | BinaryOperator::StrictEquality
+                | BinaryOperator::StrictInequality => true,
+                BinaryOperator::Instanceof => binary.left.get_inner_expression().span() == span,
+                BinaryOperator::In => binary.right.get_inner_expression().span() == span,
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Whether the value of `expression` may be the global object by anything the syntax shows: a name it goes by (unbound), a member that gives it back (`window.self`,
+/// `document.defaultView`), `this`, an arm of a conditional or logical expression, the value of an assignment or a sequence. Anything else (an identifier of the file, another
+/// member, a call's result) is not it by name: a global object that reached such a value was handed on at a place the scan records as an escape.
+fn may_be_global_object(
+    scoping: &Scoping,
+    expression: &Expression<'_>,
+    depth: u8,
+) -> bool {
+    if depth == 0 {
+        return true;
+    }
+    match expression.get_inner_expression() {
+        Expression::Identifier(identifier) => GLOBAL_OBJECTS
+            .iter()
+            .any(|name| names_global(scoping, identifier, name)),
+        Expression::ThisExpression(_) => true,
+        Expression::StaticMemberExpression(member) => {
+            let gives = GLOBAL_OBJECTS.contains(&member.property.name.as_str())
+                || member.property.name == "defaultView";
+            gives && may_be_global_object(scoping, &member.object, depth - 1)
+                || matches!(member.object.get_inner_expression(), Expression::Identifier(object) if names_global(scoping, object, "document"))
+                    && member.property.name == "defaultView"
+        }
+        Expression::ComputedMemberExpression(member) => match literal_specifier(&member.expression) {
+            Some(key) => {
+                (GLOBAL_OBJECTS.contains(&key.as_str()) || key == "defaultView")
+                    && may_be_global_object(scoping, &member.object, depth - 1)
+            }
+            None => may_be_global_object(scoping, &member.object, depth - 1),
+        },
+        Expression::ConditionalExpression(conditional) => {
+            may_be_global_object(scoping, &conditional.consequent, depth - 1)
+                || may_be_global_object(scoping, &conditional.alternate, depth - 1)
+        }
+        Expression::LogicalExpression(logical) => {
+            may_be_global_object(scoping, &logical.left, depth - 1)
+                || may_be_global_object(scoping, &logical.right, depth - 1)
+        }
+        Expression::SequenceExpression(sequence) => sequence
+            .expressions
+            .last()
+            .is_some_and(|last| may_be_global_object(scoping, last, depth - 1)),
+        Expression::AssignmentExpression(assignment) => {
+            may_be_global_object(scoping, &assignment.right, depth - 1)
+        }
+        _ => false,
+    }
+}
+
+/// The writer `object.property` is, spelled as the global `Object` and `Reflect` and `Object.prototype` are: `None` for any other member.
+fn writer_of(scoping: &Scoping, object: &Expression<'_>, property: &str) -> Option<Writer> {
+    if let Expression::Identifier(root) = object.get_inner_expression() {
+        return match property {
+            "assign" if names_global(scoping, root, "Object") => Some(Writer::Data),
+            "set" if names_global(scoping, root, "Reflect") => Some(Writer::Data),
+            "defineProperty" | "setPrototypeOf"
+                if names_global(scoping, root, "Object")
+                    || names_global(scoping, root, "Reflect") =>
+            {
+                Some(Writer::Define)
+            }
+            "defineProperties" if names_global(scoping, root, "Object") => Some(Writer::Define),
+            _ => None,
+        };
+    }
+    // `Object.prototype.__defineGetter__`
+    let (root, middle) = member_parts(object)?;
+    (middle == "prototype"
+        && matches!(property, "__defineGetter__" | "__defineSetter__")
+        && matches!(root.get_inner_expression(), Expression::Identifier(root) if names_global(scoping, root, "Object")))
+    .then_some(Writer::Receiver)
+}
+
+/// Whether the expression is an object a write to cannot reach the global object through: a fresh object, array, function or class, a primitive, the CommonJS
+/// `exports` and `module.exports`, a `const` bound to one of those, `Object.create(…)`.
+fn is_fresh(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    expression: &Expression<'_>,
+    depth: u8,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    match expression.get_inner_expression() {
+        Expression::ObjectExpression(_)
+        | Expression::ArrayExpression(_)
+        | Expression::NewExpression(_)
+        | Expression::FunctionExpression(_)
+        | Expression::ArrowFunctionExpression(_)
+        | Expression::ClassExpression(_)
+        | Expression::StringLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::BigIntLiteral(_)
+        | Expression::RegExpLiteral(_)
+        | Expression::TemplateLiteral(_) => true,
+        Expression::Identifier(identifier) => {
+            if names_global(scoping, identifier, "exports") {
+                return true;
+            }
+            let Some((declarator, _)) = constant_declarator(scoping, nodes, identifier) else {
+                return false;
+            };
+            declarator_of(nodes, declarator)
+                .and_then(|declarator| declarator.init.as_ref())
+                .is_some_and(|init| is_fresh(scoping, nodes, init, depth - 1))
+        }
+        Expression::StaticMemberExpression(member) => {
+            member.property.name == "exports"
+                && matches!(member.object.get_inner_expression(), Expression::Identifier(object) if names_global(scoping, object, "module"))
+        }
+        Expression::CallExpression(call) => match call.callee.get_inner_expression() {
+            Expression::StaticMemberExpression(callee) => {
+                callee.property.name == "create"
+                    && matches!(callee.object.get_inner_expression(), Expression::Identifier(object) if names_global(scoping, object, "Object"))
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// How the writer functions are used where the file does not call them on the global object by name: `Reflect.apply(Object.assign, null, [target, source])`,
+/// `Object.assign.call(null, target, source)`, `.apply` and `.bind` of one, a name it is bound to (`const assign = Object.assign`, `const { defineProperty } = Object`,
+/// `Object.assign || fallback`). Each call that is found is judged: a target that is a fresh object (or `exports`) is no write to a global, any other target may be the global
+/// object under any name, and a writer that escapes (exported, passed on, stored where this walk does not follow it, read as a value) may be called with it anywhere.
+fn indirect_writers(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    writes: &mut GlobalWrites,
+    mode: ScanMode,
+) {
+    let mut flow = WriterFlow {
+        scoping,
+        nodes,
+        writes,
+        mode,
+        followed: HashSet::new(),
+    };
+    for node in nodes.iter() {
+        match node.kind() {
+            AstKind::StaticMemberExpression(member) => {
+                if let Some(writer) =
+                    writer_of(scoping, &member.object, member.property.name.as_str())
+                {
+                    flow.follow(node.id(), writer, true, WRITER_DEPTH);
+                }
+            }
+            AstKind::ComputedMemberExpression(member) => {
+                if let Some(property) = literal_specifier(&member.expression)
+                    && let Some(writer) = writer_of(scoping, &member.object, &property)
+                {
+                    flow.follow(node.id(), writer, true, WRITER_DEPTH);
+                }
+            }
+            // `const { assign, defineProperty: define } = Object`: each name is a writer.
+            AstKind::VariableDeclarator(declarator) => {
+                let (BindingPattern::ObjectPattern(pattern), Some(init)) =
+                    (&declarator.id, declarator.init.as_ref())
+                else {
+                    continue;
+                };
+                let Expression::Identifier(root) = init.get_inner_expression() else {
+                    continue;
+                };
+                if !names_global(scoping, root, "Object") && !names_global(scoping, root, "Reflect")
+                {
+                    continue;
+                }
+                for property in &pattern.properties {
+                    let Some(Some(name)) = key_name(&property.key) else {
+                        continue;
+                    };
+                    let Some(writer) = writer_of(scoping, init, &name) else {
+                        continue;
+                    };
+                    let binding = match &property.value {
+                        BindingPattern::BindingIdentifier(binding) => Some(binding),
+                        BindingPattern::AssignmentPattern(with_default) => match &with_default.left
+                        {
+                            BindingPattern::BindingIdentifier(binding) => Some(binding),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    match binding.and_then(|binding| binding.symbol_id.get()) {
+                        Some(symbol) => flow.alias(symbol, writer, WRITER_DEPTH),
+                        None => flow.undecided(writer),
+                    }
+                }
+                if pattern.rest.is_some() {
+                    flow.undecided(Writer::Define);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// How far a writer function is followed through names it is bound to and members it is read through.
+const WRITER_DEPTH: u8 = 8;
+
+struct WriterFlow<'a, 'b> {
+    scoping: &'a Scoping,
+    nodes: &'a AstNodes<'b>,
+    writes: &'a mut GlobalWrites,
+    mode: ScanMode,
+    /// The names a writer is bound to that have been followed.
+    followed: HashSet<SymbolId>,
+}
+
+impl WriterFlow<'_, '_> {
+    /// A use this walk does not follow: the writer may be called with the global object, under any name.
+    fn undecided(&mut self, writer: Writer) {
+        self.writes.undecided(writer != Writer::Data);
+    }
+
+    /// A target (or, for a receiver writer, a receiver) that is not a fresh object may be the global object.
+    fn judge(&mut self, target: Option<&Argument<'_>>, writer: Writer) {
+        let Some(target) = target else {
+            return;
+        };
+        match target.as_expression() {
+            Some(expression) if is_fresh(self.scoping, self.nodes, expression, KEY_DEPTH) => {}
+            Some(expression)
+                if self.mode.decided
+                    && !may_be_global_object(self.scoping, expression, KEY_DEPTH) => {}
+            _ => self.undecided(writer),
+        }
+    }
+
+    /// The targets of a call written as `Reflect.apply(writer, receiver, [target, …])` or `writer.apply(receiver, [target, …])`.
+    fn judge_apply(
+        &mut self,
+        receiver: Option<&Argument<'_>>,
+        arguments: Option<&Argument<'_>>,
+        writer: Writer,
+    ) {
+        if writer == Writer::Receiver {
+            return self.judge(receiver, writer);
+        }
+        match arguments
+            .and_then(Argument::as_expression)
+            .map(Expression::get_inner_expression)
+        {
+            Some(Expression::ArrayExpression(array)) => {
+                if let Some(element) = array.elements.first() {
+                    match element.as_expression() {
+                        Some(expression)
+                            if is_fresh(self.scoping, self.nodes, expression, KEY_DEPTH) => {}
+                        Some(expression)
+                            if self.mode.decided
+                                && !may_be_global_object(self.scoping, expression, KEY_DEPTH) => {}
+                        _ => self.undecided(writer),
+                    }
+                }
+            }
+            Some(_) => self.undecided(writer),
+            None => {}
+        }
+    }
+
+    /// The writer bound to a name: every read of the name is a use of it.
+    fn alias(&mut self, symbol: SymbolId, writer: Writer, depth: u8) {
+        if !self.followed.insert(symbol) {
+            return;
+        }
+        // A name that is assigned again may hold something else, or the writer from elsewhere.
+        if self.scoping.symbol_is_mutated(symbol) {
+            return self.undecided(writer);
+        }
+        let reads = self
+            .scoping
+            .get_resolved_references(symbol)
+            .map(oxc_semantic::Reference::node_id)
+            .collect::<Vec<_>>();
+        for read in reads {
+            self.follow(read, writer, false, depth);
+        }
+    }
+
+    /// `id` is a node whose value is the writer function. `named` is the member that spells it, where a direct call is the call [`call_writes`] judges by the global
+    /// object it is given.
+    fn follow(&mut self, id: NodeId, writer: Writer, named: bool, depth: u8) {
+        if depth == 0 {
+            return self.undecided(writer);
+        }
+        let (child, parent) = parent_past_wrappers(self.nodes, id);
+        let child_span = self.nodes.get_node(child).kind().span();
+        match self.nodes.get_node(parent).kind() {
+            AstKind::CallExpression(call)
+                if call.callee.get_inner_expression().span() == child_span =>
+            {
+                if !named && writer != Writer::Receiver {
+                    self.judge(call.arguments.first(), writer);
+                }
+            }
+            AstKind::CallExpression(call)
+                if call
+                    .arguments
+                    .first()
+                    .is_some_and(|first| first.span() == child_span)
+                    && matches!(member_parts(&call.callee), Some((object, name)) if name == "apply"
+                        && matches!(object.get_inner_expression(), Expression::Identifier(reflect) if names_global(self.scoping, reflect, "Reflect"))) =>
+            {
+                self.judge_apply(call.arguments.get(1), call.arguments.get(2), writer);
+            }
+            AstKind::StaticMemberExpression(member)
+                if member.object.get_inner_expression().span() == child_span =>
+            {
+                self.member_of(parent, member.property.name.as_str(), writer, depth);
+            }
+            AstKind::ComputedMemberExpression(member)
+                if member.object.get_inner_expression().span() == child_span =>
+            {
+                match literal_specifier(&member.expression) {
+                    Some(property) => self.member_of(parent, &property, writer, depth),
+                    None => self.undecided(writer),
+                }
+            }
+            AstKind::VariableDeclarator(declarator)
+                if declarator
+                    .init
+                    .as_ref()
+                    .is_some_and(|init| init.get_inner_expression().span() == child_span) =>
+            {
+                let exported = matches!(
+                    self.nodes.parent_kind(self.nodes.parent_id(parent)),
+                    AstKind::ExportNamedDeclaration(_)
+                );
+                match &declarator.id {
+                    BindingPattern::BindingIdentifier(binding) if !exported => {
+                        match binding.symbol_id.get() {
+                            Some(symbol) => self.alias(symbol, writer, depth - 1),
+                            None => self.undecided(writer),
+                        }
+                    }
+                    _ => self.undecided(writer),
+                }
+            }
+            AstKind::AssignmentExpression(assignment)
+                if assignment.right.get_inner_expression().span() == child_span =>
+            {
+                match &assignment.left {
+                    oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(target) => {
+                        match target
+                            .reference_id
+                            .get()
+                            .and_then(|id| self.scoping.get_reference(id).symbol_id())
+                        {
+                            Some(symbol) => self.alias(symbol, writer, depth - 1),
+                            None => self.undecided(writer),
+                        }
+                    }
+                    _ => self.undecided(writer),
+                }
+            }
+            // `Object.assign = polyfill`: the member is written, the function is not used.
+            AstKind::AssignmentExpression(assignment) if assignment.left.span() == child_span => {}
+            // `Object.assign || fallback`, `flag ? Object.assign : fallback`, `(0, Object.assign)`: the operand is the value of the whole.
+            AstKind::LogicalExpression(_) | AstKind::SequenceExpression(_) => {
+                self.follow(parent, writer, false, depth - 1);
+            }
+            AstKind::ConditionalExpression(conditional) => {
+                // The test is only looked at (`Object.assign ? … : …`).
+                if conditional.test.get_inner_expression().span() != child_span {
+                    self.follow(parent, writer, false, depth - 1);
+                }
+            }
+            // The value is dropped or compared: no call.
+            AstKind::ExpressionStatement(_) => {}
+            AstKind::IfStatement(statement)
+                if statement.test.get_inner_expression().span() == child_span => {}
+            AstKind::UnaryExpression(unary)
+                if matches!(
+                    unary.operator,
+                    UnaryOperator::Typeof | UnaryOperator::Void | UnaryOperator::LogicalNot
+                ) => {}
+            AstKind::BinaryExpression(binary)
+                if matches!(
+                    binary.operator,
+                    oxc_syntax::operator::BinaryOperator::Equality
+                        | oxc_syntax::operator::BinaryOperator::Inequality
+                        | oxc_syntax::operator::BinaryOperator::StrictEquality
+                        | oxc_syntax::operator::BinaryOperator::StrictInequality
+                        | oxc_syntax::operator::BinaryOperator::Instanceof
+                ) => {}
+            _ => self.undecided(writer),
+        }
+    }
+
+    /// The writer read through a member (`writer.call`, `writer.apply`, `writer.bind`, or a property of the function that runs nothing: `name`, `length`).
+    fn member_of(&mut self, member: NodeId, property: &str, writer: Writer, depth: u8) {
+        if !matches!(property, "call" | "apply" | "bind") {
+            return;
+        }
+        let (child, parent) = parent_past_wrappers(self.nodes, member);
+        let child_span = self.nodes.get_node(child).kind().span();
+        let AstKind::CallExpression(call) = self.nodes.get_node(parent).kind() else {
+            // `writer.call` read as a value, handed on to run later.
+            return self.undecided(writer);
+        };
+        if call.callee.get_inner_expression().span() != child_span {
+            return self.undecided(writer);
+        }
+        // The receiver is the first argument, the writer's own arguments follow it.
+        let target = if writer == Writer::Receiver {
+            call.arguments.first()
+        } else {
+            call.arguments.get(1)
+        };
+        match property {
+            "call" => self.judge(target, writer),
+            "apply" => self.judge_apply(call.arguments.first(), call.arguments.get(1), writer),
+            // `writer.bind(receiver, target, …)` fixes the target; a bound function that takes it at the call is followed to its calls.
+            _ => match target {
+                Some(target) => self.judge(Some(target), writer),
+                None => self.follow(parent, writer, false, depth - 1),
+            },
+        }
     }
 }
 
@@ -1300,6 +2174,10 @@ mod tests {
 
     fn scan(source: &str) -> ModuleScan {
         scan_module(Path::new("/p/node_modules/x/index.js"), source)
+    }
+
+    fn scan_with(source: &str, mode: ScanMode) -> ModuleScan {
+        scan_module_with(Path::new("/p/node_modules/x/index.js"), source, mode)
     }
 
     fn kinds(scan: &ModuleScan) -> Vec<(ModuleHazardKind, &str)> {
@@ -1749,6 +2627,525 @@ mod tests {
             "const table = { a: 1, ...rest }; Object.assign(window, table);",
         ] {
             assert!(writes(source).any_name, "{source}");
+        }
+    }
+
+    /// ADR 0973 (the reviews of #231): every assignment operator on a route to the global object writes the member, and a compound one reads it first.
+    #[test]
+    fn every_assignment_operator_writes_a_global() {
+        let writes = |source: &str| scan(source).global_writes;
+        for source in [
+            "globalThis.btoa &&= wrapped;",
+            "globalThis.btoa ||= wrapped;",
+            "globalThis.btoa ??= wrapped;",
+            "window.btoa += 1;",
+            "self['btoa'] **= 2;",
+            "window.self.btoa |= 1;",
+            "document.defaultView.btoa >>>= 1;",
+        ] {
+            let found = writes(source);
+            assert_eq!(found.names, ["btoa"], "{source}");
+            assert!(!found.any_name, "{source}");
+        }
+        // A key nothing decides: any global, whatever the operator.
+        for source in [
+            "window[key] ??= value;",
+            "globalThis[key] += 1;",
+            "self[key] ||= f;",
+        ] {
+            assert!(writes(source).any_name, "{source}");
+        }
+        // The compound operator looks the member up: a global no library declares is a hazard, a known one is not.
+        assert!(
+            kinds(&scan("window.fzFlag ||= 1;"))
+                .contains(&(ModuleHazardKind::UnknownGlobal, "window.fzFlag"))
+        );
+        assert!(kinds(&scan("const f = 1; window.btoa &&= f;")).is_empty());
+        // A plain assignment reads nothing.
+        assert!(kinds(&scan("window.fzFlag = 1;")).is_empty());
+    }
+
+    /// ADR 0973: a writer function (`Object.assign` and its kin) used where its target is not seen is a write to any global unless its target is a fresh object; one that
+    /// escapes may be called with the global object anywhere.
+    #[test]
+    fn a_writer_function_used_elsewhere_is_judged_at_its_calls() {
+        let writes = |source: &str| scan(source).global_writes;
+        for source in [
+            "Reflect.apply(Object.assign, null, [globalThis, { btoa }]);",
+            "Object.assign.call(null, globalThis, { btoa });",
+            "Object.assign.apply(null, [window, src]);",
+            "Object.assign.apply(null, args);",
+            "Reflect.apply(Object.assign, null, args);",
+            "Reflect.apply(Reflect.set, null, [window, 'x', 1]);",
+            "const assign = Object.assign; assign(target, source);",
+            "var assign = Object.assign || fallback; assign(target, source);",
+            "const assign = flag ? Object.assign : fallback; assign(target, source);",
+            "const { assign } = Object; assign(target, source);",
+            "const { assign: merge = fallback } = Object; merge(target, source);",
+            "const bound = Object.assign.bind(null, target); bound(src);",
+            "const bound = Object.assign.bind(null); bound(target, src);",
+            "const bound = Object.assign.bind(); bound.call(null, target, src);",
+            "const bound = Object.assign.bind(); bound.apply(null, args);",
+            "export const assign = Object.assign;",
+            "module.exports = Object.assign;",
+            "use(Object.assign);",
+            "const assign = Object.assign; use(assign);",
+            "const assign = Object.assign; assign.call(null, target, src);",
+            "let assign = Object.assign; assign = other; assign(target);",
+            "const { assign } = Object; export { assign };",
+            "const { assign, ...rest } = Object;",
+            "const call = Object.assign.call;",
+            "Object['assign'].call(null, target, src);",
+            "Object.defineProperty.call(null, globalThis, 'x', { get() {} });",
+            "Reflect.defineProperty.apply(null, [window, 'x', d]);",
+            "Object.setPrototypeOf.call(null, window, proto);",
+            "Object.prototype.__defineGetter__.call(window, 'x', get);",
+            "Reflect.apply(Object.prototype.__defineSetter__, window, ['x', set]);",
+            "const define = Object.prototype.__defineGetter__; define.call(target, 'x', get);",
+            "const define = Object.prototype.__defineGetter__.bind(target); define('x', get);",
+        ] {
+            assert!(writes(source).any_name, "{source}");
+        }
+        // The kinds that can define an accessor say so; a data writer does not.
+        for source in [
+            "Object.defineProperty.call(null, target, 'x', d);",
+            "const define = Object.defineProperties; define(target, props);",
+            "Object.prototype.__defineGetter__.call(target, 'x', get);",
+            "Reflect.apply(Reflect.setPrototypeOf, null, [target, p]);",
+            "export const set = Reflect.defineProperty;",
+        ] {
+            let found = writes(source);
+            assert!(
+                found.any_name && found.accessors_any_name,
+                "{source}: {found:?}"
+            );
+        }
+        for source in [
+            "Object.assign.call(null, target, src);",
+            "Reflect.apply(Reflect.set, null, [target, 'x', 1]);",
+            "export const assign = Object.assign;",
+        ] {
+            let found = writes(source);
+            assert!(
+                found.any_name && !found.accessors_any_name,
+                "{source}: {found:?}"
+            );
+        }
+        // No write: the target is a fresh object, `exports`, a `const` bound to one, or the writer is only looked at.
+        for source in [
+            "Reflect.apply(Object.assign, null, [{}, src]);",
+            "Object.assign.call(null, {}, src);",
+            "Object.assign.call(null, [], src);",
+            "Object.assign.apply(null, [new Foo(), src]);",
+            "const assign = Object.assign; assign({}, a, b); assign(exports, x); assign(module.exports, y);",
+            "const target = {}; const assign = Object.assign; assign(target, x);",
+            "const assign = Object.assign || fallback; assign(Object.create(null), x);",
+            "const bound = Object.assign.bind(null, {}); bound(src);",
+            "const define = Object.defineProperty; define(exports, '__esModule', { value: true });",
+            "const { assign } = Object; assign(function () {}, { a: 1 });",
+            "var a = typeof Object.assign === 'function' ? Object.assign : null; if (!Object.assign) { Object.assign = polyfill; } if (Object.assign) {} Object.assign.length; Object.assign.name;",
+            "Object.assign(target, source); Object.defineProperty(target, 'x', { get() {} });",
+            "Object.prototype.__defineGetter__.call({}, 'x', get);",
+        ] {
+            assert!(writes(source).is_empty(), "{source}: {:?}", writes(source));
+        }
+    }
+
+    /// ADR 0973: a read of a global runs a package's code only through an accessor the package defines on the global object: the names a file defines one under, or may.
+    #[test]
+    fn accessors_a_file_defines_on_the_global_object_are_found() {
+        let writes = |source: &str| scan(source).global_writes;
+        let found = writes(
+            "Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get() { return 1; } });",
+        );
+        assert_eq!(found.names, ["devicePixelRatio"]);
+        assert_eq!(found.accessor_names, ["devicePixelRatio"]);
+        assert!(!found.any_name && !found.accessors_any_name);
+        // A setter is one, so is a descriptor the syntax does not read, and `Reflect.defineProperty` is `Object.defineProperty`.
+        assert_eq!(
+            writes("Reflect.defineProperty(globalThis, 'a', { set(v) {} });").accessor_names,
+            ["a"]
+        );
+        assert_eq!(
+            writes("Object.defineProperty(self, 'b', descriptor);").accessor_names,
+            ["b"]
+        );
+        assert_eq!(
+            writes("const KEY = 'c'; Object.defineProperty(window, KEY, { get: f });")
+                .accessor_names,
+            ["c"]
+        );
+        // A data descriptor and every data write define none.
+        for source in [
+            "Object.defineProperty(window, 'a', { value: 1, writable: true });",
+            "Reflect.defineProperty(window, 'a', { value: 1 });",
+            "window.a = 1; globalThis['b'] ||= 2; Object.assign(window, { c: 1 }); Reflect.set(self, 'd', 1);",
+            "Object.defineProperties(window, { a: { value: 1 }, b: { value: 2 } });",
+        ] {
+            let found = writes(source);
+            assert!(!found.names.is_empty(), "{source}");
+            assert!(
+                found.accessor_names.is_empty() && !found.accessors_any_name,
+                "{source}: {found:?}"
+            );
+        }
+        // `defineProperties` reads each descriptor.
+        let found = writes(
+            "Object.defineProperties(window, { a: { value: 1 }, b: { get() {} }, c: descriptor });",
+        );
+        assert_eq!(found.names, ["a", "b", "c"]);
+        assert_eq!(found.accessor_names, ["b", "c"]);
+        // A key nothing decides, a change of the prototype, a `__proto__` write and an unread map: an accessor under any name.
+        for source in [
+            "Object.defineProperty(window, key, { get() {} });",
+            "Object.defineProperty(window, key, { value: 1 });",
+            "Reflect.defineProperty(globalThis, key, d);",
+            "Object.defineProperties(window, props);",
+            "Object.defineProperties(window, { ...more });",
+            "Object.setPrototypeOf(window, p);",
+            "Reflect.setPrototypeOf(globalThis, p);",
+            "globalThis.__proto__ = p;",
+            "window['__proto__'] ||= p;",
+            "Object.defineProperty(window, '__proto__', { value: p });",
+        ] {
+            let found = writes(source);
+            assert!(found.any_name, "{source}");
+            // A data descriptor under a key nothing decides defines no accessor.
+            if source != "Object.defineProperty(window, key, { value: 1 });" {
+                assert!(found.accessors_any_name, "{source}: {found:?}");
+            }
+        }
+        // `__defineGetter__` and `__defineSetter__` on the global object define an accessor under their first argument.
+        let found =
+            writes("window.__defineGetter__('d', get); globalThis['__defineSetter__']('e', set);");
+        assert_eq!(found.names, ["d", "e"]);
+        assert_eq!(found.accessor_names, ["d", "e"]);
+        assert!(writes("window.__defineGetter__(key, get);").accessors_any_name);
+        assert!(writes("const define = window.__defineGetter__;").accessors_any_name);
+    }
+
+    /// ADR 0973 (the coordinator's check of the premise of judging a writer like a direct call): every use of the global object other than a spelled member access
+    /// is recorded as an escape, whatever name the object goes by and whatever the use is.
+    #[test]
+    fn every_use_of_the_global_object_but_a_spelled_member_is_an_escape() {
+        let names = [
+            "window",
+            "self",
+            "globalThis",
+            "top",
+            "parent",
+            "frames",
+            "global",
+            "window.self",
+            "globalThis.window",
+            "document.defaultView",
+            "window.document.defaultView",
+        ];
+        let escapes = [
+            "use(G);",
+            "const a = G; use(a);",
+            "let a; a = G; use(a);",
+            "function r() { return G; } use(r);",
+            "use(() => G);",
+            "use([G]);",
+            "use({ k: G });",
+            "use({ [G]: 1 });",
+            "use(x ? G : 1);",
+            "use(x ? 1 : G);",
+            "use(x || G);",
+            "use(G ?? x);",
+            "use(G && x);",
+            "use(...[G]);",
+            "use(`${G}`);",
+            "G();",
+            "new G();",
+            "async function a() { await G; } use(a);",
+            "use(G === x);",
+            "use('x' in G);",
+            "const { btoa } = G; use(btoa);",
+            "export default G;",
+            "for (const k in G) use(k);",
+            "use((0, G).btoa);",
+            "use(G[key]);",
+            "use(G['a' + b]);",
+            "use(void G);",
+            "class C { static field = G; } use(C);",
+            "function t() { throw G; } use(t);",
+            "if (G) use(1);",
+        ];
+        for name in names {
+            for template in escapes {
+                // `document.defaultView` as a bare name's use is the same value; the placeholder is the whole expression.
+                let source = template.replace('G', &format!("({name})"));
+                let found = scan(&source);
+                assert!(
+                    kinds(&found)
+                        .iter()
+                        .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                    "{source}: {:?}",
+                    kinds(&found)
+                );
+            }
+        }
+        // A spelled member access (static, a string-literal key, through a cast, optional) hands the object nowhere.
+        for name in names {
+            for template in [
+                "use(G.btoa);",
+                "use(G['btoa']);",
+                "use((G as any).btoa);",
+                "use(G?.btoa);",
+                "use(G!.btoa);",
+                "G.fzFlag = 1;",
+                "G['fzFlag'] = 1;",
+            ] {
+                let source = template.replace('G', name);
+                let found = scan(&source);
+                assert!(
+                    !kinds(&found)
+                        .iter()
+                        .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                    "{source}: {:?}",
+                    kinds(&found)
+                );
+            }
+        }
+        // `typeof` reads no value.
+        assert!(
+            !kinds(&scan("use(typeof window === 'undefined');"))
+                .iter()
+                .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape)
+        );
+    }
+
+    /// ADR 0973: under `escape` the object handed on, and code that can reach it, may write any global and define an accessor under any name; a spelled member never does.
+    #[test]
+    fn an_escape_of_the_global_object_is_a_writer_under_any_name_when_escapes_write() {
+        let escape = ScanMode {
+            escape_any: true,
+            ..ScanMode::default()
+        };
+        for source in [
+            "use(window);",
+            "const g = globalThis; use(g);",
+            "use([self]);",
+            "function r() { return window; } use(r);",
+            "use(cond ? window : 1);",
+            "Function('return this')();",
+            "eval('x');",
+            "setTimeout('code', 0);",
+            "new Function('return this')().btoa = f;",
+            "x.constructor.constructor('return this')();",
+        ] {
+            let found = scan_with(source, escape).global_writes;
+            assert!(found.any_name && found.accessors_any_name, "{source}");
+            // As the tree answered before: a hazard, no writer.
+            let before = scan(source).global_writes;
+            assert!(!before.any_name, "{source}");
+        }
+        for source in [
+            "use(window.btoa);",
+            "use(globalThis['btoa']);",
+            "use(typeof window);",
+            "use(document.title);",
+        ] {
+            let found = scan_with(source, escape).global_writes;
+            assert!(!found.any_name && !found.accessors_any_name, "{source}");
+        }
+    }
+
+    /// ADR 0973: the members of the global object that generate code (`window.eval`, `globalThis.Function`, a string timer) or hand the object back (`window.valueOf()`) are
+    /// routes as the unbound names are.
+    #[test]
+    fn members_of_the_global_object_generate_code_and_hand_it_back() {
+        let member = ScanMode {
+            member_routes: true,
+            escape_any: true,
+            ..ScanMode::default()
+        };
+        let has = |source: &str, kind: ModuleHazardKind| {
+            kinds(&scan_with(source, member))
+                .iter()
+                .any(|(found, _)| *found == kind)
+        };
+        for source in [
+            "window.eval('x');",
+            "globalThis['eval']('x');",
+            "self.Function('return this')();",
+            "window.setTimeout('code', 0);",
+            "globalThis.setInterval(`code`, 0);",
+        ] {
+            assert!(has(source, ModuleHazardKind::CodeGeneration), "{source}");
+            assert!(scan_with(source, member).global_writes.any_name, "{source}");
+        }
+        assert!(has("use(window.valueOf());", ModuleHazardKind::GlobalObjectEscape));
+        assert!(scan_with("use(window.valueOf());", member).global_writes.any_name);
+        // A function handed to a timer, and a comparison with `Function`, run no code.
+        for source in [
+            "window.setTimeout(() => {}, 0);",
+            "use(x instanceof window.Function);",
+            "use(window.Function.prototype);",
+        ] {
+            assert!(!has(source, ModuleHazardKind::CodeGeneration), "{source}");
+        }
+        // As before: no hazard for a member that is not read as code.
+        assert!(
+            !kinds(&scan("window.eval('x');"))
+                .iter()
+                .any(|(kind, _)| *kind == ModuleHazardKind::CodeGeneration)
+        );
+    }
+
+    /// ADR 0973: `defaultView` read off any object is the global object, as `document.defaultView` is.
+    #[test]
+    fn default_view_of_any_object_is_the_global_object() {
+        let dom = ScanMode {
+            dom_routes: true,
+            escape_any: true,
+            ..ScanMode::default()
+        };
+        for source in [
+            "use(el.ownerDocument.defaultView);",
+            "const win = el.ownerDocument.defaultView || window;",
+            "function w(doc) { return doc.defaultView; } use(w);",
+        ] {
+            let found = scan_with(source, dom);
+            assert!(
+                kinds(&found)
+                    .iter()
+                    .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                "{source}"
+            );
+            assert!(found.global_writes.any_name, "{source}");
+        }
+        // A member read of it, or one already followed from a name, is not a second route.
+        let found = scan_with("use(el.ownerDocument.defaultView.btoa);", dom);
+        assert!(!found.global_writes.any_name);
+        assert!(
+            !kinds(&found)
+                .iter()
+                .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape)
+        );
+        let found = scan_with("use(document.defaultView.btoa);", dom);
+        assert!(!found.global_writes.any_name);
+        // As before: not seen.
+        assert!(scan("use(el.ownerDocument.defaultView);").hazards.iter().all(
+            |hazard| hazard.kind != ModuleHazardKind::GlobalObjectEscape
+        ));
+    }
+
+    /// ADR 0973: `this` at the top of a file with no module syntax is the global object; handed on it escapes, as a member read it is the file's own.
+    #[test]
+    fn this_at_the_top_of_a_script_is_a_route_to_the_global_object() {
+        let this = ScanMode {
+            this_route: true,
+            escape_any: true,
+            ..ScanMode::default()
+        };
+        let escapes = |source: &str, mode: ScanMode| {
+            let found = scan_with(source, mode);
+            kinds(&found)
+                .iter()
+                .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape)
+        };
+        // UMD: the wrapper is handed the global object.
+        for source in [
+            "(function (root, factory) { root.Lib = factory(); })(this, function () { return 1; });",
+            "use(this);",
+            "const g = this; use(g);",
+            "use([this]);",
+            "use(this || {});",
+            "use(cond ? this : null);",
+            "const run = () => use(this); run();",
+            "var root = typeof exports === 'object' ? exports : this; use(root);",
+        ] {
+            assert!(escapes(source, this), "{source}");
+            assert!(scan_with(source, this).global_writes.any_name, "{source}");
+            assert!(!escapes(source, ScanMode::default()), "{source}");
+        }
+        // Where the value goes nowhere (TypeScript's helper idiom), or `this` is not the script's.
+        for source in [
+            "var __assign = (this && this.__assign) || function () { return 1; }; use(__assign);",
+            "if (this) { use(1); }",
+            "use(!this);",
+            "use(this === undefined);",
+            "use(typeof this);",
+            "function f() { use(this); } use(f);",
+            "class C { m() { use(this); } static s = this; } use(C);",
+            "const o = { m() { use(this); } }; use(o);",
+        ] {
+            assert!(!escapes(source, this), "{source}");
+        }
+        // A file with module syntax has `undefined` for `this`.
+        assert!(!escapes("use(this); export {};", this));
+        assert!(!escapes("import x from 'y'; use(this, x);", this));
+        // A member of it: a write installs the global; a read looks up a global only under `lookup`.
+        let written = scan_with("this.fzFlag = 1;", this).global_writes;
+        assert_eq!(written.names, ["fzFlag"]);
+        assert!(scan_with("use(this.fzFlag);", this).hazards.iter().all(|hazard| hazard.kind == ModuleHazardKind::UnknownGlobal && hazard.detail == "use"));
+        let lookup = ScanMode {
+            this_lookup: true,
+            ..this
+        };
+        assert!(
+            kinds(&scan_with("const f = 1; use(this.fzFlag, f);", lookup))
+                .contains(&(ModuleHazardKind::UnknownGlobal, "this.fzFlag"))
+        );
+    }
+
+    /// ADR 0973: a writer called through a name, `.bind`, `.call`, `.apply` or `Reflect.apply` is judged as a direct call is under `decided`: a write where the target names the global
+    /// object, none where it is readable and names something else, any global where nothing reads it.
+    #[test]
+    fn a_writer_is_judged_as_a_direct_call_where_the_target_is_read() {
+        let decided = ScanMode {
+            decided: true,
+            ..ScanMode::default()
+        };
+        let any = |source: &str, mode: ScanMode| scan_with(source, mode).global_writes.any_name;
+        // A parameter, a member, a call's result: named something else.
+        for source in [
+            "const define = Object.defineProperty; function f(to) { define(to, 'k', { get() {} }); } f({});",
+            "const assign = Object.assign; function f(target, src) { assign(target, src); } f({}, {});",
+            "const define = Object.defineProperty; define(holder.target, 'k', { value: 1 });",
+            "const assign = Object.assign; assign(makeTarget(), { a: 1 });",
+            "Reflect.apply(Object.assign, null, [target, source]);",
+            "Object.assign.call(null, target, source);",
+            "Object.assign.apply(null, [target, source]);",
+            "const bound = Object.assign.bind(null, target); bound(source);",
+        ] {
+            assert!(any(source, ScanMode::default()), "as ruled: {source}");
+            assert!(!any(source, decided), "decided: {source}");
+        }
+        // The global object, by a name or a route: a write whatever the form.
+        for source in [
+            "const assign = Object.assign; assign(window, { btoa: f });",
+            "const assign = Object.assign; assign(globalThis.self, { btoa: f });",
+            "const assign = Object.assign; assign(cond ? window : other, { btoa: f });",
+            "Reflect.apply(Object.assign, null, [globalThis, { btoa: f }]);",
+            "Object.assign.call(null, self, { btoa: f });",
+            "Object.assign.apply(null, [window, { btoa: f }]);",
+            "const bound = Object.assign.bind(null, window); bound({ btoa: f });",
+            "const assign = Object.assign; assign(document.defaultView, { btoa: f });",
+        ] {
+            assert!(any(source, decided), "decided, global: {source}");
+        }
+        // Nothing reads the target: any global.
+        for source in [
+            "const assign = Object.assign; assign(...args);",
+            "Reflect.apply(Object.assign, null, args);",
+            "Object.assign.apply(null, args);",
+            "Object.assign.call(null, ...args);",
+            "const bound = Object.assign.bind(null); use(bound);",
+            "use(Object.assign);",
+            "const assign = Object.assign; use(assign);",
+        ] {
+            assert!(any(source, decided), "decided, unread: {source}");
+        }
+        // A fresh target stays no write in either.
+        for source in [
+            "const assign = Object.assign; assign({}, a);",
+            "Reflect.apply(Object.assign, null, [{}, a]);",
+        ] {
+            assert!(!any(source, ScanMode::default()) && !any(source, decided), "{source}");
         }
     }
 

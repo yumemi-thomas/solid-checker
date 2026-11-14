@@ -6,6 +6,7 @@ import "fz-wclear";
 import "fz-wconst";
 import "fz-wloop";
 import "fz-wsymbol";
+import "fz-wlogical";
 
 // A global the library declares with its own type, which an installed package replaces where it loads: the call runs the package's code. The types are sound for the
 // declaration; whether a package writes the global at run time is a fact of the packages' code.
@@ -23,6 +24,19 @@ export function WrittenByDefine() {
 }
 export function WrittenByAssign() {
   structuredClone({}); // `Object.assign(globalThis, { structuredClone })`
+  return null;
+}
+// Every assignment operator writes the member (the reviews of #231): `&&=`, `||=` and `??=` as `=`, whatever route reaches the global object.
+export function WrittenByAndAssign() {
+  setInterval(() => {}, 1); // `globalThis.setInterval &&= …`
+  return null;
+}
+export function WrittenByOrAssign() {
+  clearInterval(1); // `window.clearInterval ||= …`
+  return null;
+}
+export function WrittenByNullishAssign() {
+  requestAnimationFrame(() => {}); // `self["requestAnimationFrame"] ??= …`
   return null;
 }
 // A key the writer's own constants decide is a name: only that global is its.
