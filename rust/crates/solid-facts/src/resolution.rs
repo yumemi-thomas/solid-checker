@@ -119,11 +119,6 @@ impl AttestedImportIndex {
     /// never answered for".
     pub fn insert_file(&mut self, path: impl Into<Arc<str>>, mut imports: Vec<AttestedImport>) {
         imports.sort_by_key(|import| (import.span.start, import.span.end));
-        // TEMP-SWITCH (measurement only): the attestation as it was before the fix.
-        if std::env::var_os("SC_NO_ATTEST_DEDUPE").is_some() {
-            self.by_file.insert(path.into(), imports);
-            return;
-        }
         // The producer lists a dynamic import's specifier once for every `import` or `require` its own text holds (`import("./view-import")` and
         // `import("./required")` are each listed twice, the row said again). A row said twice is one row; two rows on one span that differ stay two, and
         // [`Self::specifier`] answers unattested for them.
