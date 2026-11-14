@@ -41,7 +41,7 @@ use solid_facts::package_reach::{
 
 use crate::host_constants::{find_package_root, split_bare_specifier};
 
-// The second re-check of #232: whether a package's closure runs code the build does not see, a walk of its own beside the action walk below.
+// The second re-check of #232: whether a package's closure runs code the build does not see, a step of the one walk below.
 mod prototype;
 
 /// How many files one package's closure walk reads before it stops undecided.
@@ -848,9 +848,10 @@ fn package_reach(
             accessor_names: walk.accessors_written.into_iter().collect(),
             accessors_any_name: walk.accessors_written_any,
         },
+        // A receiver matters only where the closure was read to its end and runs nothing unseen (the consumer asks for it only then).
         unseen: prototype::Closure {
             why: walk.unseen.map(|why| walk.memo.unseen_text(why).to_owned()),
-            reads_receiver: walk.reads_receiver,
+            reads_receiver: walk.unseen.is_none() && walk.reads_receiver,
         },
     }
 }

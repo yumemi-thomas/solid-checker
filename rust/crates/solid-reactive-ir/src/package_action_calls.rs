@@ -383,7 +383,7 @@ fn file_sites(
                 Origin::GlobalObject
             )
         {
-            let accessor = match member_key(ctx, file, member) {
+            let accessor = match member_key(file, member) {
                 Key::Name(name) => global_accessor(ctx, &name),
                 Key::Unspelled => unspelled_accessor(ctx),
             };
@@ -531,8 +531,7 @@ fn file_sites(
             if !followable_root(ctx, file, &bound, at) {
                 continue;
             }
-            if let Origin::GlobalObject =
-                origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
+            if let Origin::GlobalObject = origin_of(ctx, analyzed, file, &bound, at, ORIGIN_DEPTH)
                 && let Origin::Package(origin) = unspelled_origin(ctx)
             {
                 push(call.span, at, Entry::Value, Some(origin));
@@ -1132,8 +1131,7 @@ fn relative_module_package(
 ) -> Option<DeclarationAt> {
     // A module the compiler did not attest, or the program does not analyze, exports what nobody read: the loader may hand `lazy` a package's component, so the row
     // stands (an unresolved hop is an uncertifiable row, never silence).
-    let Some(target) =
-        landing_file(ctx, file, load.specifier_span.unwrap_or(load.span), module)
+    let Some(target) = landing_file(ctx, file, load.specifier_span.unwrap_or(load.span), module)
     else {
         return Some(unresolved_hop(module));
     };
@@ -1341,49 +1339,20 @@ fn member_key_text(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> O
         .map(|at| ast.literal_computed_members[at].key.to_string())
 }
 
-/// The key a member reads: its spelled name, or the string a `const` of the program holds (`const k = "btoa"; window[k]`, through the bindings that only name one);
-/// anything else is not spelled.
-fn member_key(
-    ctx: &AnalysisContext<'_>,
-    file: &FileFacts,
-    member: &solid_facts::ast::MemberFact,
-) -> Key {
+/// The key a member reads: its spelled name, or the one string the file's own facts prove a computed key is (`const k = "btoa"; window[k]`: the `computed_keys` fact of facts
+/// schema 95 holds what a name, a conditional, a concatenation or a template can be, proven from the expression alone); a key that may be several strings, or any, is not spelled.
+fn member_key(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Key {
     if let Some(name) = member_key_text(file, member) {
         return Key::Name(name);
     }
-    constant_string(ctx, file, member.property, ALIAS_DEPTH).map_or(Key::Unspelled, Key::Name)
-}
-
-/// The string the expression at `span` is where the program fixes it: a string literal or a template without substitutions, or a name that only holds one.
-fn constant_string(
-    ctx: &AnalysisContext<'_>,
-    file: &FileFacts,
-    span: Span,
-    depth: usize,
-) -> Option<String> {
-    if depth == 0 {
-        return None;
-    }
-    let span = file.ast.peel_ts_sugar_span(span);
-    let text = file.source_text(span)?.trim();
-    if let Some(literal) = string_literal(text) {
-        return Some(literal);
-    }
-    file.ast.reference_declaration(span)?;
-    let (next, initializer) = value_initializer(ctx.semantic_lookup, file, span)?;
-    constant_string(ctx, next, initializer, depth - 1)
-}
-
-/// The text of a string literal or a template literal without substitutions, with no escape in it; `None` for any other source text.
-fn string_literal(text: &str) -> Option<String> {
-    let quote = text.chars().next()?;
-    let inner = text.get(1..text.len().checked_sub(1)?)?;
-    ((quote == '"' || quote == '\'' || quote == '`')
-        && text.len() >= 2
-        && text.ends_with(quote)
-        && !inner.contains(['\\', '\n', quote])
-        && !(quote == '`' && inner.contains("${")))
-    .then(|| inner.to_owned())
+    file.ast
+        .computed_keys
+        .iter()
+        .find(|fact| {
+            fact.site == solid_facts::ast::ComputedKeySite::Member && fact.read == member.span
+        })
+        .filter(|fact| fact.proven && fact.texts.len() == 1)
+        .map_or(Key::Unspelled, |fact| Key::Name(fact.texts[0].to_string()))
 }
 
 /// What a member of the global object is, by the key it is read with: the global of that name (the global object again for a name it goes by), or, where the key is not
@@ -1394,7 +1363,7 @@ fn global_member_origin(
     file: &FileFacts,
     member: &solid_facts::ast::MemberFact,
 ) -> Origin {
-    match member_key(ctx, file, member) {
+    match member_key(file, member) {
         Key::Name(name) if is_global_object_name(&name) => Origin::GlobalObject,
         Key::Name(name) => host_member_origin(
             ctx,
@@ -1403,7 +1372,10 @@ fn global_member_origin(
             member.span,
             member.property,
             Some(&name),
-            file.ast.computed_members.binary_search(&member.span).is_ok(),
+            file.ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok(),
         ),
         Key::Unspelled => unspelled_origin(ctx),
     }

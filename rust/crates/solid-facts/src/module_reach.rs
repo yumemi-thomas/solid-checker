@@ -2636,20 +2636,18 @@ mod tests {
             assert!(writes(source).any_name, "{source}");
         }
         // Only a writer that escapes says so below.
-        for source in ["export const set = Reflect.defineProperty;"] {
-            let found = writes(source);
-            assert!(
-                found.any_name && found.accessors_any_name,
-                "{source}: {found:?}"
-            );
-        }
-        for source in ["export const assign = Object.assign;"] {
-            let found = writes(source);
-            assert!(
-                found.any_name && !found.accessors_any_name,
-                "{source}: {found:?}"
-            );
-        }
+        let source = "export const set = Reflect.defineProperty;";
+        let found = writes(source);
+        assert!(
+            found.any_name && found.accessors_any_name,
+            "{source}: {found:?}"
+        );
+        let source = "export const assign = Object.assign;";
+        let found = writes(source);
+        assert!(
+            found.any_name && !found.accessors_any_name,
+            "{source}: {found:?}"
+        );
         // No write: the target is a fresh object, `exports`, a `const` bound to one, a target the file reads that names something else (a name, a parameter: no global, whichever form
         // the writer is called by, as for a direct call), or the writer is only looked at.
         for source in [
