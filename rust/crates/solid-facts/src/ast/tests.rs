@@ -2865,6 +2865,26 @@ fn a_counter_every_write_of_which_is_a_number_is_a_number() {
 }
 
 #[test]
+fn a_with_statement_ends_every_proof_of_a_name() {
+    // A bare name inside `with (o)` may be a property of `o`: the constant a `const` holds proves nothing there, and no name in a file that holds one is followed
+    // (a classic script only; a module rejects `with`). Without the statement the same read is proven.
+    let plain = "const k = 'key'; use(a[k]); const f = () => {}; setTimeout(f, 0);";
+    let with = format!("{plain} with (o) {{ use(a[k]); }}");
+    let facts = extract("plain.js", plain).unwrap();
+    assert_eq!(facts.computed_keys.len(), 1, "{:?}", facts.computed_keys);
+    assert!(facts.computed_keys[0].proven && facts.computed_keys[0].texts == vec!["key"]);
+    assert!(facts.code_sinks.is_empty());
+    let facts = extract("with.js", &with).unwrap();
+    assert!(
+        facts.computed_keys.iter().all(|key| !key.proven),
+        "{:?}",
+        facts.computed_keys
+    );
+    assert_eq!(facts.computed_keys.len(), 2);
+    assert_eq!(facts.code_sinks.len(), 1, "{:?}", facts.code_sinks);
+}
+
+#[test]
 fn a_computed_pattern_key_and_a_reflect_get_key_are_listed_with_their_text() {
     // A key a pattern reads is a read of it (`const { [k]: p } = x`, a parameter, an assignment), a literal key too (`{ ['constructor']: c }`: computed, so not a static key
     // of the pattern); `Reflect.get(x, k)` of the global `Reflect` reads `k`, and a shadowing `Reflect` or another member is no such read.

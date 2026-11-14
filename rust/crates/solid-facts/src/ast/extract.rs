@@ -72,9 +72,14 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
             .is_some_and(|text| text.contains("@ts-nocheck"))
     });
     facts.unreachable_regions = unreachable::unreachable_regions(&parsed.program);
-    facts.computed_keys = computed_keys::computed_keys(&semantic, execution_semantics_valid);
-    (facts.code_sinks, facts.uses_receiver) =
-        code_sinks::code_sinks(&semantic, execution_semantics_valid);
+    // A name is followed to its declaration only where the binder reported no error and no `with` statement can rebind a bare name to a property of an object.
+    let follows_names = execution_semantics_valid
+        && !semantic
+            .nodes()
+            .iter()
+            .any(|node| matches!(node.kind(), oxc_ast::AstKind::WithStatement(_)));
+    facts.computed_keys = computed_keys::computed_keys(&semantic, follows_names);
+    (facts.code_sinks, facts.uses_receiver) = code_sinks::code_sinks(&semantic, follows_names);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
         facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
