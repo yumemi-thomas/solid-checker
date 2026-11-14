@@ -32,7 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { isUnplaceable, placelessExcess, siteKey } from "./site-judge.mjs";
+import { isUnplaceable, placelessExcess, runtimeDiagnosticRows, siteKey } from "./site-judge.mjs";
 import { withholdingRules, codeOfLogged, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, inFileOf, isProgramModule, withheldAtStack, withStarts } from "./codes.mjs";
 import { ORDER_LIMIT, hitCount } from "./hits.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
@@ -407,6 +407,16 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
 
   // A checker violation against the runtime.
   const hits = runtime.hits ?? null;
+  // ADR 0979: a code Chrome cannot place accounts for as many violation sites as the run raised diagnostics of it (site-judge.mjs), not for every
+  // violation of its rules in the file; a site whose counter shows it never ran is not counted.
+  const counters = [...sites, ...glue].filter((site) => site.hit !== undefined && site.hit !== null);
+  const ranState = (finding) => {
+    const on = counters.filter((site) => inSpan(finding, site.line));
+    return on.length && on.every((site) => hitCount(hits, site.hit) === 0) ? false : null;
+  };
+  const violationSites = findings.filter((f) => f.kind === "violation").map((f) => ({ rule: f.rule, file: "App.tsx", line: f.line, column: f.column, finding: f }));
+  const excess = placelessExcess(violationSites, runtimeDiagnosticRows(events, runtime), { ran: (site) => ranState(site.finding) });
+  const outnumbered = (finding, code) => excess.get(`${code}|App.tsx`)?.keys.has(siteKey({ file: "App.tsx", line: finding.line, column: finding.column })) ?? false;
   for (const finding of findings.filter((f) => f.kind === "violation")) {
     const label = { rule: finding.rule, id: finding.id ?? null, line: finding.line };
     const payload = sites.filter((site) => inSpan(finding, site.line));
@@ -416,8 +426,8 @@ export function classify({ sites, glue = [], checker, runtime, plan, evidence = 
     if (!covered.length) { add("inconclusive", "the finding spans no site of interest", { finding: label, why: "no-site" }); continue; }
     const codes = codesForRule(finding.rule);
     // A consequence code (the engine halting after a throw) is not a diagnostic of this site.
-    // A placeless code (scheduler-time: no authored stack line) counts for a finding of a rule that claims it, wherever the file reports it.
-    const here = events.filter((event) => !consequenceCodes.includes(event.code) && (lines(event.positions).some((line) => inSpan(finding, line)) || (isPlacelessCode(event.code) && codes.includes(event.code))));
+    // A code Chrome cannot place (scheduler-time: no authored stack line) counts for a finding of a rule that claims it, as far as the run raised it (ADR 0979).
+    const here = events.filter((event) => !consequenceCodes.includes(event.code) && (lines(event.positions).some((line) => inSpan(finding, line)) || (isUnplaceable(event.code) && codes.includes(event.code) && !outnumbered(finding, event.code))));
     if (here.some((event) => codes.includes(event.code))) { add("agree", `runtime ${here.find((e) => codes.includes(e.code)).code} at the finding`, { finding: label, siteIds: covered.map((s) => s.id) }); continue; }
     const elsewhere = here.filter((event) => (codeRules[event.code] ?? []).some((rule) => sameDefectFamily(rule, finding.rule)));
     if (elsewhere.length) {

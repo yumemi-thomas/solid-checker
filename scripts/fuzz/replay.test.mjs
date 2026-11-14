@@ -68,6 +68,18 @@ describe("judging", () => {
     expect(uncached.chromeCache).toBeUndefined();
   });
 
+  // ADR 0979: the code reported at another line of the file used to account for the violation here.
+  it("names a violation at a site no diagnostic reaches, though Chrome reported its code at another violation of the file", () => {
+    const built = { id: "rp-w" };
+    const rule = { file: "App.tsx", rule: "no-store-mutation-outside-setter", id: "SC2003", kind: "violation", endLine: 8 };
+    const runtime = { diagnostics: [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 20 }] }], errors: [], failure: null };
+    const row = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [{ ...rule, line: 8 }, { ...rule, line: 20, endLine: 20 }] } }, new Map([["rp-w", { row: {}, runtime }]]));
+    expect(row.chrome).toMatchObject({ status: "violation-without-diagnostic", unmatched: ["no-store-mutation-outside-setter@8"] });
+    // Both violations reached by a frame: nothing unmatched.
+    const both = judgeWithChrome({ kind: "plain", chromeInput: { built, findings: [{ ...rule, line: 8 }, { ...rule, line: 20, endLine: 20 }] } }, new Map([["rp-w", { row: {}, runtime: { ...runtime, diagnostics: [{ code: "STORE_WRITE_OUTSIDE_SETTER", positions: [{ file: "App.tsx", line: 20 }, { file: "App.tsx", line: 8 }] }] } }]]));
+    expect(both.chrome.unmatched).toBeUndefined();
+  });
+
   it("names a violation Chrome shows no diagnostic of its codes for (a candidate false positive for a person to read)", () => {
     const built = { id: "rp-y" };
     const quiet = { row: {}, runtime: { diagnostics: [], errors: [], failure: null } };

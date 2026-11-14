@@ -103,3 +103,14 @@ export function accountViolations({ violations, diagnostics, connects = frameAt,
     return { violation, verdict: "unaccounted", why: diagnostics.some((row) => codes.includes(row.code)) ? "elsewhere" : "none" };
   });
 }
+
+/**
+ * The diagnostic rows of a run for `accountViolations`, from the judges' merged runtime events (`runtimeEvents`: one row per code, source and
+ * stack) and the raw record: a code Chrome cannot place has no stack to tell two reports apart, so its rows are the record's own, not merged.
+ * An event with no raw row (an `unattributed` one) counts once.
+ */
+export function runtimeDiagnosticRows(events, runtime) {
+  const raw = (runtime?.diagnostics ?? []).filter((row) => isUnplaceable(row.code));
+  const lone = events.filter((event) => isUnplaceable(event.code) && !raw.some((row) => row.code === event.code));
+  return [...events.filter((event) => !isUnplaceable(event.code)), ...raw, ...lone].map((event) => ({ code: event.code, frames: event.positions ?? [] }));
+}
