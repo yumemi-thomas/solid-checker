@@ -746,7 +746,8 @@ export const SPEC = {
   LOADING_ON_ACCESSOR: { recallOnly: true, placeless: true, variants: ["accessor", "memo", "arrow"], legalVariants: ["value"], legal: ["loading-on-accessor"],
     contexts: [], recallContexts: ["loading-on-accessor"], bindings: ["direct", "alias", "wrapper"],
     setup: (variant, name) => [variant === "memo" ? memoSignal(name("t")) : signal(name("t"), 1, "src")], call: (node, [sig]) => local(sig.name),
-    onAttribute: (variant, sig) => (variant === "arrow" ? `() => ${sig}()` : variant === "value" ? `${sig}()` : sig) },
+    // `source` (a parent source's name for the value, `sourcedName`): the arrow reads the value as the component names it (`props.t1`, not an undeclared `t1`, which tsc rejects).
+    onAttribute: (variant, sig, source = "local") => (variant === "arrow" ? `() => ${sourcedName(source, sig)}${sourcedRead(source) === "value" ? "" : "()"}` : variant === "value" ? `${sig}()` : sig) },
   LOADING_ON_OUTSIDE_HOLD: { recallOnly: true, placeless: true,
     contexts: [], recallContexts: ["loading-on-outside"], bindings: ["direct", "alias", "wrapper"],
     setup: (variant, name) => loadingSignals(name),
@@ -2318,7 +2319,7 @@ function buildOne(kit, plan = {}) {
   const [held, heldAsync] = heldOwn.length ? heldOwn : sigs;
   // The same for `on`: a code with no `onAttribute` passes a value of the boundary's own.
   const onOwn = placed.loadingOn && !spec.onAttribute ? [signal(kit.name("t"), 1, "src")] : [];
-  const view = placed.loadingOn ? [loadingView(null, placed.view, onOwn.length ? `${onOwn[0].name}()` : spec.onAttribute(variant, sigs[0].name))]
+  const view = placed.loadingOn ? [loadingView(null, placed.view, onOwn.length ? `${onOwn[0].name}()` : spec.onAttribute(variant, sigs[0].name, source))]
     : placed.loading ? [loadingView(held.name, [child(kit.name("v"), read(heldAsync.name))]), ...placed.view, button(kit.name("b"), [expr(write(held.name, 2))])]
     : underLoading ? [loadingView(null, placed.view)] : placed.view;
   return {
