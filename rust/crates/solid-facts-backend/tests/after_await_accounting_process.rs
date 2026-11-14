@@ -27,6 +27,19 @@ fn check(typefacts: &str, name: &str, ablate: Option<&str>) -> Vec<serde_json::V
         .env_remove("SOLID_CHECKER_IR_ABLATE_SILENCE")
         .args(["--format", "json", "--project"])
         .arg(fixture(name).join("tsconfig.json"));
+    // The runtime the fixture declares (`.solid-checker/runtime.json`, as `scripts/coverage.mjs` reads it).
+    if let Ok(text) = fs::read_to_string(fixture(name).join(".solid-checker/runtime.json")) {
+        let runtime: serde_json::Value = serde_json::from_str(&text).unwrap();
+        for (key, flag) in [
+            ("target", "--runtime-target"),
+            ("build", "--runtime-build"),
+            ("rendering", "--rendering"),
+        ] {
+            if let Some(value) = runtime[key].as_str() {
+                command.args([flag, value]);
+            }
+        }
+    }
     if let Some(ablate) = ablate {
         command.env("SOLID_CHECKER_IR_ABLATE_SILENCE", ablate);
     }
@@ -657,4 +670,48 @@ fn a_generator_body_is_a_member_route_of_the_read_after_await_net_only() {
         blockers("SC1002").contains("unresolved-invocation"),
         "the read-after-await net asks the generator body"
     );
+}
+
+/// Where `anchor` starts after the first `marker` in `source`.
+fn after(source: &str, marker: &str, anchor: &str) -> u64 {
+    let from = source
+        .find(marker)
+        .unwrap_or_else(|| panic!("no `{marker}`"));
+    (from + source[from..].find(anchor).unwrap_or_else(|| panic!("no `{anchor}` after `{marker}`"))) as u64
+}
+
+/// ADR 0984: a `let` timer handle is an inert argument when every reference of it is a proven write (a plain `=` of a call of the unpatched `setTimeout` or `setInterval`, or
+/// `undefined`) or the sole argument of a `clearTimeout` or `clearInterval`, in a browser: its `clearTimeout` ends in no row. A write by a call nothing resolves, a copy, a handing
+/// on, a destructured write, a member callee and a `const` copy keep the row; so do the same shape in a program that writes a built-in and under the Node runtime target.
+#[test]
+fn a_let_timer_handle_is_inert_in_a_browser_when_every_reference_is_a_proven_write_or_a_clear() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let name = "after-await-timer-handle";
+    let source = source(name);
+    let rows = unaccounted(&check(&typefacts, name, None));
+    for (marker, anchor, what) in [
+        ("export function Cleared()", "clearTimeout(timer);\n    timer", "the handle cleared in a promise handler"),
+        ("export async function ClearedInterval()", "clearInterval(ticker);", "an interval cleared after the suspension"),
+    ] {
+        let start = after(&source, marker, anchor);
+        assert!(!rows.contains(&start), "{what}: a row at {start}");
+    }
+    for (marker, anchor, what) in [
+        ("export function UnknownWrite()", "clearTimeout(handle);", "a write by a call nothing resolves"),
+        ("export function Copied()", "clearTimeout(timer);", "the handle copied into an object"),
+        ("export function Handed()", "clearTimeout(timer);", "the handle handed to a function"),
+        ("export function Compound()", "clearTimeout(timer);", "a destructured write"),
+        ("export function Member()", "clearTimeout(timer);", "a member callee"),
+        ("export function ConstCopy()", "clearTimeout(copy);", "a `const` copy of the handle"),
+    ] {
+        let start = after(&source, marker, anchor);
+        assert!(rows.contains(&start), "{what}: no row at {start}");
+    }
+    // The twins of `Cleared`: a program that writes a built-in, and the Node runtime target.
+    for name in ["after-await-timer-handle-patched", "after-await-timer-handle-node"] {
+        let twin = self::source(name);
+        let rows = unaccounted(&check(&typefacts, name, None));
+        let start = after(&twin, "export function Cleared()", "clearTimeout(timer);");
+        assert!(rows.contains(&start), "{name}: the same shape keeps its row, none at {start}");
+    }
 }
