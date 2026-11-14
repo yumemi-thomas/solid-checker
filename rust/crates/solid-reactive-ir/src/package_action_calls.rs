@@ -197,6 +197,10 @@ fn file_sites(
     let bound = import_bindings(ctx, file);
     let mut sites = Vec::new();
     let mut seen = HashSet::<(Span, Entry)>::default();
+    // A read of a global runs a package's code only through an accessor a package defines on the global object: where none does, every question about one is no.
+    let accessors_possible = ctx
+        .package_reach
+        .is_some_and(solid_facts::package_reach::PackageReachIndex::defines_global_accessors);
     let mut push = |at: Span, callee: Span, entry: Entry, declaration: Option<DeclarationAt>| {
         let Some(declaration) = declaration else {
             return;
@@ -270,18 +274,21 @@ fn file_sites(
     for call in &file.ast.calls {
         // A dialect primitive is the catalog's; a reviewed test runner's registration (`describe`, `it`) runs the callback on its own stack and calls no action;
         // a reviewed reading of a package's API (ADR 0975) shows what it calls for the value it is handed.
-        if lookup.primitive_at_call(file, call.span).is_some()
-            || lookup.reviewed_test_runner_registration(file, call)
+        if lookup.primitive_at_call(file, call.span).is_some() {
+            continue;
+        }
+        // What can be a site is asked first (a call no package's code runs ends here, as a site needs a declaration): the questions that clear a call are the dearer ones.
+        let Some(declaration) =
+            package_declaration(ctx, analyzed, file, &bound, call.callee, Resolve::Call)
+        else {
+            continue;
+        };
+        if lookup.reviewed_test_runner_registration(file, call)
             || crate::reviewed_api::clears_call(ctx, file, call)
         {
             continue;
         }
-        push(
-            call.span,
-            call.callee,
-            Entry::Call,
-            package_declaration(ctx, analyzed, file, &bound, call.callee, Resolve::Call),
-        );
+        push(call.span, call.callee, Entry::Call, Some(declaration));
     }
     for template in &file.ast.tagged_templates {
         push(
@@ -377,7 +384,8 @@ fn file_sites(
         }
         // A member of the global object read for its value (`void window.devicePixelRatio`, `typeof self.x`, `globalThis["x"]`) runs the accessor a package defined for
         // that global; a key the program does not spell may be any of them.
-        if evaluated_member(file, member.span)
+        if accessors_possible
+            && evaluated_member(file, member.span)
             && matches!(
                 origin_of(ctx, analyzed, file, &bound, member.object, ORIGIN_DEPTH),
                 Origin::GlobalObject
@@ -412,7 +420,8 @@ fn file_sites(
     // A global a package defines an accessor for runs the accessor where the name is read: `void devicePixelRatio`, `typeof devicePixelRatio`, `[devicePixelRatio]`. A call of
     // it is the call's site, a member read of it the member's.
     for identifier in &file.ast.identifiers {
-        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+        if !accessors_possible
+            || identifier.role != solid_facts::ast::IdentifierRole::Reference
             || file.ast.reference_declaration(identifier.span).is_some()
             || !evaluated_reference(file, identifier.span)
         {
@@ -440,7 +449,14 @@ fn file_sites(
     // A pattern written as a parameter reads each key it names off the argument the call passes (`(({ now = 0 }) => now)(clock)`, `show(clock)` with `function show({ now })`):
     // the same read, at the parameter's pattern. The function and the call are in this file; a function of another file reads its parameters where that file's own sites are found.
     let mut parameter_values = Vec::<(Span, Span)>::new();
-    for call in &file.ast.calls {
+    // Only a function with a parameter written as a pattern reads anything this way.
+    let pattern_parameters = file.ast.functions.iter().any(|function| {
+        function
+            .parameters
+            .iter()
+            .any(|parameter| slots.contains_key(&parameter.pattern))
+    });
+    for call in file.ast.calls.iter().filter(|_| pattern_parameters) {
         let Some((function_file, function)) = lookup
             .function_called_at(file.path.as_str(), call.callee)
             .or_else(|| lookup.object_member_function(file, call.callee))
@@ -477,6 +493,9 @@ fn file_sites(
         // The pattern reads each key it names off the global object (`const { devicePixelRatio: ratio } = window`): the keys the pattern spells at its own level are
         // globals, the keys below are members of what those hold; a computed key or a rest element reads any global.
         if matches!(origin, Origin::GlobalObject) {
+            if !accessors_possible {
+                continue;
+            }
             let mut accessor = None;
             let elements = slots.get(&pattern).map_or(&[][..], Vec::as_slice);
             for element in elements {
@@ -944,7 +963,8 @@ fn origin_of(
             // What a component the dialect's `lazy` made returns is the package's.
             Origin::Lazy(declaration) => Origin::Package(declaration),
             Origin::Host => host_call_origin(ctx, analyzed, file, bound, call, true, depth - 1),
-            Origin::Runtime => host_call_origin(ctx, analyzed, file, bound, call, false, depth - 1),
+            // The dialect's runtime hands back no package's value (its catalog answers for what it returns): there is no argument of the standard library to carry.
+            Origin::Runtime => Origin::Unknown,
             Origin::Namespace(_) | Origin::GlobalObject => Origin::Unknown,
             Origin::Unknown => function_return_origin(ctx, analyzed, file, bound, call, depth - 1),
         };
@@ -2440,15 +2460,17 @@ fn package_declaration(
     }
     // The code a callee runs comes from where its value came from, not from where its signature type is declared: the import its root names, through the
     // bindings that only hold a value a call made (`const handle = makeHandle()`). A global of the standard library is the host's, whatever a package augments.
-    let resolved_declaration = lookup
-        .resolved_callee_call(file, callee)
-        .and_then(|resolved| resolved.declaration.as_ref());
+    let resolved_declaration = || {
+        lookup
+            .resolved_callee_call(file, callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+    };
     match origin_of(ctx, analyzed, file, bound, callee, ORIGIN_DEPTH) {
         Origin::Package(declaration) | Origin::Lazy(declaration) => return Some(declaration),
         // The host's own function, unless the signature the compiler chose for this call is a package's: a package overloads a global (`setTimeout(cb, "fz")`,
         // `new Float32Array("fz", cb)`) and replaces it where it loads.
         Origin::Host => {
-            if !resolved_declaration.is_some_and(|declaration| !declaration.standard_library) {
+            if !resolved_declaration().is_some_and(|declaration| !declaration.standard_library) {
                 return None;
             }
         }
@@ -2457,7 +2479,7 @@ fn package_declaration(
     }
     let mut paths = Vec::<String>::new();
     if resolve == Resolve::Call
-        && let Some(declaration) = resolved_declaration
+        && let Some(declaration) = resolved_declaration()
     {
         if !declaration.origin_module.is_empty()
             && is_runtime_module(ctx, &declaration.origin_module)
@@ -2529,7 +2551,7 @@ fn package_declaration(
         hop = (next_file, next_file.ast.peel_ts_sugar_span(initializer));
     }
     // The call resolves to the standard library's signature and the standard library declares the callee too: the host's, whatever a package adds beside it.
-    if resolved_declaration.is_some_and(|declaration| declaration.standard_library)
+    if resolved_declaration().is_some_and(|declaration| declaration.standard_library)
         && paths.iter().any(|path| path.starts_with("bundled:"))
     {
         return None;

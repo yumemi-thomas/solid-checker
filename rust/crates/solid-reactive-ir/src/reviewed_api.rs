@@ -80,7 +80,7 @@ const SPY_MAKERS: &[&str] = &["fn", "spyOn"];
 /// Whether the reviewed reading says `call` runs no code a Solid action can be reached from: a registration (`vi.fn()`), the `expect(value)` of a chain, or the matcher
 /// call of one, each judged by what it is handed.
 pub(crate) fn clears_call(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact) -> bool {
-    if call.construct {
+    if call.construct || !any_premise_holds(ctx) {
         return false;
     }
     clears_registration(ctx, file, call) || clears_assertion(ctx, file, call)
@@ -91,9 +91,21 @@ pub(crate) fn clears_call(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &Ca
 /// given (`vi.stubGlobal(name, value)`) clears the call but not the value: the stored function runs wherever the global is called, so a package function handed to it is
 /// a site as before.
 pub(crate) fn clears_value_at(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> bool {
+    if !any_premise_holds(ctx) {
+        return false;
+    }
     file.ast
         .call_at(span)
         .is_some_and(|call| !call.construct && clears_assertion(ctx, file, call))
+}
+
+/// Whether a reviewed premise holds for any installed package of the program: where none does (no installed package, or none the reading covers, or no filesystem), no
+/// call is cleared and no declaration needs to be asked.
+fn any_premise_holds(ctx: &AnalysisContext<'_>) -> bool {
+    let Some(index) = ctx.package_reach else {
+        return false;
+    };
+    !index.reviewed.is_empty()
 }
 
 /// Whether every declaration of the symbol at `span` is `name` in a declaration file with the path components `run`, of a package the premise holds for.

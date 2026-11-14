@@ -307,6 +307,13 @@ impl PackageReachIndex {
             .map(String::as_str)
     }
 
+    /// Whether any installed package the program loads defines, or may define, an accessor on the global object: where none does, no read of a global runs a package's code
+    /// and the questions [`Self::global_accessor_writers_of`] and [`Self::global_accessor_writers_of_unspelled`] answer nothing.
+    #[must_use]
+    pub fn defines_global_accessors(&self) -> bool {
+        !self.global_accessor_writers.is_empty() || !self.global_accessor_writers_any.is_empty()
+    }
+
     /// The roots of the installed packages whose closure may define an accessor on the global object under any name and may reach a Solid action: the packages a read
     /// of the global object's member under a key the program does not spell may run the code of.
     pub fn global_accessor_writers_of_unspelled<'a>(
