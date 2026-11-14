@@ -3565,13 +3565,12 @@ fn receiver_value_uses_keep_their_rows() {
     assert_flush_sites(
         &findings,
         source,
-        &[],
+        // ADR 0980: `twinPattern` is `Object.create(null)`, a call's result, no fresh object the program writes, so its store is handed (the option-A cost).
+        &["twinPattern.twinPatternM = function () {\n  flush();"],
         &[
             "twinEscape.twinEscapeM = function () {\n  flush();",
             "twinRead.twinReadM = function () {\n  flush();",
             "const twinKeyBase = {\n  get g(): number {\n    flush();",
-            // The review of #232 (B3): a pattern parameter of a function nothing hands a package reads a key where it runs.
-            "twinPattern.twinPatternM = function () {\n  flush();",
         ],
     );
 }
