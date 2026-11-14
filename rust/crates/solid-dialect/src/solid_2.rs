@@ -11,9 +11,9 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, CodePolicy, ContextRole, Dialect, Execution,
-    OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode, TrackedCallbackTiming,
-    Version, lookup, reverse,
+    AsyncBoundaryShape, Boundary, CallbackOwner, CleanupRule, CodePolicy, ContextRole, Dialect,
+    Execution, OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode,
+    TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod code_policy;
@@ -2998,6 +2998,24 @@ impl Dialect for Solid2 {
     /// them (rc.17 `@solidjs/signals` `dist/dev.js`, `reportOutsideHold`).
     fn boundary_on_may_hold_outside(&self, primitive: Primitive) -> bool {
         primitive == Primitive::Loading
+    }
+
+    /// ADR 0978, read on `solid-js@2.0.0-rc.21` `dist/solid.dev.js`:
+    /// `Loading(props)` is `createLoadingBoundary(() => props.children, () =>
+    /// props.fallback, "on" in props ? { on: () => props.on } : undefined)`,
+    /// and `createLoadingBoundary(fn, fallback, options)`
+    /// (`@solidjs/signals` `dist/dev.js`) renders `fn` under its hold and
+    /// `fallback()` beside it.
+    fn async_boundary_shape(&self) -> Option<AsyncBoundaryShape> {
+        Some(AsyncBoundaryShape {
+            children_prop: "children",
+            fallback_prop: "fallback",
+            on_prop: "on",
+            primitive: Primitive::CreateLoadingBoundary,
+            held_argument: 0,
+            fallback_argument: 1,
+            options_argument: 2,
+        })
     }
 
     /// `@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:3947-3957`

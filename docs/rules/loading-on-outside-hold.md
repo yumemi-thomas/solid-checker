@@ -31,6 +31,21 @@ A boundary with no `on` (and no spread that could carry one) never re-arms
 and is not considered. A boundary under which no async source is read waits
 on nothing and stays clean.
 
+`Loading` is a component function, so the tag is not the only entry (ADR 0978).
+Every other way a program enters it that may pass `on` is an obligation too,
+with no children proof (the rule never claims a violation): a call that is exactly
+`Loading(props)` or `createComponent(Loading, props)` (through an import alias,
+a namespace, a `const` alias, a wrapper's parameter) where the props are a literal
+closed against `on` and name one, or are not a literal; `createLoadingBoundary(children,
+fallback, { on })`; the boundary named as a value (`Loading.call(null, props)`,
+`[Loading][0](props)`, `dynamicComponent(() => Loading)`, `<Dynamic component={Loading}>`,
+a tag a parameter holds) at the reference; and a tag whose component resolves to nothing
+the analysis reads (a parameter, a props member, the result of a call, `any`) with an
+`on` attribute or a spread not closed against `on`. A literal with no `on`
+(`Loading({ get children() { … } })`), `on: 1`, a local function named `Loading`,
+a project component with a body and a dialect export that is not `Loading` are not
+entries.
+
 ## Fix
 
 Move the outside read under the boundary so one hold owns the data, or read

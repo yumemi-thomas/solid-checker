@@ -1529,3 +1529,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/node_modules/**
 !fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/node_modules/
 !fixtures/reactive-ir/dependency-source-integrity-r2-outside-write/node_modules/**
+!fixtures/reactive-ir/loading-entries/node_modules/
+!fixtures/reactive-ir/loading-entries/node_modules/**
+!fixtures/reactive-ir/loading-entry-cover/node_modules/
+!fixtures/reactive-ir/loading-entry-cover/node_modules/**
