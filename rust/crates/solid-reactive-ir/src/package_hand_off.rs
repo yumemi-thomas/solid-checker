@@ -40,7 +40,9 @@
 //!   An assignment expression's own value is asked as any value is (`const first = (last = cb)`).
 //!   An assignment into an object nothing here declares (an import, `this`, a call's
 //!   result) is handed, one into a property of a local holder goes on in the holder's reads (the table has no row for a property that is only written, so
-//!   `el.onclick = f` is followed through `el`);
+//!   `el.onclick = f` is followed through `el`). ADR 0980: only into a sole-named holder (a `const`, or a `let` nothing reassigns, bound to a fresh object the program writes,
+//!   every use of the name a member access or an operand nothing takes; `holders.rs`): a store through another name of the object (`const a = o; a.m = f`, a loop variable, a
+//!   getter's result, a chain of members) is read by names nothing follows, so it is handed, and so is a holder bound to a call's result (`document.createElement(…)`);
 //! - an operand nothing takes (`typeof f`, `f === g`, an expression statement): not handed;
 //! - **anything else** (an iterable, a receiver, a `yield`, a default value, a class field): handed.
 //!
@@ -61,6 +63,8 @@
 //! Not followed, named in `docs/open-work.md`: `this` handed from inside a class (a class's functions are handed whole), an instance a framework builds, and a value that
 //! reaches a package through a global (`globalThis.x = f` with a hand-off the program does not spell).
 
+mod callers;
+mod holders;
 mod object_prototype;
 
 /// What the backend asks of each file of an installed package its walk reaches: why it may run code nothing here reads (a route to `Object.prototype`, code it builds as a
@@ -2008,15 +2012,25 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .iter()
             .flat_map(|import| &import.bindings)
             .any(|binding| binding.local.span == declaration);
+        // ADR 0980: a store into a member is followed in the reads of the name it is written through, so the name must be the only one of the object: a store through
+        // another name of it (`const a = o; a.m = f`, `box.o.m = f`, a loop variable) is read through names nothing here follows, and is handed.
+        if ast.member_at(target).is_some_and(|member| {
+            ast.peel_ts_sugar_span(member.object) != root
+                || !self.sole_named(file, declaration, &[])
+        }) {
+            return true;
+        }
         imported
             || self.binding(file, declaration, walk)
             || self.parameter_holder_hands(file, declaration, walk)
     }
 
     /// A store into a member of a parameter (`t.m = f` in `function put(t) { … }`) stores into the object the callers pass, whose reads the walk of the parameter's own does not
-    /// reach (`put(o)`, then `runStep(() => { o.m(); })`): the holder is each caller's argument, followed like a store into it. Every use of the function must be a direct call
-    /// the build resolves (a use that is no call, an export a program may enter, a function nothing names, a parameter that is a pattern or a rest: the callers are not known,
-    /// and the store is handed). An argument that is a fresh object literal is reached through the parameter only.
+    /// reach (`put(o)`, then `runStep(() => { o.m(); })`): the holder is each caller's argument, followed like a store into it. ADR 0980: every caller must be known (`exact_callers`,
+    /// `callers.rs`: every reference of the function's binding in every file is a direct call; a method, a function no binding names, a reassigned binding, a use that is no call, an
+    /// export a program may enter, a missing symbol or file: the store is handed), the parameter must be sole-named inside the function (a plain identifier no assignment
+    /// reassigns, no copy of it), and each caller must write the argument at the index, no spread at or before it (a default value or an omitted argument carries a holder no
+    /// caller names), as the name of a binding that is sole-named except for that call (`holders.rs`). A fresh object literal is reached through the parameter only.
     fn parameter_holder_hands(
         &self,
         file: &'a FileFacts,
@@ -2061,12 +2075,19 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             return true;
         };
         callers.into_iter().any(|(caller_file, call)| {
-            let Some(argument) = call.arguments.get(index) else {
-                return false;
-            };
-            if argument.spread {
+            // The argument at the index is written, and no spread stands at or before it (a spread may carry the holder anywhere; a default value or an omitted argument
+            // is no argument of the caller's: a missing fact is no proof of "not handed").
+            if call
+                .arguments
+                .iter()
+                .take(index + 1)
+                .any(|argument| argument.spread)
+            {
                 return true;
             }
+            let Some(argument) = call.arguments.get(index) else {
+                return true;
+            };
             let argument = caller_file.ast.peel_ts_sugar_span(argument.span);
             if caller_file
                 .ast
@@ -2076,42 +2097,15 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             {
                 return false;
             }
+            // The argument is the name of a binding that is sole-named except for this call (an argument of any other form names an object nothing here follows).
+            let Some(declaration) = caller_file.ast.reference_declaration(argument) else {
+                return true;
+            };
+            if !self.sole_named(caller_file, declaration, &[argument]) {
+                return true;
+            }
             self.assignment_hands(caller_file, argument, walk)
         })
-    }
-
-    /// The calls that run `function`, when every use of it is a direct call; `None` when anything else may call it: a use that is no call (a copy, an argument, a tag), an
-    /// export a program may enter, a function no binding names.
-    fn exact_callers(
-        &self,
-        file: &'a FileFacts,
-        function: &'a FunctionFact,
-    ) -> Option<Vec<(&'a FileFacts, &'a CallFact)>> {
-        if self.exported(file, function)
-            && (!self.lookup.program_closed || self.lookup.escapes_unnamed(file.path.as_str()))
-        {
-            return None;
-        }
-        let placed =
-            crate::local_access::function_reference_hand_offs(file, function, self.lookup)?;
-        let foreign = crate::local_access::foreign_reference_hand_offs(file, function, self.lookup);
-        if placed
-            .iter()
-            .any(|(_, hand_off)| *hand_off != HandOff::Call)
-            || foreign
-                .iter()
-                .any(|(_, _, hand_off)| *hand_off != HandOff::Call)
-        {
-            return None;
-        }
-        let mut callers = Vec::new();
-        for (at, _) in placed {
-            callers.push((file, file.ast.calls_with_peeled_callee(at).next()?));
-        }
-        for (holder, at, _) in foreign {
-            callers.push((holder, holder.ast.calls_with_peeled_callee(at).next()?));
-        }
-        Some(callers)
     }
 
     /// A function returns the value (a `return`, an arrow's expression body): the calls of that function evaluate to it (`make()`, an immediately invoked function), so
