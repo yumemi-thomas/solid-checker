@@ -23,10 +23,10 @@ const built = (code, context) => {
 const textOf = (code, context) => built(code, context).text.split("\n").map((line) => line.trim());
 
 describe("the ph contexts (a flush in a function a package nothing here reads may run)", () => {
-  it("are one hundred and twenty-one routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
-    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto"]);
+  it("are one hundred and sixty-three routes on three hosts (dynref, spreadref, spreadvar, childfn and the frame routes on the step host only), each with a twin that never runs the site, each name parsed back", () => {
+    expect(PH_ROUTES).toEqual(["literal", "ref", "alias", "member", "method", "holder", "array", "jsx", "children", "wrap", "caller", "return", "call", "set", "forof", "recv", "resolve", "class", "assign", "props", "getter", "reflect", "inline", "param", "untrack", "dynamic", "mapinit", "mapdestr", "mapparam", "mapflat", "maptemplate", "maplogical", "mapawait", "mapassign", "maparg", "yieldof", "nbmap", "nbobj", "argsindex", "argsapply", "thenreturn", "thenconst", "thenlet", "thenfn", "thenmember", "refprop", "dynref", "chainconst", "chainassign", "chainrecv", "spreadref", "spreadvar", "childfn", "framechild", "framebare", "framemap", "framecall", "framerender", "frameiife", "framemapref", "framevoid", "frametypeof", "propsread", "propsrender", "getterparam", "selfgetter", "treerec", "propsjsx", "propsclass", "getterthis", "getterouter", "getterassign", "propsmethod", "getterpick", "gettersuper", "methodsuper", "protogetter", "protogetterthis", "protoassign", "protomethod", "ownmethod", "ownvalue", "foreignthis", "foreignparam", "foreigncall", "foreignalias", "foreignarray", "lateassign", "latesetter", "latenested", "lateput", "protoreceiver", "protocreate", "protoclass", "protokey", "lateself", "latedestr", "latecomputed", "putparam", "putparamany", "putchain", "restcopy", "nestedpattern", "nestedread", "nestedchain", "nestedarg", "restnested", "nestedspread", "keyescape", "keyreadescape", "keymethodescape", "keyhex", "keyfloat", "parampattern", "paramgetter", "paramarray", "paramrest", "paramrestpass", "assignthis", "symbolrewrite", "objproto", "opvalueof", "opvalueofkey", "opglobalalias", "opglobaldestr", "opassigned", "opparam", "oparray", "opassignpattern", "opreflectget", "opreturn", "opsequence", "oplogical", "opgetproto", "opreflectgetproto", "opconstructor", "opdunder", "opclassdunder", "opsuper", "opvalueofcall", "optop", "opparent", "opframes", "opwindowview", "opglobalview", "opdocalias", "opdocpattern", "opdoccall", "opbuiltkey", "opbuiltconst", "opbuiltproto", "opreflectbuilt", "opparamkey", "oppatternkey", "opforofkey", "opreflectalias", "opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"]);
     expect(PH_HOSTS).toEqual(["step", "apply", "leaf"]);
-    expect(PH_CONTEXT_NAMES).toHaveLength(674);
+    expect(PH_CONTEXT_NAMES).toHaveLength(914);
     for (const name of PH_CONTEXT_NAMES) {
       const parts = phParts(name);
       expect(parts, name).not.toBeNull();
@@ -343,5 +343,82 @@ describe("the ph contexts (a flush in a function a package nothing here reads ma
     expect(symbol.some((line) => /^\(\{ sym\d+ \} = \{ sym\d+: "m\d+" \}\);$/.test(line))).toBe(true);
     expect(textOf("FLUSH_IN_ACTION", "ph-objproto-step").some((line) => line === 'Object.defineProperty(Object.prototype, "h", {')).toBe(true);
     expect(textOf("FLUSH_IN_ACTION", "ph-restcopy-step-never")).toContain("skipRun(() => {");
+  });
+  it("print the re-check of #232's routes: the ways to Object.prototype the rule had not followed", () => {
+    const define = (route) => textOf("FLUSH_IN_ACTION", `ph-${route}-step`);
+    expect(define("opvalueof")).toContain('Object.defineProperty(Object.prototype.valueOf(), "h", {');
+    expect(define("opvalueofkey")).toContain('Object.defineProperty((Object.prototype as any)["valueOf"](), "h", {');
+    const alias = define("opglobalalias");
+    expect(alias.some((line) => /^const g\d+: any = globalThis;$/.test(line))).toBe(true);
+    expect(alias.some((line) => /^Object\.defineProperty\(g\d+\.Object\.prototype, "h", \{$/.test(line))).toBe(true);
+    expect(define("opglobaldestr").some((line) => /^const \{ Object: O\d+ \}: any = globalThis;$/.test(line))).toBe(true);
+    const assigned = define("opassigned");
+    expect(assigned.some((line) => /^let O\d+: any;$/.test(line))).toBe(true);
+    expect(assigned.some((line) => /^O\d+ = Object;$/.test(line))).toBe(true);
+    const param = define("opparam");
+    expect(param.some((line) => /^function take\d+\(O: any\) \{$/.test(line))).toBe(true);
+    expect(param.some((line) => /^take\d+\(Object\);$/.test(line))).toBe(true);
+    expect(define("oparray").some((line) => /^const \[O\d+\]: any\[\] = \[Object\];$/.test(line))).toBe(true);
+    expect(define("opassignpattern").some((line) => /^\(\{ prototype: P\d+ \} = Object\);$/.test(line))).toBe(true);
+    expect(define("opreflectget").some((line) => /^const P\d+ = Reflect\.get\(Object, "prototype"\);$/.test(line))).toBe(true);
+    expect(define("opreturn").some((line) => /^function getO\d+\(\): any \{$/.test(line))).toBe(true);
+    const sequence = define("opsequence");
+    expect(sequence.some((line) => /^function touch\d+\(\) \{\}$/.test(line))).toBe(true);
+    expect(sequence.some((line) => /^Object\.defineProperty\(\(touch\d+\(\), Object\)\.prototype, "h", \{$/.test(line))).toBe(true);
+    expect(define("oplogical")).toContain('Object.defineProperty((Object ?? null).prototype, "h", {');
+    expect(define("opgetproto")).toContain('Object.defineProperty(Object.getPrototypeOf({}), "h", {');
+    expect(define("opreflectgetproto")).toContain('Object.defineProperty(Reflect.getPrototypeOf({})!, "h", {');
+    expect(define("opconstructor")).toContain('Object.defineProperty(({} as any).constructor.prototype, "h", {');
+    expect(define("opdunder")).toContain('Object.defineProperty(({} as any).__proto__, "h", {');
+    expect(define("opclassdunder").some((line) => /^Object\.defineProperty\(\(X\d+\.prototype as any\)\.__proto__, "h", \{$/.test(line))).toBe(true);
+    const sup = define("opsuper");
+    expect(sup.some((line) => /^class X\d+ extends Object \{$/.test(line))).toBe(true);
+    expect(sup).toContain("return super.prototype;");
+    const call = define("opvalueofcall");
+    expect(call.some((line) => /^const v\d+ = Object\.prototype\.valueOf;$/.test(line))).toBe(true);
+    expect(call.some((line) => /^const p\d+ = v\d+\.call\(\(\{\} as any\)\.__proto__\);$/.test(line))).toBe(true);
+    // The second round: the names for the window and the keys a program builds.
+    expect(define("optop")).toContain('Object.defineProperty((top as any).Object.prototype, "h", {');
+    expect(define("opparent")).toContain('Object.defineProperty((parent as any).Object.prototype, "h", {');
+    expect(define("opframes")).toContain('Object.defineProperty((frames as any).Object.prototype, "h", {');
+    expect(define("opwindowview")).toContain('Object.defineProperty((window as any).document.defaultView.Object.prototype, "h", {');
+    expect(define("opglobalview")).toContain('Object.defineProperty((globalThis as any).document.defaultView.Object.prototype, "h", {');
+    const docAlias = define("opdocalias");
+    expect(docAlias.some((line) => /^const d\d+: any = document;$/.test(line))).toBe(true);
+    expect(docAlias.some((line) => /^Object\.defineProperty\(d\d+\.defaultView\.Object\.prototype, "h", \{$/.test(line))).toBe(true);
+    expect(define("opdocpattern").some((line) => /^const \{ defaultView: view\d+ \}: any = document;$/.test(line))).toBe(true);
+    expect(define("opdoccall").some((line) => /^Object\.defineProperty\(getDoc\d+\(\)\.defaultView\.Object\.prototype, "h", \{$/.test(line))).toBe(true);
+    expect(define("opbuiltkey")).toContain('Object.defineProperty(({} as any)["const" + "ructor"].prototype, "h", {');
+    const builtConst = define("opbuiltconst");
+    expect(builtConst.some((line) => /^const k\d+ = "const" \+ "ructor";$/.test(line))).toBe(true);
+    expect(builtConst.some((line) => /^Object\.defineProperty\(\(\{\} as any\)\[k\d+\]\.prototype, "h", \{$/.test(line))).toBe(true);
+    expect(define("opbuiltproto")).toContain('Object.defineProperty(({} as any)["__pro" + "to__"], "h", {');
+    expect(define("opreflectbuilt")).toContain('Object.defineProperty(Reflect.get({}, "const" + "ructor").prototype, "h", {');
+    const paramKey = define("opparamkey");
+    expect(paramKey.some((line) => /^function pick\d+\(k: string\): any \{$/.test(line))).toBe(true);
+    expect(paramKey.some((line) => /^Object\.defineProperty\(pick\d+\(\["const", "ructor"\]\.join\(""\)\)\.prototype, "h", \{$/.test(line))).toBe(true);
+    expect(define("oppatternkey").some((line) => /^const \{ \[key\d+\]: Ctor\d+ \}: any = \{\};$/.test(line))).toBe(true);
+    expect(define("opforofkey")).toContain('for (const k of ["constructor"]) {');
+    expect(define("opreflectalias").some((line) => /^const get\d+ = Reflect\.get;$/.test(line))).toBe(true);
+    // The third round: code the program builds as a string, and the global that hands it the runner.
+    const exposes = (route) => define(route).some((line) => /^\(globalThis as any\)\.rs\d+ = runStep;$/.test(line));
+    for (const route of ["opsinktimer", "opsinkscript", "opsinkonerror", "opsinkonclick", "opsinkimport", "opsinkblob", "opsinkhtml"]) expect(exposes(route), route).toBe(true);
+    expect(define("opsinktimer").some((line) => /^setTimeout\(".*Object\.defineProperty\(Object\.prototype, 'h', \{ get\(\) \{ rs\d+\(\(\) => \{ this\.m\d+\(\); \}\); return 1; \}, configurable: true \}\)", 0\);$/.test(line))).toBe(true);
+    expect(define("opsinkscript").some((line) => /^s\d+\.textContent = ".*";$/.test(line))).toBe(true);
+    expect(define("opsinkonerror").some((line) => /^img\d+\.setAttribute\("onerror", ".*"\);$/.test(line))).toBe(true);
+    expect(define("opsinkonclick").some((line) => /^b\d+\.click\(\);$/.test(line))).toBe(true);
+    expect(define("opsinkimport").some((line) => /^await import\(\/\* @vite-ignore \*\/ "data:text\/javascript,"/.test(line))).toBe(true);
+    expect(define("opsinkblob").some((line) => /^s\d+\.src = URL\.createObjectURL\(new Blob\(\[".*"\], \{ type: "text\/javascript" \}\)\);$/.test(line))).toBe(true);
+    expect(define("opsinkhtml").some((line) => /^host\d+\.innerHTML = `<img src="data:," onerror=".*">`;$/.test(line))).toBe(true);
+    // The read waits where the code runs later (an image's error, a script's load).
+    expect(define("opsinkonerror")).toContain("}, 30);");
+    expect(define("opsinkblob")).toContain("}, 40);");
+    // Every one reads `h` of a plain object in a timer, in a step the package runs, and its twin never runs the function.
+    for (const route of ["opvalueof", "opglobalalias", "opsuper", "optop", "opbuiltkey", "opreflectalias"]) {
+      expect(define(route).some((line) => /^void o\d+\.h;$/.test(line)), route).toBe(true);
+      expect(textOf("FLUSH_IN_ACTION", `ph-${route}-step-never`), route).toContain("skipRun(() => {");
+    }
+    // A route that builds code as a string hands the global the runner, and the twin hands it the one that never runs the function.
+    expect(textOf("FLUSH_IN_ACTION", "ph-opsinktimer-step-never").some((line) => /^\(globalThis as any\)\.rs\d+ = skipRun;$/.test(line))).toBe(true);
   });
 });
