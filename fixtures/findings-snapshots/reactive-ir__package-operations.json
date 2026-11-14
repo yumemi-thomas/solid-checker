@@ -221,6 +221,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-operations/App.tsx",
+      "start": 1564,
+      "end": 1573,
+      "fixes": 0
+    },
+    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
@@ -350,6 +361,17 @@
       "path": "fixtures/reactive-ir/package-operations/App.tsx",
       "start": 1879,
       "end": 1891,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-operations/App.tsx",
+      "start": 1879,
+      "end": 1888,
       "fixes": 0
     },
     {

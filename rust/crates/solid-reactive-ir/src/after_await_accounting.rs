@@ -17,11 +17,12 @@
 //!   - `project` and `unresolved`: any other call whose callee is no declaration outside the project: a project declaration the resolver does not run exactly
 //!     (a computed or optional member of a literal, a method the receiver census withholds), or no declaration at all (no resolved-call fact, an `any`-typed value).
 //!
-//! Not sites, each named in `docs/open-work.md`: a `.then` continuation or a callback a later microtask runs (the reads in it are the function's own sites), a
-//! read in a nested function (that function's own site), a tagged template's tag, a construct (a constructor runs where no call shows: ADR 0963's member route),
-//! and a call into code outside the project (a standard-library or package declaration): it runs project code only through what it is handed or a protocol the
-//! project's objects implement (a callback, a getter, a listener, a thenable), a hole of its own (the review of #233, S1 to S3). An accessor, a setter and an action
-//! have rules of their own. A function a reviewed test runner schedules is a function like any other (owner ruling 9b): its sites are sites.
+//! Not sites, each named in `docs/open-work.md`: a `.then` continuation or a callback a later microtask runs (the reads in it are the function's own sites), a read
+//! in a nested function (that function's own site), a tagged template's tag, and a call of an accessor (a read of the universe, listed as a site of its own). A call into code
+//! outside the project is a site (ADR 0976): the argument that a library "runs project code only through what it is handed or a protocol the project's objects implement" was
+//! the hole the reviews of #233 found (a callback the library runs here, a listener a synchronous dispatch delivers to, a receiver that is the project's own object under a library
+//! type, a vetoed call the symbol fallback let through, a setter's updater, a constructor), so such a call is a site unless the typed fact [`library_call`] holds. A function a
+//! reviewed test runner schedules is a function like any other (owner ruling 9b): its sites are sites.
 //!
 //! Like [`crate::flush_accounting`] (and ADRs 0838 and 0886) this pass keeps its own typed endings and its own universe; it names no
 //! [`crate::site_accounting::SiteSilence`] and no premise kind. A site ends in
@@ -32,9 +33,11 @@
 //! - the compiler's discard of the code;
 //! - a typed reason ([`AfterAwaitSafe`]): a fact of the program or of the site that rules the claim out, asked of the facts and nothing else;
 //!
-//! or it gets an uncertifiable row of SC1002, blocker `read-after-await-unaccounted`: never a violation, and it yields to a row that stands. The one reason:
+//! or it gets an uncertifiable row of SC1002, blocker `read-after-await-unaccounted`: never a violation, and it yields to a row that stands. The reasons:
 //!
-//! - **never runs**: no execution of the program runs the site (`SiteReach`).
+//! - **never runs**: no execution of the program runs the site (`SiteReach`);
+//! - **library runs nothing** (ADR 0976, [`library_call`]): a call into the standard library, a setter or an action that, by exact facts alone, runs no project code;
+//! - **owner captured** (ADR 0976, R5): a `runWithOwner` call whose owner the function captured, as an unreassigned `const` of `getOwner()`, before its first suspension.
 //!
 //! **No callee reason.** A call of a project function whose closure reads nothing the universe lists is no ending. The first build of this pass had one, and the
 //! review of #233 found it unsound: the closure is a list of reads and calls, and a read reaches a continuation through values no call shows (a store read through
@@ -56,6 +59,10 @@
 //! of the family overlaps the site without standing at one of its spans), `test` (the function is a literal a reviewed runner schedules), `never` (`SiteReach`), `host`
 //! (the callee that takes the function as an argument), `reason` (the typed reason that ended the site) and `filed` (whether the site got its row).
 
+mod handlers;
+mod library_call;
+mod member_reads;
+
 use solid_facts::FileFacts;
 use solid_facts::ast::ArgumentValueKind;
 use solid_facts::core::Span;
@@ -76,26 +83,63 @@ const fn yes(flag: bool) -> &'static str {
 enum AfterAwaitSafe {
     /// No execution of the program runs the site (`SiteReach`).
     NeverRuns,
+    /// A call into the standard library, a setter or an action that runs no project code ([`library_call`], ADR 0976).
+    LibraryRunsNothing,
+    /// A `runWithOwner` call whose owner the async function captured, as an unreassigned `const` of `getOwner()`, ahead of every suspension of it (ADR 0976, R5): the callback runs
+    /// in the computation's own owner, and Chrome rc.21 raises nothing for a read there.
+    OwnerCaptured,
+    /// A member read whose object is proven plain data: a primitive from its own expression, a fresh built-in value, an unpatched ECMAScript global (ADR 0976, S4,
+    /// [`member_reads::root_is_plain`]).
+    PlainReceiver,
 }
 
 impl AfterAwaitSafe {
     /// In the order they are asked, the cheapest first.
-    const ALL: [Self; 1] = [Self::NeverRuns];
+    const ALL: [Self; 4] = [
+        Self::NeverRuns,
+        Self::LibraryRunsNothing,
+        Self::OwnerCaptured,
+        Self::PlainReceiver,
+    ];
 
     /// The id the proof log writes, and `SOLID_CHECKER_IR_ABLATE_SILENCE` names (`<module>.<function>.<end>`).
     const fn id(self) -> &'static str {
         match self {
             Self::NeverRuns => "after_await_accounting.account.never-runs",
+            Self::LibraryRunsNothing => "after_await_accounting.account.library-runs-nothing",
+            Self::OwnerCaptured => "after_await_accounting.account.owner-captured",
+            Self::PlainReceiver => "after_await_accounting.account.plain-receiver",
         }
     }
 
     /// Whether the reason holds at `site`.
-    fn holds(self, site: &AwaitSite<'_>, reach: &crate::execution_role::SiteReach<'_, '_>) -> bool {
+    fn holds(
+        self,
+        ctx: &AnalysisContext<'_>,
+        site: &AwaitSite<'_>,
+        reach: &crate::execution_role::SiteReach<'_, '_>,
+        object_prototype_touched: &dyn Fn() -> bool,
+    ) -> bool {
         match self {
             Self::NeverRuns => matches!(
                 reach.site(site.file, site.at),
                 crate::execution_role::Reach::Unreached(_)
             ),
+            Self::LibraryRunsNothing => site.call.is_some_and(|call| {
+                library_call::runs_nothing(ctx, site.file, call, site.via, object_prototype_touched)
+            }),
+            Self::OwnerCaptured => {
+                site.via == "primitive"
+                    && site.call.is_some_and(|call| {
+                        owner_captured_before_the_suspension(ctx, site.file, call)
+                    })
+            }
+            Self::PlainReceiver => {
+                site.via == "member-read"
+                    && site
+                        .root
+                        .is_some_and(|root| member_reads::root_is_plain(ctx, site.file, root))
+            }
         }
     }
 }
@@ -105,17 +149,69 @@ fn ablated(reason: AfterAwaitSafe) -> bool {
     crate::site_accounting::ablated_id(reason.id())
 }
 
+/// Whether the owner a `runWithOwner` call hands its callback is one the enclosing function captured before it first suspended: an identifier bound by an unreassigned `const` of a
+/// `getOwner()` call written in the same function and not after any suspension of it (the program Chrome rc.21 is quiet on: `const owner = getOwner(); await …; runWithOwner(owner,
+/// () => read())`). A nullish literal, a `getOwner()` call written after the suspension (a continuation has no owner), a parameter, an owner captured in another function and any
+/// value no fact proves are not.
+fn owner_captured_before_the_suspension(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    use solid_facts::ast::BindingShape;
+    let lookup = ctx.semantic_lookup;
+    let Some(owner) = call.arguments.first().filter(|argument| !argument.spread) else {
+        return false;
+    };
+    let Some((binding_file, binding, _)) =
+        lookup.binding_at_reference(file.path.as_str(), owner.span)
+    else {
+        return false;
+    };
+    if binding_file.path != file.path
+        || !binding.immutable
+        || binding.shape != BindingShape::Identifier
+        || binding.names.len() != 1
+    {
+        return false;
+    }
+    let Some(initializer) = binding
+        .initializer
+        .map(|initializer| file.ast.peel_ts_sugar_span(initializer))
+    else {
+        return false;
+    };
+    let Some(captured) = file.ast.call_at(initializer) else {
+        return false;
+    };
+    let same_function = crate::owners::containing_ast_function(&file.ast, call.span)
+        .map(|function| function.span)
+        == crate::owners::containing_ast_function(&file.ast, captured.span)
+            .map(|function| function.span);
+    !captured.construct
+        && lookup
+            .primitive_at_call(file, captured.span)
+            .is_some_and(|primitive| ctx.dialect.returns_current_owner(primitive))
+        && same_function
+        && !crate::execution_role::may_follow_suspension(file, captured.span)
+}
+
 /// One site: a read, or a call that may run a project function, written after its async function's own suspension.
 struct AwaitSite<'a> {
     file: &'a FileFacts,
     at: Span,
     alternates: Vec<Span>,
-    /// How the site is listed: `read`, `call`, `member`, `inexact`, `inexact-member`, `invocation`, `iife`, `apply`, `project` or `unresolved`.
+    /// How the site is listed: `read`, `call`, `member`, `inexact`, `inexact-member`, `invocation`, `iife`, `apply`, `project`, `unresolved`, and (ADR 0976) `library`, `package`,
+    /// `symbol`, `construct`, `setter`, `action`, `typed`, `primitive` (R5: a `runWithOwner` call), `package` or `package-symbol`.
     via: &'static str,
     /// The function holding the site is a literal a reviewed runner schedules.
     test: bool,
     /// The callee that takes the function holding the site as an argument, when one does.
     host: String,
+    /// The call, for a site that is one (the typed reasons ask its facts).
+    call: Option<&'a solid_facts::ast::CallFact>,
+    /// The root expression of a member read (`via: member-read`): the object whose plainness a typed reason asks.
+    root: Option<Span>,
 }
 
 /// The rows of the final program by file, as `(start, end, label)`: an SC1002-family row as `row`, an SC9012 as `sc9012`.
@@ -222,22 +318,19 @@ const RUNS_A_FUNCTION_VALUE: [&str; 6] = [
     "Reflect.construct",
 ];
 
-/// What a call the lookup resolves to no project function, and that is no stored function value ([`crate::static_rules::unresolved_invocation_shaped`]), is: a site, or one
-/// of the four facts that show it is no site. This was a `continue` for every such call, and the review of #233 found what left through it (a method of a module-scope
-/// literal, `f.call(…)`, an immediately invoked function literal), so a call is a site unless the callee is shown to be outside the project or Solid's own; each way to be no
-/// site is a named fact, never a slot that matched nothing.
+/// What a call the lookup resolves to no project function, and that is no stored function value ([`crate::static_rules::unresolved_invocation_shaped`]), is: a site, or an
+/// accessor's call. A call is a site unless it is shown to be no more than a read of the universe: each way to be no site is a named fact, never a slot that matched nothing.
+///
+/// This was an arm that skipped every call whose callee is outside the project or Solid's own (a standard-library or package declaration, a setter, an action, a construct), on
+/// the argument that it runs project code only through what it is handed or a protocol the project's objects implement. The reviews of #233 found that each of those holds
+/// (S1, S2, R1 to R4 of the follow-up): a callback the library runs on this stack, a listener a synchronous dispatch delivers to, a receiver that is the project's own object under
+/// a library type, a vetoed standard call the symbol fallback let through, a setter's updater, a constructor. So such a call is a site (ADR 0976), and [`library_call`] says when
+/// one runs no project code.
 enum Unnamed {
-    /// The `via` of the site: the call may run a project function.
+    /// The `via` of the site: the call may run project code.
     Site(&'static str),
-    /// A construct: a constructor runs where no call shows (a field initializer, a base class), ADR 0963's member route, named in `docs/open-work.md` (S1 of the review of #233).
-    Construct,
-    /// Solid's own: an accessor call is a read of the universe, a setter's and an action's call have rules of their own, a typed candidate has its SC9012.
-    Solid,
-    /// The callee's resolved declaration is the standard library's or an installed package's: it runs project code only through what it is handed or a protocol the project's
-    /// objects implement (a callback, a getter, a listener, a thenable), the hole of S2 of the review, named in `docs/open-work.md`.
-    Declared,
-    /// No resolved-call fact (an argumentless call demands none), and the compiler's declarations of the callee's own symbol lie only in a package or a default library file.
-    Symbol,
+    /// An accessor's call: a read of the universe, listed as a site of its own (`read`), so the call is no second site.
+    Accessor,
 }
 
 fn unnamed_call(
@@ -246,15 +339,21 @@ fn unnamed_call(
     call: &solid_facts::ast::CallFact,
     callee: Span,
 ) -> Unnamed {
+    use crate::static_rules::{CalleeHome, SolidCall};
     if call.construct {
-        return Unnamed::Construct;
+        return Unnamed::Site("construct");
     }
     // A function literal called where it is written runs on this stack.
     if file.ast.function_at(callee).is_some() {
         return Unnamed::Site("iife");
     }
-    if crate::static_rules::solid_owned_call(ctx, file, call) {
-        return Unnamed::Solid;
+    if let Some(solid) = crate::static_rules::solid_owned_call(ctx, file, call) {
+        return match solid {
+            SolidCall::Accessor => Unnamed::Accessor,
+            SolidCall::Setter => Unnamed::Site("setter"),
+            SolidCall::Action => Unnamed::Site("action"),
+            SolidCall::Typed => Unnamed::Site("typed"),
+        };
     }
     let declaration = ctx
         .semantic_lookup
@@ -262,22 +361,25 @@ fn unnamed_call(
         .and_then(|resolved| resolved.declaration.as_ref());
     match declaration {
         // `f.call(…)`, `f.apply(…)`, `Reflect.apply(f, …)`, `Reflect.construct(f, …)` run a function value their receiver or arguments name.
-        Some(declaration) if declaration.standard_library => {
+        Some(declaration) if declaration.standard_library => Unnamed::Site(
             if RUNS_A_FUNCTION_VALUE.contains(&declaration.qualified_name.as_ref()) {
-                Unnamed::Site("apply")
+                "apply"
             } else {
-                Unnamed::Declared
-            }
-        }
+                "library"
+            },
+        ),
         Some(declaration)
             if crate::effect_phase::package_root(declaration.location.path.as_ref()).is_some() =>
         {
-            Unnamed::Declared
+            Unnamed::Site("package")
         }
         Some(_) => Unnamed::Site("project"),
-        None => match crate::static_rules::callee_declared_outside_project(ctx, file, call) {
-            Some(true) => Unnamed::Symbol,
-            Some(false) => Unnamed::Site("project"),
+        // No resolved-call fact (an argumentless call demands none, a veto withholds a standard call): the compiler's declarations of the callee's own symbol decide only
+        // where it is declared, and a symbol found only outside the project says nothing of what runs.
+        None => match crate::static_rules::callee_home(ctx, file, call) {
+            Some(CalleeHome::DefaultLibrary) => Unnamed::Site("symbol"),
+            Some(CalleeHome::Package) => Unnamed::Site("package-symbol"),
+            Some(CalleeHome::Project) => Unnamed::Site("project"),
             None => Unnamed::Site("unresolved"),
         },
     }
@@ -327,19 +429,26 @@ fn sites<'a>(
             );
         (set.contains(&function.span), host)
     };
-    // A file with no async function holds no site: a site needs an async function's own suspension.
+    // ADR 0976, S3: the functions a promise handler call runs after a suspension are after one, async or not.
+    let handlers = handlers::handler_functions(ctx);
+    let after = |file: &FileFacts, span: Span| {
+        crate::execution_role::may_follow_suspension(file, span)
+            || handlers::in_handler(&handlers, file, span)
+    };
+    // A file with no async function and no promise handler holds no site: a site needs a suspension of its own function.
     let mut async_files: HashMap<&str, bool> = HashMap::default();
-    let mut has_async = |file: &'a FileFacts| {
-        *async_files
-            .entry(file.path.as_str())
-            .or_insert_with(|| file.ast.functions.iter().any(|function| function.r#async))
+    let mut holds_suspension = |file: &'a FileFacts| {
+        *async_files.entry(file.path.as_str()).or_insert_with(|| {
+            file.ast.functions.iter().any(|function| function.r#async)
+                || handlers.contains_key(file.path.as_str())
+        })
     };
     let mut found = Vec::new();
     for &(file, ref site) in universe {
         if site.table != "read"
             || lookup.in_dependency_source(file.path.as_str())
-            || !has_async(file)
-            || !crate::execution_role::may_follow_suspension(file, site.at)
+            || !holds_suspension(file)
+            || !after(file, site.at)
         {
             continue;
         }
@@ -351,17 +460,38 @@ fn sites<'a>(
             via: "read",
             test,
             host,
+            call: None,
+            root: None,
         });
     }
     for file in lookup.files() {
-        if lookup.in_dependency_source(file.path.as_str()) || !has_async(file) {
+        if lookup.in_dependency_source(file.path.as_str()) || !holds_suspension(file) {
             continue;
         }
         for call in &file.ast.calls {
             let callee = file.ast.peel_ts_sugar_span(call.callee);
-            if lookup.primitive_at_call(file, call.span).is_some()
-                || !crate::execution_role::may_follow_suspension(file, call.span)
-            {
+            if !after(file, call.span) {
+                continue;
+            }
+            // A call of a primitive is the dialect's own, a site only where its callback keeps the after-await flag (ADR 0976, R5: `runWithOwner`): the other primitives clear it
+            // or run the callback in a pass of their own.
+            if let Some(primitive) = lookup.primitive_at_call(file, call.span) {
+                if (0..call.arguments.len()).any(|index| {
+                    ctx.dialect
+                        .callback_keeps_after_await_flag(primitive, index)
+                }) {
+                    let (test, host) = classify(file, call.span);
+                    found.push(AwaitSite {
+                        file,
+                        at: callee,
+                        alternates: vec![call.span],
+                        via: "primitive",
+                        test,
+                        host,
+                        call: Some(call),
+                        root: None,
+                    });
+                }
                 continue;
             }
             // A project function the callee exactly names (and the name still holds), or a function value the walk cannot resolve (ADR 0964): a call the net takes for an
@@ -387,19 +517,48 @@ fn sites<'a>(
                 }
                 (Callee::Unknown, false) => match unnamed_call(ctx, file, call, callee) {
                     Unnamed::Site(via) => via,
-                    Unnamed::Construct | Unnamed::Solid | Unnamed::Declared | Unnamed::Symbol => {
-                        continue;
-                    }
+                    // A read of the universe: its own site.
+                    Unnamed::Accessor => continue,
                 },
             };
             let (test, host) = classify(file, call.span);
+            // A construct is reported from its `new` token (the position a stack frame of `new K(…)` has), not from the callee after it.
+            let at = if call.construct && call.span.start <= callee.start {
+                Span::new(call.span.start, callee.end)
+            } else {
+                callee
+            };
             found.push(AwaitSite {
                 file,
-                at: callee,
+                at,
                 alternates: vec![call.span],
                 via,
                 test,
                 host,
+                call: Some(call),
+                root: None,
+            });
+        }
+    }
+    // ADR 0976, S4: the member reads of values the universe does not list (a store or props value reached through a binding).
+    for file in lookup.files() {
+        if lookup.in_dependency_source(file.path.as_str()) || !holds_suspension(file) {
+            continue;
+        }
+        for chain in member_reads::chains(file) {
+            if !after(file, chain.at) || member_reads::root_is_a_source(ctx, file, chain.root) {
+                continue;
+            }
+            let (test, host) = classify(file, chain.at);
+            found.push(AwaitSite {
+                file,
+                at: chain.at,
+                alternates: chain.alternates,
+                via: "member-read",
+                test,
+                host,
+                call: None,
+                root: Some(chain.root),
             });
         }
     }
@@ -436,6 +595,18 @@ pub(crate) fn account<'a>(
     }
     let rows = row_index(program);
     let reach = crate::execution_role::SiteReach::new(ctx.semantic_lookup);
+    // Whether a file of the program can name `Object.prototype` (#232's fact), asked once and only by a site whose argument is an object literal.
+    let by_path: std::collections::HashMap<&str, &FileFacts> = ctx
+        .semantic_lookup
+        .files()
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect();
+    let hand_off =
+        crate::package_hand_off::UnreadPackageHandOff::new(ctx.semantic_lookup, &by_path);
+    let prototype_touched = std::cell::OnceCell::new();
+    let object_prototype_touched =
+        || *prototype_touched.get_or_init(|| hand_off.object_prototype_touched());
     let logging = proof_log::enabled();
     let candidates = crate::proof_candidates::enabled();
     let mut filed: Vec<StaticDefect> = Vec::new();
@@ -446,7 +617,7 @@ pub(crate) fn account<'a>(
             AfterAwaitSafe::ALL
                 .into_iter()
                 .filter(|reason| !ablated(*reason))
-                .find(|reason| reason.holds(site, &reach))
+                .find(|reason| reason.holds(ctx, site, &reach, &object_prototype_touched))
         } else {
             None
         };
@@ -516,10 +687,16 @@ mod tests {
     }
 
     #[test]
-    fn the_one_reason_that_remains_is_never_runs_and_there_is_no_callee_or_census_reason() {
+    fn the_reasons_are_never_runs_library_runs_nothing_and_owner_captured_and_there_is_no_callee_or_census_reason()
+     {
         assert_eq!(
             AfterAwaitSafe::ALL.map(AfterAwaitSafe::id),
-            ["after_await_accounting.account.never-runs"]
+            [
+                "after_await_accounting.account.never-runs",
+                "after_await_accounting.account.library-runs-nothing",
+                "after_await_accounting.account.owner-captured",
+                "after_await_accounting.account.plain-receiver"
+            ]
         );
         // ADR 0973: a closure that reads nothing the universe lists (the review of #233: a store read through an alias, a stored generator stepped by a spread, a trap or a
         // getter installed by reference) and the absence of a recognized computation (the oracle cases `after-await-universe-census-*`) are no endings.

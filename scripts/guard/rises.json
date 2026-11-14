@@ -1495,6 +1495,974 @@
    "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
   },
   {
+   "fixture": "engine/eslint-reactivity-v2",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 9,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 6,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-lazy",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-carrier-runs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 8,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-handoff",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 13,
+   "to": 15,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-rowless-ends",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 6,
+   "to": 8,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-paths",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC1001 function-run-unplaced",
+   "from": 8,
+   "to": 24,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC1002 field-initializer-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC1002 function-run-unplaced",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 27,
+   "to": 54,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC9012 standard-member-impostor",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe-census",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/await-continuation-reads",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 8,
+   "to": 15,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/callback-props-reads",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/callee-callback-timing",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/callee-spelling",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/classic-script-enum-global",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/classic-script-global-function",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/classic-script-global-let",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/classic-script-global-let",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/classic-script-global-module",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/classic-script-this-patch",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/closed-export-alias-load",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/closed-export-namespace-call",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/closed-export-namespace-call",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/component-owner-binding",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/context-package-lazy",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-escape",
+   "key": "SC1002 package-finding-at-entry",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-escape",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/eslint-plugin-corpus",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 6,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-await-conditional",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-await-continuation",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-class",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-causes",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-flip",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/forwarded-tracked-compute",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/fp-exec-await-argument-write",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/fp-exec-handler-writes",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-loading-cover",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-read-role",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/generator-hand-off",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/generator-hand-off",
+   "key": "SC1002 unresolved-invocation",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/generator-stepped",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/handed-net",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/helper-prop-read",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/host-callback-read-timing",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/host-callback-read-timing",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/impostor-census",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/impostor-census",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/impostor-prototype-own",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/impostor-prototype-reach",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/impostor-prototype-reach",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/loading-cover-children",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/lying-assertion",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/member-routes-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 12,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/object-arrow-receiver-this",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-import",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-import",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 17,
+   "to": 18,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-namespace-escape",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-namespace-escape",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/owner-after-await-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/owner-helper-callback",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/owner-namespace-named-reads",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/package-operations",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/parameter-initializer-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 10,
+   "to": 15,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/parameter-initializer-unplaced",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/prop-callback-roles-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/provider-array-provenance",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-deferred-mount",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-event-windows",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-flush-in-action-unplaced",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-render-placed",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/rc9-flush-in-action",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/rc9-flush-in-action-layers",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-premise-tripwire-prototype",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-purity",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 6,
+   "to": 17,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 9,
+   "to": 55,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach-member-helpers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/read-handed-by-name",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/read-handed-by-name",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/ref-await-in-place-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/resolve-scope",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/returned-store-source",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/root-window-reads",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/rule-negatives",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/run-with-owner-in-computation",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/server-function-rich-args",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 24,
+   "to": 25,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/slot-run-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/solid2-precision",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 7,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/standard-patches",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/store-strict-read-keys",
+   "key": "SC1002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/stored-function-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 10,
+   "to": 15,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/strict-read-maybe-suspended",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 17,
+   "to": 28,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest4",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/then-unplaced-chain",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/top-window-patch",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/transported-parameter-flow",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 5,
+   "to": 8,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/value-flow-review",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget-dynamic",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/walk-bounds",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/write-cleanup-handle-call",
+   "key": "SC1002 unresolved-invocation",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/write-legality-proofs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 8,
+   "to": 12,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/write-owner-in-cleanup",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/write-owner-in-cleanup-rc13",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "reactive-ir/write-owner-in-cleanup-unread",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "uncertifiable-repro/other-rules",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 9,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 unresolved-invocation",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001-clean",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc9012",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 11,
+   "adr": "ADR 0976",
+   "fact": "the typed fact library-runs-nothing (a call written after an async function's own suspension into the standard library, a package, a setter or a constructor is a site, ended only where the program leaves every built-in alone, the callee resolves exactly and every argument is inert), a promise handler's code, the net's generator and member routes, and the full S4 member-read rule (an object not proven plain: no store or props alias is a symbol of the read universe)"
+  },
+  {
    "fixture": "reactive-ir/flush-universe-package-hand-off-flip",
    "key": "SC2006 flush-in-action-unaccounted",
    "from": 16,

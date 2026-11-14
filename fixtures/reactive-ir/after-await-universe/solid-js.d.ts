@@ -9,7 +9,7 @@
 //
 // Reduced, with no claim reading them back: `Owner` and `Root` to the
 // interfaces' names (`dist/types/core/types.d.ts:153`, `:208`), `createSignal`
-// to its value overload, and `createEffect` and `createRenderEffect` to their
+// to its value overload (its `Setter` is byte-faithful, `@solidjs/signals` `dist/types/signals.d.ts:66`: the follow-up's cases hand a setter a function), and `createEffect` and `createRenderEffect` to their
 // two-function shape (`dist/types/signals.d.ts:427`, `:457`) whose apply returns
 // `(() => void) | void`, as the package says; `createTrackedEffect`
 // (`:503`), `createMemo` (`:358`), `untrack` (`core.d.ts:167`) and `flush`
@@ -37,7 +37,12 @@ declare module "solid-js" {
   export interface Owner {}
   export interface Root extends Owner {}
   export type Accessor<T> = () => T;
-  export type Setter<T> = (value: T) => T;
+  export type Setter<in out T> = {
+    <U extends T>(...args: undefined extends T ? [] : [value: Exclude<U, Function> | ((prev: T) => U)]): undefined extends T ? undefined : U;
+    <U extends T>(value: (prev: T) => U): U;
+    <U extends T>(value: Exclude<U, Function>): U;
+    <U extends T>(value: Exclude<U, Function> | ((prev: T) => U)): U;
+  };
   export function createSignal<T>(value: T): [get: Accessor<T>, set: Setter<T>];
   export function createEffect<Next, Init = Next>(
     compute: (prev: Init | Next) => Next,

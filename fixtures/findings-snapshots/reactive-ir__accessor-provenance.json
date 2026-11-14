@@ -228,6 +228,17 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 2167,
+      "end": 2178,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 2179,
       "end": 2191,
       "fixes": 0
@@ -720,6 +731,17 @@
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 7205,
+      "end": 7211,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 7205,
       "end": 7211,
@@ -1503,6 +1525,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
+      "start": 1748,
+      "end": 1759,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1522,6 +1555,17 @@
       "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
       "start": 1955,
       "end": 1968,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx",
+      "start": 1982,
+      "end": 1993,
       "fixes": 0
     },
     {

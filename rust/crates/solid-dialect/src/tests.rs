@@ -125,6 +125,52 @@ fn the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set() {
     assert!(!two.runs_callback_synchronously(Primitive::Latest));
 }
 
+/// ADR 0976, R5: the one primitive whose callback keeps the after-await flag is `runWithOwner`'s (probed on rc.21: `untrack` and `createRoot` clear it).
+#[test]
+fn only_run_with_owners_callback_keeps_the_after_await_flag() {
+    let two = &Solid2 as &dyn Dialect;
+    assert!(two.callback_keeps_after_await_flag(Primitive::RunWithOwner, 1));
+    // The owner argument is no callback.
+    assert!(!two.callback_keeps_after_await_flag(Primitive::RunWithOwner, 0));
+    for primitive in [
+        Primitive::Untrack,
+        Primitive::CreateRoot,
+        Primitive::CreateMemo,
+        Primitive::CreateEffect,
+        Primitive::Flush,
+        Primitive::OnCleanup,
+    ] {
+        for argument in 0..3 {
+            assert!(
+                !two.callback_keeps_after_await_flag(primitive, argument),
+                "{primitive:?} at {argument}"
+            );
+        }
+    }
+}
+
+/// ADR 0976: `getOwner` is the one primitive that returns the current owner, and `createSignal` the one whose options argument belongs to a setter's signal.
+#[test]
+fn getowner_returns_the_owner_and_createsignal_names_the_options_of_a_setters_signal() {
+    let two = &Solid2 as &dyn Dialect;
+    assert!(two.returns_current_owner(Primitive::GetOwner));
+    assert!(!two.returns_current_owner(Primitive::CreateOwner));
+    assert!(!two.returns_current_owner(Primitive::RunWithOwner));
+    assert_eq!(
+        two.signal_creation_options(Primitive::CreateSignal),
+        two.options_argument(Primitive::CreateSignal)
+    );
+    assert!(
+        two.signal_creation_options(Primitive::CreateSignal)
+            .is_some()
+    );
+    assert!(two.signal_creation_options(Primitive::CreateMemo).is_none());
+    assert!(
+        two.signal_creation_options(Primitive::CreateStore)
+            .is_none()
+    );
+}
+
 /// Every name whose tracked callback this dialect gives `timing` for, at
 /// any argument index a two-argument call could carry.
 fn tracked_schedule_names(

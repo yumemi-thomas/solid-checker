@@ -1521,6 +1521,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-universe-none/node_modules/**
 !fixtures/reactive-ir/after-await-universe-census/node_modules/
 !fixtures/reactive-ir/after-await-universe-census/node_modules/**
+!fixtures/reactive-ir/after-await-library/node_modules/
+!fixtures/reactive-ir/after-await-library/node_modules/**
+!fixtures/reactive-ir/after-await-library-patched/node_modules/
+!fixtures/reactive-ir/after-await-library-patched/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receivers/node_modules/
 !fixtures/reactive-ir/flush-universe-package-hand-off-receivers/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/node_modules/
@@ -1561,3 +1565,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/loading-entries/node_modules/**
 !fixtures/reactive-ir/loading-entry-cover/node_modules/
 !fixtures/reactive-ir/loading-entry-cover/node_modules/**
+!fixtures/reactive-ir/after-await-net/node_modules/
+!fixtures/reactive-ir/after-await-net/node_modules/**
+!fixtures/reactive-ir/after-await-then-handler/node_modules/
+!fixtures/reactive-ir/after-await-then-handler/node_modules/**
+!fixtures/reactive-ir/after-await-store-alias/node_modules/
+!fixtures/reactive-ir/after-await-store-alias/node_modules/**

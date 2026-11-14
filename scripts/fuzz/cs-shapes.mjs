@@ -29,6 +29,19 @@
 //                       getter installed through a handler or a descriptor declared apart), in a recognized computation (`rec`): the first build's callee reason ended `peek()` silently.
 //                       The store-alias and props-alias shapes of B1 are not cells: the site would be a store or props read through an alias, which the checker lists as no read at all (S4 of the
 //                       review, open-work), so the generator has no marked site to place there; the oracle case `after-await-closure` holds them.
+//          setter, setter-ref   R1 of the re-check of #233 (ADR 0976): a setter's updater function, and a project function handed to a setter (`setCnt(reader)`): the setter runs it on this stack
+//          dispatch, click, abort   R2: a synchronous dispatch to a listener registered earlier (`target.dispatchEvent`, `button.click()`, `controller.abort()`)
+//          next-arg      R3: a stored generator stepped by a call with an argument (`it.next(1)`)
+//          iterator, map-sub   R4: an iterator literal under `Iterator<number>` and a `Map` subclass under `Map`: the library declares the call and the project's function runs
+//          foreach, from, executor   S2: a callback the standard library runs here (`[1].forEach`, `Array.from([1], reader)`, a `Promise` executor)
+//          construct-arg N1: `new K(reader)`, a class whose constructor calls its argument
+//          owner-null    R5: `runWithOwner(null, () => read())`, which keeps the after-await flag (`untrack` and `createRoot` clear it and are no routes)
+//          net-getter, net-coerce, net-destructure, net-forof, net-new, net-tag, net-proxy   S1 of the review of #233 (ADR 0976): code the async function runs with no call written there, the site
+//                       a read in the member the continuation runs without a call (a getter, a `toString`, an iterator method, a constructor, a tag function, a Proxy trap): the member-route net's
+//                       rows, once its gate is any suspension in the program
+//          net-stored-spread, net-stored-loop, net-stored-pattern   R6: a stored generator object spread, iterated or destructured in the async function (a generator body is a member of the net)
+//          (S3, a promise handler, and S4, a value reached through a binding, are not cells: a handler's read is after a suspension wherever the chain is written, so the `-before` twin does not
+//          exist, and S4's site is a store read through an alias, which needs the store model the cells do not have: the oracle cases `after-await-then-handler` and `after-await-store-alias` hold them)
 //
 // Recall contexts, one base shape (the direct binding): the question is how the computation is started and how the continuation reaches the read, not the spelling of the site. Not
 // crossed with other codes by the census, out of api-fire's plan.
@@ -105,6 +118,105 @@ const ROUTES = {
       inside: [text(`void ${peek}()`)],
     };
   },
+  // R1 (ADR 0976): the setter of a signal of the route's own runs a function handed to it as the updater, on this stack.
+  setter: (n, stmts) => {
+    const s = n("setCount");
+    return { hoisted: [text(`const [, ${s}] = createSignal(0)`)], inside: [contain("frame", 9, stmts, { head: `${s}(() => `, close: ");", after: ["return 1;"] })] };
+  },
+  "setter-ref": (n, stmts) => {
+    const s = n("setCount");
+    const r = n("reader");
+    return { hoisted: [text(`const [, ${s}] = createSignal(0)`), contain("frame", 9, stmts, { head: `function ${r}() `, close: "", after: ["return 1;"] })], inside: [text(`${s}(${r})`)] };
+  },
+  // R2: the listener is registered at module scope, the dispatch is written after the await: the platform runs the listener on the dispatcher's stack.
+  dispatch: (n, stmts) => {
+    const t = n("target");
+    return { hoisted: [text(`const ${t} = new EventTarget()`), contain("frame", 9, stmts, { head: `${t}.addEventListener("x", () => `, close: ");" })], inside: [text(`${t}.dispatchEvent(new Event("x"))`)] };
+  },
+  click: (n, stmts) => {
+    const b = n("button");
+    return { hoisted: [text(`const ${b} = document.createElement("button")`), contain("frame", 9, stmts, { head: `${b}.addEventListener("click", () => `, close: ");" })], inside: [text(`${b}.click()`)] };
+  },
+  abort: (n, stmts) => {
+    const c = n("controller");
+    return { hoisted: [text(`const ${c} = new AbortController()`), contain("frame", 9, stmts, { head: `${c}.signal.addEventListener("abort", () => `, close: ");" })], inside: [text(`${c}.abort()`)] };
+  },
+  // R3: the generator body runs when its object is stepped, and the step is a call with an argument.
+  "next-arg": (n, stmts) => {
+    const g = n("numbers");
+    const it = n("stored");
+    return { hoisted: [contain("frame", 9, stmts, { head: `function* ${g}(): Generator<number, void, number> `, close: "", after: ["yield 1;"] }), text(`const ${it} = ${g}()`)], inside: [text(`${it}.next(1)`)] };
+  },
+  // R4: the call is declared by the library and the method that runs is the project's.
+  iterator: (n, stmts) => {
+    const it = n("iterator");
+    return { hoisted: [contain("frame", 9, stmts, { head: `const ${it}: Iterator<number> = { next() `, close: " };", after: ["return { done: true, value: 1 };"] })], inside: [text(`${it}.next(undefined)`)] };
+  },
+  "map-sub": (n, stmts) => {
+    const k = n("Counts");
+    const m = n("counts");
+    return { hoisted: [contain("frame", 9, stmts, { head: `class ${k} extends Map<string, number> { get(key: string) `, close: " }", after: ["return super.get(key);"] }), text(`const ${m}: Map<string, number> = new ${k}()`)], inside: [text(`${m}.get("x")`)] };
+  },
+  // S2: a callback the standard library runs on this stack.
+  foreach: (n, stmts) => ({ hoisted: [], inside: [contain("frame", 9, stmts, { head: "[1].forEach(() => ", close: ");" })] }),
+  from: (n, stmts) => {
+    const r = n("reader");
+    return { hoisted: [contain("frame", 9, stmts, { head: `function ${r}() `, close: "", after: ["return 1;"] })], inside: [text(`Array.from([1], ${r})`)] };
+  },
+  executor: (n, stmts) => ({ hoisted: [], inside: [contain("frame", 9, stmts, { head: "new Promise<number>((done) => ", close: ");", after: ["done(1);"] })] }),
+  // N1: a constructor that calls the function it is handed.
+  "construct-arg": (n, stmts) => {
+    const k = n("Wraps");
+    const r = n("reader");
+    return { hoisted: [contain("frame", 9, stmts, { head: `function ${r}() `, close: "", after: ["return 1;"] }), text(`class ${k} { constructor(callback: () => number) { callback(); } }`)], inside: [text(`new ${k}(${r})`)] };
+  },
+  // R5: `runWithOwner` keeps the after-await flag (the model prints the import).
+  "owner-null": (n, stmts) => ({ hoisted: [], inside: [expr(prim("owner", fn(stmts), { ownerArg: "null" }))] }),
+  // S1: the read is in a member the continuation runs without a call.
+  "net-getter": (n, stmts) => {
+    const o = n("holder");
+    return { hoisted: [contain("frame", 9, stmts, { head: `const ${o} = { get value() `, close: " };", after: ["return 1;"] })], inside: [text(`void ${o}.value`)] };
+  },
+  "net-coerce": (n, stmts) => {
+    const o = n("coerced");
+    return { hoisted: [contain("frame", 9, stmts, { head: `const ${o} = { toString() `, close: " };", after: ['return "x";'] })], inside: [text(`void \`\${${o}}\``)] };
+  },
+  "net-destructure": (n, stmts) => {
+    const o = n("holder");
+    return { hoisted: [contain("frame", 9, stmts, { head: `const ${o} = { get value() `, close: " };", after: ["return 1;"] })], inside: [text(`const { value } = ${o}`), text("void value")] };
+  },
+  "net-forof": (n, stmts) => {
+    const o = n("iterable");
+    return { hoisted: [contain("frame", 9, stmts, { head: `const ${o} = { *[Symbol.iterator]() `, close: " };", after: ["yield 1;"] })], inside: [text(`for (const item of ${o}) void item`)] };
+  },
+  "net-new": (n, stmts) => {
+    const k = n("Reads");
+    return { hoisted: [contain("frame", 9, stmts, { head: `class ${k} { value: number; constructor() `, close: " }", after: ["this.value = 1;"] })], inside: [text(`void new ${k}().value`)] };
+  },
+  "net-tag": (n, stmts) => {
+    const t = n("tag");
+    return { hoisted: [contain("frame", 9, stmts, { head: `function ${t}(parts: TemplateStringsArray) `, close: "", after: ["return parts.length;"] })], inside: [text(`void ${t}\`x\``)] };
+  },
+  "net-proxy": (n, stmts) => {
+    const p = n("proxy");
+    return { hoisted: [contain("frame", 9, stmts, { head: `const ${p}: any = new Proxy({}, { get: () => `, close: " });", after: ["return 1;"] })], inside: [text(`void ${p}.x`)] };
+  },
+  // R6: a stored generator object stepped by an iteration no call shows.
+  "net-stored-spread": (n, stmts) => {
+    const g = n("numbers");
+    const it = n("stored");
+    return { hoisted: [contain("frame", 9, stmts, { head: `function* ${g}() `, close: "", after: ["yield 1;"] }), text(`const ${it} = ${g}()`)], inside: [text(`void [...${it}][0]`)] };
+  },
+  "net-stored-loop": (n, stmts) => {
+    const g = n("numbers");
+    const it = n("stored");
+    return { hoisted: [contain("frame", 9, stmts, { head: `function* ${g}() `, close: "", after: ["yield 1;"] }), text(`const ${it} = ${g}()`)], inside: [text(`for (const item of ${it}) void item`)] };
+  },
+  "net-stored-pattern": (n, stmts) => {
+    const g = n("numbers");
+    const it = n("stored");
+    return { hoisted: [contain("frame", 9, stmts, { head: `function* ${g}() `, close: "", after: ["yield 1;"] }), text(`const ${it} = ${g}()`)], inside: [text(`const [first] = ${it}`), text("void first")] };
+  },
 };
 
 /** The start forms each route is crossed with: the first two ask how the function is started, the others how the continuation reaches the site, over one hidden start or a recognized one. */
@@ -114,6 +226,12 @@ const ROUTE_FORMS = {
   "ns-method": ["wrapper"], "ns-arrow": ["wrapper"], "ns-computed": ["wrapper"], "ns-optional": ["wrapper"],
   dotcall: ["wrapper"], apply: ["wrapper"], reflect: ["wrapper"], iife: ["wrapper"], "iife-fn": ["wrapper"], "iife-async": ["wrapper"],
   gen: [CS_RECOGNIZED], "proxy-ref": [CS_RECOGNIZED], "defprop-ref": [CS_RECOGNIZED],
+  // ADR 0976: over one hidden start, and over the recognized one where the review found a recognized computation silent too (a function handed to a setter, a listener's dispatch).
+  setter: ["wrapper"], "setter-ref": ["wrapper", CS_RECOGNIZED], dispatch: ["wrapper", CS_RECOGNIZED], click: ["wrapper", CS_RECOGNIZED], abort: ["wrapper", CS_RECOGNIZED],
+  "next-arg": ["wrapper"], iterator: ["wrapper"], "map-sub": ["wrapper"], foreach: ["wrapper"], from: ["wrapper"], executor: ["wrapper"], "construct-arg": ["wrapper"], "owner-null": ["wrapper"],
+  // ADR 0976, S1 and R6: over one hidden start, and the stored generator over the recognized start too (silent there as well on main).
+  "net-getter": ["wrapper"], "net-coerce": ["wrapper"], "net-destructure": ["wrapper"], "net-forof": ["wrapper"], "net-new": ["wrapper"], "net-tag": ["wrapper"], "net-proxy": ["wrapper"],
+  "net-stored-spread": ["wrapper", CS_RECOGNIZED], "net-stored-loop": ["wrapper", CS_RECOGNIZED], "net-stored-pattern": ["wrapper", CS_RECOGNIZED],
 };
 export const CS_ROUTE_NAMES = Object.keys(ROUTES).filter((route) => route !== "");
 
