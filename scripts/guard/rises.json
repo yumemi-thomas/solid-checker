@@ -1209,6 +1209,258 @@
    "to": 23,
    "adr": "ADR 0967",
    "fact": "the review of #229 (B2): the name net's known cost, a function stored under a key that a receiver reads, in code a package may run, is handed whichever object the receiver is of when its holder is not proved plain (the receivers fixture's twinProto and twinWritten, whose base is the prototype of another object; the accessors fixture's twinPick, whose object reaches an array's element through a callback's return; legal in Chrome, kept as the expectation); and the four renamed twins added to the receivers fixture, each of which calls the package's runStep, where ADR 0972 puts its package-may-call-action row (a fixture addition, not a changed answer)"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 20,
+   "to": 21,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/async-boundary",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/callback-props-reads",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/closed-export-alias-load",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/context-package-lazy",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-unfollowed",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/escaping-object-methods",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/instance-key-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/member-value-alternatives",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 55,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/route-config-key-read",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported",
+   "key": "SC2002 package-may-call-action",
+   "from": 6,
+   "to": 7,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-namespace",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 6,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-kept",
+   "key": "SC2002 package-may-call-action",
+   "from": 9,
+   "to": 10,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget-dynamic",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget-reexport",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget-transitive",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 37,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 1,
+   "to": 20,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 21,
+   "adr": "ADR 0974",
+   "fact": "a call, render, member read or hand-off of a package whose closure was clear before, or of a global some declaration file declares: the global object reached through its own members (window.self, globalThis.globalThis, document.defaultView), a global a declaration names (a package of global declarations only, a project declare function, a member a project interface adds to window), a package component loaded lazily, or a member of an object a package made where the package's whole closure may define an accessor under a name of the chain, or a call of a global the standard library declares that an installed package writes at run time (globalThis.setTimeout = ..., or under a key nothing in its file decides), or where a package may write any global because it hands the global object on, builds code (eval, Function, a string timer), or calls a writer through a target nothing reads, so whether it calls action is not proven",
+   "why": "fail-closed: Chrome (rc.21) throws ACTION_CALLED_IN_OWNED_SCOPE at these (the reviews of #231: B4, B5, S2 and the third batch) and the checker was silent; the new rows are uncertifiable (never violations)"
   }
  ]
 }

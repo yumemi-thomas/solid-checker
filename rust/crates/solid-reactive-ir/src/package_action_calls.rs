@@ -478,7 +478,8 @@ fn file_sites(
         // globals, the keys below are members of what those hold; a computed key or a rest element reads any global.
         if matches!(origin, Origin::GlobalObject) {
             let mut accessor = None;
-            for element in slots.get(&pattern).into_iter().flatten() {
+            let elements = slots.get(&pattern).map_or(&[][..], Vec::as_slice);
+            for element in elements {
                 accessor = accessor.or_else(|| match &element.slot {
                     solid_facts::ast::PatternSlot::Key(name) => global_accessor(ctx, name),
                     solid_facts::ast::PatternSlot::ComputedKey
@@ -988,7 +989,12 @@ fn origin_of(
                 Origin::Package(declaration) => return Origin::Package(declaration),
                 // An element may be the global object (`[window][0].btoa(x)`), read by a member of the array's own element.
                 Origin::GlobalObject => held = Origin::GlobalObject,
-                _ => {}
+                // Any other element is no package's code and not the global object: it adds nothing here (the whole array is then followed no further, below).
+                Origin::Host
+                | Origin::Runtime
+                | Origin::Lazy(_)
+                | Origin::Namespace(_)
+                | Origin::Unknown => {}
             }
         }
         return if array.elements.len() > ORIGIN_WIDTH {
@@ -1325,12 +1331,17 @@ fn written_global(ctx: &AnalysisContext<'_>, name: &str) -> Option<Origin> {
     }))
 }
 
+/// Whether the expression at `span` is a reference to the global `name`: a reference no declaration of the file binds (so a local `document` is not it), spelled `name`.
+fn is_unbound_global(file: &FileFacts, span: Span, name: &str) -> bool {
+    file.ast.reference_declaration(span).is_none()
+        && file.source_text(span).is_some_and(|text| text == name)
+}
+
 /// Whether the member is `document.defaultView`, the global object, of the unbound global `document`.
 fn is_document_default_view(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> bool {
     let ast = &file.ast;
     let object = ast.peel_ts_sugar_span(member.object);
-    ast.reference_declaration(object).is_none()
-        && file.source_text(object) == Some("document")
+    is_unbound_global(file, object, "document")
         && match member_key_text(file, member) {
             Some(name) => name == "defaultView",
             None => false,
@@ -1761,7 +1772,12 @@ fn function_returns(
         match origin_of(ctx, analyzed, function_file, &table, value, depth) {
             Origin::Package(declaration) => return Origin::Package(declaration),
             Origin::GlobalObject => held = Origin::GlobalObject,
-            _ => {}
+            // Any other returned value is no package's code and not the global object: it adds nothing to this answer (a returned parameter is read next).
+            Origin::Host
+            | Origin::Runtime
+            | Origin::Lazy(_)
+            | Origin::Namespace(_)
+            | Origin::Unknown => {}
         }
         // A returned parameter is what the call passed (`function id(f) { return f; }`, `id(makeVoid())`).
         let value = ast.peel_ts_sugar_span(value);
