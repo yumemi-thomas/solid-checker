@@ -19,11 +19,18 @@
 //!
 //! File scans are kept for the life of the process, keyed by path and checked against the file's length and modification time, so a daemon
 //! scans a package once.
+//!
+//! One computation walks the closure of every installed package, and the closures overlap (a package's dependencies are in the closure of each package that
+//! loads it), so what a walk reads is worked out once per computation: the lookups of the file system (a manifest, a resolution, a canonical path, the package a
+//! name finds) are answered from one snapshot of the tree, and a file's visit (its hazards, accessors and global writes, and the files and package entries its
+//! loads name, as steps in the order the visit meets them) is kept in a [`Memo`] that every walk holding the file replays. A walk finds the same files in the same
+//! order and notes the same problems as one that read everything itself. The files one step out of a walk are scanned side by side before the walk visits them.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::rc::Rc;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::SystemTime;
 
 use solid_facts::module_reach::{ModuleHazardKind, ModuleScan, scan_module};
@@ -134,7 +141,7 @@ pub fn package_reach_index(
     facts: &solid_facts::ProjectFacts,
     solid: &SolidPackages<'_>,
 ) -> PackageReachIndex {
-    MANIFESTS.with(|held| held.borrow_mut().clear());
+    let _reading = Reading::fresh();
     // Each declaration root, with the runtime root that holds its code, the runtime files beside its declarations and the subpaths the program imports.
     struct Named {
         runtime: Result<PathBuf, PackageReach>,
@@ -185,10 +192,11 @@ pub fn package_reach_index(
             }
         }
     }
+    let mut memo = Memo::default();
     let verdicts = by_runtime
         .into_iter()
         .map(|(runtime, (demand, siblings))| {
-            let closure = package_reach(&runtime, solid, &demand, &siblings);
+            let closure = package_reach(&runtime, solid, &demand, &siblings, &mut memo);
             (runtime, closure)
         })
         .collect::<HashMap<_, _>>();
@@ -564,16 +572,115 @@ fn declares_only_globals(root: &Path) -> bool {
 }
 
 /// The manifests read during one [`package_reach_index`] computation, by directory: a manifest is read and parsed once however many probes of the walk
-/// ask for it (every bare load, every self-reference check, every `main` of a directory). An index is computed from the tree as it stands, so one
-/// computation's manifests are one snapshot; the next computation starts empty.
+/// ask for it (every bare load, every self-reference check, every `main` of a directory).
 type Manifests = HashMap<PathBuf, Result<Arc<serde_json::Value>, PackageReach>>;
 
+/// What the walks of one [`package_reach_index`] computation have read of the file system: one snapshot of the tree as it stands while the computation runs. A
+/// lookup answered once (a manifest, a resolution, a canonical path, the package that installs a name, the nearest manifest above a directory) is answered again
+/// from here, and the threads that work ahead of a walk share it. The next computation starts empty.
+#[derive(Default)]
+struct Snapshot {
+    manifests: Mutex<Manifests>,
+    /// What [`resolve_path_following`] answered for a path and `follow_main`: the same target is named by many loads.
+    resolved: Mutex<HashMap<(PathBuf, bool), Option<PathBuf>>>,
+    /// What a path canonicalizes to (or why it does not).
+    canonical: Mutex<HashMap<PathBuf, Result<PathBuf, String>>>,
+    /// The directory that installs `name` for a file in a directory ([`find_package_root`]).
+    package_roots: Mutex<HashMap<(PathBuf, String), Option<PathBuf>>>,
+    /// The nearest directory at or above one that holds a `package.json`.
+    manifest_directories: Mutex<HashMap<PathBuf, Option<PathBuf>>>,
+}
+
 thread_local! {
-    static MANIFESTS: std::cell::RefCell<Manifests> = std::cell::RefCell::default();
+    /// The snapshot of the computation this thread works for.
+    static READING: std::cell::RefCell<Option<Arc<Snapshot>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The snapshot this thread reads through: a thread that works for no computation reads through one of its own.
+fn snapshot() -> Arc<Snapshot> {
+    READING.with(|reading| Arc::clone(reading.borrow_mut().get_or_insert_with(Arc::default)))
+}
+
+/// A thread reads through a snapshot until this drops, then through the one it read through before.
+struct Reading(Option<Arc<Snapshot>>);
+
+impl Reading {
+    fn through(snapshot: Arc<Snapshot>) -> Self {
+        Self(READING.with(|reading| reading.borrow_mut().replace(snapshot)))
+    }
+
+    /// The snapshot of a computation that starts now: empty.
+    fn fresh() -> Self {
+        Self::through(Arc::default())
+    }
+}
+
+impl Drop for Reading {
+    fn drop(&mut self) {
+        READING.with(|reading| *reading.borrow_mut() = self.0.take());
+    }
+}
+
+fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// `path.canonicalize()`, once per path: the error as its text.
+fn canonical(path: &Path) -> Result<PathBuf, String> {
+    let snapshot = snapshot();
+    let held = locked(&snapshot.canonical).get(path).cloned();
+    if let Some(held) = held {
+        return held;
+    }
+    let found = path.canonicalize().map_err(|error| error.to_string());
+    locked(&snapshot.canonical).insert(path.to_path_buf(), found.clone());
+    found
+}
+
+/// The nearest directory at or above `start` that holds a `package.json`, once per directory (every directory on the way to it shares the answer).
+fn nearest_manifest_directory(start: &Path) -> Option<PathBuf> {
+    let snapshot = snapshot();
+    let mut walked = Vec::<PathBuf>::new();
+    let mut found = None;
+    let mut directory = Some(start);
+    while let Some(current) = directory {
+        let held = locked(&snapshot.manifest_directories).get(current).cloned();
+        if let Some(held) = held {
+            found = held;
+            break;
+        }
+        walked.push(current.to_path_buf());
+        if current.join("package.json").is_file() {
+            found = Some(current.to_path_buf());
+            break;
+        }
+        directory = current.parent();
+    }
+    let mut held = locked(&snapshot.manifest_directories);
+    for directory in walked {
+        held.insert(directory, found.clone());
+    }
+    found
+}
+
+/// [`find_package_root`] for a file, once per (directory, name): Node's lookup depends on the directory chain alone.
+fn package_root_of_load(file: &Path, name: &str) -> Option<PathBuf> {
+    let snapshot = snapshot();
+    let directory = file.parent()?.to_path_buf();
+    let key = (directory, name.to_owned());
+    let held = locked(&snapshot.package_roots).get(&key).cloned();
+    if let Some(held) = held {
+        return held;
+    }
+    let found = find_package_root(file, name, None);
+    locked(&snapshot.package_roots).insert(key, found.clone());
+    found
 }
 
 fn manifest(root: &Path) -> Result<Arc<serde_json::Value>, PackageReach> {
-    if let Some(held) = MANIFESTS.with(|held| held.borrow().get(root).cloned()) {
+    let snapshot = snapshot();
+    let held = locked(&snapshot.manifests).get(root).cloned();
+    if let Some(held) = held {
         return held;
     }
     let unread = |detail: String| PackageReach::Undecided {
@@ -587,7 +694,7 @@ fn manifest(root: &Path) -> Result<Arc<serde_json::Value>, PackageReach> {
                 .map(Arc::new)
                 .map_err(|error| unread(format!("{}: {error}", short(root))))
         });
-    MANIFESTS.with(|held| held.borrow_mut().insert(root.to_path_buf(), read.clone()));
+    locked(&snapshot.manifests).insert(root.to_path_buf(), read.clone());
     read
 }
 
@@ -600,7 +707,9 @@ struct Demand {
     everything: bool,
 }
 
+#[cfg(test)]
 impl Demand {
+    /// What a program that loads one subpath of a package asks of it.
     fn subpath(subpath: &str) -> Self {
         Self {
             subpaths: BTreeSet::from([subpath.to_owned()]),
@@ -630,6 +739,7 @@ fn package_reach(
     solid: &SolidPackages<'_>,
     demand: &Demand,
     extra_entries: &BTreeSet<PathBuf>,
+    memo: &mut Memo,
 ) -> Closure {
     let name = manifest(root)
         .ok()
@@ -645,9 +755,11 @@ fn package_reach(
     }
     let mut walk = Walk {
         solid,
-        files: BTreeSet::new(),
+        memo,
+        files: IdSet::default(),
         queue: VecDeque::new(),
-        entered: BTreeSet::new(),
+        entered: IdSet::default(),
+        noted: IdSet::default(),
         problems: Vec::new(),
         accessor_names: BTreeSet::new(),
         accessors_any_name: false,
@@ -655,18 +767,18 @@ fn package_reach(
         written_any: false,
     };
     walk.run(root, demand, extra_entries);
-    // Only a load of Solid's runtime is a known value from outside the closure: any other problem leaves code, or a value, the walk did not read.
-    let closed = walk
+    let problems = walk
         .problems
+        .iter()
+        .map(|&problem| walk.memo.problem(problem).clone())
+        .collect::<Vec<_>>();
+    // Only a load of Solid's runtime is a known value from outside the closure: any other problem leaves code, or a value, the walk did not read.
+    let closed = problems
         .iter()
         .all(|problem| matches!(problem, PackageReach::ReachesSolid { .. }));
     Closure {
-        reach: walk
-            .problems
-            .first()
-            .cloned()
-            .unwrap_or(PackageReach::Clear),
-        problems: walk.problems,
+        reach: problems.first().cloned().unwrap_or(PackageReach::Clear),
+        problems,
         accessors: AccessorFacts {
             closed,
             names: walk.accessor_names,
@@ -682,82 +794,257 @@ fn package_reach(
 /// The most distinct problems one walk keeps: the first is the verdict, the rest only say what else the closure holds.
 const MAX_PROBLEMS: usize = 256;
 
-struct Walk<'s, 'd> {
-    solid: &'s SolidPackages<'d>,
-    files: BTreeSet<PathBuf>,
-    queue: VecDeque<PathBuf>,
-    /// The (package, subpath) pairs whose entries were pushed; `*` is every entry.
-    entered: BTreeSet<(PathBuf, String)>,
-    /// Everything that makes the closure reach Solid or not decided, each once, in walk order.
-    problems: Vec<PackageReach>,
-    /// The names accessors are defined under in the files read, and whether any is defined under a name the syntax does not fix.
-    accessor_names: BTreeSet<String>,
-    accessors_any_name: bool,
-    /// The globals the files read write (ADR 0973), and whether any is written under a name the syntax does not fix.
-    written: BTreeSet<String>,
-    written_any: bool,
+/// A file a walk names, by the index the computation's [`Memo`] gave its path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FileId(usize);
+
+/// A problem a walk notes, by the index the [`Memo`] gave it: two equal problems are one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ProblemId(usize);
+
+/// A package entered at a subpath (`*` is every entry), by the index the [`Memo`] gave the pair.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct EntryId(usize);
+
+/// What a [`PackageReach`] problem is, as a hash key: equal problems have equal keys.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum ProblemKey {
+    Clear,
+    ReachesSolid(String),
+    Undecided(ReachBlocker, String),
 }
 
-impl Walk<'_, '_> {
-    fn run(&mut self, root: &Path, demand: &Demand, extra_entries: &BTreeSet<PathBuf>) {
-        self.enter(root, demand);
-        for entry in extra_entries {
-            self.push(entry.clone());
-        }
-        while let Some(file) = self.queue.pop_front() {
-            if self.files.len() > MAX_CLOSURE_FILES {
-                self.note(PackageReach::Undecided {
-                    blocker: ReachBlocker::ClosureLimit,
-                    detail: format!("more than {MAX_CLOSURE_FILES} files"),
-                });
-                return;
-            }
-            if let Err(problem) = self.visit(&file) {
-                self.note(problem);
+impl ProblemKey {
+    fn of(problem: &PackageReach) -> Self {
+        match problem {
+            PackageReach::Clear => Self::Clear,
+            PackageReach::ReachesSolid { via } => Self::ReachesSolid(via.clone()),
+            PackageReach::Undecided { blocker, detail } => {
+                Self::Undecided(*blocker, detail.clone())
             }
         }
     }
+}
 
-    fn note(&mut self, problem: PackageReach) {
-        if self.problems.len() < MAX_PROBLEMS && !self.problems.contains(&problem) {
-            self.problems.push(problem);
+/// A set of indexes, a bit each.
+#[derive(Default)]
+struct IdSet {
+    words: Vec<u64>,
+    len: usize,
+}
+
+impl IdSet {
+    /// Adds `index`; whether it was not there.
+    fn insert(&mut self, index: usize) -> bool {
+        let (word, bit) = (index / 64, 1_u64 << (index % 64));
+        if word >= self.words.len() {
+            self.words.resize(word + 1, 0);
         }
+        let fresh = self.words[word] & bit == 0;
+        self.words[word] |= bit;
+        self.len += usize::from(fresh);
+        fresh
+    }
+
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+/// One thing visiting a file does to a walk.
+#[derive(Clone, Copy, Debug)]
+enum Step {
+    /// A problem the file or one of its loads has.
+    Note(ProblemId),
+    /// A file one of its loads names.
+    Push(FileId),
+    /// A package one of its loads names, entered at a subpath.
+    Enter(EntryId),
+}
+
+/// What visiting one file does to a walk, in the order the visit meets it. A file's visit depends on the file and on the tree alone, so it is worked out once and
+/// every closure that holds the file replays it.
+struct Visit {
+    /// What the file's scan says of the accessors and global writes a walk collects; `None` for a file nobody scans.
+    scan: Option<Arc<ModuleScan>>,
+    steps: Vec<Step>,
+}
+
+/// The entry files a package's subpath names, once read.
+struct Entry {
+    root: PathBuf,
+    subpath: String,
+    files: Option<Result<Rc<[FileId]>, ProblemId>>,
+}
+
+/// What the closure walks of one [`package_reach_index`] computation have worked out, each once: the files they name (by index), what visiting each does, the
+/// distinct problems they find and the entries each package subpath names. Every package's closure is walked in full, and the closures overlap (a package's
+/// dependencies are walked again in the closure of each package that loads it), so a file is visited, its loads resolved and its problems built a single time
+/// and every walk that reaches it replays that: the walks answer as they would had each read everything itself.
+#[derive(Default)]
+struct Memo {
+    paths: Vec<PathBuf>,
+    file_ids: HashMap<PathBuf, FileId>,
+    /// By file: what visiting it does, once worked out.
+    visits: Vec<Option<Rc<Visit>>>,
+    problems: Vec<PackageReach>,
+    problem_ids: HashMap<ProblemKey, ProblemId>,
+    entries: Vec<Entry>,
+    entry_ids: HashMap<(PathBuf, String), EntryId>,
+}
+
+impl Memo {
+    fn file(&mut self, path: PathBuf) -> FileId {
+        if let Some(&id) = self.file_ids.get(&path) {
+            return id;
+        }
+        let id = FileId(self.paths.len());
+        self.file_ids.insert(path.clone(), id);
+        self.paths.push(path);
+        self.visits.push(None);
+        id
+    }
+
+    fn path(&self, file: FileId) -> &Path {
+        &self.paths[file.0]
+    }
+
+    fn problem_id(&mut self, problem: PackageReach) -> ProblemId {
+        let key = ProblemKey::of(&problem);
+        if let Some(&id) = self.problem_ids.get(&key) {
+            return id;
+        }
+        let id = ProblemId(self.problems.len());
+        self.problem_ids.insert(key, id);
+        self.problems.push(problem);
+        id
+    }
+
+    fn problem(&self, problem: ProblemId) -> &PackageReach {
+        &self.problems[problem.0]
+    }
+
+    /// The pair of a package root (canonical) and a subpath.
+    fn entry(&mut self, root: PathBuf, subpath: String) -> EntryId {
+        let key = (root, subpath);
+        if let Some(&id) = self.entry_ids.get(&key) {
+            return id;
+        }
+        let id = EntryId(self.entries.len());
+        self.entries.push(Entry {
+            root: key.0.clone(),
+            subpath: key.1.clone(),
+            files: None,
+        });
+        self.entry_ids.insert(key, id);
+        id
+    }
+
+    /// The files the entry names, read from the package's manifest the first time; what cannot be read is the problem.
+    fn entry_files(&mut self, entry: EntryId) -> Result<Rc<[FileId]>, ProblemId> {
+        if let Some(held) = &self.entries[entry.0].files {
+            return held.clone();
+        }
+        let (root, subpath) = (
+            self.entries[entry.0].root.clone(),
+            self.entries[entry.0].subpath.clone(),
+        );
+        let read = if subpath == "*" {
+            all_entries(&root)
+        } else {
+            subpath_entries(&root, &subpath)
+        };
+        let files = match read {
+            Ok(paths) => Ok(paths
+                .into_iter()
+                .map(|path| self.file(path))
+                .collect::<Rc<[FileId]>>()),
+            Err(problem) => Err(self.problem_id(problem)),
+        };
+        self.entries[entry.0].files = Some(files.clone());
+        files
+    }
+
+    /// What visiting `file` does to a walk, worked out the first time.
+    fn visit(&mut self, solid: &SolidPackages<'_>, file: FileId) -> Rc<Visit> {
+        if let Some(visit) = &self.visits[file.0] {
+            return Rc::clone(visit);
+        }
+        let raw = record(&self.paths[file.0], solid);
+        self.keep(file, raw)
+    }
+
+    /// Keeps what visiting `file` does, the files, problems and entries it names numbered.
+    fn keep(&mut self, file: FileId, raw: RawVisit) -> Rc<Visit> {
+        let steps = raw
+            .steps
+            .into_iter()
+            .map(|step| match step {
+                RawStep::Note(problem) => Step::Note(self.problem_id(problem)),
+                RawStep::Push(path) => Step::Push(self.file(path)),
+                RawStep::Enter(root, subpath) => Step::Enter(self.entry(root, subpath)),
+            })
+            .collect();
+        let visit = Rc::new(Visit {
+            scan: raw.scan,
+            steps,
+        });
+        self.visits[file.0] = Some(Rc::clone(&visit));
+        visit
+    }
+}
+
+/// One thing visiting a file does to a walk, before the memo has numbered what it names.
+enum RawStep {
+    Note(PackageReach),
+    Push(PathBuf),
+    /// A package (canonical root) entered at a subpath.
+    Enter(PathBuf, String),
+}
+
+/// What visiting a file does, as [`record`] found it.
+struct RawVisit {
+    scan: Option<Arc<ModuleScan>>,
+    steps: Vec<RawStep>,
+}
+
+/// What visiting `file` does to a walk: its hazards are noted and its loads followed, in the order the visit meets them. It depends on the file, the dialect's Solid
+/// packages and the tree alone, so any thread may work it out.
+fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
+    let mut recorder = Recorder {
+        solid,
+        steps: Vec::new(),
+    };
+    let scan = match recorder.visit(file) {
+        Ok(scan) => scan,
+        Err(problem) => {
+            recorder.note(problem);
+            None
+        }
+    };
+    RawVisit {
+        scan,
+        steps: recorder.steps,
+    }
+}
+
+/// Works out what visiting one file does: its hazards are noted and its loads followed, as steps.
+struct Recorder<'a, 'd> {
+    solid: &'a SolidPackages<'d>,
+    steps: Vec<RawStep>,
+}
+
+impl Recorder<'_, '_> {
+    fn note(&mut self, problem: PackageReach) {
+        self.steps.push(RawStep::Note(problem));
     }
 
     fn push(&mut self, file: PathBuf) {
-        if self.files.insert(file.clone()) {
-            self.queue.push_back(file);
-        }
+        self.steps.push(RawStep::Push(file));
     }
 
-    /// The entries `demand` asks of the package at `root`, each pair once; what cannot be read is a problem, and the rest of the walk goes on.
-    fn enter(&mut self, root: &Path, demand: &Demand) {
-        if let Err(problem) = self.try_enter(root, demand) {
-            self.note(problem);
-        }
-    }
-
-    fn try_enter(&mut self, root: &Path, demand: &Demand) -> Result<(), PackageReach> {
-        let root = root
-            .canonicalize()
-            .map_err(|error| missing(format!("{}: {error}", short(root))))?;
-        if demand.everything && self.entered.insert((root.clone(), "*".to_owned())) {
-            for entry in all_entries(&root)? {
-                self.push(entry);
-            }
-        }
-        for subpath in &demand.subpaths {
-            if self.entered.insert((root.clone(), subpath.clone())) {
-                for entry in subpath_entries(&root, subpath)? {
-                    self.push(entry);
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// One file: its hazards are noted and its loads followed; `Err` when the file cannot be read as code.
-    fn visit(&mut self, file: &Path) -> Result<(), PackageReach> {
+    /// One file: its hazards are noted and its loads followed; `Err` when the file cannot be read as code. The scan, for a file that has one.
+    fn visit(&mut self, file: &Path) -> Result<Option<Arc<ModuleScan>>, PackageReach> {
         let name = file.to_string_lossy();
         if NATIVE_EXTENSIONS
             .iter()
@@ -768,18 +1055,11 @@ impl Walk<'_, '_> {
                 detail: short(file),
             });
         }
-        if is_declaration_file(&name)
-            || CODE_FREE_EXTENSIONS
-                .iter()
-                .any(|extension| name.ends_with(extension))
-        {
+        if is_declaration_file(&name) || is_code_free(&name) {
             // A declaration file runs nothing; a stylesheet, an image or JSON holds no code a package wrote.
-            return Ok(());
+            return Ok(None);
         }
-        if !SCRIPT_EXTENSIONS
-            .iter()
-            .any(|extension| name.ends_with(extension))
-        {
+        if !is_script(&name) {
             // A file a bundler plugin compiles (`.vue`, `.svelte`) may become code that loads anything.
             return Err(PackageReach::Undecided {
                 blocker: ReachBlocker::Unparseable,
@@ -793,22 +1073,16 @@ impl Walk<'_, '_> {
                 detail: format!("{}: {}", short(file), hazard.detail),
             });
         }
-        self.accessor_names
-            .extend(scan.accessors.names.iter().cloned());
-        self.accessors_any_name |= scan.accessors.any_name;
-        self.written
-            .extend(scan.global_writes.names.iter().cloned());
-        self.written_any |= scan.global_writes.any_name;
         let directory = file.parent().unwrap_or(Path::new("/"));
         for specifier in &scan.loads {
             if let Err(problem) = self.load(file, directory, specifier) {
                 self.note(problem);
             }
         }
-        Ok(())
+        Ok(Some(scan))
     }
 
-    /// One load of `file`: the files it names are queued; `Err` when it names a Solid package (not walked: the dialect's runtime) or code nothing installed holds.
+    /// One load of `file`: the files it names are pushed; `Err` when it names a Solid package (not walked: the dialect's runtime) or code nothing installed holds.
     fn load(&mut self, file: &Path, directory: &Path, specifier: &str) -> Result<(), PackageReach> {
         if specifier.starts_with("node:") {
             return Ok(());
@@ -864,7 +1138,7 @@ impl Walk<'_, '_> {
                 via: format!("{} loads {specifier}", short(file)),
             });
         }
-        let root = self_reference(file, &name).or_else(|| find_package_root(file, &name, None));
+        let root = self_reference(file, &name).or_else(|| package_root_of_load(file, &name));
         let Some(root) = root else {
             let builtin =
                 NODE_BUILTINS.contains(&specifier) || NODE_BUILTINS.contains(&name.as_str());
@@ -888,7 +1162,303 @@ impl Walk<'_, '_> {
             });
         }
         // Only what the load names: the subpath's targets of an `exports` map, or the file a deep path names.
-        self.try_enter(&root, &Demand::subpath(&subpath))
+        let root =
+            canonical(&root).map_err(|error| missing(format!("{}: {error}", short(&root))))?;
+        self.steps.push(RawStep::Enter(root, subpath));
+        Ok(())
+    }
+}
+
+struct Walk<'s, 'd, 'm> {
+    solid: &'s SolidPackages<'d>,
+    memo: &'m mut Memo,
+    /// The files pushed so far: each is visited once.
+    files: IdSet,
+    queue: VecDeque<FileId>,
+    /// The (package, subpath) pairs whose entries were pushed; `*` is every entry.
+    entered: IdSet,
+    /// The problems in `problems`, so that each is kept once.
+    noted: IdSet,
+    /// Everything that makes the closure reach Solid or not decided, each once, in walk order.
+    problems: Vec<ProblemId>,
+    /// The names accessors are defined under in the files read, and whether any is defined under a name the syntax does not fix.
+    accessor_names: BTreeSet<String>,
+    accessors_any_name: bool,
+    /// The globals the files read write (ADR 0973), and whether any is written under a name the syntax does not fix.
+    written: BTreeSet<String>,
+    written_any: bool,
+}
+
+impl Walk<'_, '_, '_> {
+    fn run(&mut self, root: &Path, demand: &Demand, extra_entries: &BTreeSet<PathBuf>) {
+        self.enter(root, demand);
+        for entry in extra_entries {
+            let file = self.memo.file(entry.clone());
+            self.push(file);
+        }
+        // The files one step out are scanned side by side and then visited one by one in the order they were found (the queue's own, so the files a visit
+        // finds come after the ones already waiting): what the walk answers does not depend on how many threads scan.
+        while !self.queue.is_empty() {
+            let level = self.queue.drain(..).collect::<Vec<_>>();
+            prepare(self.memo, self.solid, &level);
+            for file in level {
+                if self.files.len() > MAX_CLOSURE_FILES {
+                    self.note(PackageReach::Undecided {
+                        blocker: ReachBlocker::ClosureLimit,
+                        detail: format!("more than {MAX_CLOSURE_FILES} files"),
+                    });
+                    return;
+                }
+                self.visit(file);
+            }
+        }
+    }
+
+    fn note(&mut self, problem: PackageReach) {
+        let problem = self.memo.problem_id(problem);
+        self.note_problem(problem);
+    }
+
+    fn note_problem(&mut self, problem: ProblemId) {
+        if self.problems.len() < MAX_PROBLEMS && self.noted.insert(problem.0) {
+            self.problems.push(problem);
+        }
+    }
+
+    fn push(&mut self, file: FileId) {
+        if self.files.insert(file.0) {
+            self.queue.push_back(file);
+        }
+    }
+
+    /// The entries `demand` asks of the package at `root`, each pair once; what cannot be read is a problem, and the rest of the walk goes on.
+    fn enter(&mut self, root: &Path, demand: &Demand) {
+        if let Err(problem) = self.try_enter(root, demand) {
+            self.note(problem);
+        }
+    }
+
+    fn try_enter(&mut self, root: &Path, demand: &Demand) -> Result<(), PackageReach> {
+        let root = canonical(root).map_err(|error| missing(format!("{}: {error}", short(root))))?;
+        if demand.everything {
+            let entry = self.memo.entry(root.clone(), "*".to_owned());
+            self.enter_entry(entry)
+                .map_err(|problem| self.memo.problem(problem).clone())?;
+        }
+        for subpath in &demand.subpaths {
+            let entry = self.memo.entry(root.clone(), subpath.clone());
+            self.enter_entry(entry)
+                .map_err(|problem| self.memo.problem(problem).clone())?;
+        }
+        Ok(())
+    }
+
+    /// The files of an entry are pushed the first time the walk enters it; `Err` when the package's manifest names them in a way the walk does not read.
+    fn enter_entry(&mut self, entry: EntryId) -> Result<(), ProblemId> {
+        if !self.entered.insert(entry.0) {
+            return Ok(());
+        }
+        for &file in self.memo.entry_files(entry)?.iter() {
+            self.push(file);
+        }
+        Ok(())
+    }
+
+    /// One file: what visiting it does, replayed in order.
+    fn visit(&mut self, file: FileId) {
+        let visit = self.memo.visit(self.solid, file);
+        if let Some(scan) = &visit.scan {
+            extend(&mut self.accessor_names, &scan.accessors.names);
+            self.accessors_any_name |= scan.accessors.any_name;
+            extend(&mut self.written, &scan.global_writes.names);
+            self.written_any |= scan.global_writes.any_name;
+        }
+        for step in &visit.steps {
+            match *step {
+                Step::Note(problem) => self.note_problem(problem),
+                Step::Push(file) => self.push(file),
+                Step::Enter(entry) => {
+                    if let Err(problem) = self.enter_entry(entry) {
+                        self.note_problem(problem);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// `into.extend(names)`, without a copy of a name `into` holds.
+fn extend(into: &mut BTreeSet<String>, names: &[String]) {
+    for name in names {
+        if !into.contains(name.as_str()) {
+            into.insert(name.clone());
+        }
+    }
+}
+
+/// Whether a file name is a stylesheet, an image or JSON: no code a package wrote.
+fn is_code_free(name: &str) -> bool {
+    CODE_FREE_EXTENSIONS
+        .iter()
+        .any(|extension| name.ends_with(extension))
+}
+
+/// Whether a file name is one the walk scans as code.
+fn is_script(name: &str) -> bool {
+    SCRIPT_EXTENSIONS
+        .iter()
+        .any(|extension| name.ends_with(extension))
+}
+
+/// The most threads that work ahead of one level of a walk at once, and the fewest bytes of source worth a thread of its own: a level with less is visited by the walk.
+const SCAN_THREADS: usize = 6;
+const SCAN_AHEAD_THREAD_BYTES: u64 = 128 << 10;
+/// A file of more bytes than this is big. Its syntax tree and semantic tables take many times its size, so the threads hold at most [`SCAN_AHEAD_BIG_BUDGET`] bytes
+/// of big files open at once (the biggest first; one bigger than that scans alone) and work on the small files meanwhile. A file bigger than [`SCAN_AHEAD_MAX`] is
+/// scanned when it is visited.
+const SCAN_AHEAD_BIG: u64 = 1 << 20;
+const SCAN_AHEAD_BIG_BUDGET: u64 = 24 << 20;
+const SCAN_AHEAD_MAX: u64 = 32 << 20;
+
+/// The files (by place in the level) the threads of [`prepare`] have yet to start, and the bytes of big files they hold open.
+struct ScanQueue {
+    /// Big files, the biggest first, with their sizes.
+    big: Vec<(u64, usize)>,
+    small: Vec<usize>,
+    next_big: usize,
+    next_small: usize,
+    held: u64,
+}
+
+/// Gives back the bytes of a big file when its scan ends, or unwinds.
+struct Held<'q> {
+    queue: &'q (Mutex<ScanQueue>, Condvar),
+    bytes: u64,
+}
+
+impl Drop for Held<'_> {
+    fn drop(&mut self) {
+        if self.bytes > 0 {
+            locked(&self.queue.0).held -= self.bytes;
+            self.queue.1.notify_all();
+        }
+    }
+}
+
+/// Works out, on a few threads, what visiting each file of `level` that no walk has visited does: the scan of the file and the resolution of its loads, which is
+/// where the file system is asked. The memo keeps the results in the order of the level, as the visits of the walk would have, so what the walk finds does not
+/// depend on how many threads worked. A file that cannot be read or scanned here is left for its visit, which meets the same problem and notes it.
+fn prepare(memo: &mut Memo, solid: &SolidPackages<'_>, level: &[FileId]) {
+    let mut big = Vec::new();
+    let mut small = Vec::new();
+    let mut bytes = 0_u64;
+    for (at, file) in level.iter().enumerate() {
+        if memo.visits[file.0].is_some() {
+            continue;
+        }
+        let path = memo.path(*file);
+        let name = path.to_string_lossy();
+        if NATIVE_EXTENSIONS
+            .iter()
+            .any(|extension| name.ends_with(extension))
+            || is_declaration_file(&name)
+            || is_code_free(&name)
+            || !is_script(&name)
+        {
+            continue;
+        }
+        let Ok(size) = fs::metadata(path).map(|metadata| metadata.len()) else {
+            continue;
+        };
+        if size > SCAN_AHEAD_MAX {
+            continue;
+        }
+        bytes += size;
+        if size > SCAN_AHEAD_BIG {
+            big.push((size, at));
+        } else {
+            small.push(at);
+        }
+    }
+    let tasks = big.len() + small.len();
+    let threads = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .min(SCAN_THREADS)
+        .min(tasks)
+        .min(usize::try_from(bytes / SCAN_AHEAD_THREAD_BYTES).unwrap_or(usize::MAX));
+    if threads < 2 {
+        return;
+    }
+    big.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
+    let queue = (
+        Mutex::new(ScanQueue {
+            big,
+            small,
+            next_big: 0,
+            next_small: 0,
+            held: 0,
+        }),
+        Condvar::new(),
+    );
+    let results = Mutex::new(
+        std::iter::repeat_with(|| None)
+            .take(level.len())
+            .collect::<Vec<Option<RawVisit>>>(),
+    );
+    let files = level
+        .iter()
+        .map(|file| memo.path(*file))
+        .collect::<Vec<_>>();
+    let reading = snapshot();
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                let _reading = Reading::through(Arc::clone(&reading));
+                loop {
+                    // A big file when the big files being scanned leave room for it, else a small one; with neither, wait for a big one to end.
+                    let task = {
+                        let mut state = locked(&queue.0);
+                        loop {
+                            if let Some(&(size, at)) = state.big.get(state.next_big)
+                                && (state.held == 0 || state.held + size <= SCAN_AHEAD_BIG_BUDGET)
+                            {
+                                state.next_big += 1;
+                                state.held += size;
+                                break Some((at, size));
+                            }
+                            if let Some(&at) = state.small.get(state.next_small) {
+                                state.next_small += 1;
+                                break Some((at, 0));
+                            }
+                            if state.next_big >= state.big.len() {
+                                break None;
+                            }
+                            state = queue.1.wait(state).unwrap_or_else(PoisonError::into_inner);
+                        }
+                    };
+                    let Some((at, held)) = task else {
+                        break;
+                    };
+                    let file = files[at];
+                    {
+                        // The syntax tree is gone when the scan ends; what is left is small.
+                        let _held = Held {
+                            queue: &queue,
+                            bytes: held,
+                        };
+                        let _ = scanned(file);
+                    }
+                    let raw = record(file, solid);
+                    locked(&results)[at] = Some(raw);
+                }
+            });
+        }
+    });
+    let results = results.into_inner().unwrap_or_else(PoisonError::into_inner);
+    for (at, raw) in results.into_iter().enumerate() {
+        if let Some(raw) = raw {
+            memo.keep(level[at], raw);
+        }
     }
 }
 
@@ -974,20 +1544,32 @@ fn source_spellings(path: &str) -> Vec<String> {
 /// [`resolve_path`]; `follow_main` is whether a directory's `main` is read, which only the first directory of a resolution does (a `main` naming a
 /// directory is resolved by its `index` file, and a `main` of `""`, `"."` or the directory itself would otherwise never end).
 fn resolve_path_following(base: &Path, follow_main: bool) -> Option<PathBuf> {
+    let snapshot = snapshot();
+    let key = (base.to_path_buf(), follow_main);
+    let held = locked(&snapshot.resolved).get(&key).cloned();
+    if let Some(held) = held {
+        return held;
+    }
+    let found = resolve_path_unheld(base, follow_main);
+    locked(&snapshot.resolved).insert(key, found.clone());
+    found
+}
+
+fn resolve_path_unheld(base: &Path, follow_main: bool) -> Option<PathBuf> {
     if base.is_file() {
-        return base.canonicalize().ok();
+        return canonical(base).ok();
     }
     let text = base.to_string_lossy();
     for spelling in source_spellings(&text) {
         let candidate = PathBuf::from(spelling);
         if candidate.is_file() {
-            return candidate.canonicalize().ok();
+            return canonical(&candidate).ok();
         }
     }
     for extension in RESOLVE_EXTENSIONS {
         let candidate = PathBuf::from(format!("{text}{extension}"));
         if candidate.is_file() {
-            return candidate.canonicalize().ok();
+            return canonical(&candidate).ok();
         }
     }
     if base.is_dir() {
@@ -1004,7 +1586,7 @@ fn resolve_path_following(base: &Path, follow_main: bool) -> Option<PathBuf> {
         for extension in RESOLVE_EXTENSIONS {
             let candidate = base.join(format!("index{extension}"));
             if candidate.is_file() {
-                return candidate.canonicalize().ok();
+                return canonical(&candidate).ok();
             }
         }
     }
@@ -1210,7 +1792,7 @@ fn expand_pattern(root: &Path, pattern: &str) -> Vec<PathBuf> {
                     .iter()
                     .any(|extension| relative.ends_with(extension))
                 && !is_declaration_file(&relative)
-                && let Ok(path) = path.canonicalize()
+                && let Ok(path) = canonical(&path)
             {
                 found.push(path);
             }
@@ -1291,17 +1873,11 @@ fn package_imports(file: &Path, specifier: &str) -> Result<Vec<Target>, PackageR
 
 /// Node's package self-reference: the nearest manifest above `file` is named `name` and has `exports`.
 fn self_reference(file: &Path, name: &str) -> Option<PathBuf> {
-    let mut directory = file.parent();
-    while let Some(current) = directory {
-        if current.join("package.json").is_file() {
-            let manifest = manifest(current).ok()?;
-            return (manifest.get("name").and_then(serde_json::Value::as_str) == Some(name)
-                && manifest.get("exports").is_some())
-            .then(|| current.to_path_buf());
-        }
-        directory = current.parent();
-    }
-    None
+    let current = nearest_manifest_directory(file.parent()?)?;
+    let manifest = manifest(&current).ok()?;
+    (manifest.get("name").and_then(serde_json::Value::as_str) == Some(name)
+        && manifest.get("exports").is_some())
+    .then_some(current)
 }
 
 /// The verdicts by root, for a report: how many of each.
@@ -1369,11 +1945,18 @@ mod tests {
     }
 
     fn closure(root: &Path, name: &str) -> Closure {
+        reach_closure(root, name, &everything())
+    }
+
+    /// One computation: the lookups and the walks' memo start empty, as in [`package_reach_index`].
+    fn reach_closure(root: &Path, name: &str, demand: &Demand) -> Closure {
+        let _reading = Reading::fresh();
         package_reach(
             &root.join("node_modules").join(name).canonicalize().unwrap(),
             &SOLID,
-            &everything(),
+            demand,
             &BTreeSet::new(),
+            &mut Memo::default(),
         )
     }
 
@@ -1385,13 +1968,7 @@ mod tests {
     }
 
     fn reach_of(root: &Path, name: &str, demand: &Demand) -> PackageReach {
-        package_reach(
-            &root.join("node_modules").join(name).canonicalize().unwrap(),
-            &SOLID,
-            demand,
-            &BTreeSet::new(),
-        )
-        .reach
+        reach_closure(root, name, demand).reach
     }
 
     #[test]
@@ -1725,7 +2302,15 @@ mod tests {
             .collect::<BTreeSet<_>>();
         assert_eq!(siblings.len(), 1);
         let package = root.join("node_modules/deep").canonicalize().unwrap();
-        let found = package_reach(&package, &SOLID, &everything(), &siblings).reach;
+        let _reading = Reading::fresh();
+        let found = package_reach(
+            &package,
+            &SOLID,
+            &everything(),
+            &siblings,
+            &mut Memo::default(),
+        )
+        .reach;
         assert!(
             matches!(found, PackageReach::ReachesSolid { .. }),
             "{found:?}"
@@ -1836,6 +2421,164 @@ mod tests {
             PackageReach::ReachesSolid { .. }
         ));
         assert_eq!(closure(root, "early").problems.len(), 2);
+    }
+
+    /// What a closure answers, whole.
+    fn answer(closure: &Closure) -> String {
+        format!(
+            "{:?} {:?} {:?} {:?}",
+            closure.reach, closure.problems, closure.accessors, closure.global_writes
+        )
+    }
+
+    /// The closures of `names` in one computation: one memo, so a file a closure shares with an earlier one is replayed, not read again.
+    fn closures_in_one_computation(root: &Path, names: &[&str]) -> Vec<Closure> {
+        let _reading = Reading::fresh();
+        let mut memo = Memo::default();
+        names
+            .iter()
+            .map(|name| {
+                package_reach(
+                    &root.join("node_modules").join(name).canonicalize().unwrap(),
+                    &SOLID,
+                    &everything(),
+                    &BTreeSet::new(),
+                    &mut memo,
+                )
+            })
+            .collect()
+    }
+
+    /// The walks of one computation share what they read (each file is visited once, its loads resolved once, a package's entries read once), and every closure
+    /// answers as it would have alone: the verdict, every problem in walk order, the accessors and the global writes.
+    #[test]
+    fn closures_that_share_files_answer_as_each_would_alone() {
+        let directory = project();
+        let root = directory.path();
+        let package = |name: &str, main: &str, source: &str| {
+            write(
+                root,
+                &format!("node_modules/{name}/package.json"),
+                &format!(r#"{{"name":"{name}","main":"{main}"}}"#),
+            );
+            write(root, &format!("node_modules/{name}/{main}"), source);
+        };
+        // `shared` holds a hazard, an accessor and a global write, and loads a file only it holds.
+        package(
+            "shared",
+            "index.js",
+            "import './inner.js'; export const o = { get x() { return 1; } }; window.__shared = 1; export const p = process.env.X;",
+        );
+        write(
+            root,
+            "node_modules/shared/inner.js",
+            "export const i = eval('1');",
+        );
+        package("a", "index.js", "import 'shared'; export const a = 1;");
+        package(
+            "b",
+            "index.js",
+            "import 'shared'; import { action } from 'solid-js'; export const b = action;",
+        );
+        package(
+            "c",
+            "index.js",
+            "import 'b'; import 'a'; export const c = 1;",
+        );
+        package(
+            "d",
+            "index.js",
+            "import 'missing-package'; export const d = 1;",
+        );
+        package(
+            "e",
+            "index.js",
+            "import 'c'; import 'd'; export const e = 1;",
+        );
+        let names = ["e", "d", "c", "b", "a", "shared"];
+        let together = closures_in_one_computation(root, &names);
+        for (name, together) in names.iter().zip(&together) {
+            let alone = closures_in_one_computation(root, &[name]);
+            assert_eq!(answer(together), answer(&alone[0]), "{name}");
+        }
+        // The shared dependency's problems reach every package that loads it, in the order the walk meets them: `b` loads Solid first (its own file's
+        // loads are in order), then `shared` and the file `shared` loads.
+        assert_eq!(together[3].problems.len(), 3, "{:?}", together[3].problems);
+        assert!(matches!(
+            together[3].problems[0],
+            PackageReach::ReachesSolid { .. }
+        ));
+        assert_eq!(together[4].problems.len(), 2, "{:?}", together[4].problems);
+        assert!(together[4].accessors.names.contains("x"));
+        assert!(
+            together[4]
+                .global_writes
+                .names
+                .contains(&"__shared".to_owned())
+        );
+    }
+
+    /// Many files one step out are scanned, and their loads resolved, side by side; they are still visited in the order the walk found them, so the problems keep
+    /// that order (the files are padded to be enough bytes for threads to start).
+    #[test]
+    fn a_level_of_many_files_is_walked_in_the_order_it_was_found() {
+        let directory = project();
+        let root = directory.path();
+        write(
+            root,
+            "node_modules/wide/package.json",
+            r#"{"name":"wide","main":"index.js"}"#,
+        );
+        let padding = format!("// {}\n", "x".repeat(8192));
+        let mut index = String::new();
+        for number in 0..40 {
+            index.push_str(&format!("import './f{number}.js';\n"));
+            let source = match number {
+                7 => "export const x = eval('1');",
+                30 => "export const x = process.env.X;",
+                _ => "export const x = 1;",
+            };
+            write(
+                root,
+                &format!("node_modules/wide/f{number}.js"),
+                &format!("{padding}import './sub/g{number}.js';\n{source}"),
+            );
+            let source = match number {
+                12 => "export const g = new Function('return 1');",
+                _ => "export const g = 1;",
+            };
+            write(
+                root,
+                &format!("node_modules/wide/sub/g{number}.js"),
+                &format!("{padding}{source}"),
+            );
+        }
+        write(root, "node_modules/wide/index.js", &index);
+        let found = closure(root, "wide");
+        // A load list is sorted, so the files are visited as strings: `f30.js` before `f7.js`; the files they load come after the whole level, in the order found.
+        let files = found
+            .problems
+            .iter()
+            .map(|problem| match problem {
+                PackageReach::Undecided { detail, .. } => {
+                    detail.split(':').next().unwrap_or_default().to_owned()
+                }
+                other => format!("{other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            files,
+            ["wide/f30.js", "wide/f7.js", "wide/sub/g12.js"],
+            "{:?}",
+            found.problems
+        );
+        assert!(matches!(
+            found.reach,
+            PackageReach::Undecided {
+                blocker: ReachBlocker::UnknownGlobal,
+                ..
+            }
+        ));
     }
 
     /// ADR 0973: where a package's closure may define an accessor, read from the whole closure; a closure not read whole answers for every name.
