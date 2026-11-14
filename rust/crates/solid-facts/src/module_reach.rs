@@ -1498,7 +1498,7 @@ fn member_parts<'a>(expression: &'a Expression<'a>) -> Option<(&'a Expression<'a
 }
 
 /// Whether the value of the expression at `child` is only inspected by its `parent` and goes nowhere: the operand of `typeof` or `!`, a side of an equality, the test of a
-/// conditional, `if` or loop, or the left side of `&&` (an object is truthy, so the expression's value is the right side's).
+/// conditional, `if` or loop, or the left operand of `&&` (an object is truthy, so the expression is its right operand).
 fn only_inspected(nodes: &AstNodes<'_>, child: oxc_span::Span, parent: NodeId) -> bool {
     use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
     match nodes.get_node(parent).kind() {
