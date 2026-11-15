@@ -9,7 +9,7 @@
 //
 // "0 added" is not a soundness gate: an unproven clean claim is a finding
 // that is missing, and this comparison only sees which keys moved.
-import { readFileSync } from "node:fs";
+import { readReportFile } from "./lib/corpus-report.mjs";
 
 const [beforePath, afterPath, ...rest] = process.argv.slice(2);
 if (!beforePath || !afterPath) throw new Error("usage: corpus-sweep-compare.mjs <before> <after> [--list N]");
@@ -17,18 +17,20 @@ const listIndex = rest.indexOf("--list");
 const listLimit = listIndex >= 0 ? Number(rest[listIndex + 1]) : 20;
 
 function load(path) {
-  const report = JSON.parse(readFileSync(path, "utf8"));
   const keys = new Map();
-  for (const result of report.results) {
-    for (const finding of result.findings) {
-      const location = finding.primaryLocation ?? {};
-      const key = [
-        result.app, result.project, finding.id, finding.kind,
-        location.path, location.startByte, location.endByte,
-      ].join("|");
-      keys.set(key, (keys.get(key) ?? 0) + 1);
-    }
-  }
+  // A project at a time: a whole corpus report does not fit one string (scripts/lib/corpus-report.mjs).
+  readReportFile(path, {
+    onResult: (result) => {
+      for (const finding of result.findings) {
+        const location = finding.primaryLocation ?? {};
+        const key = [
+          result.app, result.project, finding.id, finding.kind,
+          location.path, location.startByte, location.endByte,
+        ].join("|");
+        keys.set(key, (keys.get(key) ?? 0) + 1);
+      }
+    },
+  });
   return keys;
 }
 

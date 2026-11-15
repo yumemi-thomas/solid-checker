@@ -34,6 +34,8 @@ import { relative } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { readReportFile } from "./lib/corpus-report.mjs";
+
 /** A finding's category, from its path relative to the project root. */
 export function category(path) {
   const lower = path.toLowerCase();
@@ -124,7 +126,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const oraclePath = oracleIndex >= 0 ? argv[oracleIndex + 1] : undefined;
   const asJson = argv.includes("--json");
 
-  const sweep = JSON.parse(readFileSync(sweepPath, "utf8"));
+  const sweep = readReportFile(sweepPath);
 
   let oracle;
   if (oraclePath) {

@@ -30,6 +30,7 @@ import { fileURLToPath } from "node:url";
 
 import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
 import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
+import { readReportFile } from "./lib/corpus-report.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -297,7 +298,8 @@ async function main(argv) {
   // The old build's results: the baseline report's, and a run for each project it lacks.
   const oldResults = new Map();
   if (options.baseline) {
-    for (const result of JSON.parse(readFileSync(resolve(options.baseline), "utf8")).results) oldResults.set(keyOf(result), result);
+    // Read a project at a time: a whole corpus report does not fit one string (scripts/lib/corpus-report.mjs).
+    readReportFile(resolve(options.baseline), { onResult: (result) => oldResults.set(keyOf(result), result) });
   }
   const missing = rows.filter((row) => !oldResults.has(keyOf(row)));
   for (const result of await pool(missing, jobs, (row) => runProject(oldBin, oldFacts, row, manifest.configuration, boundary, timeoutMs), "old")) oldResults.set(keyOf(result), result);

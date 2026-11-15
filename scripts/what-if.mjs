@@ -35,6 +35,7 @@ import { fileURLToPath } from "node:url";
 
 import { codesForRule, codeRules, ruleHasRuntimeCounterpart } from "./fuzz/codes.mjs";
 import { refuseAssumed } from "./lib/assumed.mjs";
+import { readReportFile } from "./lib/corpus-report.mjs";
 import { findingSites, summarize, transitions } from "./proof-ablation.mjs";
 import { liftingSets } from "./u-blockers.mjs";
 
@@ -431,7 +432,8 @@ async function corpus(argv) {
   const rows = manifest.projects.filter((row) => !selected || selected.has(row.app)).map((row) => ({ app: row.app, root: join(appsRoot, row.root), project: row.project }));
   for (const row of rows) if (!existsSync(join(row.root, row.project))) throw new Error(`missing project input: ${join(row.root, row.project)}`);
   if (found["order-from"]) {
-    const previous = new Map(JSON.parse(readFileSync(resolve(found["order-from"]), "utf8")).results.map((row) => [`${row.app}\0${row.project}`, row.wallMs]));
+    const previous = new Map();
+    readReportFile(resolve(found["order-from"]), { onResult: (row) => previous.set(`${row.app}\0${row.project}`, row.wallMs) });
     rows.sort((left, right) => (previous.get(`${right.app}\0${right.project}`) ?? Number.MAX_SAFE_INTEGER) - (previous.get(`${left.app}\0${left.project}`) ?? Number.MAX_SAFE_INTEGER));
   }
   const configuration = manifest.configuration;
