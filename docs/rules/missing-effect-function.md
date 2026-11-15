@@ -129,3 +129,7 @@ everything it needs in compute.
 
 - [strict-read-untracked](strict-read-untracked.md) — reads in the apply phase
 - [missing-owner](missing-owner.md) — an effect with no owner at all
+
+## Every call ends (ADR 0989)
+
+Each call of an effect primitive is a site (`effect-fn`, MISSING_EFFECT_FN) and ends in a row or a typed silence: `slot-callable` (the apply is provably callable: a function, a bundle whose `effect` is one) or `tsc-rejected` (TypeScript rejects the call and reports it). A call no resolved-call fact describes is an obligation (`effect-argument-shape-uncertain`), never silent.

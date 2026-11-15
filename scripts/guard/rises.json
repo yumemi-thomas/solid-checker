@@ -3650,6 +3650,62 @@
    "to": 2,
    "adr": "ADR 0988",
    "fact": "the new case FlowReadSeventeen in write-climb-depth adds one JSX creation site, its <For> element, to the owner-call universe (slice 6, ADR 0969): the site's home rows SC3001 leaf-operation-unaccounted and SC6002 effect-creation-unaccounted, the pair FlowReadSixteen's <For> already carries. No depth change adds a row; a component body is no leaf scope and no effect's apply, so Chrome rc.21 fires neither code there (patterns/depth/s17-flow-read reports STRICT_READ_UNTRACKED only)"
+  },
+  {
+   "fixture": "reactive-ir/effect-apply-first-run-component-child",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0989",
+   "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/effect-apply-first-run-entry-code",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0989",
+   "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/effect-apply-first-run-helper-call",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0989",
+   "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/effect-apply-first-run-module-code",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0989",
+   "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/eslint-plugin-corpus",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0989",
+   "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0989",
+   "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/render-apply-first-run",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0989",
+   "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
   }
  ]
 }
