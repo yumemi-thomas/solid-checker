@@ -24471,5 +24471,11 @@
    "mx-untracked-read-after-await-effect-async-use-await-forwarded-direct-none"
   ],
   "rediscovered": "focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall,lg-recall -- --contexts memo-async,effect-async (the arguments of make fuzz-focus CODES=UNTRACKED_READ_AFTER_AWAIT FUZZ_GRIDS=mx-recall,lg-recall, narrowed to the two contexts), 1,822 programs, on the new AWAIT_USES variants `use-await-forwarded` (mx: the call past the second await) and `use-await-forwarded-unread` (the same forward, never called; legal in lg), layer none only (`layers`: the variant's `await` cannot sit in a closure, helper or iife layer): the 516acd229 release build exits 1 with 26 false-clean programs, both ids of this entry among them (the lane program api/v49-await-accessor is a false clean there too); the head of this branch (23ad6b7f4 plus ADR 0986) exits 0, `nothing needs a look`: both ids recall-gap (uncertifiable, never silent), the twins not-fired in mx and uncertifiable in lg, oracle 22 compared, 0 behaviour differences."
+ },
+ {
+  "finding": "the write walk's region fold skipped ADR 0874's withheld-layer veto: a write (and a call into an unread package) in a function whose callers are callbacks of a withheld standard call was silent in the plain build and `Unknown` with the role log or the proof log on, so the proof log dropped a row the plain build never had (ADR 0991)",
+  "found": "Research C, brief 07 (expenses-app `clerk.tsx`: 1,664 plain rows against 1,663 with the proof log), then the plain-vs-log corpus diff on main 3bd824913 (10 rows standard, 7 development)",
+  "fixed": "ADR 0991 (`execution_role/write_roles.rs` `withheld_caller_role`, asked by the path walk and by `write_components.rs` `place_sites`)",
+  "outside": "no generator writes the proof-log or role-log toggle, and the shape (a program-wide veto from an unspelled-key write into a handed object, a callback of a withheld `then`, a listener nested in it, in an `onSettled`) is not a grid shape; the fixtures `write-fold-withheld-caller` and `-no-veto`, `write_walk_strategies_process::a_caller_in_a_withheld_layer_is_unknown_in_the_fold_and_on_every_path` and `proof_log_process::the_proof_log_changes_no_answer` hold it (each fails on main 3bd824913), and the plain-vs-log corpus diff (std and dev) is the check: identical after the fix"
  }
 ]
