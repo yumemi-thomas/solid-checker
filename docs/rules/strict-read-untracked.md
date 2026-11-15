@@ -40,6 +40,13 @@ violation. A package whose manifest names no Solid package is read as source non
 closure imports one (a package that forgot its peer): the same read of its value is a violation or
 silent by its source. `docs/open-work.md` names what would win the rows back.
 
+Such a value is followed forward through the program as well ([ADR 0998](../decisions.md#adr-0998)): a binding, a pattern,
+an assignment, a slot of a literal, a return, a parameter of a project function, a standard method's result, an export read in
+another module. Each call or member get through it where nothing tracks or places the read is **uncertifiable**
+(`package-value-read:flowed`), and so is a position inside the project the walk cannot follow (`package-value-read:value-in-class-field`,
+`:value-through-generator`, `:value-thrown`, `:value-forwarded`, `:value-use-unclassified`). A value handed to a package, a
+constructor, a component, a Solid primitive or an `await` is not followed there (`docs/open-work.md`).
+
 ## What it does
 
 Flags reads of reactive values that happen outside every tracking scope: at the top

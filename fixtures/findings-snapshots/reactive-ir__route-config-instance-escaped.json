@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/instance-escaped/Read.tsx",
+      "start": 123,
+      "end": 136,
+      "fixes": 0
+    },
+    {
       "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",

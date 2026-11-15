@@ -785,6 +785,17 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/FakeLazy.tsx",
+      "start": 447,
+      "end": 462,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer/LocalLazy.tsx",
