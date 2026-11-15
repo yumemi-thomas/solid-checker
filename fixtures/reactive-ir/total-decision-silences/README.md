@@ -9,3 +9,5 @@
 | `on-not-function` | LOADING_ON_ACCESSOR | `OnValueNotCallable`: the value of `on` (the compiler's callability is non-callable) |
 
 Both codes are placeless, so an SC9012 never credits them. `NamesNothing`, `HoldsNothing`, `Namespace` and `HandCall` each end in the silences above and produce no finding; `Shadowed` (a local `Loading`) is no site; `SyncOptimistic` (a `createOptimistic(0)` setter in a handler) carries no SC2009 code, as its source is synchronous. With `SOLID_CHECKER_IR_ABLATE_SILENCE=all` every site of the first four becomes an uncertifiable row of its rule: the process test `a_loading_boundary_exit_is_a_named_silence_and_unnamed_it_is_an_uncertifiable_row` pins it.
+
+The fixture's snapshot also holds rows of other families (SC3001, SC4001, SC6002 at the component tags, SC9014 for the stub's package): they are those universes' own and are not part of this claim.

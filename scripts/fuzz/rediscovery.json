@@ -24421,5 +24421,23 @@
   "fixed": "ADR 0981 change 4 (`package_action_calls.rs` `installed_path`: a file of an installed package is code the pass asks about whether or not the build reads the package; rule 3 skips a package read as source)",
   "outside": "the generators' package sites enter a package directly and write no project-side stored handle, getter, lazy name, namespace or standard-library form into a package the build reads; the pattern lane holds it: `patterns/pkgaction/*` (116 fine on this head, 2 false clean that were already in open-defects.json) and the new `pkgaction/declared-stored-handle`, `-fnret-value` and `-getter-class` (the same programs with the peer declared: false clean on main 3 of 3, fine on this head 3 of 3)",
   "rediscovered": "pattern lane in Chrome, release builds: main fails the 3 declared twins (3 of 3 false clean); the first head of ADR 0981 failed 29 of the lane's `pkgaction/*`; this head passes all of them and the twins"
+ },
+ {
+  "finding": "SC2009: an optimistic setter recorded by an assignment's destructuring (`let o, setO; [o, setO] = createOptimistic(async () => 1); setO(2)`) made no async decision, so its write raised nothing where Chrome throws OPTIMISTIC_WRITE_BEFORE_LOAD; the declaration form had the decision (ADR 0987)",
+  "found": "the SC2009 audit of slice 8a (an untracked probe, then the runtime oracle case `optimistic-setter-forms`, Chrome rc.21, 2026-11-15)",
+  "fixed": "ADR 0987 (`source_discovery/discover_file.rs` `optimistic_setter_is_async`, used by the declaration, assignment and callback-return setter recordings)",
+  "grid": "mx-recall",
+  "code": "OPTIMISTIC_WRITE_BEFORE_LOAD",
+  "ids": [
+   "mx-optimistic-write-before-load-body-assigned-direct-none",
+   "mx-optimistic-write-before-load-body-assigned-direct-closure",
+   "mx-optimistic-write-before-load-body-assigned-direct-helper",
+   "mx-optimistic-write-before-load-body-assigned-direct-iife",
+   "mx-optimistic-write-before-load-body-assigned-direct-module-helper",
+   "mx-optimistic-write-before-load-body-assigned-alias-none",
+   "mx-optimistic-write-before-load-body-assigned-alias-closure",
+   "mx-optimistic-write-before-load-body-assigned-alias-helper"
+  ],
+  "rediscovered": "main 9878ba9d7 (release) on `focus.mjs --grids mx-recall,lg-recall --split-codes --codes LOADING_ON_ACCESSOR,OPTIMISTIC_WRITE_BEFORE_LOAD`: 36 false-clean, all the new `assigned` recall variant; this head: 0 (mx-recall OPTIMISTIC 1,426 agree, 1,334 recall-gap as before; lg-recall 1,146 uncertifiable, 54 clean). The callback-return and factory forms were already obligations (SC9012) on main, so the generator does not separate them; the fixture rc21-optimistic-setter-forms and the oracle case pin all four forms"
  }
 ]
