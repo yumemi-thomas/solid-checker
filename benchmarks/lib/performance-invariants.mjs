@@ -41,6 +41,69 @@ export const DEFAULT_CEILINGS = Object.freeze({
 // real regression slows every one.
 export const COLD_SAMPLES = 9;
 
+// First-IR cold processes: drawn one at a time until one reads at or under the
+// ceiling or this many are spent. The decision is the minimum of them either
+// way (the minimum is at most the ceiling exactly when some sample is), so the
+// early stop only saves time on a quiet machine; a regression raises the floor
+// under every sample and still fails after all of them. 9 was too few for a
+// shared machine: on this Mac at 1-minute load 5 to 30 the good commit
+// 9d875bff0 had 5% of its samples under the ceiling, so the chance of a hit
+// within 9 was 38% and within 40 is 88% (bootstrap over 117 samples).
+export const FIRST_IR_MAX_SAMPLES = 40;
+
+// A cold sample is slowed by whatever else runs: before the first one, wait up
+// to this long for the 1-minute load average to fall to a quarter of the
+// cores (at least 2), then measure anyway. The gate never skips and never
+// passes for lack of data; the load is printed with the result.
+export const QUIET_WAIT_MS = 30_000;
+export const quietLoadBound = cpuCount => Math.max(2, cpuCount / 4);
+
+// The checker's cost per source grows with the length of the source path (it
+// keys its tables by path strings): the same binary read 4.5% slower, about
+// 8,000 ns/source, on a corpus directory of 93 characters than on one of 51
+// (ADR 0986, an open item). The corpus lives under the temporary directory, so
+// its path length is an input of this gate: the result says it.
+
+/** Order statistics of a list of numbers. */
+export function spreadOf(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = fraction => sorted[Math.floor(fraction * (sorted.length - 1))];
+  return { n: sorted.length, min: sorted[0], p25: at(0.25), median: at(0.5), p75: at(0.75), max: sorted[sorted.length - 1] };
+}
+
+const perSource = report => report.firstRustPipelineBreakdown.reactiveIrTotal.medianNs / report.sourceCount;
+
+/**
+ * The first-IR cold samples: waits (up to `waitMs`) for `load()` to reach `bound`, then calls `measureOne()` until a
+ * sample is at or under `limit` or `maxSamples` are spent. Returns the reports and what the machine was doing.
+ * `load`, `now` and `sleep` are injected for tests.
+ */
+export function sampleFirstIr({
+  measureOne,
+  limit,
+  maxSamples = FIRST_IR_MAX_SAMPLES,
+  bound,
+  waitMs = QUIET_WAIT_MS,
+  load,
+  now = Date.now,
+  sleep
+}) {
+  const loadBefore = load();
+  const waitStarted = now();
+  while (load() > bound && now() - waitStarted < waitMs) sleep(1000);
+  const waitedMs = now() - waitStarted;
+  const loadStart = load();
+  const reports = [];
+  while (reports.length < maxSamples) {
+    reports.push(measureOne());
+    if (perSource(reports[reports.length - 1]) <= limit) break;
+  }
+  return {
+    reports,
+    run: { loadBefore, loadStart, loadEnd: load(), bound, waitedMs, maxSamples, quiet: loadStart <= bound, stoppedEarly: reports.length < maxSamples }
+  };
+}
+
 // The export phase needs a corpus that has something to aggregate. Sizes
 // (files) of the "structured" corpus the export-scaling invariant measures.
 export const EXPORT_CORPUS_FILES = Object.freeze({ small: 500, large: 1000 });
@@ -57,6 +120,22 @@ function exportWork(report) {
   return report.firstRustPipelineBreakdown.interproceduralExportWork.medianNs;
 }
 
+function describeFirstIr(samples, run, over) {
+  const spread = spreadOf(samples);
+  const at = value => value.toFixed(0);
+  const parts = [`${spread.n} cold sample${spread.n === 1 ? "" : "s"}, min ${at(spread.min)}, p25 ${at(spread.p25)}, median ${at(spread.median)}, p75 ${at(spread.p75)}, max ${at(spread.max)}`];
+  if (run) {
+    const load = value => value.toFixed(1);
+    parts.push(
+      `1-minute load ${load(run.loadStart)} at the first sample, ${load(run.loadEnd)} at the last (quiet bound ${load(run.bound)}${run.waitedMs >= 1000 ? `, waited ${(run.waitedMs / 1000).toFixed(0)} s for it` : ""}${run.quiet ? "" : ", not reached"})`
+    );
+    if (run.corpusPathChars) parts.push(`corpus path ${run.corpusPathChars} characters`);
+    if (run.stoppedEarly) parts.push("stopped at the first sample under the ceiling");
+    if (over) parts.push(`all ${spread.n} samples were over the ceiling${run.quiet ? "" : ": the machine was not quiet, rerun it when it is"}`);
+  }
+  return parts.join("; ");
+}
+
 /**
  * Evaluates every invariant. `wallTimeGate` is "enforce" (a breached ceiling is
  * a violation) or "report" (it is recorded with status "reported" and never
@@ -64,7 +143,7 @@ function exportWork(report) {
  * one-line summary.
  */
 export function assessPerformance(
-  { small, largeSamples, exportSmallSamples, exportLargeSamples, incremental },
+  { small, largeSamples, exportSmallSamples, exportLargeSamples, incremental, firstIrRun },
   { wallTimeGate = "enforce", ceilings = DEFAULT_CEILINGS } = {}
 ) {
   if (!WALL_TIME_GATES.includes(wallTimeGate)) {
@@ -88,9 +167,7 @@ export function assessPerformance(
     Math.min(...exportLargeSamples.map(exportTime)) / Math.max(Math.min(...exportSmallSamples.map(exportTime)), 1);
   const responseBytes = small.firstAnalysisBreakdown.responseBytes.medianNs / small.sourceCount;
   const cachedIr = small.rustPipelineBreakdown.reactiveIrTotal.medianNs;
-  const firstIrSamples = largeSamples.map(
-    report => report.firstRustPipelineBreakdown.reactiveIrTotal.medianNs / report.sourceCount
-  );
+  const firstIrSamples = largeSamples.map(perSource);
   // Best of the independent cold processes: shared-runner scheduling can slow
   // one sample, a real regression slows every one.
   const firstIrPerSource = Math.min(...firstIrSamples);
@@ -134,8 +211,8 @@ export function assessPerformance(
       `cached Reactive IR analysis takes ${value} ns (limit ${limit} ns for shared-result reuse)`
     ),
     wallTime("first-ir", firstIrPerSource, ceilings.firstIrNsPerSource, "ns/source", (value, limit) =>
-      `best first Reactive IR analysis uses ${value.toFixed(0)} ns/source (limit ${limit}; samples ${firstIrSamples.map(sample => sample.toFixed(0)).join(", ")})`,
-      { samples: firstIrSamples }
+      `best first Reactive IR analysis uses ${value.toFixed(0)} ns/source (limit ${limit}; ${describeFirstIr(firstIrSamples, firstIrRun, value > limit)})`,
+      { samples: firstIrSamples, spread: spreadOf(firstIrSamples), run: firstIrRun }
     ),
     wallTime("incremental", incrementalNs, ceilings.incrementalNs, "ns", (value, limit) =>
       `one-file incremental analysis takes ${value} ns (limit ${limit} ns)`
@@ -151,7 +228,7 @@ export function assessPerformance(
     summary:
       `export work ${workScaling.toFixed(2)}x, export time ${timeScaling.toFixed(2)}x, Type Facts ${responseBytes.toFixed(0)} bytes/source, ` +
       `cached IR ${cachedIr} ns, best first IR ${firstIrPerSource.toFixed(0)} ns/source ` +
-      `(${firstIrSamples.map(sample => sample.toFixed(0)).join(", ")}), incremental ${incrementalNs} ns`
+      `(${describeFirstIr(firstIrSamples, firstIrRun, false)}), incremental ${incrementalNs} ns`
   };
 }
 

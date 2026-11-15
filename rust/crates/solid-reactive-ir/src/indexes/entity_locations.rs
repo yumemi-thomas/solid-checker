@@ -28,6 +28,9 @@ pub(crate) struct PathLocations {
     first_at: HashMap<(u64, u64), u32>,
     /// Every row's ordinal by `start_byte`, equal starts in row order.
     by_start: Vec<u32>,
+    /// Some row's resolved call is a valid call of a standard promise handler declaration
+    /// ([`crate::runtime_semantics::is_promise_handler_name`]): no call of the path resolves to one otherwise.
+    resolves_promise_handler: bool,
 }
 
 impl PathLocations {
@@ -45,10 +48,17 @@ impl PathLocations {
         }
         let mut by_start = (0..rows.len()).map(ordinal_of).collect::<Vec<_>>();
         by_start.sort_by_key(|&ordinal| rows[ordinal as usize].location.start_byte);
+        let resolves_promise_handler = rows.iter().any(|row| {
+            row.resolved_call
+                .as_deref()
+                .and_then(crate::runtime_semantics::standard_call_name)
+                .is_some_and(crate::runtime_semantics::is_promise_handler_name)
+        });
         Self {
             rows,
             first_at,
             by_start,
+            resolves_promise_handler,
         }
     }
 
@@ -102,6 +112,14 @@ impl EntityLocations {
             self.by_path
                 .insert(path.to_owned(), Arc::new(PathLocations::new(path, rows)));
         }
+    }
+
+    /// Whether some entity of `path` carries a resolved call of a standard promise handler declaration: false where no call of the path can
+    /// resolve to one, since [`Self::at`] answers a resolved call only from these rows.
+    pub(crate) fn resolves_promise_handler(&self, path: &str) -> bool {
+        self.by_path
+            .get(path)
+            .is_some_and(|locations| locations.resolves_promise_handler)
     }
 
     /// The first entity at exactly `span` of `path`, in the table's order.
