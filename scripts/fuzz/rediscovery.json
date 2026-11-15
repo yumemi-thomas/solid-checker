@@ -22139,7 +22139,7 @@
   "finding": "SC7002 `sync-computation-received-async` was a violation for `createMemo(async () => 1, { sync: true, ...optOver })` and for the same options on `createEffect`, `createSignal`, `createOptimistic`, `createRenderEffect` and `createTrackedEffect` where `optOver.sync` is `false`: the rule took `sync: true` from ANY literal `true` property, and the runtime reads the LAST `sync` (a spread after the literal, or a later duplicate key, decides). Chrome rc.21 reports nothing for these programs.",
   "found": "the coordinator's duplicate-key ruling for slice 8b (the check of `{ sync: true, sync: false }` against Chrome) and the pattern lane's `syncopt/d1`, `d3`, `d4`, `s-*`: 14 false positives on main; also `createTrackedEffect(async () => ..., { sync: true })`, a plain false positive: its node's compute returns `undefined` (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2878-2892`), so SYNC_NODE_RECEIVED_ASYNC is never raised there.",
   "fixed": "ADR 0989 (`static_api.rs` `sync_option_state`): the V arm needs the exact literal's last `sync` to be `true` (`call_option_literal`); a spread, computed key or non-literal options keep the existing uncertifiable arm; a duplicate `sync` key is TypeScript's (TS1117) unless a directive silences it, then the last one decides; `createTrackedEffect` left `supports_sync_option`.",
-  "grid": "lg-base",
+  "grid": "lg-recall",
   "code": "SYNC_NODE_RECEIVED_ASYNC",
   "ids": [
    "lg-sync-node-received-async-body-opt-spread-direct-none",
@@ -22147,7 +22147,7 @@
    "lg-sync-node-received-async-root-opt-spread-direct-none",
    "lg-sync-node-received-async-memo-opt-spread-effect-direct-none"
   ],
-  "rediscovered": "the legal cells `opt-spread` and `opt-spread-effect` (body, root, memo; every binding, layer and mount: 720 programs on lg-base, 720 on lg-combo): main 1,440 false positives, this head 0 (uncertifiable at the site). Not generatable: the duplicate key needs a `@ts-ignore` line before the call (the generator's `contextLine` is a module-level declaration, not a directive on the call's line) and `createTrackedEffect(async ...)` makes Chrome throw an invalid-cleanup Error that disturbs the program; the lane programs `syncopt/d1`, `d2`, `s-tracked-*`, `t1` hold both (main: 14 false positives, this head: 0)."
+  "rediscovered": "the recall legal cells `opt-spread` and `opt-spread-effect` (body, root, memo; every binding and layer; `lg-recall`): main false positives, this head none (uncertifiable at the site). Not generatable: the duplicate key needs a `@ts-ignore` line before the call (the generator's `contextLine` is a module-level declaration, not a directive on the call's line) and `createTrackedEffect(async ...)` makes Chrome throw an invalid-cleanup Error that disturbs the program; the lane programs `syncopt/d1`, `d2`, `s-tracked-*`, `t1` hold both (main: 14 false positives, this head: 0)."
  },
  {
   "finding": "A `createRenderEffect` whose compute is async (`createRenderEffect(async () => 1, () => {})`, or one that returns a Promise) outside any `<Loading>` raised ASYNC_OUTSIDE_LOADING_BOUNDARY in Chrome rc.21 (a render effect pending with no boundary above it: `notifyEffectStatus`, `dist/dev.js:2672-2700`, `EFFECT_RENDER` only) and had no SC5003 row of any kind: the pending accounting's sites are reads of pending sources, and a compute is no read. Certified false clean on main (`certified: false` because other rows stood at the call, none of them SC5003's).",
