@@ -1153,7 +1153,7 @@
     },
     "rust/crates/solid-reactive-ir/src/static_api.rs": {
       "default-on-missing": {
-        "count": 2,
+        "count": 1,
         "why": "pending-review"
       },
       "name-only-match": {
@@ -1161,11 +1161,7 @@
         "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is"
       },
       "primitive-name-match": {
-        "count": 8,
-        "why": "pending-review"
-      },
-      "prose-hand-off": {
-        "count": 1,
+        "count": 4,
         "why": "pending-review"
       },
       "silent-unmatched-slot": {
