@@ -1,0 +1,6 @@
+{
+  "note": "ADR 0999: fz-patch reaches the global object through `x[\"defaultView\"]` and replaces `btoa` with a function that calls an action: Chrome throws ACTION_CALLED_IN_OWNED_SCOPE at `btoa(\"x\")` in a component body, covered-uncertifiable.",
+  "packages": [
+    "fz-patch"
+  ]
+}

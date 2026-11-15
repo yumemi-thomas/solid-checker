@@ -812,10 +812,23 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     }
     {
         for node in nodes.iter() {
-            if let AstKind::StaticMemberExpression(member) = node.kind()
-                && member.property.name == "defaultView"
-                && !rooted_in_global(scoping, &member.object)
-            {
+            // ADR 0999: `x["defaultView"]` is the same read as `x.defaultView` (a string literal key, or one the file's constants decide to be that one name).
+            let reads_default_view = match node.kind() {
+                AstKind::StaticMemberExpression(member) => {
+                    member.property.name == "defaultView"
+                        && !rooted_in_global(scoping, &member.object)
+                }
+                AstKind::ComputedMemberExpression(member) => {
+                    !rooted_in_global(scoping, &member.object)
+                        && (literal_specifier(&member.expression).as_deref() == Some("defaultView")
+                            || matches!(
+                                key_of(scoping, nodes, &member.expression, KEY_DEPTH),
+                                Keys::Names(names) if names.len() == 1 && names[0] == "defaultView"
+                            ))
+                }
+                _ => false,
+            };
+            if reads_default_view {
                 route_use(
                     scoping,
                     nodes,
@@ -1246,6 +1259,9 @@ fn global_use(
             }
             return match holder {
                 Holder::Global => GlobalUse::Escape { path, at },
+                // ADR 0999: a member of `document` read by a key the syntax does not fix (`document[k]`, `document[c ? "defaultView" : "body"]`) may be its
+                // `defaultView`, the global object: it escapes as the global object does. The document itself used as a value holds no global object.
+                Holder::Document if computed => GlobalUse::Escape { path, at },
                 Holder::Document => GlobalUse::Inert,
             };
         };
@@ -3129,6 +3145,50 @@ mod tests {
         assert!(!found.global_writes.any_name);
         let found = scan("use(self.window.document.defaultView.document.defaultView.btoa);");
         assert!(!found.global_writes.any_name, "{found:?}");
+    }
+
+    /// ADR 0999: `x["defaultView"]` is `x.defaultView` (a string-literal key, or one the file's constants decide), and a member of `document` read by a key
+    /// the syntax does not fix may be its `defaultView`.
+    #[test]
+    fn default_view_by_a_computed_key_is_the_global_object() {
+        // The global object escapes, as it does through the static member.
+        for source in [
+            "use(el.ownerDocument[\"defaultView\"]);",
+            "const KEY = \"defaultView\"; use(el.ownerDocument[KEY]);",
+            "use(el.ownerDocument[`defaultView`]);",
+            "export const g = (k) => document[k];",
+            "export const g = (c) => document[c ? \"defaultView\" : \"body\"];",
+        ] {
+            let found = scan(source);
+            assert!(
+                kinds(&found)
+                    .iter()
+                    .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                "{source}"
+            );
+            assert!(found.global_writes.any_name, "{source}");
+        }
+        // A write through it is a write of that global by its name, as through the static member.
+        let found = scan("el.ownerDocument[\"defaultView\"].btoa = () => 1;");
+        assert!(!found.global_writes.any_name, "{found:?}");
+        assert_eq!(
+            found.global_writes.names.iter().collect::<Vec<_>>(),
+            scan("el.ownerDocument.defaultView.btoa = () => 1;")
+                .global_writes
+                .names
+                .iter()
+                .collect::<Vec<_>>()
+        );
+        assert!(!found.global_writes.names.is_empty());
+        // A member of `document` by another literal key, or of an object by another key, is no route.
+        for source in [
+            "use(document[\"body\"]);",
+            "use(el.ownerDocument[\"body\"]);",
+            "use(el[\"view\"]);",
+        ] {
+            let found = scan(source);
+            assert!(!found.global_writes.any_name, "{source}");
+        }
     }
 
     /// ADR 0974: `this` at the top of a file with no module syntax is the global object; handed on it escapes, as a member read it is the file's own.
