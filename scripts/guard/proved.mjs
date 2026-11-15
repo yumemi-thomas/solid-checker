@@ -66,6 +66,8 @@ export function ledgerProblems({ head, base }) {
 }
 
 const keyOf = (entry) => `${entry.grid}\0${entry.kind}\0${entry.item}`;
+/** An entry's counts by recall mode: a number counts for both. */
+const countsOf = (entry) => (typeof entry.count === "number" ? { lean: entry.count, full: entry.count } : { lean: entry.count?.lean ?? 0, full: entry.count?.full ?? 0 });
 
 /** The audit's known list against the base: a new entry or a raised count needs a new ADR and a why. */
 export function knownProblems({ head, base, decisions }) {
@@ -73,11 +75,12 @@ export function knownProblems({ head, base, decisions }) {
   const before = new Map((base.entries ?? []).map((entry) => [keyOf(entry), entry]));
   for (const entry of head.entries ?? []) {
     const old = before.get(keyOf(entry));
-    if (old && entry.count <= old.count) continue;
+    const now = countsOf(entry), was = old ? countsOf(old) : null;
+    if (old && now.lean <= was.lean && now.full <= was.full) continue;
     const name = `${entry.grid} ${entry.kind} ${entry.item}`;
-    if (!Number.isInteger(entry.count) || entry.count < 0) problems.push(`audit-known.json: ${name}: count must be a non-negative integer`);
+    if (![now.lean, now.full].every((n) => Number.isInteger(n) && n >= 0)) problems.push(`audit-known.json: ${name}: count must be a non-negative integer (or { lean, full })`);
     if (!inDecisions(decisions, entry.adr)) problems.push(`audit-known.json: ${old ? "raised" : "new"} entry ${name}: ${entry.adr ?? "no adr"} is not an ADR in docs/decisions.md`);
-    else if (old && old.adr === entry.adr) problems.push(`audit-known.json: entry ${name} rose ${old.count} -> ${entry.count} under ${entry.adr}, the ADR the base already named: a rise needs a new ADR`);
+    else if (old && old.adr === entry.adr) problems.push(`audit-known.json: entry ${name} rose (lean ${was.lean} -> ${now.lean}, full ${was.full} -> ${now.full}) under ${entry.adr}, the ADR the base already named: a rise needs a new ADR`);
     if (!text(entry.why)) problems.push(`audit-known.json: ${old ? "raised" : "new"} entry ${name} says no why`);
   }
   return problems;

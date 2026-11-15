@@ -60,8 +60,16 @@ test("audit-known.json: a new entry or a raised count needs a new ADR and a why;
   const entry = (over = {}) => ({ grid: "mx-recall", kind: "unplaced", item: "pk-lazy", count: 614, adr: "ADR 1012", why: "x", ...over });
   assert.deepEqual(knownProblems({ head: { entries: [entry()] }, base: { entries: [] }, decisions }), []);
   assert.deepEqual(knownProblems({ head: { entries: [entry({ count: 600 })] }, base: { entries: [entry()] }, decisions }), []);
-  assert.match(knownProblems({ head: { entries: [entry({ count: 700 })] }, base: { entries: [entry()] }, decisions })[0], /rose 614 -> 700 under ADR 1012, the ADR the base already named/);
+  assert.match(knownProblems({ head: { entries: [entry({ count: 700 })] }, base: { entries: [entry()] }, decisions })[0], /rose \(lean 614 -> 700, full 614 -> 700\) under ADR 1012, the ADR the base already named/);
   assert.deepEqual(knownProblems({ head: { entries: [entry({ count: 700, adr: "ADR 0803" })] }, base: { entries: [entry()] }, decisions }), []);
   assert.match(knownProblems({ head: { entries: [entry({ adr: "ADR 9999" })] }, base: { entries: [] }, decisions })[0], /not an ADR in docs\/decisions.md/);
   assert.match(knownProblems({ head: { entries: [entry({ why: "" })] }, base: { entries: [] }, decisions })[0], /says no why/);
+});
+
+test("audit-known.json: a count by recall mode rises per mode", () => {
+  const entry = (count, adr = "ADR 1012") => ({ grid: "mx-recall", kind: "halted-claim", item: "flw", count, adr, why: "x" });
+  assert.deepEqual(knownProblems({ head: { entries: [entry({ lean: 58, full: 98 })] }, base: { entries: [] }, decisions }), []);
+  assert.deepEqual(knownProblems({ head: { entries: [entry({ lean: 50, full: 98 })] }, base: { entries: [entry({ lean: 58, full: 98 })] }, decisions }), []);
+  assert.match(knownProblems({ head: { entries: [entry({ lean: 58, full: 99 })] }, base: { entries: [entry({ lean: 58, full: 98 })] }, decisions })[0], /lean 58 -> 58, full 98 -> 99\) under ADR 1012/);
+  assert.match(knownProblems({ head: { entries: [entry({ lean: -1, full: 98 })] }, base: { entries: [] }, decisions })[0], /non-negative integer/);
 });
