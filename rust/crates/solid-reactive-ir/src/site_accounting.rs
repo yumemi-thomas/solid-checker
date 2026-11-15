@@ -241,6 +241,25 @@ site_silences! {
     ResolveRoleDeferredCallback => "static_api.resolve_scope.role-deferred-callback",
     /// The role is code the compiler discarded (`DiscardedRendering`).
     ResolveRoleDiscardedRendering => "static_api.resolve_scope.role-discarded-rendering",
+    /// A call of an effect primitive whose apply argument is provably callable: no missing-function throw (SC7001; ADR 0989; the premise is the argument).
+    EffectSlotCallable => "static_api.effect_function.slot-callable",
+    /// A call of an effect primitive the published overloads reject and TypeScript reports (a resolved call with `Recovery` validity): the call is TypeScript's
+    /// (invariant 1; the premise is the callee or the failing argument).
+    EffectCallTscRejected => "static_api.effect_function.tsc-rejected",
+    /// A call whose options are proven not to assert `sync: true`: absent, nullish, or an exact literal whose last `sync` is `false` or that names none (SC7002; the
+    /// premise is the options argument, or the call).
+    SyncOptionNotAsserted => "static_api.sync_option.not-asserted",
+    /// An options literal with a duplicate `sync` key that TypeScript reports (TS1117, every configuration) where no directive suppresses it (SC7002; the premise is
+    /// the duplicate key).
+    SyncOptionTscReports => "static_api.sync_option.tsc-reports",
+    /// A call whose computation answers synchronously or is no function (`StaticSource::Sync`, or no computation): nothing the `sync` guard looks for is returned
+    /// (SC7002; never for an `Open` answer; the premise is the computation).
+    ComputationNotAsync => "static_api.sync_option.computation-not-async",
+    /// A static-form `dynamic` call whose source is proven to answer synchronously (a closed return type with no thenable, a sync or async generator: the static form
+    /// throws on a thenable only; SC2007; the premise is the source function).
+    DynamicSourceSynchronous => "static_api.dynamic_static.source-synchronous",
+    /// A `dynamic` call with no source argument that TypeScript rejects (`Recovery` validity): TypeScript's (SC2007; the premise is the callee).
+    DynamicNoSourceTscRejected => "static_api.dynamic_static.no-source-tsc-rejected",
 }
 
 impl SiteSilence {
@@ -252,6 +271,7 @@ impl SiteSilence {
             ActionCall, CleanupForbidden, EffectCreation, OnFlush, PrimitiveForbidden,
             ReactiveWrite, ResolveInScope, StoreWrite, StrictRead, UntilInScope,
         };
+        use SiteCode::{DynamicStaticPromise, MissingEffectFn, SyncNodeAsync};
         match self {
             // The reads: an accessor's call, a store or props member Get.
             Self::AsyncSitesDormantCallbackArgument
@@ -337,6 +357,14 @@ impl SiteSilence {
             | Self::ResolveRoleModuleInitialization
             | Self::ResolveRoleDeferredCallback
             | Self::ResolveRoleDiscardedRendering => &[ResolveInScope, UntilInScope],
+            // The static API's calls (slice 8b): each silence answers the one code of its family.
+            Self::EffectSlotCallable | Self::EffectCallTscRejected => &[MissingEffectFn],
+            Self::SyncOptionNotAsserted
+            | Self::SyncOptionTscReports
+            | Self::ComputationNotAsync => &[SyncNodeAsync],
+            Self::DynamicSourceSynchronous | Self::DynamicNoSourceTscRejected => {
+                &[DynamicStaticPromise]
+            }
             // The passes that remove a row: the codes the removed row's ending answered.
             Self::ApplyNeverRuns
             | Self::ClosedProgramExportDischarge

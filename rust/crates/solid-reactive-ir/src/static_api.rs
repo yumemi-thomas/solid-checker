@@ -378,6 +378,36 @@ impl StaticApiContext<'_> {
                     uncertain: true,
                 });
             }
+            // ADR 0989: a call of an effect primitive the rule gives no row ends in the fact that says so: the apply is provably callable, or TypeScript
+            // reports the call (its resolved call is `Recovery` and no directive may silence it: where one may, the SC9012 above stands instead).
+            if let Some(semantics) = effect_semantics
+                && semantics.missing_effect_function == ProofStatus::No
+                && let Some(silence) = semantics.silence
+            {
+                use crate::effect_api::EffectSilence;
+                use crate::proof_log::PremiseKind;
+                use crate::site_accounting::SiteSilence;
+                match silence {
+                    EffectSilence::SlotCallable(at) => result.ends.end_at(
+                        file,
+                        call.callee,
+                        SiteSilence::EffectSlotCallable,
+                        PremiseKind::ArgumentShape,
+                        || Some(at),
+                    ),
+                    EffectSilence::TscRejected(at) => {
+                        if !file.tsc_may_be_silent_within(call.span) {
+                            result.ends.end_at(
+                                file,
+                                call.callee,
+                                SiteSilence::EffectCallTscRejected,
+                                PremiseKind::TscReportsAtSite,
+                                || Some(at),
+                            );
+                        }
+                    }
+                }
+            }
             // Where each primitive takes its options object -- a second index
             // vocabulary, and the dialect's to answer: 2.0's numbers read
             // 1.x's `createMemo(fn, seed)` seed as an options object.
@@ -486,6 +516,46 @@ impl StaticApiContext<'_> {
                     fixes: vec![],
                     uncertain,
                 });
+            }
+            // ADR 0989: a call of a primitive that takes `sync` the rule gave no row ends in the fact that says why: the options are proven not to assert it,
+            // TypeScript reports a duplicate key, or the computation answers synchronously (never for an `Open` answer, which is the row above).
+            if let Some(options_state) = sync_options {
+                use crate::proof_log::PremiseKind;
+                use crate::site_accounting::SiteSilence;
+                let options_at = options_index
+                    .and_then(|index| call.arguments.get(index))
+                    .map_or(call.span, |argument| argument.span);
+                match options_state {
+                    SyncOptionState::NotAsserted => result.ends.end_at(
+                        file,
+                        call.callee,
+                        SiteSilence::SyncOptionNotAsserted,
+                        PremiseKind::OptionsLiteral,
+                        || Some(options_at),
+                    ),
+                    SyncOptionState::TscReports(duplicate) => result.ends.end_at(
+                        file,
+                        call.callee,
+                        SiteSilence::SyncOptionTscReports,
+                        PremiseKind::TscReportsAtSite,
+                        || Some(duplicate),
+                    ),
+                    SyncOptionState::Asserted | SyncOptionState::Unreadable => {
+                        // A computation that is no function (`createSignal(0, ..)`) or is proven synchronous returns nothing the guard probes for. No
+                        // computation argument at all is a call TypeScript rejects, and stays unaccounted.
+                        if let Some(argument) = call.arguments.first()
+                            && matches!(compute(), None | Some(StaticSource::Sync))
+                        {
+                            result.ends.end_at(
+                                file,
+                                call.callee,
+                                SiteSilence::ComputationNotAsync,
+                                PremiseKind::StaticSourceState,
+                                || Some(argument.span),
+                            );
+                        }
+                    }
+                }
             }
             // SC2004 / SC2005 (ADR 0985): `resolve()` and `until()` in a tracked scope. Probed on
             // `@solidjs/signals@2.0.0-rc.0`: the dev bundle guards on the
@@ -606,13 +676,44 @@ impl StaticApiContext<'_> {
             // so `tsc` accepts every source proven here.
             // ADR 0654: a source not proven synchronous is open, and so is a
             // form the options do not decide (`dynamic(source, options)`).
-            if matches!(
-                kind,
-                Some(Primitive::DynamicStatic | Primitive::DynamicUnknownForm)
-            ) && let Some(source) = call.arguments.first()
+            let dynamic_form = kind.and_then(|primitive| dialect.static_dynamic_form(primitive));
+            if dynamic_form.is_some() && call.arguments.is_empty() {
+                // ADR 0989: no source at all is a call the published overloads reject: TypeScript's where its resolved call is `Recovery` and no directive
+                // may silence it; otherwise the site keeps its row.
+                if self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_some_and(|resolved| {
+                        resolved.validity == typefacts::ResolvedCallValidity::Recovery
+                    })
+                    && !file.tsc_may_be_silent_within(call.span)
+                {
+                    result.ends.end_at(
+                        file,
+                        call.callee,
+                        crate::site_accounting::SiteSilence::DynamicNoSourceTscRejected,
+                        crate::proof_log::PremiseKind::TscReportsAtSite,
+                        || Some(call.callee),
+                    );
+                }
+            }
+            if let Some(form) = dynamic_form
+                && let Some(source) = call.arguments.first()
             {
                 let state = static_source_state(file, source, self);
-                let unknown_form = kind == Some(Primitive::DynamicUnknownForm);
+                let unknown_form = form == solid_dialect::StaticDynamicForm::MayBeStatic;
+                // ADR 0989: a source proven to answer synchronously ends the site: the static form throws on a thenable only (ADR 0865).
+                if matches!(state, StaticSource::Sync | StaticSource::AsyncIterable)
+                    && let Some(function) = static_source_function(file, source, self)
+                {
+                    result.ends.end_at(
+                        file,
+                        call.callee,
+                        crate::site_accounting::SiteSilence::DynamicSourceSynchronous,
+                        crate::proof_log::PremiseKind::StaticSourceState,
+                        || Some(function.span),
+                    );
+                }
                 let reported = match state {
                     // ADR 0865: `staticDynamic` throws on a thenable only.
                     StaticSource::Sync | StaticSource::AsyncIterable => None,

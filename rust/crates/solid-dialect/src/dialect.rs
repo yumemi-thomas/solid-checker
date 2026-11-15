@@ -498,6 +498,13 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0989: whether a call the dialect resolved to `primitive` is a `dynamic` call in its static form, or may be one
+    /// ([`StaticDynamicForm`]): the calls whose source the runtime calls once and refuses to be a promise (`DYNAMIC_STATIC_PROMISE`).
+    fn static_dynamic_form(&self, primitive: Primitive) -> Option<StaticDynamicForm> {
+        let _ = primitive;
+        None
+    }
+
     /// ADR 0985: the runtime code of the observer guard a call of `primitive` opens with, if it has one (`resolve`, `until`: `if (getObserver()) throw`).
     /// The site universe lists every call of such a primitive, and every value reference to one, as a site of that code.
     fn observer_guard_code(&self, primitive: Primitive) -> Option<RuntimeCode> {

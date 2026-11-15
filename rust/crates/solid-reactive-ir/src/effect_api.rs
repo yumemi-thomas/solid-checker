@@ -8,6 +8,7 @@
 use solid_dialect::Version;
 use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentFact, CallFact, RuntimeValueKind};
+use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
 use crate::Primitive;
@@ -25,6 +26,19 @@ pub(crate) struct EffectCallSemantics {
     /// The client runtime reaches computation allocation. Solid 2 throws
     /// before allocation for an absent/nullish apply argument.
     pub(crate) owner_registration: ProofStatus,
+    /// Why `missing_effect_function` is `No`, when a fact says (ADR 0989): the site's typed silence. A `No` with no reason ends
+    /// nothing, and the site gets its uncertifiable row.
+    pub(crate) silence: Option<EffectSilence>,
+}
+
+/// The fact behind a `missing_effect_function` of [`ProofStatus::No`], each with the span it stands at.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum EffectSilence {
+    /// The apply argument is proven callable (a function, a bundle whose `effect` is one, a type whose only domain is callable).
+    SlotCallable(Span),
+    /// The call is one the published overloads reject, and TypeScript reports it (a resolved call with `Recovery` validity): the
+    /// call is TypeScript's. The span is the callee, or the argument that fails.
+    TscRejected(Span),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,6 +119,7 @@ pub(crate) fn classify_effect_call(
             missing_effect_uncertainty: EffectFunctionUncertainty::None,
             owner_registration: ProofStatus::Proven
                 .with_server_entry_possible(server_entry_possible),
+            silence: None,
         };
     };
     match lookup.dialect.version() {
@@ -123,12 +138,20 @@ pub(crate) fn classify_effect_call(
                 missing_effect_function: ProofStatus::Uncertain,
                 missing_effect_uncertainty: EffectFunctionUncertainty::ArgumentShape,
                 owner_registration: ProofStatus::Uncertain,
+                silence: None,
             };
         }
     }
-    let call_is_valid = lookup
+    // ADR 0989: three answers, not two. A call with no resolved-call fact is no call TypeScript rejected: nothing is known of it, and
+    // it is an obligation, never the silence a rejected call gets.
+    let validity = lookup
         .resolved_callee_call(file, call.callee)
-        .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
+        .map(|resolved| resolved.validity);
+    let call_is_valid = validity == Some(ResolvedCallValidity::Valid);
+    let no_fact = !matches!(
+        validity,
+        Some(ResolvedCallValidity::Valid | ResolvedCallValidity::Recovery)
+    );
     // A runtime with no `undefined` guard allocates the node whatever the
     // argument is, so the owner pass keeps the call.
     let unguarded_registration =
@@ -140,7 +163,9 @@ pub(crate) fn classify_effect_call(
         // not describe a hidden slot's value, so only proven absence (or a
         // visible argument preceding/following exact spreads) is classified.
         let apply = expanded_argument(file, call, slot.index, lookup);
-        let missing_effect_function = if !call_is_valid {
+        let missing_effect_function = if no_fact {
+            ProofStatus::Uncertain
+        } else if !call_is_valid {
             ProofStatus::No
         } else {
             match apply {
@@ -153,6 +178,16 @@ pub(crate) fn classify_effect_call(
                 }
             }
         };
+        let silence = (missing_effect_function == ProofStatus::No).then(|| match apply {
+            // `No` through a visible argument is a callable one; through an invalid call it is TypeScript's.
+            ExpandedArgument::Visible(argument) if call_is_valid => {
+                EffectSilence::SlotCallable(argument.span)
+            }
+            ExpandedArgument::Visible(_)
+            | ExpandedArgument::Absent
+            | ExpandedArgument::HiddenBySpread
+            | ExpandedArgument::Uncertain => EffectSilence::TscRejected(call.callee),
+        });
         let owner_registration = if !slot.guards_undefined {
             unguarded_registration
         } else {
@@ -172,6 +207,7 @@ pub(crate) fn classify_effect_call(
             slot,
             server_entry_possible,
             owner_registration,
+            silence,
         );
     }
 
@@ -184,9 +220,16 @@ pub(crate) fn classify_effect_call(
         apply.map_or(ProofStatus::Proven, |argument| {
             v2_effect_function_status(file, argument, slot, lookup)
         })
+    } else if no_fact {
+        ProofStatus::Uncertain
     } else {
         suppressed_effect_function_status(file, call, apply, slot, lookup)
     };
+    let silence = (missing_effect_function == ProofStatus::No).then(|| match apply {
+        Some(argument) if call_is_valid => EffectSilence::SlotCallable(argument.span),
+        Some(argument) => suppressed_silence(file, argument, slot, lookup),
+        None => EffectSilence::TscRejected(call.callee),
+    });
     // The shipped build reads `createEffect`'s apply argument before creating
     // the effect node: it throws on `=== undefined`, then dereferences
     // `.effect`. So absence and nullishness are proven pre-allocation throws;
@@ -204,6 +247,7 @@ pub(crate) fn classify_effect_call(
         slot,
         server_entry_possible,
         owner_registration,
+        silence,
     )
 }
 
@@ -223,8 +267,9 @@ fn suppressed_effect_function_status(
     let rejected = lookup
         .resolved_callee_call(file, call.callee)
         .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Recovery);
+    // A call no fact calls rejected is no silence (ADR 0989): the answer asks for an obligation.
     if !rejected {
-        return ProofStatus::No;
+        return ProofStatus::Uncertain;
     }
     let silent_on_one_line = |span: solid_facts::core::Span| {
         file.line_of(span.start) == file.line_of(span.end.saturating_sub(1).max(span.start))
@@ -241,6 +286,27 @@ fn suppressed_effect_function_status(
     }
 }
 
+/// Why [`suppressed_effect_function_status`] answered `No` for a rejected call with an argument: TypeScript reports the bad value (it is
+/// not on one silenced line), or the argument is callable all the same.
+fn suppressed_silence(
+    file: &FileFacts,
+    argument: &ArgumentFact,
+    slot: solid_dialect::EffectFunctionSlot,
+    lookup: &SemanticLookup<'_>,
+) -> EffectSilence {
+    let one_line = file.line_of(argument.span.start)
+        == file.line_of(argument.span.end.saturating_sub(1).max(argument.span.start));
+    if one_line && file.tsc_silence_at(argument.span.start) == solid_facts::TscSilence::Silent {
+        // Judged as a value no type vouches for, and still callable: the apply is a function.
+        let mut unvouched = argument.clone();
+        unvouched.runtime_type_escape = true;
+        if v2_effect_function_status(file, &unvouched, slot, lookup) == ProofStatus::No {
+            return EffectSilence::SlotCallable(argument.span);
+        }
+    }
+    EffectSilence::TscRejected(argument.span)
+}
+
 /// A proof that fails only when a function the call returns runs
 /// (`createReaction`'s tracker) proves nothing at the call: uncertain, with
 /// its own blocker (ADR 0701).
@@ -249,6 +315,7 @@ fn finish(
     slot: solid_dialect::EffectFunctionSlot,
     server_entry_possible: bool,
     owner_registration: ProofStatus,
+    silence: Option<EffectSilence>,
 ) -> EffectCallSemantics {
     if slot.fails == solid_dialect::EffectFunctionFailure::ReturnedFunctionRun
         && missing_effect_function == ProofStatus::Proven
@@ -257,6 +324,7 @@ fn finish(
             missing_effect_function: ProofStatus::Uncertain,
             missing_effect_uncertainty: EffectFunctionUncertainty::ReturnedFunctionRun,
             owner_registration,
+            silence: None,
         };
     }
     EffectCallSemantics {
@@ -267,6 +335,7 @@ fn finish(
         missing_effect_function: missing_effect_function
             .with_server_entry_possible(server_entry_possible),
         owner_registration,
+        silence,
     }
 }
 
