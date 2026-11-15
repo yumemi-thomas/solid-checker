@@ -384,16 +384,8 @@ impl StaticApiContext<'_> {
             let options_index = kind
                 .filter(|kind| dialect.supports_sync_option(*kind))
                 .and_then(|kind| dialect.options_argument(kind));
-            let sync_literal = options_index.map(|options_index| {
-                (
-                    call.arguments.get(options_index).is_some_and(|argument| {
-                        argument.boolean_properties.iter().any(|property| {
-                            file.source_text(property.name) == Some("sync") && property.value
-                        })
-                    }),
-                    crate::call_option_literal(file, call, options_index, "sync"),
-                )
-            });
+            let sync_options =
+                options_index.map(|options_index| sync_option_state(file, call, options_index));
             // ADR 0655: what the computation does on a pass. A return typed
             // `any`, a type that may be sync and a value no fact describes are
             // open; only an async function or a Promise on every path proves
@@ -447,7 +439,7 @@ impl StaticApiContext<'_> {
             // a non-literal `sync:` value) may assert `sync: true`: with a
             // computation not proven synchronous that is an obligation, not a
             // silent clean.
-            if let Some((false, solid_dialect::OptionLiteral::Unknown)) = sync_literal
+            if let Some(SyncOptionState::Unreadable) = sync_options
                 && matches!(
                     compute(),
                     Some(StaticSource::Promise(_) | StaticSource::Open)
@@ -466,7 +458,7 @@ impl StaticApiContext<'_> {
                     uncertain: true,
                 });
             }
-            if let Some((true, _)) = sync_literal
+            if let Some(SyncOptionState::Asserted) = sync_options
                 && let Some(state @ (StaticSource::Promise(_) | StaticSource::Open)) = compute()
             {
                 let uncertain = matches!(state, StaticSource::Open);
@@ -2054,6 +2046,65 @@ fn resolve_scope_answer(
         return ScopeAnswer::Unplaced;
     }
     silent(silence, PremiseKind::RoleDoesNotReport, call.callee)
+}
+
+/// What the options argument of a call that takes `sync` says of it (ADR 0989). The runtime reads the LAST `sync` property of an object
+/// literal, and a spread or a computed key after a literal `true` may override it, so only the exact literal's last `sync` is a fact:
+/// `{ sync: true, ...over }` and `{ sync: true, sync: false }` are not `sync: true`. TypeScript reports a duplicate key (TS1117, every
+/// configuration) unless a directive suppresses the line, and an exact literal TypeScript reports is its own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SyncOptionState {
+    /// The exact literal's last `sync` is the literal `true`.
+    Asserted,
+    /// Options the syntax cannot read (an identifier, a spread, a computed key, a wrapped value): they may assert `sync: true`.
+    Unreadable,
+    /// The options are proven not to assert it: no options, `null`/`undefined`, an exact literal with no `sync` or whose last is `false`.
+    NotAsserted,
+    /// A duplicate `sync` key that TypeScript reports (TS1117): its diagnostic stands at this span, so the call is TypeScript's.
+    TscReports(Span),
+}
+
+fn sync_option_state(file: &FileFacts, call: &solid_facts::ast::CallFact, index: usize) -> SyncOptionState {
+    use solid_dialect::OptionLiteral;
+    use solid_facts::TscSilence;
+    let literal = crate::call_option_literal(file, call, index, "sync");
+    // A duplicate `sync` key of an exact literal: TS1117 stands at each later one.
+    let duplicates = call
+        .arguments
+        .get(index)
+        .filter(|argument| argument.exact_object_literal)
+        .map(|argument| {
+            let mut keys = argument
+                .property_names
+                .iter()
+                .copied()
+                .filter(|span| file.source_text(*span) == Some("sync"))
+                .collect::<Vec<_>>();
+            keys.sort_by_key(|span| span.start);
+            keys
+        })
+        .unwrap_or_default();
+    if let [_, later @ ..] = duplicates.as_slice()
+        && !later.is_empty()
+    {
+        let states = later
+            .iter()
+            .map(|span| file.tsc_silence_at(span.start))
+            .collect::<Vec<_>>();
+        if let Some(position) = states.iter().position(|state| *state == TscSilence::Reports) {
+            return SyncOptionState::TscReports(later[position]);
+        }
+        // Every later key is suppressed by a directive both compilers read: TypeScript says nothing, so the runtime's last key decides.
+        // Where one compiler may still report, nothing is proven either way.
+        if states.iter().any(|state| *state != TscSilence::Silent) {
+            return SyncOptionState::Unreadable;
+        }
+    }
+    match literal {
+        OptionLiteral::True => SyncOptionState::Asserted,
+        OptionLiteral::Unknown => SyncOptionState::Unreadable,
+        OptionLiteral::Absent | OptionLiteral::False => SyncOptionState::NotAsserted,
+    }
 }
 
 /// Why a `dynamic` source provably returns a Promise, phrased for the
