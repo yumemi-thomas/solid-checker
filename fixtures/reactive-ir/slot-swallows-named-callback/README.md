@@ -1,0 +1,7 @@
+# A named callback of a slot that takes what it throws
+
+ADR 0990. `isPending(fn)` runs `fn` in place and catches what it throws (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:1699`), so the observer guard's throw of `resolve` and `until` in a tracked effect is no report, whether `fn` is written inline (`rc21-latest-ispending-observer-guard`) or named. The leaf walk read a NAMED callback through a second reader that took the slot's swallowing for `flush` only, and reported `resolve(...)` in `const cb = () => { resolve(...) }; isPending(cb)` as an SC2004 violation at the `isPending` call (the same for `until`, SC2005, and for a function declaration or a callback that calls a helper). Chrome (rc.21) is quiet at all of them. The reader now asks the one question the literal form asks (`LeafOwnerOperation::fails_with_plain_throw`: `flush`, and the observer guard where the leaf owner has an observer).
+
+What stays: the rows of what the slot does not catch (`onSettled` has no observer, so `resolve` is the creation the leaf owner refuses; `latest` keeps the observer and throws to the caller; `untrack` clears it), an `async` callback (its throw is a rejection the slot does not take: an obligation, never a violation), and a callback whose identity is not exact (an obligation of the walk that could not read it, here the SC2004/SC3001 rows at the `resolve`).
+
+Real typings: `isPending(fn: () => any): boolean` in `@solidjs/signals@2.0.0-rc.21` (`dist/types/core/verdict.d.ts:37`); the stub's `() => unknown` accepts the same callbacks.

@@ -869,7 +869,14 @@ impl LeafOwnerOperation {
     #[must_use]
     pub fn observer_guarded(&self) -> bool {
         matches!(self.kind, LeafOwnerOperationKind::ObserverGuarded(_))
-            && self.owner == "createTrackedEffect"
+            && Self::owner_has_observer(&self.owner)
+    }
+
+    /// Whether the leaf owner named `owner` runs its callback under an active observer (`createTrackedEffect`), the one
+    /// condition that makes the observer guard's call throw there rather than meet the leaf owner's refusal.
+    #[must_use]
+    pub fn owner_has_observer(owner: &str) -> bool {
+        owner == "createTrackedEffect"
     }
 
     /// ADR 0944: the call fails with a plain `throw` here, no diagnostic before it: `flush()` in a tracked

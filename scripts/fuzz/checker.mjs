@@ -8,6 +8,7 @@
 // nothing it can prove", which is never evidence either way.
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { createRequire } from "node:module";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,9 +38,128 @@ export const mainSourceFor = (oracleJson) => {
   return mount ? oracleMainSource(undefined, mount) : MAIN_SOURCE;
 };
 
+/**
+ * `SOLID_CHECKER_FUZZ_BOUNDARY=open|closed` (focus.mjs `--boundary`): every program's checker project gets that boundary's manifest, whatever its
+ * oracle.json says. The runtime does not read the manifest, so a program's Chrome record is the same under both (the runtime cache is keyed by the
+ * case's files, which the override does not change); the type-check cache is keyed by the project's bytes, so it keys by boundary on its own.
+ * Unset: each program's own (none: the install's private manifest, a closed program).
+ */
+export function boundaryOverride(env = process.env) {
+  const value = env.SOLID_CHECKER_FUZZ_BOUNDARY;
+  if (value === undefined || value === "") return undefined;
+  if (value !== "open" && value !== "closed") throw new Error(`SOLID_CHECKER_FUZZ_BOUNDARY takes open or closed, not ${value}`);
+  return value;
+}
+
+/**
+ * `SOLID_CHECKER_FUZZ_ENTRY=named` (focus.mjs `--entry named`, ADR 0990): the CHECKER project's `main.tsx` names the exports it enters (`import { C1 } from "./App"`, one
+ * `render(() => <C1 />)` each) instead of `import * as mod` and a loop over the namespace. The loop makes every export of App entered by code the checker cannot see, so no
+ * closed-program proof (a caller census, the closed discharge of an owner's entry) is reached in a grid; the named entry lets them apply. The runtime's entry is unchanged
+ * (`mainSourceFor` is what Chrome's records were taken with): `namedEntry` enters exactly the exports the loop enters, in the loop's order, with the loop's driver.
+ */
+export function entryOverride(env = process.env) {
+  const value = env.SOLID_CHECKER_FUZZ_ENTRY;
+  if (value === undefined || value === "" || value === "namespace") return undefined;
+  if (value !== "named") throw new Error(`SOLID_CHECKER_FUZZ_ENTRY takes namespace or named, not ${value}`);
+  return value;
+}
+
+let typescriptModule = null;
+const typescript = () => (typescriptModule ??= createRequire(join(resolve(dirname(fileURLToPath(import.meta.url)), "../../packages/cli"), "package.json"))("typescript"));
+
+/** Whether an expression is a function value (`true`), a literal value that is none (`false`) or neither knowable here (`null`). */
+function functionValue(ts, node, locals, seen = new Set()) {
+  if (!node) return null;
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression?.(node) || ts.isNonNullExpression(node)) return functionValue(ts, node.expression, locals, seen);
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isClassExpression(node)) return true;
+  if (ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) || node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return false;
+  // A name another top-level binding holds (`export { a }` over `const a = …` is handled by the caller; `const b = a` follows `a`).
+  if (ts.isIdentifier(node) && locals.has(node.text) && !seen.has(node.text)) { seen.add(node.text); return locals.get(node.text)(seen); }
+  return null;
+}
+
+/**
+ * The exports of App.tsx the namespace loop enters (`default` and the capitalised names whose value is a function), sorted as a module namespace's keys are, or `null` when one
+ * of the exports cannot be classified from the text (a value a call computes, a re-export, `export *`): such a program keeps the namespace entry.
+ */
+export function enteredExports(appText) {
+  const ts = typescript();
+  const source = ts.createSourceFile("App.tsx", appText, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
+  const locals = new Map();
+  for (const statement of source.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name) locals.set(statement.name.text, () => true);
+    else if (ts.isClassDeclaration(statement) && statement.name) locals.set(statement.name.text, () => true);
+    else if (ts.isVariableStatement(statement)) for (const one of statement.declarationList.declarations) if (ts.isIdentifier(one.name)) locals.set(one.name.text, (seen) => functionValue(ts, one.initializer, locals, seen));
+  }
+  const isFunction = (name) => (locals.has(name) ? locals.get(name)(new Set([name])) : null);
+  const entered = new Map();
+  const exportedAs = (name, isFn) => { if (isFn === null) throw new Error(`cannot classify ${name}`); entered.set(name, isFn); };
+  try {
+    for (const statement of source.statements) {
+      const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) ?? [] : [];
+      const exported = modifiers.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+      const isDefault = modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword);
+      if (ts.isExportDeclaration(statement)) {
+        if (statement.isTypeOnly) continue;
+        if (statement.moduleSpecifier || !statement.exportClause || !ts.isNamedExports(statement.exportClause)) throw new Error("re-export");
+        for (const specifier of statement.exportClause.elements) if (!specifier.isTypeOnly) exportedAs(specifier.name.text, isFunction((specifier.propertyName ?? specifier.name).text));
+      } else if (ts.isExportAssignment(statement)) {
+        if (statement.isExportEquals) throw new Error("export =");
+        exportedAs("default", functionValue(ts, statement.expression, locals));
+      } else if (!exported) continue;
+      else if (isDefault && (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement))) entered.set("default", true);
+      else if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) entered.set(statement.name.text, true);
+      else if (ts.isVariableStatement(statement)) for (const one of statement.declarationList.declarations) { if (!ts.isIdentifier(one.name)) throw new Error("destructured export"); exportedAs(one.name.text, functionValue(ts, one.initializer, locals)); }
+      else if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) continue;
+      else throw new Error("unclassified export");
+    }
+  } catch { return null; }
+  return [...entered].filter(([name, isFn]) => isFn && (name === "default" || /^[A-Z]/.test(name))).map(([name]) => name).sort();
+}
+
+/** How many programs `namedEntry` could not derive an entry for (they kept the namespace one). */
+export const namedEntryFallbacks = { count: 0 };
+process.on("exit", () => { if (namedEntryFallbacks.count) process.stderr.write(`named entry: ${namedEntryFallbacks.count} programs kept the namespace entry (an export that cannot be classified from the text)\n`); });
+
+/**
+ * The named entry of a case (see `entryOverride`): the oracle's entry with `import * as mod` and the namespace loop replaced by one `render` per entered export, the mount names
+ * first (as the oracle's mount form does) and the others in namespace order; the oracle's event driver is carried over byte for byte. `null` when the exports cannot be classified.
+ */
+export function namedEntry(oracleJson, appText) {
+  const base = mainSourceFor(oracleJson);
+  const driver = base.indexOf("// Drive every handler");
+  const names = enteredExports(appText);
+  if (driver < 0 || names === null) { namedEntryFallbacks.count += 1; return null; }
+  const mount = (oracleJson ? JSON.parse(oracleJson).mount : undefined) ?? [];
+  const order = [...mount].sort().filter((name) => names.includes(name) || mount.includes(name)).concat(names.filter((name) => !mount.includes(name)));
+  const local = (name) => (name === "default" ? "DefaultExport" : name);
+  const imports = order.map((name) => (name === "default" ? "default as DefaultExport" : name));
+  return `import { render } from "@solidjs/web";
+${imports.length ? `import { ${imports.join(", ")} } from "./App";\n` : ""}
+// The named entry (scripts/fuzz/checker.mjs \`entryOverride\`): the oracle's entry with each entered export rendered by name, not found through the namespace.
+const root = document.getElementById("root")!;
+const host = (name: string) => {
+  const section = document.createElement("section");
+  section.dataset.export = name;
+  root.append(section);
+  return section;
+};
+${order.map((name) => `try {
+  render(() => <${local(name)} />, host("${name}"));
+} catch (error) {
+  console.error("render failed", "${name}", error);
+  setTimeout(() => { throw error; });
+}
+`).join("")}
+${base.slice(driver)}`;
+}
+
+/** The entry a case's checker project gets: the named one under `entryOverride`, the oracle's otherwise. */
+export const entryFor = (oracleJson, appText) => (entryOverride() ? namedEntry(oracleJson, appText) ?? mainSourceFor(oracleJson) : mainSourceFor(oracleJson));
+
 /** The manifest a case's oracle.json `programBoundary` asks for, the one the oracle writes (scripts/runtime-oracle.mjs): a publishing one (an entry field) is open, a private one closed; none without it. */
-export const boundaryManifest = (oracleJson, id) => {
-  const boundary = oracleJson ? JSON.parse(oracleJson).programBoundary : undefined;
+export const boundaryManifest = (oracleJson, id, override = boundaryOverride()) => {
+  const boundary = override ?? (oracleJson ? JSON.parse(oracleJson).programBoundary : undefined);
   if (boundary === undefined) return undefined;
   return `${JSON.stringify(boundary === "open" ? { name: id, main: "main.tsx" } : { name: id, private: true }, null, 2)}\n`;
 };
@@ -95,7 +215,7 @@ export function checkerProjectFiles(built, { twin = false } = {}) {
   const modules = projectModules(built.files);
   const files = { "App.tsx": twin ? built.files["App.run.txt"] : built.files["App.tsx"] };
   for (const name of modules) files[name] = built.files[name];
-  files["main.tsx"] = mainSourceFor(built.files["oracle.json"]);
+  files["main.tsx"] = entryFor(built.files["oracle.json"], files["App.tsx"]);
   files["tsconfig.json"] = tsconfigFor(["main.tsx", "App.tsx", ...modules]);
   const manifest = boundaryManifest(built.files["oracle.json"], built.id);
   if (manifest) files["package.json"] = manifest;
@@ -114,7 +234,7 @@ export function materializeFromDirectory(caseDir, install, id) {
   const modules = readdirSync(caseDir).filter((name) => isProjectModule(name));
   for (const name of modules) cpSync(join(caseDir, name), join(dir, name));
   if (existsSync(join(caseDir, "node_modules"))) cpSync(join(caseDir, "node_modules"), join(dir, "node_modules"), { recursive: true });
-  writeFileSync(join(dir, "main.tsx"), mainSourceFor(existsSync(join(caseDir, "oracle.json")) ? readFileSync(join(caseDir, "oracle.json"), "utf8") : undefined));
+  writeFileSync(join(dir, "main.tsx"), entryFor(existsSync(join(caseDir, "oracle.json")) ? readFileSync(join(caseDir, "oracle.json"), "utf8") : undefined, readFileSync(join(caseDir, "App.tsx"), "utf8")));
   writeFileSync(join(dir, "tsconfig.json"), tsconfigFor(["main.tsx", "App.tsx", ...modules]));
   const manifest = boundaryManifest(existsSync(join(caseDir, "oracle.json")) ? readFileSync(join(caseDir, "oracle.json"), "utf8") : undefined, id);
   if (manifest) writeFileSync(join(dir, "package.json"), manifest);
