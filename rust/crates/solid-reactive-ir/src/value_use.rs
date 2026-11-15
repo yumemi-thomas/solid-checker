@@ -1529,6 +1529,12 @@ impl<'l, 'a> Census<'l, 'a> {
                 }
                 _ => Position::Open(blockers::VALUE_IN_CARRIER),
             },
+            // ADR 1002: a package value handed as a named attribute is followed where the tag names its reader: a project component's reads of that prop
+            // (`props.view.search`, a pattern's slot) and, for a context provider, each `useContext` of it. Chrome rc.21 warns at the read in the child as it
+            // does at a read beside the call. A tag nobody resolved ends as before (`value-to-unresolved-callee`: no claim of this rule).
+            Holder::JsxValue(element, slot) if self.package_value => {
+                self.jsx_value(file, element, Some(slot), mode)
+            }
             Holder::JsxValue(element, _) | Holder::JsxSpread(element) => {
                 if intrinsic(file, element) {
                     Position::Followed

@@ -1645,3 +1645,5 @@ packages/wasm/owned/
 !fixtures/runtime-oracle/after-await-package-global/node_modules/**
 !fixtures/reactive-ir/after-await-read-first-writes/node_modules/
 !fixtures/reactive-ir/after-await-read-first-writes/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-unread-code/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-unread-code/node_modules/**

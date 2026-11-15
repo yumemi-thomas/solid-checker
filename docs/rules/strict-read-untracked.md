@@ -44,8 +44,10 @@ Such a value is followed forward through the program as well ([ADR 0998](../deci
 an assignment, a slot of a literal, a return, a parameter of a project function, a standard method's result, an export read in
 another module. Each call or member get through it where nothing tracks or places the read is **uncertifiable**
 (`package-value-read:flowed`), and so is a position inside the project the walk cannot follow (`package-value-read:value-in-class-field`,
-`:value-through-generator`, `:value-thrown`, `:value-forwarded`, `:value-use-unclassified`). A value handed to a package, a
-constructor, a component, a Solid primitive or an `await` is not followed there (`docs/open-work.md`).
+`:value-through-generator`, `:value-thrown`, `:value-forwarded`, `:value-use-unclassified`). A value handed on as a named JSX
+attribute is followed where the tag names its reader ([ADR 1002](../decisions.md#adr-1002)): a project component's reads of that prop (`props.view.search`, a
+pattern's slot) and each `useContext` of a context provider. A value handed to a package, a constructor, a tag nobody resolved, a
+spread or a child of a component, a Solid primitive or an `await` is not followed there (`docs/open-work.md`).
 
 ## What it does
 
