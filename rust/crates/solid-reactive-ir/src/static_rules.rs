@@ -4,7 +4,9 @@
 
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
-use crate::execution_role::{allowed_callback_spans, read_execution_role, semantic_execution_role};
+use crate::execution_role::{
+    InPlaceStop, allowed_callback_spans, read_execution_role, semantic_execution_role,
+};
 use crate::identity::SymbolId;
 use crate::owners::{
     component_binding_name, component_props_parameter_fix, containing_ast_function,
@@ -1882,8 +1884,21 @@ fn member_reads_after_await(
         let climbed = || {
             crate::execution_role::climb_in_place_layers(file, member.span, ctx.semantic_lookup)
                 .is_some_and(|climb| {
-                    !climb.exhausted
-                        && !climb.in_list
+                    // The layers past the bound are unread, so the member is not proven read on this continuation: it is not a read
+                    // here, and the after-await accounting's universe ends the member at its own site. Every other stop ends the
+                    // climb at a call that runs on this continuation.
+                    let layers_read = match climb.stop {
+                        InPlaceStop::Bound => false,
+                        InPlaceStop::NoFunction
+                        | InPlaceStop::Generator
+                        | InPlaceStop::Within
+                        | InPlaceStop::FreshStack
+                        | InPlaceStop::Elsewhere
+                        | InPlaceStop::Withheld
+                        | InPlaceStop::JsxPlaced => true,
+                    };
+                    layers_read
+                        && climb.in_list.is_none()
                         && !climb.among_others
                         // A hoisted function's call may come before the await.
                         && climb.at.start >= boundary

@@ -1691,7 +1691,7 @@ pub(crate) fn gated_leaf_calls_at(
         .collect();
     let direct = crate::owners::containing_body_function(&file.ast, span);
     let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
-        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
+        .filter(|climb| !climb.bound() && climb.in_list.is_none() && climb.suspended.is_none())
         .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
     for function in [direct, climbed].into_iter().flatten() {
         let Some((positions, _)) = crate::owners::exact_value_positions(file, function, lookup)
@@ -1746,7 +1746,7 @@ fn named_leaf_owner(
 ) -> Option<String> {
     let direct = crate::owners::containing_body_function(&file.ast, span)?;
     let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
-        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
+        .filter(|climb| !climb.bound() && climb.in_list.is_none() && climb.suspended.is_none())
         .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
     [Some(direct), climbed]
         .into_iter()

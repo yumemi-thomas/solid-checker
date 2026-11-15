@@ -56,8 +56,14 @@ export function RootHelperSixteen() {
   return <button onClick={() => createRoot(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { h(() => { setW1(7); }); }); }); }); }); }); }); }); }); }); }); }); }); }); }); }); })} />;
 }
 
-// Read-role consumer of an exhausted partial climb: obligation, never deferred.
+// Read-role consumer of a climb that ends in the flow child's callback after sixteen layers: placed, a violation (ADR 0988; Chrome rc.21 warns at 15, 16 and 17).
 export function FlowReadSixteen() {
   const [r1] = createSignal(0);
   return <For each={[1]}>{() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { r1(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); return <button />; }}</For>;
+}
+
+// ADR 0988: seventeen layers is the bound (a seventeenth layer is unread), so the read keeps its obligation; sixteen end at the flow child's callback and are placed.
+export function FlowReadSeventeen() {
+  const [r1] = createSignal(0);
+  return <For each={[1]}>{() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { (() => { r1(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); })(); return <button />; }}</For>;
 }
