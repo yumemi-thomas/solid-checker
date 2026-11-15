@@ -24441,5 +24441,17 @@
   "found": "the lane programs of slice 8b's sync-option probes: the render-effect variants showed the code with no rule claiming it (`syncopt/r0-render-async-plain`, `r1-render-async-false`, `r5-render-promise-returning`); the SC7002 false positive had masked it in the `{ sync: true, ...over }` variants.",
   "fixed": "ADR 0989 (`pending_accounting.rs`, site (5); `static_api::render_effect_computes_not_proven_sync`, the dialect's `render_effect_compute`): the callee of every render effect whose compute is not proven synchronous is a site of SC5003 alone, ended by the cover walk's `UnderLoading`, a discarded region or a reviewed fresh stack, else an uncertifiable `async-read-unaccounted` row. Always an obligation, never a violation: that the call runs inside the mount's enforcement window, with no boundary above, is not proven.",
   "outside": "the generator has no render-effect-compute shape (ASYNC_OUTSIDE_LOADING_BOUNDARY's cells read an async source); `patterns/syncopt/r0`, `r1`, `r5` hold the programs (main: false clean, this head: an obligation), with `r2` (createEffect: Chrome quiet), `r3` (a read of an async memo: covered on both), `r4` (a synchronous compute) and `w0` (wrapped in `<Loading>`) as twins."
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT false clean (pattern lane api/v49-await-accessor): the accessor itself came out of an await, `const f = await Promise.resolve(c); await 0; return f();` in an async memo, and the call past the second await had no row; Chrome rc.21 reports it. The lane listed it in open-defects.json from 516acd229 (ADR 0815's position rule) until this entry.",
+  "found": "the pattern lane (scripts/fuzz/patterns/api/v49-await-accessor, audit program); seen passing by Research C on main 2026-11-15, confirmed by make fuzz-patterns on 23ad6b7f4 plus ADR 0986's tree (FIXED api/v49-await-accessor)",
+  "fixed": "between 516acd229 (the lane reports false-clean) and 9d875bff0 (the lane reports fine); not bisected to a commit",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-memo-async-use-await-forwarded-direct-none",
+   "mx-untracked-read-after-await-effect-async-use-await-forwarded-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall,lg-recall -- --contexts memo-async,effect-async (the arguments of make fuzz-focus CODES=UNTRACKED_READ_AFTER_AWAIT FUZZ_GRIDS=mx-recall,lg-recall, narrowed to the two contexts), 1,822 programs, on the new AWAIT_USES variants `use-await-forwarded` (mx: the call past the second await) and `use-await-forwarded-unread` (the same forward, never called; legal in lg), layer none only (`layers`: the variant's `await` cannot sit in a closure, helper or iife layer): the 516acd229 release build exits 1 with 26 false-clean programs, both ids of this entry among them (the lane program api/v49-await-accessor is a false clean there too); the head of this branch (23ad6b7f4 plus ADR 0986) exits 0, `nothing needs a look`: both ids recall-gap (uncertifiable, never silent), the twins not-fired in mx and uncertifiable in lg, oracle 22 compared, 0 behaviour differences."
  }
 ]

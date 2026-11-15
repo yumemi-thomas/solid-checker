@@ -4,8 +4,12 @@ import { test } from "vitest";
 import {
   COLD_SAMPLES,
   DEFAULT_CEILINGS,
+  FIRST_IR_MAX_SAMPLES,
   assessPerformance,
-  renderPerformanceFindings
+  quietLoadBound,
+  renderPerformanceFindings,
+  sampleFirstIr,
+  spreadOf
 } from "./lib/performance-invariants.mjs";
 
 function report({ sources, exportNs, exportWork = sources * 23, responseBytes, cachedIrNs, firstIrNs, incrementalNs }) {
@@ -151,4 +155,81 @@ test("the Markdown rendering lists every invariant and explains the reporting mo
   assert.match(markdown, /\| export-scaling \| structural \| 2 x \| 2\.2 x \| ok \|/);
   assert.match(markdown, /\| incremental \| wall-time \| 26000000 ns \| 400000000 ns \| ok \|/);
   assert.match(markdown, /reported, not enforced/);
+});
+
+// The first-IR sampler (ADR 0986): `values` are ns/source, one per cold process.
+const firstIrReport = value => report({ sources: 1000, exportNs: 1_900_000, responseBytes: 892, cachedIrNs: 3000, firstIrNs: value, incrementalNs: 26_000_000 });
+const sampler = (values, { load = () => 1, waitMs = 30_000, clock = { at: 0 } } = {}) => {
+  const queue = [...values];
+  const slept = [];
+  const result = sampleFirstIr({
+    measureOne: () => firstIrReport(queue.shift()),
+    limit: DEFAULT_CEILINGS.firstIrNsPerSource,
+    maxSamples: FIRST_IR_MAX_SAMPLES,
+    bound: 3.5,
+    waitMs,
+    load,
+    now: () => clock.at,
+    sleep: milliseconds => { slept.push(milliseconds); clock.at += milliseconds; }
+  });
+  return { ...result, slept, taken: values.length - queue.length };
+};
+const nsOf = reports => reports.map(r => r.firstRustPipelineBreakdown.reactiveIrTotal.medianNs / r.sourceCount);
+
+test("the first-IR sampler stops at the first sample under the ceiling, and its decision is the minimum of all", () => {
+  const slow = Array(FIRST_IR_MAX_SAMPLES).fill(180_000);
+  const lucky = sampler([181_000, 176_000, 174_900, ...slow]);
+  assert.equal(lucky.taken, 3);
+  assert.equal(lucky.run.stoppedEarly, true);
+  const assessment = assessPerformance({ ...healthy, largeSamples: lucky.reports, firstIrRun: lucky.run });
+  assert.equal(assessment.ok, true);
+  // The same samples drawn in full give the same minimum, so stopping early cannot change a decision.
+  assert.equal(Math.min(...nsOf(lucky.reports)), 174_900);
+  assert.equal(Math.min(...nsOf([...lucky.reports, ...slow.map(firstIrReport)])), 174_900);
+});
+
+test("a regression raises every sample, so it fails after all of them, whatever the load", () => {
+  for (const load of [0.5, 40]) {
+    const regressed = sampler(Array(FIRST_IR_MAX_SAMPLES).fill(175_100), { load: () => load });
+    assert.equal(regressed.taken, FIRST_IR_MAX_SAMPLES);
+    const assessment = assessPerformance({ ...healthy, largeSamples: regressed.reports, firstIrRun: regressed.run });
+    assert.equal(assessment.ok, false);
+    assert.deepEqual(assessment.violations.map(finding => finding.id), ["first-ir"]);
+    assert.match(assessment.violations[0].message, /all 40 samples were over the ceiling/);
+  }
+  const busy = sampler(Array(FIRST_IR_MAX_SAMPLES).fill(190_000), { load: () => 20 });
+  const message = assessPerformance({ ...healthy, largeSamples: busy.reports, firstIrRun: busy.run }).violations[0].message;
+  assert.match(message, /1-minute load 20\.0 at the first sample/);
+  assert.match(message, /not reached/);
+  assert.match(message, /rerun it when it is/);
+});
+
+test("the sampler waits for a quiet machine up to the wait, then measures anyway", () => {
+  const readings = [9, 8, 7, 3, 3, 3, 3, 3];
+  const falling = sampler([170_000], { load: () => readings.length > 1 ? readings.shift() : readings[0] });
+  assert.deepEqual(falling.slept, [1000, 1000]);
+  assert.equal(falling.run.quiet, true);
+  assert.equal(falling.taken, 1);
+  const stuck = sampler([170_000], { load: () => 12 });
+  assert.equal(stuck.slept.length, 30);
+  assert.equal(stuck.run.waitedMs, 30_000);
+  assert.equal(stuck.run.quiet, false);
+  assert.equal(stuck.taken, 1, "a machine that never quiets is still measured, never skipped or passed");
+  const quiet = sampler([170_000], { load: () => 0.5 });
+  assert.deepEqual(quiet.slept, []);
+});
+
+test("the quiet bound is a quarter of the cores, at least 2", () => {
+  assert.equal(quietLoadBound(14), 3.5);
+  assert.equal(quietLoadBound(4), 2);
+});
+
+test("spreadOf gives the order statistics the failure message reports", () => {
+  assert.deepEqual(spreadOf([5, 1, 3, 2, 4]), { n: 5, min: 1, p25: 2, median: 3, p75: 4, max: 5 });
+});
+
+test("the first-IR result names the corpus path length", () => {
+  const sampled = sampler([170_000]);
+  sampled.run.corpusPathChars = 93;
+  assert.match(assessPerformance({ ...healthy, largeSamples: sampled.reports, firstIrRun: sampled.run }).summary, /corpus path 93 characters/);
 });

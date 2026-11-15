@@ -961,6 +961,10 @@ export const AWAIT_USES = {
   // arity, 0), so the read past the await is untracked; `aw-pre-or` calls the source (`||` takes the truthy accessor), so it is tracked.
   "use-pre-pick": { kind: "plain", only: true, bindings: ["direct"], contexts: ["aw-pre-pick"], legal: ["aw-pre-or"], text: (o) => `${o}();` },
   "use-mixed-tracked": { kind: "plain", only: true, bindings: ["direct"], contexts: ["aw-mixed-cont", "aw-mixed-late"], importLines: ["const [emx] = createSignal(4);"], text: (o) => `(Math.random() < 0 ? ${o} : emx)();` },
+  // The accessor itself comes out of an `await` (the pattern lane's api/v49-await-accessor: `const f = await Promise.resolve(c); await 0; return f();`): the call past the
+  // second await reads it untracked; the twin forwards it the same way and never calls it.
+  "use-await-forwarded": { kind: "plain", bindings: ["direct"], layers: ["none"], contexts: ["memo-async", "effect-async"], text: (o) => `const eaf = await Promise.resolve(${o}); await 0; eaf();` },
+  "use-await-forwarded-unread": { kind: "plain", bindings: ["direct"], layers: ["none"], contexts: [], legal: ["memo-async", "effect-async"], text: (o) => `const eau = await Promise.resolve(${o}); await 0; void eau;` },
 };
 
 export const FLIP_READ_VARIANTS = {
