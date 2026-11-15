@@ -287,6 +287,23 @@ pub(crate) enum LayerCover {
     Unresolved,
 }
 
+/// ADR 1011: whether the member callee of `call` is a project function whose body is read, resolved the way every other pass resolves a call's
+/// target (`project_callee_at_parameter`), with the argument at `position` landing in its parameter exactly. `function_called_at` names only
+/// an identifier callee (its own comment: a member callee "names its own value through other facts"), so a closure handed to `H.run(cb)`,
+/// `Api.run(cb)` of a re-exported namespace, or `bus.run(cb)` of a literal's method was read as handed to a call the analysis does not resolve:
+/// a violation it proved (Chrome: ASYNC_OUTSIDE_LOADING_BOUNDARY) became an SC5003 uncertifiable `mount-unresolved`. What the analysis resolves
+/// exactly is read as the identifier callee is; a callee it does not resolve, a method an assignment or an escape may have replaced, a binding
+/// that is not current and a spread before the argument stay unresolved (fail closed).
+fn runs_project_member(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    position: usize,
+) -> bool {
+    crate::execution_role::project_callee_at_parameter(file, call, position, lookup)
+        .is_some_and(|(_, _, exact)| exact)
+}
+
 /// What the layer `function` is, when a call edge does not place it. `None` leaves it "part of the function around it": a callback of a dialect
 /// primitive that runs it where it is written, a function the JSX hands to a component, a standard library callback.
 pub(crate) fn layer_cover(
@@ -320,6 +337,7 @@ pub(crate) fn layer_cover(
             || lookup
                 .function_called_at(file.path.as_str(), call.callee)
                 .is_some()
+            || runs_project_member(lookup, file, call, position)
         {
             // A primitive that runs it where it is written, the standard library, a project function whose body is read.
             continue;
