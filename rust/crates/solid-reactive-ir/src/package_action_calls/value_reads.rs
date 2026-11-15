@@ -161,6 +161,154 @@ pub(crate) fn rows(ctx: &AnalysisContext<'_>, rows: &mut Vec<crate::StaticViolat
             rows.push(row(file, at, &package, role.reports_untracked_read()));
         }
     }
+    flowed_rows(ctx, &analyzed, rows);
+}
+
+/// ADR 0998: the reads the backward walk above does not reach. [`value_of`] follows a read back through a call, a member, an operand and a plain
+/// binding; a value that goes through an element of a literal, an assignment to an existing binding, a parameter of a project function or a copy
+/// reaches its read by a route it does not follow, and Chrome warns there all the same. The value-use census walks every such value FORWARD as
+/// a value past an escape ([`crate::value_use::Census::package_value_start`]): each call or Get through it in project code that no role clears,
+/// and each position that walk cannot follow, is an uncertifiable SC1001 here unless a row of the walk above already stands on the same span.
+fn flowed_rows(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    rows: &mut Vec<crate::StaticViolation>,
+) {
+    let lookup = ctx.semantic_lookup;
+    let files = lookup
+        .files()
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect::<HashMap<_, _>>();
+    // The spans this pass already filed, by path: a site stands once.
+    let mut filed = HashMap::<String, HashSet<(u64, u64)>>::default();
+    for row in rows.iter().filter(|row| {
+        row.analysis_context
+            .starts_with(crate::blockers::PACKAGE_VALUE_READ)
+    }) {
+        filed
+            .entry(row.location.path.to_string())
+            .or_default()
+            .insert((row.location.start_byte, row.location.end_byte));
+    }
+    let no_calls = HashMap::default();
+    let no_rows = crate::value_use::RowIndex::default();
+    let mut census = crate::value_use::Census::new(
+        lookup,
+        ctx.entities,
+        ctx.symbol_names,
+        HashSet::default(),
+        &no_calls,
+        crate::attribution::ExportedCallers::new(lookup, ctx.aliases, ctx.symbols_by_root),
+        &no_rows,
+    );
+    for file in lookup.files() {
+        if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        let bound = import_bindings(ctx, file);
+        for call in &file.ast.calls {
+            let Origin::Package(declaration) =
+                origin_of(ctx, analyzed, file, &bound, call.span, ORIGIN_DEPTH)
+            else {
+                continue;
+            };
+            if is_pseudo(&declaration.path) || lookup.in_dependency_source(&declaration.path) {
+                continue;
+            }
+            let package = package_root_of(&declaration.path).map_or_else(
+                || declaration.path.clone(),
+                |root| installed_name(ctx, root),
+            );
+            let answer =
+                census.package_value_start(file, call.span, crate::blockers::PACKAGE_VALUE_READ);
+            let budget = answer.cut.then(|| {
+                (
+                    call.span.location(file.path.as_str()),
+                    crate::blockers::VALUE_USE_UNCLASSIFIED,
+                )
+            });
+            for (location, blocker) in answer
+                .uses
+                .into_iter()
+                .chain(answer.escaped_uses)
+                .chain(budget)
+            {
+                // A value handed to code that is no function of the project (a package, the standard library, a constructor, a component, a
+                // primitive, an `await`) is that code's to read: no claim of this rule (`docs/open-work.md`). What stays is a call or Get through
+                // the value in project code, and a position inside the project the walk cannot follow.
+                if matches!(
+                    blocker,
+                    crate::blockers::VALUE_TO_UNRESOLVED_CALLEE
+                        | crate::blockers::VALUE_THROUGH_NEW
+                        | crate::blockers::VALUE_IN_CARRIER
+                        | crate::blockers::VALUE_THROUGH_AWAIT
+                ) {
+                    continue;
+                }
+                let Some(target) = files.get(location.path.as_ref()) else {
+                    continue;
+                };
+                if lookup.in_dependency_source(target.path.as_str()) {
+                    continue;
+                }
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(location.start_byte),
+                    u32::try_from(location.end_byte),
+                ) else {
+                    continue;
+                };
+                if !filed
+                    .entry(location.path.to_string())
+                    .or_default()
+                    .insert((location.start_byte, location.end_byte))
+                {
+                    continue;
+                }
+                rows.push(flowed_row(target, Span::new(start, end), &package, blocker));
+            }
+        }
+    }
+}
+
+/// The row of a site or an end [`flowed_rows`] found: `flowed` for a call or Get through the value, else the position the walk could not follow.
+fn flowed_row(
+    file: &FileFacts,
+    at: Span,
+    package: &str,
+    blocker: &'static str,
+) -> crate::StaticViolation {
+    let text = file.source_text(at).unwrap_or_default();
+    let first = text.lines().next().unwrap_or_default().trim();
+    let shown = if first.chars().count() > 48 {
+        format!("{}…", first.chars().take(47).collect::<String>())
+    } else {
+        first.to_owned()
+    };
+    let site = blocker == crate::blockers::PACKAGE_VALUE_READ;
+    crate::StaticViolation {
+        id: "SC1001".into(),
+        rule: "strict-read-untracked".into(),
+        message: if site {
+            format!(
+                "`{shown}` reads, or calls, a value that `{package}` returned and that reached this place through the program (a binding, a literal, an assignment or a parameter); `{package}` is a package this build does not read as source, so the value may be a getter or an accessor it defines, or a function or object this program handed it, and whether Solid warns STRICT_READ_UNTRACKED here is not proven"
+            )
+        } else {
+            format!(
+                "`{shown}` holds a value that `{package}` returned, where this analysis does not follow it further; `{package}` is a package this build does not read as source, so the value may be a getter or an accessor it defines, and whether a read of it past this place warns STRICT_READ_UNTRACKED is not proven"
+            )
+        },
+        hint: "Read the value inside a tracked expression (JSX, an effect's compute function or a memo), or let the build read the package as source (a declared host with the Solid Vite \
+               plugin reads the packages that name Solid, or whose code imports it)."
+            .into(),
+        location: crate::location(file.path.shared(), at),
+        analysis_context: crate::blockers::with_detail(
+            crate::blockers::PACKAGE_VALUE_READ,
+            if site { "flowed" } else { blocker },
+        ),
+        fixes: Vec::new(),
+        uncertain: true,
+    }
 }
 
 fn row(file: &FileFacts, at: Span, package: &str, untracked: bool) -> crate::StaticViolation {

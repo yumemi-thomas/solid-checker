@@ -1,0 +1,4 @@
+{
+  "note": "ADR 0998: dep-router is not read as source (no pin); useLocation() returns getters over a memo. Chrome warns STRICT_READ_UNTRACKED at each untracked `.search`, on every route to the read (a plain binding, an array literal and a pattern, a binding assigned later, an object literal's slot, a project function's parameter, an Object.assign copy): each is covered-uncertifiable. The same routes read in a tracked expression, and a project function of the same name, are quiet.",
+  "packages": ["dep-router"]
+}
