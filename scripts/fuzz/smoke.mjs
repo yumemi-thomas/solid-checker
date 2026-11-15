@@ -16,6 +16,7 @@
 //
 //   node scripts/fuzz/smoke.mjs select --from <full run: one directory per grid> [--out scripts/fuzz/smoke] [--per-behaviour 5]
 //   node scripts/fuzz/smoke.mjs check --reference <full run> --against <full run of another checker> [--manifests scripts/fuzz/smoke]
+//   node scripts/fuzz/smoke.mjs record --from <run of the manifests' programs: one directory per grid> [--whole mx-census] [--drop-missing]   (ADR 0996: same ids, new expectations)
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -160,6 +161,41 @@ function select(from, out, perBehaviour) {
   }
 }
 
+/**
+ * ADR 0996: a manifest re-recorded against a run, the ids kept. The expectation of each id becomes the behaviour the run gave it (`select`'s canonical form: the table of
+ * distinct behaviours sorted, `expected` the index of each id's); the program set is not re-chosen. An id with no row in the run is refused unless `dropMissing` (a program
+ * the grid no longer generates). A manifest that is a grid's whole population (`whole`: the census, whose `ids` are every program) takes the run's programs as its ids
+ * instead: the ids it had in the run, in their order, then the run's other programs in grid order.
+ * @returns {{ manifest: object, kept: number, dropped: string[], added: number, moved: number }}
+ */
+export function recorded(manifest, rows, { whole = false, dropMissing = false } = {}) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const missing = manifest.ids.filter((id) => !byId.has(id));
+  if (missing.length && !(dropMissing || whole)) throw new Error(`${manifest.grid}: ${missing.length} ids of the manifest have no row in the run (e.g. ${missing.slice(0, 3).join(", ")}): the run is not of this grid, or it needs --drop-missing`);
+  const kept = manifest.ids.filter((id) => byId.has(id));
+  const had = new Set(kept);
+  const added = whole ? rows.map((row) => row.id).filter((id) => !had.has(id)) : [];
+  const ids = [...kept, ...added];
+  const was = new Map(manifest.ids.map((id, index) => [id, manifest.behaviours[manifest.expected[index]]]));
+  const behaviour = new Map(ids.map((id) => [id, behaviourOf(byId.get(id))]));
+  const table = [...new Set(ids.map((id) => behaviour.get(id)))].sort();
+  const moved = kept.filter((id) => was.get(id) !== behaviour.get(id)).length;
+  return {
+    manifest: { ...manifest, programs: rows.length, behaviours: table, ids, expected: ids.map((id) => table.indexOf(behaviour.get(id))) },
+    kept: kept.length, dropped: missing, added: added.length, moved,
+  };
+}
+
+function record(from, manifests, { whole, dropMissing }) {
+  for (const grid of gridsIn(from)) {
+    const file = join(manifests, `${grid}.json`);
+    if (!existsSync(file)) continue;
+    const result = recorded(JSON.parse(readFileSync(file, "utf8")), readRows(join(from, grid)), { whole: whole.includes(grid), dropMissing });
+    writeFileSync(file, `${JSON.stringify(result.manifest, null, 0)}\n`);
+    console.log(`${grid.padEnd(9)} ${String(result.kept).padStart(6)} ids kept, ${result.moved} with a new expectation, ${result.dropped.length} dropped${result.dropped.length ? ` (${result.dropped.slice(0, 2).join(", ")})` : ""}, ${result.added} added`);
+  }
+}
+
 /** Outcomes from best to worst, a misuse grid's and a legal grid's: a move down this list is a regression. */
 const RANK = [
   ["agree", "recall-gap", "pending-uncaught", "not-fired", "typed-away", "harness", "wrong-rule", "unjudged-claim", "halted-claim", "stacked-claim", "false-clean", "misplaced", "unplaced", "false-positive", "tsc-overlap"],
@@ -219,7 +255,8 @@ function main(argv) {
   const option = (name, fallback) => { const at = rest.indexOf(`--${name}`); return at < 0 ? fallback : rest[at + 1]; };
   if (command === "select") return select(resolve(option("from")), resolve(option("out", SMOKE_DIR)), Number(option("per-behaviour", PER_BEHAVIOUR)));
   if (command === "check") return check(resolve(option("reference")), resolve(option("against")), resolve(option("manifests", SMOKE_DIR)));
-  throw new Error("smoke.mjs select --from <full run> | check --reference <full run> --against <full run>");
+  if (command === "record") return record(resolve(option("from")), resolve(option("manifests", SMOKE_DIR)), { whole: String(option("whole", "")).split(",").filter(Boolean), dropMissing: rest.includes("--drop-missing") });
+  throw new Error("smoke.mjs select --from <full run> | check --reference <full run> --against <full run> | record --from <run> [--whole mx-census] [--drop-missing]");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv.slice(2));
