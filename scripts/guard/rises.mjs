@@ -12,9 +12,13 @@
 //   key and fact are text. Those are the failures (exit 1);
 // - `--append` adds a row for every unnamed rise (the ADR and the fact are asked for; one fact for the whole change).
 // counts.json is not touched and not rekeyed: its keys stay `code blocker`.
+// No base is a failure, never a pass (ADR 0995; COUNT_BASE=<rev> names one).
+// Recording an intended change: `node scripts/guard/rises.mjs --append "ADR NNNN" --fact "<the typed fact>"` adds the rows to
+// scripts/guard/rises.json for the unnamed rises (the ADR must be in docs/decisions.md); commit it with the change.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { helpOf } from "./base-revision.mjs";
 import { baseLedger, countRows, fixtureOf, git, snapshotsAt } from "./count.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -60,16 +64,19 @@ const readSnapshots = () => new Map(readdirSync(join(repo, SNAPSHOTS)).filter((n
 export const rowsFor = (unnamed, { adr, fact, why }) => unnamed.map((rise) => ({ ...rise, adr, fact, ...(why ? { why } : {}) }));
 
 function main(argv) {
+  if (argv.includes("--help")) return console.log(helpOf(import.meta.url));
   const value = (name) => { const at = argv.indexOf(name); return at < 0 ? undefined : argv[at + 1]; };
   const path = join(repo, RISES);
   const ledger = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { about: "", rises: [] };
-  const { revision, ledger: baseCounts } = baseLedger();
-  const baseSnapshots = baseCounts && !revision.includes(",") ? snapshotsAt(revision) : null;
+  const { revision, ledger: baseCounts, problem } = baseLedger();
+  const baseSnapshots = baseCounts ? snapshotsAt(revision) : null;
   const baseText = baseSnapshots ? git("show", `${revision}:${RISES}`) : null;
   const base = baseText ? JSON.parse(baseText) : null;
   const measured = baseSnapshots ? measureRises(baseSnapshots, readSnapshots()) : [];
   const decisions = readFileSync(join(repo, "docs/decisions.md"), "utf8");
   const { failures, named, unnamed } = checkRises({ ledger, base: base ?? { rises: [] }, measured, decisions });
+  // No base is a failure, never a pass (ADR 0995): a rise is named against a base, and "append-only" holds nothing without one.
+  if (problem) failures.unshift(problem);
   if (argv.includes("--append")) {
     const adr = value("--append");
     const fact = value("--fact");

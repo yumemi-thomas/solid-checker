@@ -50,11 +50,20 @@
 // other; --update keeps the list).
 //
 //   bun scripts/ir-read-lint.mjs            check, exit 1 on any difference
-//   bun scripts/ir-read-lint.mjs --update   rewrite the allow-list
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+//   bun scripts/ir-read-lint.mjs --update   rewrite the allow-list (a count that fell, or a file that went); a RISE is refused (ADR 0995)
+//   bun scripts/ir-read-lint.mjs --update --allow-rise   record a rise, or a replaced site, after reading it: the entry's `pending-review`
+//                                           list gets a line naming it (unreviewed, as that list says), which the reviewer reads in the diff
+//
+// Against the merge base (ADR 0995; COUNT_BASE=<rev> names one, no base is a failure): a count that holds while one site was fixed and
+// another added is no different from a count, so the sites are also compared by normalized line text. A site whose text the base did not
+// hold, in a file and kind whose count did not rise, REPLACED one: it fails unless the entry's `pending-review` list names the text in
+// backticks (what `--update --allow-rise` writes). Reflowing a line (whitespace) is the same site; renaming a binding on it is not.
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+
+import { baseFile, exportBase, helpOf } from "./guard/base-revision.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const SOURCE_ROOT = "rust/crates/solid-reactive-ir/src";
@@ -149,6 +158,9 @@ export function testItemLines(text) {
   return inTest;
 }
 
+/** A line's text with its whitespace collapsed: a reflow is the same site. */
+const normalText = (line) => line.replace(/\s+/g, " ").trim();
+
 /** Counts of each raw-read kind in one source text. */
 export function countReads(text) {
   const counts = {
@@ -167,6 +179,11 @@ export function countReads(text) {
 
 /** Each raw read in one source text, as `{ line (1-based), kind }`. */
 export function readSites(text) {
+  return readSitesWithText(text).map(({ line, kind }) => ({ line, kind }));
+}
+
+/** Each raw read in one source text, as `{ line (1-based), kind, text }`: the line's normalized text names the site (ADR 0995). */
+export function readSitesWithText(text) {
   const lines = codeLines(text);
   const sites = [];
   const names = new Set();
@@ -189,7 +206,7 @@ export function readSites(text) {
     : [];
   lines.forEach((line, index) => {
     const add = (kind, count) => {
-      for (let n = 0; n < count; n += 1) sites.push({ line: index + 1, kind });
+      for (let n = 0; n < count; n += 1) sites.push({ line: index + 1, kind, text: normalText(line) });
     };
     add("file_slots", (line.match(/\bfile_slots\s*\(/g) ?? []).length);
     add("file_by_path", (line.match(/\bfile_by_path\b/g) ?? []).length);
@@ -202,7 +219,8 @@ export function readSites(text) {
   const code = lines.join("\n");
   const joined = (kind, pattern) => {
     for (const found of code.matchAll(pattern)) {
-      sites.push({ line: code.slice(0, found.index).split("\n").length, kind });
+      const at = code.slice(0, found.index).split("\n").length;
+      sites.push({ line: at, kind, text: normalText(lines[at - 1] ?? "") });
     }
   };
   // rustfmt splits `facts\n.files` as often as it keeps it on one line.
@@ -227,8 +245,56 @@ export function measure(root = ROOT) {
   return measured;
 }
 
-/** Human-readable differences between the allow-list and the measurement. */
+/** `{ relative path: [{ kind, text }] }` for the IR's non-test sources (the sites behind `measure`'s counts). */
+export function measureSites(root = ROOT) {
+  const measured = {};
+  for (const path of sourceFiles(join(root, SOURCE_ROOT))) {
+    const sites = readSitesWithText(readFileSync(path, "utf8")).map(({ kind, text }) => ({ kind, text }));
+    if (sites.length > 0) measured[relative(root, path)] = sites;
+  }
+  return measured;
+}
+
 export const PENDING = "pending-review";
+
+/** The (file, kind) entries whose count rose against `allowed`: `[{ path, kind, was, now }]`. */
+export function risesOf(allowed, measured) {
+  const rises = [];
+  for (const [path, counts] of Object.entries(measured)) {
+    for (const [kind, now] of Object.entries(counts)) {
+      if (kind !== PENDING && now > (allowed[path]?.[kind] ?? 0)) rises.push({ path, kind, was: allowed[path]?.[kind] ?? 0, now });
+    }
+  }
+  return rises;
+}
+
+/**
+ * ADR 0995: the sites that REPLACED another: text the base did not hold, where the file and kind lost a text too (so the count may not have
+ * moved). `[{ path, kind, text }]`, the head's new texts, one per pairing. `baseSites` and `headSites` are `measureSites` results.
+ */
+export function replacedSites(baseSites, headSites) {
+  const replaced = [];
+  for (const path of Object.keys(headSites)) {
+    for (const kind of [...new Set(headSites[path].map((site) => site.kind))]) {
+      const before = (baseSites[path] ?? []).filter((site) => site.kind === kind).map((site) => site.text);
+      const left = [...before];
+      const fresh = [];
+      for (const site of headSites[path].filter((one) => one.kind === kind)) {
+        const at = left.indexOf(site.text);
+        if (at >= 0) left.splice(at, 1);
+        else fresh.push(site.text);
+      }
+      // `left` now holds the base's texts that went: each pairs with one fresh text; fresh beyond that is a rise, which the counts catch.
+      replaced.push(...fresh.slice(0, left.length).map((text) => ({ path, kind, text })));
+    }
+  }
+  return replaced;
+}
+
+/** Whether an entry's pending-review list names `text` in backticks. */
+export const acknowledges = (entry, text) => (entry?.[PENDING] ?? []).some((line) => typeof line === "string" && line.includes(`\`${text}\``));
+
+/** Human-readable differences between the allow-list and the measurement. */
 
 export function violations(allowed, measured) {
   const problems = [];
@@ -254,13 +320,40 @@ export function violations(allowed, measured) {
   return problems;
 }
 
+/** The base's sites and allow-list, or a problem sentence (no base is a failure). */
+function baseState() {
+  const found = baseFile("scripts/ir-read-lint.allowlist.json");
+  if (found.problem) return { problem: found.problem };
+  const { dir, problem } = exportBase(found.revision, [SOURCE_ROOT]);
+  try {
+    return problem ? { problem } : { sites: measureSites(dir), revision: found.revision };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function main() {
+  if (process.argv.includes("--help")) {
+    console.log(helpOf(import.meta.url));
+    return 0;
+  }
   const measured = measure();
   if (process.argv.includes("--update")) {
     const previous = existsSync(ALLOWLIST) ? JSON.parse(readFileSync(ALLOWLIST, "utf8")) : {};
-    for (const [path, counts] of Object.entries(measured)) {
-      if (previous[path]?.[PENDING]) counts[PENDING] = previous[path][PENDING];
+    const rises = risesOf(previous, measured);
+    const base = baseState();
+    const replaced = base.problem ? [] : replacedSites(base.sites, measureSites()).filter((site) => !acknowledges(previous[site.path], site.text));
+    if ((rises.length > 0 || replaced.length > 0) && !process.argv.includes("--allow-rise")) {
+      for (const rise of rises) console.error(`rise: ${rise.path} ${rise.kind} ${rise.was} -> ${rise.now}`);
+      for (const site of replaced) console.error(`replaced site: ${site.path} ${site.kind} \`${site.text}\``);
+      console.error("ir-read-lint: refusing to record a rise or a replaced site: read through a recorded query. If the read is sound, record it with `--update --allow-rise`, which names it in the entry's pending-review list for the reviewer");
+      return 1;
     }
+    for (const [path, counts] of Object.entries(measured)) {
+      if (previous[path]?.[PENDING]) counts[PENDING] = [...previous[path][PENDING]];
+    }
+    for (const rise of rises) (measured[rise.path][PENDING] ??= []).push(`${rise.kind} rose ${rise.was} -> ${rise.now} (--allow-rise): unreviewed`);
+    for (const site of replaced) (measured[site.path][PENDING] ??= []).push(`${site.kind} site replaced (--allow-rise): unreviewed \`${site.text}\``);
     writeFileSync(ALLOWLIST, `${JSON.stringify(measured, null, 2)}\n`);
     const total = Object.values(measured).flatMap((counts) => Object.values(counts)).filter(Number.isInteger).reduce((a, b) => a + b, 0);
     console.log(`ir-read-lint: allow-list rewritten (${Object.keys(measured).length} files, ${total} sites)`);
@@ -268,6 +361,13 @@ function main() {
   }
   const allowed = existsSync(ALLOWLIST) ? JSON.parse(readFileSync(ALLOWLIST, "utf8")) : {};
   const problems = violations(allowed, measured);
+  const base = baseState();
+  if (base.problem) problems.push(base.problem);
+  else {
+    for (const site of replacedSites(base.sites, measureSites())) {
+      if (!acknowledges(allowed[site.path], site.text)) problems.push(`${site.path}: a ${site.kind} site replaced one of the base's (the count may hold): \`${site.text.slice(0, 120)}\`. If it is sound, \`--update --allow-rise\` names it in the entry's pending-review list for the reviewer`);
+    }
+  }
   for (const problem of problems) console.error(problem);
   if (problems.length > 0) return 1;
   const total = Object.values(measured).flatMap((counts) => Object.values(counts)).filter(Number.isInteger).reduce((a, b) => a + b, 0);

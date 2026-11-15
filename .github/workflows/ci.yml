@@ -125,6 +125,13 @@ jobs:
         if: env.TESTED == ''
       - run: make ownership-gate
         if: env.TESTED == ''
+      # The two gates verify.sh's gates lane runs that CI never did (ADR 0995): every site of the independent universe ends in a row, an
+      # obligation, a discard or a stated silence (proof-gate), and each reproduction still reads as the cause it stands for (repro-causes).
+      # Both run the debug checker the steps above built.
+      - run: make proof-gate
+        if: env.TESTED == ''
+      - run: make repro-causes
+        if: env.TESTED == ''
       # AGENTS.md's absolute rule, as a gate: no rule's positive case may also
       # be a `tsc` error against the real published Solid typings, and — the
       # half the checker-side declarations added — no rule may be narrowed into
@@ -356,12 +363,39 @@ jobs:
       - run: jq empty schema/*.json
       - run: make test-cli
 
+  # The precision ratchets that need no checker build (ADR 0995): every one compares with the merge base, so the history is fetched in full
+  # (a shallow clone has no merge base, and a ratchet with no base fails rather than passes: scripts/guard/base-revision.mjs). Without the
+  # job, nothing in CI ran them: `make verify` was the only place a proved result could be held to its base.
+  # Skipped on a tested tree: the tree was compared when its pull request ran, and a push to main compares with itself.
+  guards:
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.tested == '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      # count: the one-way uncertifiable count (a fall needs a row, per fixture and path). rises: named rises. regress: a removed violation
+      # needs a row. base: the frozen judge, the proof gate's candidates and the held cases against the base.
+      - run: node scripts/guard/count.mjs
+      - run: node scripts/guard/rises.mjs
+      - run: node scripts/guard/regress.mjs
+      - run: node scripts/guard/base.mjs
+      - run: bun scripts/proof-lint.mjs
+      - run: bun scripts/ir-read-lint.mjs
+
   # A pull request's passing run records the tree it tested (its merge ref's),
   # which a push to main with the same tree reads in `tested` above. Only after
   # every job passed; the reader also requires the whole run's success.
   record-tested-tree:
     if: github.event_name == 'pull_request'
-    needs: [rust-engine, rust-package, wasm-package, wasm-parity, scripts-and-cli]
+    needs: [rust-engine, rust-package, wasm-package, wasm-parity, scripts-and-cli, guards]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
