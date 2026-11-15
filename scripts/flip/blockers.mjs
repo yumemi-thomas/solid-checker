@@ -1,8 +1,8 @@
 // Every uncertifiable row of a sweep names its blocker (ADR 0680): node scripts/flip/blockers.mjs <sweep.json>. Exits 1 on a row that does not.
-import { readFileSync } from "node:fs";
+import { readReportFile } from "../lib/corpus-report.mjs";
 
 const named = (context) => /^[a-z0-9]+(-[a-z0-9]+)+(:.*)?$/s.test(context ?? "") && !String(context).startsWith("proof-step-unnamed");
-const sweep = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const sweep = readReportFile(process.argv[2]);
 const counts = new Map();
 const missing = new Map();
 let rows = 0;
