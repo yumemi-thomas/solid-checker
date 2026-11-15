@@ -18,10 +18,163 @@ use solid_facts::core::Span;
 const RULE_ID: &str = "SC5006";
 const RULE_NAME: &str = "loading-on-outside-hold";
 
+/// ADR 0987: one place a boundary is entered with a way to pass `on`: a candidate, the one list both rules decide in one loop. The universe
+/// ([`crate::proof_universe`]'s `loading-on` table) lists exactly these, found from the dialect's identity of the boundary (a tag, an exact call, the
+/// primitive behind it, a value reference, an unresolved tag), so a candidate no producer reached is a site all the same.
+pub(crate) struct Candidate {
+    form: Form,
+    /// Where the site is, and the other spans a finding or a silence for it may stand at (the `on` attribute and its value, a spread and its argument,
+    /// the call, the props argument, the property and its value).
+    pub(crate) anchor: Span,
+    pub(crate) alternates: Vec<Span>,
+    /// Whether SC5007's question is asked here (`on` may be a function): not for the primitive's options, and not for a tag whose spreads are all
+    /// closed against `on`.
+    pub(crate) accessor: bool,
+}
+
+#[derive(Clone, Copy)]
+enum Form {
+    /// A tag of the dialect's boundary (the element's index).
+    Element(usize),
+    /// An exact call that enters the boundary (`Loading(props)`, `createComponent(Loading, props)`).
+    Call(usize, crate::loading_entries::EntryCall),
+    /// The primitive behind the boundary (`createLoadingBoundary(children, fallback, { on })`).
+    Primitive(usize),
+    /// The boundary named as a value that may enter it anywhere.
+    Reference,
+    /// A tag whose component is not resolved: it may be the boundary.
+    UnresolvedTag(usize),
+}
+
+/// The spans the `on` of a tag may be reported at: the attribute and its value, every spread and its argument.
+fn element_spans(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    on_prop: &str,
+) -> Vec<Span> {
+    let mut spans = vec![element.span];
+    for attribute in &element.attributes {
+        if attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some(on_prop)
+        {
+            spans.push(attribute.span);
+            spans.extend(
+                attribute
+                    .expression
+                    .map(|value| file.ast.peel_ts_sugar_span(value)),
+            );
+            spans.extend(attribute.value);
+        }
+    }
+    for spread in &element.spreads {
+        spans.push(spread.span);
+        spans.push(spread.argument);
+    }
+    spans
+}
+
+/// The spans a props argument's `on` may be reported at: the call, the argument, the property and its value.
+fn props_spans(
+    file: &solid_facts::FileFacts,
+    on_prop: &str,
+    call: &solid_facts::ast::CallFact,
+    argument: Option<&solid_facts::ast::ArgumentFact>,
+) -> Vec<Span> {
+    let mut spans = vec![call.span];
+    if let Some(argument) = argument {
+        spans.push(argument.span);
+        if let crate::loading_entries::PropsOn::Member(property) =
+            crate::loading_entries::props_on(file, on_prop, Some(argument))
+        {
+            spans.push(property.span);
+            spans.push(file.ast.peel_ts_sugar_span(property.value));
+        }
+    }
+    spans
+}
+
+/// Every candidate of one file, by the dialect's identity of the boundary. `None` where the dialect names no async boundary.
+pub(crate) fn candidates(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Candidate> {
+    use crate::loading_entries::{
+        PropsOn, entry_call, loading_value_references, props_on, unresolved_tag,
+    };
+    let Some(on) = crate::loading_entries::on_prop(lookup) else {
+        return Vec::new();
+    };
+    let primitives = lookup.primitives(file);
+    let mut found = Vec::new();
+    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+        let boundary = super::known_primitive(&primitives.jsx[index])
+            .is_some_and(|primitive| lookup.dialect.boundary_on_may_hold_outside(primitive));
+        let unresolved = !boundary && unresolved_tag(lookup, file, index, element);
+        if !(boundary || unresolved) || !passes_on(file, on, element) {
+            continue;
+        }
+        found.push(Candidate {
+            form: if boundary {
+                Form::Element(index)
+            } else {
+                Form::UnresolvedTag(index)
+            },
+            anchor: element.name.span,
+            alternates: element_spans(file, element, on),
+            accessor: jsx_on_value(file, lookup, element).is_some(),
+        });
+    }
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        let Some(entry) = entry_call(lookup, file, index) else {
+            continue;
+        };
+        let argument = call.arguments.get(entry.props());
+        if matches!(props_on(file, on, argument), PropsOn::Absent) {
+            continue;
+        }
+        found.push(Candidate {
+            form: Form::Call(index, entry),
+            anchor: call.callee,
+            alternates: props_spans(file, on, call, argument),
+            accessor: argument.is_some(),
+        });
+    }
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        let Some(shape) = lookup.dialect.async_boundary_shape() else {
+            break;
+        };
+        if lookup.primitive_at_call(file, call.span) != Some(shape.primitive) {
+            continue;
+        }
+        let argument = call.arguments.get(shape.options_argument);
+        if matches!(props_on(file, shape.on_prop, argument), PropsOn::Absent) {
+            continue;
+        }
+        found.push(Candidate {
+            form: Form::Primitive(index),
+            anchor: call.callee,
+            alternates: props_spans(file, shape.on_prop, call, argument),
+            accessor: false,
+        });
+    }
+    for at in loading_value_references(lookup, file) {
+        found.push(Candidate {
+            form: Form::Reference,
+            anchor: at,
+            alternates: Vec::new(),
+            accessor: true,
+        });
+    }
+    found
+}
+
+/// The two rules over the candidates, each decided at every one: a finding, or a silence the decision names in `ends` (ADR 0987). A boundary with no
+/// `on` and no spread is no candidate (a filter, not a site); every other exit of either rule is a finding or a named silence, so an unnamed one is an
+/// uncertifiable row of the rule (`proof_universe`'s `loading-on` table).
 pub(crate) fn loading_on_outside_hold_obligations(
     facts: &solid_facts::ProjectFacts,
     program: &Program,
     lookup: &SemanticLookup<'_>,
+    ends: &mut crate::site_accounting::SiteEnds,
 ) -> Vec<StaticViolation> {
     let mut obligations = Vec::new();
     // The dialect names the boundary's props and primitive (ADR 0978); without an async boundary nothing here is asked.
@@ -29,64 +182,137 @@ pub(crate) fn loading_on_outside_hold_obligations(
         return obligations;
     };
     for file in crate::base::reads::all_files(facts) {
-        loading_on_accessor_violations(file, lookup, on, &mut obligations);
-        let primitives = lookup.primitives(file);
-        for (index, element) in file.ast.jsx_elements.iter().enumerate() {
-            if !super::known_primitive(&primitives.jsx[index])
-                .is_some_and(|primitive| lookup.dialect.boundary_on_may_hold_outside(primitive))
-            {
-                continue;
-            }
-            let Some(at) = on_to_hold(file, on, element) else {
-                continue;
-            };
-            if let Some(reason) = unproven_hold(program, lookup, file, element) {
-                obligations.push(hold_obligation(file, at, reason));
+        let found = candidates(file, lookup);
+        for candidate in &found {
+            if candidate.accessor {
+                accessor_decision(file, lookup, on, candidate, ends, &mut obligations);
             }
         }
-        // ADR 0978: the boundary entered other than as a tag. No children proof is built for these forms: each that may pass `on` is an
-        // uncertifiable obligation, never a certified clean.
-        for (index, call) in file.ast.calls.iter().enumerate() {
-            let Some(entry) = crate::loading_entries::entry_call(lookup, file, index) else {
-                continue;
-            };
-            let argument = call.arguments.get(entry.props());
-            let (at, reason) = match crate::loading_entries::props_on(file, on, argument) {
-                crate::loading_entries::PropsOn::Absent => continue,
-                crate::loading_entries::PropsOn::Member(property) => {
-                    // An `on` that names nothing (`on: 1`) never re-arms, as for the tag.
-                    if property.data && names_nothing(file, property.value) {
-                        continue;
-                    }
-                    (property.span, BY_CALL)
-                }
-                crate::loading_entries::PropsOn::Open => (
-                    argument.map_or(call.span, |argument| argument.span),
-                    "its props are not resolved",
-                ),
-            };
-            obligations.push(hold_obligation(file, at, reason));
-        }
-        // `createLoadingBoundary(children, fallback, { on })`: the primitive behind the boundary re-arms through the same `on`.
-        for call in &file.ast.calls {
-            let Some(at) = primitive_on(lookup, file, call) else {
-                continue;
-            };
-            obligations.push(hold_obligation(file, at, BY_CALL));
-        }
-        for at in crate::loading_entries::loading_value_references(lookup, file) {
-            obligations.push(hold_obligation(file, at, AS_VALUE));
-        }
-        for (index, element) in file.ast.jsx_elements.iter().enumerate() {
-            // The syntactic question first: the component is resolved only for a tag that passes `on`.
-            if let Some(at) = on_to_hold(file, on, element)
-                && crate::loading_entries::unresolved_tag(lookup, file, index, element)
-            {
-                obligations.push(hold_obligation(file, at, UNRESOLVED_TAG));
-            }
+        for candidate in &found {
+            hold_decision(file, program, lookup, on, candidate, ends, &mut obligations);
         }
     }
     obligations
+}
+
+/// SC5006 at one candidate: an obligation, or `on` names nothing (the silence `LoadingOnNamesNothing`, on the value), or no async source is read under
+/// the boundary and its children are all seen (`LoadingHoldsNoAsyncSource`, on the children: only where [`unproven_hold`] answers `None`).
+fn hold_decision(
+    file: &solid_facts::FileFacts,
+    program: &Program,
+    lookup: &SemanticLookup<'_>,
+    on: &str,
+    candidate: &Candidate,
+    ends: &mut crate::site_accounting::SiteEnds,
+    obligations: &mut Vec<StaticViolation>,
+) {
+    use crate::loading_entries::{PropsOn, props_on};
+    use crate::site_accounting::SiteSilence;
+    let names_nothing_end = |ends: &mut crate::site_accounting::SiteEnds, value: Span| {
+        ends.end_at(
+            file,
+            candidate.anchor,
+            SiteSilence::LoadingOnNamesNothing,
+            crate::proof_log::PremiseKind::OptionLiteral,
+            || Some(value),
+        );
+    };
+    let from_props = |ends: &mut crate::site_accounting::SiteEnds,
+                      obligations: &mut Vec<StaticViolation>,
+                      argument: Option<&solid_facts::ast::ArgumentFact>,
+                      call: &solid_facts::ast::CallFact| {
+        match props_on(file, on, argument) {
+            // The candidate list holds none: a filter.
+            PropsOn::Absent => {}
+            PropsOn::Member(property) => {
+                // An `on` that names nothing (`on: 1`) never re-arms, as for the tag.
+                if property.data && names_nothing(file, property.value) {
+                    names_nothing_end(ends, property.value);
+                } else {
+                    obligations.push(hold_obligation(file, property.span, BY_CALL));
+                }
+            }
+            PropsOn::Open => obligations.push(hold_obligation(
+                file,
+                argument.map_or(call.span, |argument| argument.span),
+                "its props are not resolved",
+            )),
+        }
+    };
+    match candidate.form {
+        Form::Element(index) | Form::UnresolvedTag(index) => {
+            let element = &file.ast.jsx_elements[index];
+            let unresolved = matches!(candidate.form, Form::UnresolvedTag(_));
+            match on_to_hold(file, on, element) {
+                Some(at) => {
+                    if unresolved {
+                        obligations.push(hold_obligation(file, at, UNRESOLVED_TAG));
+                    } else if let Some(reason) = unproven_hold(program, lookup, file, element) {
+                        obligations.push(hold_obligation(file, at, reason));
+                    } else {
+                        // The one proof here: no async source is read under the boundary and every child is seen (`unproven_hold` answers `None`).
+                        let children = children_span(element);
+                        ends.end_at(
+                            file,
+                            candidate.anchor,
+                            SiteSilence::LoadingHoldsNoAsyncSource,
+                            crate::proof_log::PremiseKind::BoundaryHoldsNoAsync,
+                            || Some(children),
+                        );
+                    }
+                }
+                None => {
+                    // `on` is written and names nothing (no spread may carry another): `on={1}` has no dependency to change.
+                    if let Some(value) = element.attributes.iter().find_map(|attribute| {
+                        (attribute.namespace.is_none()
+                            && file.source_text(attribute.local_name) == Some(on))
+                        .then_some(attribute.value)
+                        .flatten()
+                    }) {
+                        names_nothing_end(ends, value);
+                    }
+                }
+            }
+        }
+        Form::Call(index, entry) => {
+            let call = &file.ast.calls[index];
+            from_props(ends, obligations, call.arguments.get(entry.props()), call);
+        }
+        Form::Primitive(index) => {
+            let Some(shape) = lookup.dialect.async_boundary_shape() else {
+                return;
+            };
+            let call = &file.ast.calls[index];
+            // The options of the primitive are read as a props argument is, under the dialect's own prop name.
+            let argument = call.arguments.get(shape.options_argument);
+            match props_on(file, shape.on_prop, argument) {
+                PropsOn::Absent => {}
+                PropsOn::Member(property) => {
+                    if property.data && names_nothing(file, property.value) {
+                        names_nothing_end(ends, property.value);
+                    } else {
+                        obligations.push(hold_obligation(file, property.span, BY_CALL));
+                    }
+                }
+                PropsOn::Open => {
+                    if let Some(argument) = argument {
+                        obligations.push(hold_obligation(file, argument.span, BY_CALL));
+                    }
+                }
+            }
+        }
+        Form::Reference => {
+            obligations.push(hold_obligation(file, candidate.anchor, AS_VALUE));
+        }
+    }
+}
+
+/// The span of a tag's children, or the element where it has none (a boundary with no children holds nothing under it).
+fn children_span(element: &solid_facts::ast::JsxElementFact) -> Span {
+    match (element.children.first(), element.children.last()) {
+        (Some(first), Some(last)) => Span::new(first.start, last.end),
+        _ => element.span,
+    }
 }
 
 /// ADR 0978: why a boundary entered other than as a tag is not proven to hold nothing.
@@ -192,53 +418,35 @@ fn hold_obligation(file: &solid_facts::FileFacts, at: Span, reason: &str) -> Sta
 /// else (`any`, `unknown`, a union, a possibly undefined function, a spread not
 /// closed against `on`, an options object that is no exact literal) is an
 /// uncertifiable with [`crate::blockers::LOADING_ON_VALUE_UNPROVEN`].
-fn loading_on_accessor_violations(
+fn accessor_decision(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
     on_prop: &str,
+    candidate: &Candidate,
+    ends: &mut crate::site_accounting::SiteEnds,
     violations: &mut Vec<StaticViolation>,
 ) {
-    let primitives = lookup.primitives(file);
-    let on_boundary = |primitive| {
-        super::known_primitive(primitive)
-            .is_some_and(|primitive| lookup.dialect.boundary_on_may_hold_outside(primitive))
-    };
-    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
-        if !on_boundary(&primitives.jsx[index]) {
-            continue;
-        }
-        if let Some((at, value)) = jsx_on_value(file, lookup, element) {
-            push_on_verdict(file, at, value, violations);
-        }
-    }
-    // `Loading({ on, … })`: the component called by hand, and `createComponent(Loading, { on, … })` (ADR 0978). The props object is one
-    // argument, so the same question is asked of that object.
-    for (index, call) in file.ast.calls.iter().enumerate() {
-        let Some(entry) = crate::loading_entries::entry_call(lookup, file, index) else {
-            continue;
+    // The value `on` takes at the candidate, and where it is said: `Loading({ on, … })` and `createComponent(Loading, { on, … })` ask the props object
+    // (ADR 0978); a value reference gives the props to code this analysis does not follow and an unresolved tag may not be the boundary at all, so
+    // neither states a violation, only that `on` may be a function there.
+    let verdict =
+        match candidate.form {
+            Form::Element(index) => jsx_on_value(file, lookup, &file.ast.jsx_elements[index]),
+            Form::UnresolvedTag(index) => jsx_on_value(file, lookup, &file.ast.jsx_elements[index])
+                .map(|(at, value)| (at, unproven(value))),
+            Form::Call(index, entry) => file.ast.calls[index]
+                .arguments
+                .get(entry.props())
+                .and_then(|argument| {
+                    let (at, verdict) = props_on_value(file, lookup, on_prop, argument);
+                    verdict.map(|verdict| (at, verdict))
+                }),
+            Form::Reference => Some((candidate.anchor, OnValue::Open)),
+            // The primitive's options carry `on` as the boundary's props do, and no SC5007 question is asked of them: the site has no such code.
+            Form::Primitive(_) => None,
         };
-        let Some(argument) = call.arguments.get(entry.props()) else {
-            continue;
-        };
-        let (at, verdict) = props_on_value(file, lookup, on_prop, argument);
-        if let Some(verdict) = verdict {
-            push_on_verdict(file, at, verdict, violations);
-        }
-    }
-    // ADR 0978: every other way the boundary is entered. A value reference gives the props to code this analysis does not follow, and an
-    // unresolved tag may not be the boundary at all: neither states a violation, only that `on` may be a function there.
-    for at in crate::loading_entries::loading_value_references(lookup, file) {
-        push_on_verdict(file, at, OnValue::Open, violations);
-    }
-    for (index, element) in file.ast.jsx_elements.iter().enumerate() {
-        if !passes_on(file, on_prop, element)
-            || !crate::loading_entries::unresolved_tag(lookup, file, index, element)
-        {
-            continue;
-        }
-        if let Some((at, value)) = jsx_on_value(file, lookup, element) {
-            push_on_verdict(file, at, unproven(value), violations);
-        }
+    if let Some((at, value)) = verdict {
+        push_on_verdict(file, candidate, at, value, ends, violations);
     }
 }
 
@@ -343,11 +551,21 @@ fn jsx_on_value(
 
 fn push_on_verdict(
     file: &solid_facts::FileFacts,
+    candidate: &Candidate,
     at: Span,
     value: OnValue,
+    ends: &mut crate::site_accounting::SiteEnds,
     violations: &mut Vec<StaticViolation>,
 ) {
     if value == OnValue::NotFunction {
+        // The compiler's callability of the value is non-callable: `on` states nothing about this rule (ADR 0987 names the exit).
+        ends.end_at(
+            file,
+            candidate.anchor,
+            crate::site_accounting::SiteSilence::LoadingOnNotFunction,
+            crate::proof_log::PremiseKind::OnValueNotCallable,
+            || Some(at),
+        );
         return;
     }
     let uncertain = value == OnValue::Open;

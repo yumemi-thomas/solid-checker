@@ -911,6 +911,8 @@ fn create_deferred_answers_as_create_memo() {
     );
     // Not measured for `createDeferred`, so not stated.
     assert!(!two.supports_sync_option(deferred));
+    // ADR 0989: a tracked effect's compute returns `undefined` to its node, so the node never receives the thenable `sync: true` guards.
+    assert!(!two.supports_sync_option(Primitive::CreateTrackedEffect));
     assert!(!two.accessor_yields_only_its_compute(deferred));
 }
 

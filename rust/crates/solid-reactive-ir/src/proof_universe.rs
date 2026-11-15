@@ -252,10 +252,20 @@ pub(crate) enum SiteCode {
     PrimitiveForbidden,
     /// PRIMITIVE_IN_EFFECT_CALLBACK: a creation on an effect apply's stack with no owner set (SC6002).
     EffectCreation,
+    /// LOADING_ON_OUTSIDE_HOLD: a boundary with an `on` re-armed by a change while a frame reader outside it holds its source (SC5006, ADR 0987). Placeless.
+    LoadingOnOutsideHold,
+    /// LOADING_ON_ACCESSOR: a boundary whose `on` is a function, which it never calls (SC5007, ADR 0987). Placeless.
+    LoadingOnAccessor,
     /// RESOLVE_IN_REACTIVE_SCOPE: a `resolve` call with an observer active (SC2004; batch 11, slice 7).
     ResolveInScope,
     /// UNTIL_IN_REACTIVE_SCOPE: an `until` call with an observer active (SC2005; batch 11, slice 7).
     UntilInScope,
+    /// MISSING_EFFECT_FN: a call of an effect primitive that meets no callable effect function (SC7001; batch 11, slice 8b).
+    MissingEffectFn,
+    /// SYNC_NODE_RECEIVED_ASYNC: a call that asserts `sync: true` over a computation that returns a thenable (SC7002; batch 11, slice 8b).
+    SyncNodeAsync,
+    /// DYNAMIC_STATIC_PROMISE: a static-form `dynamic` call whose source returns a promise (SC2007; batch 11, slice 8b).
+    DynamicStaticPromise,
 }
 
 /// The uncertifiable row a code gets when nothing ends it: the rule's id, name and blocker, and the noun its message uses.
@@ -268,7 +278,7 @@ pub(crate) struct Home {
 
 impl SiteCode {
     /// Every code of the universe, in the order the proof log writes them.
-    pub(crate) const ALL: [Self; 11] = [
+    pub(crate) const ALL: [Self; 16] = [
         Self::StrictRead,
         Self::ReactiveWrite,
         Self::OptimisticWrite,
@@ -278,8 +288,13 @@ impl SiteCode {
         Self::CleanupForbidden,
         Self::PrimitiveForbidden,
         Self::EffectCreation,
+        Self::LoadingOnOutsideHold,
+        Self::LoadingOnAccessor,
         Self::ResolveInScope,
         Self::UntilInScope,
+        Self::MissingEffectFn,
+        Self::SyncNodeAsync,
+        Self::DynamicStaticPromise,
     ];
 
     pub(crate) const fn runtime_code(self) -> RuntimeCode {
@@ -293,8 +308,13 @@ impl SiteCode {
             Self::CleanupForbidden => RuntimeCode::CleanupInForbiddenScope,
             Self::PrimitiveForbidden => RuntimeCode::PrimitiveInForbiddenScope,
             Self::EffectCreation => RuntimeCode::PrimitiveInEffectCallback,
+            Self::LoadingOnOutsideHold => RuntimeCode::LoadingOnOutsideHold,
+            Self::LoadingOnAccessor => RuntimeCode::LoadingOnAccessor,
             Self::ResolveInScope => RuntimeCode::ResolveInReactiveScope,
             Self::UntilInScope => RuntimeCode::UntilInReactiveScope,
+            Self::MissingEffectFn => RuntimeCode::MissingEffectFn,
+            Self::SyncNodeAsync => RuntimeCode::SyncNodeReceivedAsync,
+            Self::DynamicStaticPromise => RuntimeCode::DynamicStaticPromise,
         }
     }
 
@@ -360,6 +380,18 @@ impl SiteCode {
                 blocker: crate::blockers::EFFECT_CREATION_UNACCOUNTED,
                 noun: "creation",
             },
+            Self::LoadingOnOutsideHold => Home {
+                id: "SC5006",
+                rule: "loading-on-outside-hold",
+                blocker: crate::blockers::LOADING_ON_OUTSIDE_HOLD_UNACCOUNTED,
+                noun: "Loading boundary",
+            },
+            Self::LoadingOnAccessor => Home {
+                id: "SC5007",
+                rule: "loading-on-accessor",
+                blocker: crate::blockers::LOADING_ON_ACCESSOR_UNACCOUNTED,
+                noun: "Loading boundary",
+            },
             Self::ResolveInScope => Home {
                 id: "SC2004",
                 rule: "no-await-primitive-in-tracked-scope",
@@ -371,6 +403,24 @@ impl SiteCode {
                 rule: "no-await-primitive-in-tracked-scope",
                 blocker: crate::blockers::RESOLVE_SCOPE_UNACCOUNTED,
                 noun: "until call",
+            },
+            Self::MissingEffectFn => Home {
+                id: "SC7001",
+                rule: "missing-effect-function",
+                blocker: crate::blockers::EFFECT_FN_UNACCOUNTED,
+                noun: "effect call",
+            },
+            Self::SyncNodeAsync => Home {
+                id: "SC7002",
+                rule: "sync-computation-received-async",
+                blocker: crate::blockers::SYNC_OPTION_UNACCOUNTED,
+                noun: "call with a sync option",
+            },
+            Self::DynamicStaticPromise => Home {
+                id: "SC2007",
+                rule: "static-dynamic-async-source",
+                blocker: crate::blockers::DYNAMIC_STATIC_UNACCOUNTED,
+                noun: "static dynamic call",
             },
         }
     }
@@ -392,14 +442,23 @@ const CREATION_AND_EFFECT_CODES: &[SiteCode] =
 /// The code lists of a resolve/until site (batch 11, slice 7): the observer guard of the one primitive the call is.
 const RESOLVE_CODES: &[SiteCode] = &[SiteCode::ResolveInScope];
 const UNTIL_CODES: &[SiteCode] = &[SiteCode::UntilInScope];
+/// The code lists of the static-API sites (batch 11, slice 8b).
+const EFFECT_FN_CODES: &[SiteCode] = &[SiteCode::MissingEffectFn];
+const SYNC_OPTION_CODES: &[SiteCode] = &[SiteCode::SyncNodeAsync];
+const DYNAMIC_STATIC_CODES: &[SiteCode] = &[SiteCode::DynamicStaticPromise];
 /// A leaf operation at a call the walk could not place (`UnmodelledSlot`): any forbidden operation, so both of a leaf owner's codes.
 const CLEANUP_AND_CREATION_CODES: &[SiteCode] =
     &[SiteCode::CleanupForbidden, SiteCode::PrimitiveForbidden];
+/// The code lists of a `loading-on` site (ADR 0987): a boundary entry with an `on`, which re-arms (SC5006) and may be a function (SC5007); the primitive's options
+/// are asked the first only.
+const LOADING_ON_CODES: &[SiteCode] =
+    &[SiteCode::LoadingOnOutsideHold, SiteCode::LoadingOnAccessor];
+const LOADING_ON_HOLD_CODES: &[SiteCode] = &[SiteCode::LoadingOnOutsideHold];
 
 /// One site: where it is, what kind it is, and the other spans a row that
 /// answers for it may sit at.
 pub(crate) struct Site {
-    /// `read`, `write`, `action`, `store-write`, `on-flush`, `owner-call` or `resolve`.
+    /// `read`, `write`, `action`, `store-write`, `on-flush`, `owner-call`, `resolve`, `effect-fn`, `sync-option` or `dynamic-static`.
     pub(crate) table: &'static str,
     /// What the source is: `accessor`, `store`, `props`, `setter`, `action` or
     /// `primitive`.
@@ -1075,6 +1134,7 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
     }
     primitive_call_sites(ctx, &mut found);
     inline_action_sites(ctx, &mut found);
+    loading_on_sites(ctx, &mut found);
     // ADR 0972: a call into code of a package the build does not read, whose closure is not clear.
     for (file, at, callee, via) in crate::package_action_calls::universe_sites(ctx) {
         found.push((
@@ -1187,6 +1247,40 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
                     },
                 ));
             }
+            // Batch 11, slice 8b (ADR 0989): the static API's calls, one table per family, found from the resolved primitive and the dialect's own questions:
+            // a call of an effect primitive (the slot where an effect function is read), of one that takes `sync`, and a `dynamic` call in its static form.
+            for (table, applies, codes) in [
+                (
+                    "effect-fn",
+                    dialect.effect_function_slot(primitive).is_some(),
+                    EFFECT_FN_CODES,
+                ),
+                (
+                    "sync-option",
+                    dialect.supports_sync_option(primitive)
+                        && dialect.options_argument(primitive).is_some(),
+                    SYNC_OPTION_CODES,
+                ),
+                (
+                    "dynamic-static",
+                    dialect.static_dynamic_form(primitive).is_some(),
+                    DYNAMIC_STATIC_CODES,
+                ),
+            ] {
+                if applies {
+                    found.push((
+                        file,
+                        Site {
+                            table,
+                            source: "primitive",
+                            via: "call",
+                            at: call.callee,
+                            alternates: vec![call.span],
+                            codes,
+                        },
+                    ));
+                }
+            }
             let codes = owner_call_codes(dialect, file, call, primitive, client_build);
             if codes.is_empty() {
                 continue;
@@ -1254,6 +1348,35 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
                     at: site.span,
                     alternates: vec![site.anchor],
                     codes: jsx_codes,
+                },
+            ));
+        }
+    }
+}
+
+/// The `loading-on` universe (ADR 0987): every place the dialect's async boundary is entered with a way to pass `on` (a tag, an exact call, the primitive behind it,
+/// a value reference, an unresolved tag), outside dependency source, by identity (an alias, a namespace member), never spelling: the candidates of
+/// [`crate::loading_hold::candidates`], which the two rules decide in one loop. A boundary with no `on` and no spread is a filter, not a site.
+fn loading_on_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a FileFacts, Site)>) {
+    let lookup = ctx.semantic_lookup;
+    for file in lookup.files() {
+        if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        for candidate in crate::loading_hold::candidates(file, lookup) {
+            found.push((
+                file,
+                Site {
+                    table: "loading-on",
+                    source: "primitive",
+                    via: "call",
+                    at: candidate.anchor,
+                    alternates: candidate.alternates.clone(),
+                    codes: if candidate.accessor {
+                        LOADING_ON_CODES
+                    } else {
+                        LOADING_ON_HOLD_CODES
+                    },
                 },
             ));
         }

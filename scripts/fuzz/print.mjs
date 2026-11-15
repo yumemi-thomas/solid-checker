@@ -966,6 +966,8 @@ function signalText(sig, signals, used) {
     case "optimistic-async": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init});`;
     // ADR 0640: a hook's tuple whose first slot is plain: only the setter's slot reaches the setter.
     case "optimistic-tuple-hook": used.add("createOptimistic"); return `const ${sig.name}h = () => {\n    const [o, setO] = createOptimistic(async () => ${sig.init});\n    return [() => ${sig.init}, setO, o] as const;\n  };\n  const [${sig.name}, ${sig.setter}] = ${sig.name}h();`;
+    // ADR 0987: the pair assigned by destructuring, not declared (the setter's recording takes the same async decision).
+    case "optimistic-async-assigned": used.add("createOptimistic"); return `let ${sig.name}: () => number;\n  let ${sig.setter}: (v: number) => void;\n  [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init});`;
     case "optimistic-declared": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(async () => ${sig.init}, { loadingValue: ${sig.init} });`;
     case "optimistic-async-store": used.add("createOptimisticStore"); return `const [${sig.name}, ${sig.setter}] = createOptimisticStore(async () => ({ v: ${sig.init} }), { v: ${sig.init} });`;
     case "projection": used.add("createProjection"); return `const ${sig.name} = createProjection((draft: { v: number }) => { draft.v = ${sig.init}; }, { v: ${sig.init} });`;

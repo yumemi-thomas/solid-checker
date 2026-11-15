@@ -12,6 +12,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-extended-invalid.tsx",
+      "start": 205,
+      "end": 223,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",

@@ -57,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/effect-apply-first-run/variants/entry-code/App.tsx",
+      "start": 184,
+      "end": 202,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",

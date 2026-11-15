@@ -793,6 +793,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dispatch-read-through-closure/node_modules/**
 !fixtures/reactive-ir/loading-on-outside-hold/node_modules/
 !fixtures/reactive-ir/loading-on-outside-hold/node_modules/**
+!fixtures/reactive-ir/total-decision-silences/node_modules/
+!fixtures/reactive-ir/total-decision-silences/node_modules/**
 !fixtures/reactive-ir/named-inheriting-callback/node_modules/
 !fixtures/reactive-ir/named-inheriting-callback/node_modules/**
 !fixtures/reactive-ir/resolve-named-closure-unplaced/node_modules/
@@ -907,6 +909,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-shallow-store-writes/node_modules/**
 !fixtures/reactive-ir/rc21-optimistic-before-load/node_modules/
 !fixtures/reactive-ir/rc21-optimistic-before-load/node_modules/**
+!fixtures/reactive-ir/rc21-optimistic-setter-forms/node_modules/
+!fixtures/reactive-ir/rc21-optimistic-setter-forms/node_modules/**
 !fixtures/reactive-ir/rc21-optimistic-handed-prop/node_modules/
 !fixtures/reactive-ir/rc21-optimistic-handed-prop/node_modules/**
 !fixtures/reactive-ir/rc21-untrack-hook-pending/node_modules/
@@ -1147,6 +1151,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-prototype-own/node_modules/**
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/**
+!fixtures/reactive-ir/write-fold-withheld-caller/node_modules/
+!fixtures/reactive-ir/write-fold-withheld-caller/node_modules/**
+!fixtures/reactive-ir/write-fold-withheld-caller-no-veto/node_modules/
+!fixtures/reactive-ir/write-fold-withheld-caller-no-veto/node_modules/**
 !fixtures/reactive-ir/impostor-symbol-key/node_modules/
 !fixtures/reactive-ir/impostor-symbol-key/node_modules/**
 !fixtures/reactive-ir/impostor-symbol-key-lie/node_modules/
@@ -1615,3 +1623,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/resolve-until-slots/node_modules/**
 !fixtures/reactive-ir/in-place-depth/node_modules/
 !fixtures/reactive-ir/in-place-depth/node_modules/**
+!fixtures/reactive-ir/static-api-silences/node_modules/
+!fixtures/reactive-ir/static-api-silences/node_modules/**

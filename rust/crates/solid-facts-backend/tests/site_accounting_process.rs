@@ -190,6 +190,82 @@ fn a_read_no_strict_read_window_holds_ends_on_the_fact_that_says_so() {
     assert_eq!(module_scope.len(), 1, "{module_scope:?}");
 }
 
+/// The lines of the rows the accounting files for `blocker`, each an uncertifiable row of `id`, never a violation.
+fn unaccounted_lines(findings: &[serde_json::Value], blocker: &str, id: &str) -> BTreeSet<u64> {
+    findings
+        .iter()
+        .filter(|finding| finding["analysisContext"] == blocker)
+        .map(|finding| {
+            assert_eq!(finding["id"], id, "the row is the rule's own");
+            assert_eq!(finding["kind"], "uncertifiable", "never a violation");
+            finding["primaryLocation"]["line"].as_u64().unwrap()
+        })
+        .collect()
+}
+
+/// The 1-based line of the first occurrence of `anchor`.
+fn line_of(source: &str, anchor: &str) -> u64 {
+    let at = source
+        .find(anchor)
+        .unwrap_or_else(|| panic!("no `{anchor}`"));
+    source[..at].matches('\n').count() as u64 + 1
+}
+
+/// ADR 0987 (slice 8a): the exits of SC5006 and SC5007 are typed silences. Every site of `total-decision-silences` ends in one and files no row; dropping a silence
+/// (the mutation hook) files exactly the rows of its sites, and of its rule, and `all` files them all.
+#[test]
+fn a_loading_boundary_exit_is_a_named_silence_and_unnamed_it_is_an_uncertifiable_row() {
+    const HOLD: &str = "loading-on-outside-hold-unaccounted";
+    const ACCESSOR: &str = "loading-on-accessor-unaccounted";
+    const NAMES_NOTHING: &str = "loading_hold.loading_on_outside_hold_obligations.on-names-nothing";
+    const HOLDS_NOTHING: &str =
+        "loading_hold.loading_on_outside_hold_obligations.holds-no-async-source";
+    const NOT_FUNCTION: &str = "loading_hold.loading_on_accessor.on-not-function";
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let name = "total-decision-silences";
+    let source = std::fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let names_nothing = line_of(&source, "<Loading fallback={0} on={1}>");
+    let holds_nothing = line_of(&source, "<Loading fallback={0} on={count()}>");
+    let namespace = line_of(&source, "<S.Loading fallback={0} on={2}>");
+    let hand_call = line_of(&source, "Loading({ fallback: 0, on: 3 })");
+    let sites = BTreeSet::from([names_nothing, holds_nothing, namespace, hand_call]);
+    let rows = |findings: &[serde_json::Value]| {
+        (
+            unaccounted_lines(findings, HOLD, "SC5006"),
+            unaccounted_lines(findings, ACCESSOR, "SC5007"),
+        )
+    };
+    // Named: no row of either family and no finding of either rule, and the three silences end the sites.
+    let named = check(&typefacts, name, None, &[]);
+    assert_eq!(rows(&named), (BTreeSet::new(), BTreeSet::new()));
+    assert!(
+        named
+            .iter()
+            .all(|finding| finding["id"] != "SC5006" && finding["id"] != "SC5007"),
+        "a silent exit filed a finding"
+    );
+    // Dropping one silence files the rows of the sites it ended, of its own rule.
+    for (id, hold, accessor) in [
+        (
+            NAMES_NOTHING,
+            BTreeSet::from([names_nothing, namespace, hand_call]),
+            BTreeSet::new(),
+        ),
+        (
+            HOLDS_NOTHING,
+            BTreeSet::from([holds_nothing]),
+            BTreeSet::new(),
+        ),
+        (NOT_FUNCTION, BTreeSet::new(), sites.clone()),
+    ] {
+        let ablated = check(&typefacts, name, Some(id), &[]);
+        assert_eq!(rows(&ablated), (hold, accessor), "ablating {id}");
+    }
+    // All of them: every site is an uncertifiable row of each rule.
+    let all = check(&typefacts, name, Some("all"), &[]);
+    assert_eq!(rows(&all), (sites.clone(), sites), "ablating all");
+}
+
 /// The rows dropping `silence` adds to the fixture `name`: each an uncertifiable SC2004 or SC2005 row with the resolve universe's blocker, nothing else moved.
 fn resolve_rows_the_silence_ends(typefacts: &str, silence: &str) -> BTreeSet<String> {
     let name = "resolve-until-slots";
@@ -198,7 +274,18 @@ fn resolve_rows_the_silence_ends(typefacts: &str, silence: &str) -> BTreeSet<Str
     let before = named.iter().map(key).collect::<BTreeSet<_>>();
     let after = ablated.iter().map(key).collect::<BTreeSet<_>>();
     assert!(before.is_subset(&after), "an answer was lost");
-    let added = after.difference(&before).cloned().collect::<BTreeSet<_>>();
+    let mut added = after.difference(&before).cloned().collect::<BTreeSet<_>>();
+    // Dropping every silence also drops other families' (a `createMemo` call's `sync` option, ADR 0989): their unaccounted rows are theirs.
+    if silence == "all" {
+        added.retain(|row| {
+            let resolve = row.contains("SC2004") || row.contains("SC2005");
+            assert!(
+                resolve || row.contains("-unaccounted"),
+                "dropping every silence moved an answer that is no unaccounted row: {row}"
+            );
+            resolve
+        });
+    }
     for row in &added {
         assert!(
             (row.contains("SC2004") || row.contains("SC2005"))
@@ -240,4 +327,97 @@ fn a_resolve_or_until_call_no_silence_ends_is_an_obligation_never_a_violation() 
         per_silence.iter().map(|(_, rows)| rows).sum::<usize>(),
         "{all:?}"
     );
+}
+
+/// The rows dropping `silence` adds to the fixture `fixture`: each an uncertifiable row of one of `ids` with `blocker`, and nothing else moves.
+fn ablation_rows(
+    typefacts: &str,
+    fixture: &str,
+    silence: &str,
+    ids: &[&str],
+    blocker: &str,
+) -> BTreeSet<String> {
+    let named = check(typefacts, fixture, None, &[]);
+    let ablated = check(typefacts, fixture, Some(silence), &[]);
+    let before = named.iter().map(key).collect::<BTreeSet<_>>();
+    let after = ablated.iter().map(key).collect::<BTreeSet<_>>();
+    assert!(before.is_subset(&after), "an answer was lost");
+    let added = after.difference(&before).cloned().collect::<BTreeSet<_>>();
+    for row in &added {
+        assert!(
+            ids.iter().any(|id| row.contains(id))
+                && row.contains("\"uncertifiable\"")
+                && row.contains(blocker),
+            "dropping `{silence}` moved an answer that is no unaccounted {blocker} call: {row}"
+        );
+    }
+    added
+}
+
+/// ADR 0989: every call of an effect primitive and of a primitive that takes `sync` ends in a row or a typed silence; each silence dropped on its own leaves its
+/// calls an obligation of their rule (never a violation), the others and the rows untouched.
+#[test]
+fn a_static_api_call_no_silence_ends_is_an_obligation_never_a_violation() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let fixture = "static-api-silences";
+    let named = check(&typefacts, fixture, None, &[]);
+    for blocker in ["effect-fn-unaccounted", "sync-option-unaccounted"] {
+        assert!(
+            unaccounted(&named, blocker).is_empty(),
+            "a call is {blocker} with every silence named"
+        );
+    }
+    let per_silence = [
+        (
+            "static_api.effect_function.slot-callable",
+            &["SC7001"][..],
+            "effect-fn-unaccounted",
+            9,
+        ),
+        (
+            "static_api.effect_function.tsc-rejected",
+            &["SC7001"][..],
+            "effect-fn-unaccounted",
+            1,
+        ),
+        (
+            "static_api.sync_option.not-asserted",
+            &["SC7002"][..],
+            "sync-option-unaccounted",
+            12,
+        ),
+        (
+            "static_api.sync_option.tsc-reports",
+            &["SC7002"][..],
+            "sync-option-unaccounted",
+            1,
+        ),
+        (
+            "static_api.sync_option.computation-not-async",
+            &["SC7002"][..],
+            "sync-option-unaccounted",
+            2,
+        ),
+    ];
+    for (silence, ids, blocker, rows) in per_silence {
+        let added = ablation_rows(&typefacts, fixture, silence, ids, blocker);
+        assert_eq!(added.len(), rows, "{silence}: {added:?}");
+    }
+    // The dynamic fixture: a static `dynamic` call whose source is proven synchronous (four of them) ends in a silence.
+    let dynamic = "rc9-static-dynamic-async";
+    assert!(
+        unaccounted(
+            &check(&typefacts, dynamic, None, &[]),
+            "dynamic-static-unaccounted"
+        )
+        .is_empty()
+    );
+    let added = ablation_rows(
+        &typefacts,
+        dynamic,
+        "static_api.dynamic_static.source-synchronous",
+        &["SC2007"],
+        "dynamic-static-unaccounted",
+    );
+    assert_eq!(added.len(), 4, "{added:?}");
 }

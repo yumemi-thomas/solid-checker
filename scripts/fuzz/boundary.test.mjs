@@ -116,6 +116,14 @@ describe("premise kinds, drop passes and named ends", () => {
     }
   });
 
+  test("every id of the site_silences! list is read: none is skipped for its spelling", () => {
+    const text = readFileSync(join(REPO, "rust/crates/solid-reactive-ir/src/site_accounting.rs"), "utf8");
+    const list = text.slice(text.indexOf("site_silences! {"), text.indexOf("\n}\n", text.indexOf("site_silences! {")));
+    const written = [...list.matchAll(/^\s*[A-Z][A-Za-z0-9]*\s*=>\s*"([^"]*)"/gm)].map((match) => match[1]);
+    assert.ok(written.length >= 30);
+    assert.deepEqual(namedEnds().map((end) => end.id), written);
+  });
+
   test("every named end has a premise or a stated gap, and no gap is stale", () => {
     const listed = new Set(premises.flatMap((premise) => premise.ends));
     const all = namedEnds().map((end) => end.id);

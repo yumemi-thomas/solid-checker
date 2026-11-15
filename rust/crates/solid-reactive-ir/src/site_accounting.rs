@@ -183,7 +183,7 @@ site_silences! {
     MemberRoleDoesNotReport => "local_access.discover_member.role-does-not-report",
     /// `onFlush` where the write role allows it (an effect's apply, a leaf, a
     /// handler): no owner rejects the call.
-    OnFlushRoleAllows => "static_api.on-flush.role-allows",
+    OnFlushRoleAllows => "static_api.on_flush.role-allows",
     /// ADR 0972: a call into a package the build does not read, whose role allows an action (a handler, a timer, an effect's apply).
     PackageCallRoleAllows => "package_action_calls.package_action_calls.role-allows",
     /// ADR 0972: a call into a package the build does not read that cannot run (module initialization, a function nothing reaches).
@@ -208,6 +208,15 @@ site_silences! {
     /// A creation the dialect says throws on an effect's apply, inside the callback of an exact owner-setting primitive (`runWithOwner`, `createRoot`, a
     /// computation's compute): an owner is current.
     EffectCreationOwnerSetAround => "leaf_universe.account.effect-creation-owner-set-around",
+    /// ADR 0987: a boundary's `on` that names nothing (`on={1}`: no identifier, no call), so it has no dependency to change and never re-arms. The fact is the
+    /// literal at the value.
+    LoadingOnNamesNothing => "loading_hold.loading_on_outside_hold_obligations.on-names-nothing",
+    /// ADR 0987: a boundary with an `on` under which no async source is read and every child is seen (`unproven_hold` answers `None`): it holds nothing. The fact
+    /// is the children.
+    LoadingHoldsNoAsyncSource => "loading_hold.loading_on_outside_hold_obligations.holds-no-async-source",
+    /// ADR 0987: the `on` handed to the boundary is proven not to be a function (the compiler's callability of the value is non-callable), so the boundary's
+    /// `typeof on === "function"` is false.
+    LoadingOnNotFunction => "loading_hold.loading_on_accessor.on-not-function",
     /// A `resolve`/`until` call (SC2004, SC2005) written past an `await` its function reaches on every path: a later task, with no observer (ADR 0612; the
     /// premise is the `await`).
     ResolvePastSuspension => "static_api.resolve_scope.past-suspension",
@@ -241,6 +250,23 @@ site_silences! {
     ResolveRoleDeferredCallback => "static_api.resolve_scope.role-deferred-callback",
     /// The role is code the compiler discarded (`DiscardedRendering`).
     ResolveRoleDiscardedRendering => "static_api.resolve_scope.role-discarded-rendering",
+    /// A call of an effect primitive whose apply argument is provably callable: no missing-function throw (SC7001; ADR 0989; the premise is the argument).
+    EffectSlotCallable => "static_api.effect_function.slot-callable",
+    /// A call of an effect primitive the published overloads reject and TypeScript reports (a resolved call with `Recovery` validity): the call is TypeScript's
+    /// (invariant 1; the premise is the callee or the failing argument).
+    EffectCallTscRejected => "static_api.effect_function.tsc-rejected",
+    /// A call whose options are proven not to assert `sync: true`: absent, nullish, or an exact literal whose last `sync` is `false` or that names none (SC7002; the
+    /// premise is the options argument, or the call).
+    SyncOptionNotAsserted => "static_api.sync_option.not-asserted",
+    /// An options literal with a duplicate `sync` key that TypeScript reports (TS1117, every configuration) where no directive suppresses it (SC7002; the premise is
+    /// the duplicate key).
+    SyncOptionTscReports => "static_api.sync_option.tsc-reports",
+    /// A call whose computation answers synchronously or is no function (`StaticSource::Sync`, or no computation): nothing the `sync` guard looks for is returned
+    /// (SC7002; never for an `Open` answer; the premise is the computation).
+    ComputationNotAsync => "static_api.sync_option.computation-not-async",
+    /// A static-form `dynamic` call whose source is proven to answer synchronously (a closed return type with no thenable, a sync or async generator: the static form
+    /// throws on a thenable only; SC2007; the premise is the source function).
+    DynamicSourceSynchronous => "static_api.dynamic_static.source-synchronous",
 }
 
 impl SiteSilence {
@@ -249,9 +275,11 @@ impl SiteSilence {
     /// row (`removed`, `removed_with`) names none here: it answers the codes the removed row's ending answered ([`SiteEnd::answers`]).
     pub(crate) const fn codes(self) -> &'static [SiteCode] {
         use SiteCode::{
-            ActionCall, CleanupForbidden, EffectCreation, OnFlush, PrimitiveForbidden,
-            ReactiveWrite, ResolveInScope, StoreWrite, StrictRead, UntilInScope,
+            ActionCall, CleanupForbidden, EffectCreation, LoadingOnAccessor, LoadingOnOutsideHold,
+            OnFlush, PrimitiveForbidden, ReactiveWrite, ResolveInScope, StoreWrite, StrictRead,
+            UntilInScope,
         };
+        use SiteCode::{DynamicStaticPromise, MissingEffectFn, SyncNodeAsync};
         match self {
             // The reads: an accessor's call, a store or props member Get.
             Self::AsyncSitesDormantCallbackArgument
@@ -320,6 +348,11 @@ impl SiteSilence {
             Self::OwnerCurrent
             | Self::EffectCreationRunsOffApply
             | Self::EffectCreationOwnerSetAround => &[EffectCreation],
+            // ADR 0987: the `loading-on` universe's two codes, each ended by its own rule's finding or its own silence.
+            Self::LoadingOnNamesNothing | Self::LoadingHoldsNoAsyncSource => {
+                &[LoadingOnOutsideHold]
+            }
+            Self::LoadingOnNotFunction => &[LoadingOnAccessor],
             // The resolve/until universe (slice 7): the observer guard of the primitive the site's table names. A silence is a proof about the guard where the
             // call runs, so it answers the code of the primitive at the site; a `resolve` site never lists `until`'s code, and the two codes are separate sites.
             Self::ResolvePastSuspension
@@ -337,6 +370,12 @@ impl SiteSilence {
             | Self::ResolveRoleModuleInitialization
             | Self::ResolveRoleDeferredCallback
             | Self::ResolveRoleDiscardedRendering => &[ResolveInScope, UntilInScope],
+            // The static API's calls (slice 8b): each silence answers the one code of its family.
+            Self::EffectSlotCallable | Self::EffectCallTscRejected => &[MissingEffectFn],
+            Self::SyncOptionNotAsserted
+            | Self::SyncOptionTscReports
+            | Self::ComputationNotAsync => &[SyncNodeAsync],
+            Self::DynamicSourceSynchronous => &[DynamicStaticPromise],
             // The passes that remove a row: the codes the removed row's ending answered.
             Self::ApplyNeverRuns
             | Self::ClosedProgramExportDischarge
@@ -753,6 +792,18 @@ fn unaccounted_row(file: &FileFacts, site: &Site, code: SiteCode) -> StaticViola
     }
 }
 
+/// The uncertifiable defect a code of a static-defect family gets when nothing ends it (SC7001).
+fn unaccounted_defect(file: &FileFacts, site: &Site, code: SiteCode) -> crate::StaticDefect {
+    let home = code.home();
+    crate::StaticDefect {
+        kind: crate::StaticDefectKind::MissingEffectFunction,
+        location: site.at.location(file.path.shared()),
+        analysis_context: home.blocker.into(),
+        fixes: vec![],
+        uncertain: true,
+    }
+}
+
 /// Ends every code of every site of the universe in the final `program`, or gives it the uncertifiable row of the code's own rule. Run once per build,
 /// after every producer and pass that adds or removes a row and before the reachability queries over the rows. A site ends for a code only by an
 /// ending that answers that code (a row of its table, an SC9012, a finding of a rule the dialect's policy says claims it, the compiler's discard) or by a
@@ -767,6 +818,8 @@ pub(crate) fn account<'a>(
     let dialect = ctx.dialect;
     let logging = proof_log::enabled();
     let mut rows = Vec::new();
+    // SC7001's rule is a static-defect family (`StaticDefectKind::MissingEffectFunction`), not a static-violation rule: its home row is a defect.
+    let mut defects = Vec::new();
     {
         let endings = Endings::of(program);
         let mut filed: HashSet<(&str, u32, u32, SiteCode)> = HashSet::default();
@@ -791,7 +844,11 @@ pub(crate) fn account<'a>(
                             })
                     });
                 if !silenced && filed.insert((path, site.at.start, site.at.end, code)) {
-                    rows.push(unaccounted_row(file, site, code));
+                    if code == SiteCode::MissingEffectFn {
+                        defects.push(unaccounted_defect(file, site, code));
+                    } else {
+                        rows.push(unaccounted_row(file, site, code));
+                    }
                 }
             }
         }
@@ -806,6 +863,7 @@ pub(crate) fn account<'a>(
     // In the universe's order, after the rows the program holds: the findings
     // are ordered by place when they are projected.
     program.static_violations.extend(rows);
+    program.static_defects.extend(defects);
     // The universe is the one list of the build's sites: the passes that run after this one (batch 11, slice 9B) read it rather than list it again.
     universe
 }
@@ -832,7 +890,7 @@ mod tests {
     }
 
     /// The sources that name silences, by the module a silence's id begins with.
-    const PRODUCERS: [(&str, &str); 7] = [
+    const PRODUCERS: [(&str, &str); 8] = [
         ("local_access", include_str!("local_access.rs")),
         (
             "shared_reactivity",
@@ -846,6 +904,7 @@ mod tests {
             include_str!("package_action_calls.rs"),
         ),
         ("leaf_universe", include_str!("owners/leaf_universe.rs")),
+        ("loading_hold", include_str!("loading_hold.rs")),
     ];
 
     /// ADR 0886's test of its emission arms, for these: every silence is named
@@ -1145,7 +1204,13 @@ mod tests {
         ));
         let census = removed(RemovedBy::Census);
         for code in SiteCode::ALL {
-            assert!(census.answers(policy(code).as_ref(), code), "{code:?}");
+            // An SC9012 answers every code that has a position; a placeless code (the `loading-on` universe's) has none for it to name (ADR 0987).
+            let placeless = policy(code).is_some_and(|policy| policy.placeless);
+            assert_eq!(
+                census.answers(policy(code).as_ref(), code),
+                !placeless,
+                "{code:?}"
+            );
         }
         let style = removed(RemovedBy::Rule {
             name: "prefer-show".into(),
