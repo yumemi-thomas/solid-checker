@@ -38,14 +38,21 @@
 //! - **never runs**: no execution of the program runs the site (`SiteReach`);
 //! - **library runs nothing** (ADR 0976, [`library_call`]): a call into the standard library, a setter or an action that, by exact facts alone, runs no project code;
 //! - **owner captured** (ADR 0976, R5): a `runWithOwner` call whose owner the function captured, as an unreassigned `const` of `getOwner()`, before its first suspension.
+//! - **runner scheduled** (ADR 1004): the site is written directly in a function literal a reviewed test runner schedules (ADR 0438's premise, read from the runners'
+//!   published bytes: a registered test or hook, and a suite body the runner defers, is called from the runner's own loop, and a registered `async` callback is wholly
+//!   in the premise, its prefix and every resumption). The dialect's runtime raises the code only for a read with an async computation's flight on its async stack, and
+//!   the stack of such a callback's continuations is the runner's. The facts asked are the flush accounting's for the same class
+//!   ([`crate::flush_accounting::runs_when_the_call_runs`]). A helper the tests call, a callback handed by name or through a wrapper, a suite body a runner runs inside
+//!   the registration call and a function written inside the callback are not covered.
 //!
 //! **No callee reason.** A call of a project function whose closure reads nothing the universe lists is no ending. The first build of this pass had one, and the
 //! review of #233 found it unsound: the closure is a list of reads and calls, and a read reaches a continuation through values no call shows (a store read through
 //! an alias, a stored generator stepped by a spread, a trap or a getter installed by reference, a props alias). Making it exact asks for facts the checker does not
 //! have (which values are plain data), so the call keeps its row; `docs/open-work.md` names the cost and what a sound reason needs.
 //!
-//! Left out on purpose and named in `docs/open-work.md` (owner ruling, decision 5): a role silence (a handler, a deferred callback, a test callback), a read the
-//! walk's pre-await window already tracked, and a read inside an `untrack` callback: each needs a premise and a Chrome twin of its own.
+//! Left out on purpose and named in `docs/open-work.md` (owner ruling, decision 5): a role silence (a handler, a deferred callback), a read the
+//! walk's pre-await window already tracked, and a read inside an `untrack` callback: each needs a premise and a Chrome twin of its own. The test callback has both
+//! (ADR 1004: ADR 0438's premise, the oracle case `after-await-runner-callback` and the vitest probe).
 //!
 //! **No census reason.** "The program holds no tracked async computation, so nothing starts a walk" is no ending: the census (`holds_suspending`, ADR 0963) is only as
 //! complete as the producers' index of computations, and Chrome shows starts the index does not find (the oracle cases `after-await-universe-census-*`: a function
@@ -92,12 +99,19 @@ enum AfterAwaitSafe {
     /// A member read whose object is proven plain data: a primitive from its own expression, a fresh built-in value, an unpatched ECMAScript global (ADR 0976, S4,
     /// [`member_reads::root_is_plain`]).
     PlainReceiver,
+    /// The site is written directly in a function literal a reviewed test runner schedules (ADR 1004, on ADR 0438's premise: the runner calls a registered test or hook,
+    /// and a suite body it defers, from its own loop, and a registered `async` callback is wholly in the premise, its prefix and every resumption). The dialect's runtime
+    /// raises the code only for a read with an async computation's flight on its async stack, and the stack of such a callback and of its continuations is the runner's.
+    /// The facts asked are the flush accounting's for the same class ([`crate::flush_accounting::runs_when_the_call_runs`]): the site is in the callback's body and nothing
+    /// written between runs it elsewhere, the callback is no generator, and its own name (a named function expression) is used nowhere.
+    RunnerScheduled,
 }
 
 impl AfterAwaitSafe {
     /// In the order they are asked, the cheapest first.
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 5] = [
         Self::NeverRuns,
+        Self::RunnerScheduled,
         Self::LibraryRunsNothing,
         Self::OwnerCaptured,
         Self::PlainReceiver,
@@ -110,6 +124,7 @@ impl AfterAwaitSafe {
             Self::LibraryRunsNothing => "after_await_accounting.account.library-runs-nothing",
             Self::OwnerCaptured => "after_await_accounting.account.owner-captured",
             Self::PlainReceiver => "after_await_accounting.account.plain-receiver",
+            Self::RunnerScheduled => "after_await_accounting.account.runner-scheduled",
         }
     }
 
@@ -141,6 +156,21 @@ impl AfterAwaitSafe {
                         .root
                         .is_some_and(|root| member_reads::root_is_plain(ctx, site.file, root))
             }
+            Self::RunnerScheduled => site.registration.is_some_and(|(registration, read_bytes)| {
+                read_bytes
+                    && crate::flush_accounting::runs_when_the_call_runs(
+                        site.file,
+                        site.at,
+                        registration,
+                    )
+                    && site.alternates.iter().all(|alternate| {
+                        crate::flush_accounting::runs_when_the_call_runs(
+                            site.file,
+                            *alternate,
+                            registration,
+                        )
+                    })
+            }),
         }
     }
 }
@@ -207,6 +237,9 @@ struct AwaitSite<'a> {
     via: &'static str,
     /// The function holding the site is a literal a reviewed runner schedules.
     test: bool,
+    /// The registration call that hands that literal to the runner (`it("…", async () => { … })`), when `test` holds, and whether the runner is one whose published
+    /// JavaScript shows how it calls a registered callback ([`crate::indexes::SemanticLookup::test_runner_schedules_by_read_bytes`]).
+    registration: Option<(Span, bool)>,
     /// The callee that takes the function holding the site as an argument, when one does.
     host: String,
     /// The call, for a site that is one (the typed reasons ask its facts).
@@ -393,14 +426,15 @@ fn sites<'a>(
 ) -> Vec<AwaitSite<'a>> {
     let lookup = ctx.semantic_lookup;
     // Per file, the function literals handed directly to a call a reviewed runner schedules (`it("…", async () => { … })`): measurement facts only.
-    let mut scheduled: HashMap<&str, HashSet<Span>> = HashMap::default();
-    let mut classify = |file: &'a FileFacts, at: Span| -> (bool, String) {
+    let mut scheduled: HashMap<&str, HashMap<Span, (Span, bool)>> = HashMap::default();
+    let mut classify = |file: &'a FileFacts, at: Span| -> (Option<(Span, bool)>, String) {
         let set = scheduled.entry(file.path.as_str()).or_insert_with(|| {
-            let mut runners = HashSet::default();
+            let mut runners = HashMap::default();
             for call in &file.ast.calls {
                 if lookup.test_runner_callback(file, call) != Some(TestRunnerCallback::Scheduled) {
                     continue;
                 }
+                let read_bytes = lookup.test_runner_schedules_by_read_bytes(file, call);
                 for argument in &call.arguments {
                     if !argument.spread
                         && matches!(
@@ -408,14 +442,17 @@ fn sites<'a>(
                             ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction
                         )
                     {
-                        runners.insert(file.ast.peel_ts_sugar_span(argument.span));
+                        runners.insert(
+                            file.ast.peel_ts_sugar_span(argument.span),
+                            (call.span, read_bytes),
+                        );
                     }
                 }
             }
             runners
         });
         let Some(function) = crate::owners::containing_ast_function(&file.ast, at) else {
-            return (false, "none".to_owned());
+            return (None, "none".to_owned());
         };
         let host = file
             .ast
@@ -428,7 +465,7 @@ fn sites<'a>(
                 || "none".to_owned(),
                 |text| text.chars().take(24).collect::<String>(),
             );
-        (set.contains(&function.span), host)
+        (set.get(&function.span).copied(), host)
     };
     // ADR 0976, S3: the functions a promise handler call runs after a suspension are after one, async or not.
     let handlers = handlers::handler_functions(ctx);
@@ -453,13 +490,14 @@ fn sites<'a>(
         {
             continue;
         }
-        let (test, host) = classify(file, site.at);
+        let (registration, host) = classify(file, site.at);
         found.push(AwaitSite {
             file,
             at: site.at,
             alternates: site.alternates.clone(),
             via: "read",
-            test,
+            test: registration.is_some(),
+            registration,
             host,
             call: None,
             root: None,
@@ -481,13 +519,14 @@ fn sites<'a>(
                     ctx.dialect
                         .callback_keeps_after_await_flag(primitive, index)
                 }) {
-                    let (test, host) = classify(file, call.span);
+                    let (registration, host) = classify(file, call.span);
                     found.push(AwaitSite {
                         file,
                         at: callee,
                         alternates: vec![call.span],
                         via: "primitive",
-                        test,
+                        test: registration.is_some(),
+                        registration,
                         host,
                         call: Some(call),
                         root: None,
@@ -522,7 +561,7 @@ fn sites<'a>(
                     Unnamed::Accessor => continue,
                 },
             };
-            let (test, host) = classify(file, call.span);
+            let (registration, host) = classify(file, call.span);
             // A construct is reported from its `new` token (the position a stack frame of `new K(…)` has), not from the callee after it.
             let at = if call.construct && call.span.start <= callee.start {
                 Span::new(call.span.start, callee.end)
@@ -534,7 +573,8 @@ fn sites<'a>(
                 at,
                 alternates: vec![call.span],
                 via,
-                test,
+                test: registration.is_some(),
+                registration,
                 host,
                 call: Some(call),
                 root: None,
@@ -550,13 +590,14 @@ fn sites<'a>(
             if !after(file, chain.at) || member_reads::root_is_a_source(ctx, file, chain.root) {
                 continue;
             }
-            let (test, host) = classify(file, chain.at);
+            let (registration, host) = classify(file, chain.at);
             found.push(AwaitSite {
                 file,
                 at: chain.at,
                 alternates: chain.alternates,
                 via: "member-read",
-                test,
+                test: registration.is_some(),
+                registration,
                 host,
                 call: None,
                 root: Some(chain.root),
@@ -694,6 +735,7 @@ mod tests {
             AfterAwaitSafe::ALL.map(AfterAwaitSafe::id),
             [
                 "after_await_accounting.account.never-runs",
+                "after_await_accounting.account.runner-scheduled",
                 "after_await_accounting.account.library-runs-nothing",
                 "after_await_accounting.account.owner-captured",
                 "after_await_accounting.account.plain-receiver"

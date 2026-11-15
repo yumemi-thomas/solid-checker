@@ -24520,5 +24520,11 @@
   "found": "the Fable review of main dfa6c5dec..48b5ecf6a (2026-11-15): the read-only helper report on #235 and #237, then the runtime oracle (3 of 3 `unproven-clean`, the plain-name control covered)",
   "fixed": "ADR 0999 (`package_action_calls::cooked_identifier`; `module_reach.rs`: the computed `defaultView` read and `document[k]`; `after_await_accounting/library_call.rs` `package_writes_global`)",
   "outside": "the package-site generators spell every identifier plainly, write a global through `window`/`globalThis`/`document.defaultView`, and place no package-replaced global after an await; the pattern lane holds the shapes: `patterns/pkgglobal/g02-escaped-name`, `g03-escaped-member`, `g04-computed-default-view`, `g05-await-replaced-global` (4 of 4 false clean on ADR 0998's head, fine on ADR 0999's), with `g01-plain-name` fine on both, `make fuzz-patterns ARGS=\"--only pkgglobal/\"`"
+ },
+ {
+  "finding": "no defect: a precision gap. A read, or a call that may run a project function, written after an await directly in a function literal a reviewed test runner schedules (`it(\"…\", async () => { await …; expect(count()).toBe(0); })`) kept SC1002's uncertifiable row `read-after-await-unaccounted`, though rc.21 raises UNTRACKED_READ_AFTER_AWAIT only for a read with an async computation's flight on its async stack and the stack of such a callback is the runner's (about 24,000 corpus rows)",
+  "found": "the proof ranking of 2026-11-16 (the corpus's uncertifiable rows by cause; the proof candidates of jandibat-web: 805 of about 1,080 filed after-await rows carry `test=yes`)",
+  "fixed": "ADR 1004 (`after_await_accounting.rs` `AfterAwaitSafe::RunnerScheduled`; `indexes/test_runner.rs` `test_runner_schedules_by_read_bytes`; `flush_accounting::runs_when_the_call_runs`)",
+  "outside": "the fuzz harness runs its programs in Chrome with no test runner, and a grid program imports no runner package, so no cell holds a registered callback; the shapes are held by the fixture `fixtures/reactive-ir/after-await-runner-callback`, the oracle case `fixtures/runtime-oracle/after-await-runner-callback` (the stack semantics in Chrome, with a loop written like a runner's) and the probe `scripts/probes/rc21-runner-callback-after-await` (vitest's own runner on V8)"
  }
 ]

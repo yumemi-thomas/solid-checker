@@ -9,26 +9,26 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1444,
+  "SC1001 function-run-unplaced": 1445,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
-  "SC1001 package-value-read": 139,
+  "SC1001 package-value-read": 140,
   "SC1001 read-backing-unproven": 378,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 94,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 field-initializer-unplaced": 2,
-  "SC1002 function-run-unplaced": 73,
+  "SC1002 function-run-unplaced": 78,
   "SC1002 generator-stepped": 11,
   "SC1002 handed-read-after-await": 188,
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 662,
+  "SC1002 read-after-await-unaccounted": 663,
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 82,
   "SC1002 unresolved-invocation": 93,
@@ -160,7 +160,7 @@
   "SC5003 mount-form-window": 2,
   "SC5003 mount-unresolved": 375,
   "SC5003 package-finding-at-entry": 113,
-  "SC5003 pending-read-unresolved": 735,
+  "SC5003 pending-read-unresolved": 736,
   "SC5003 root-mount-pass-unproven": 55,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
@@ -176,9 +176,9 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 4974,
+  "SC6002 effect-creation-unaccounted": 4977,
   "SC6002 effect-owner-unproven": 31,
-  "SC6002 function-run-unplaced": 47,
+  "SC6002 function-run-unplaced": 48,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 26,
   "SC6002 package-operation-in-effect-apply": 1,
@@ -216,8 +216,9 @@
   "SC9012 derived-read-under-untrack": 6,
   "SC9012 exported-parameter-member-dispatch": 79,
   "SC9012 forwarded-to-undescribed-callee": 28,
-  "SC9012 function-call-target-unresolved": 8,
+  "SC9012 function-call-target-unresolved": 9,
   "SC9012 function-prototype-callee-unresolved": 1,
+  "SC9012 function-run-unplaced": 1,
   "SC9012 handed-member-dispatch": 449,
   "SC9012 handed-member-read": 71,
   "SC9012 handed-read-after-await": 10,
@@ -266,7 +267,7 @@
   "SC9012 value-through-logical": 37,
   "SC9012 value-through-new": 32,
   "SC9012 value-thrown": 49,
-  "SC9012 value-to-unresolved-callee": 332,
+  "SC9012 value-to-unresolved-callee": 333,
   "SC9012 value-use-unclassified": 49,
   "SC9012 withheld-object-member": 66,
   "SC9014 dialect-detection": 184,
@@ -2285,6 +2286,58 @@
     "open": "reactive-ir/portal-children-owner"
    },
    "note": "the same site, the SC6002 half."
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1004",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/test_runner.rs::test_runner_schedules_by_read_bytes",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-async-dispatch",
+    "open": "reactive-ir/after-await-runner-callback"
+   },
+   "note": "`target.dispatchEvent(…)` and `item.dispatchEvent(…)` after an await, written directly in `it(\"…\", async () => { … })` (vitest 5.0.5): the callback's continuation is on the runner's stack, with no flight on it."
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-role",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 1004",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/test_runner.rs::test_runner_schedules_by_read_bytes",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-async-role",
+    "open": "reactive-ir/after-await-runner-callback"
+   },
+   "note": "`count()` twice and `settle()` after an await, directly in a vitest test callback."
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1004",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/test_runner.rs::test_runner_schedules_by_read_bytes",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-helper-test-only",
+    "open": "reactive-ir/after-await-runner-callback"
+   },
+   "note": "`choose()` and `settle()` after an await, directly in a vitest test callback; the row left is in a helper the tests call, which the reason does not cover."
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest4",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1004",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/test_runner.rs::test_runner_schedules_by_read_bytes",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest4",
+    "open": "reactive-ir/after-await-runner-callback"
+   },
+   "note": "`target.dispatchEvent(…)` after an await, directly in a test callback of vitest 4 (`@vitest/runner`'s declarations)."
   }
  ],
  "renames": []
