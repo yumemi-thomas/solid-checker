@@ -198,6 +198,90 @@ impl StaticApiContext<'_> {
     }
 }
 
+impl StaticApiContext<'_> {
+    /// ADR 0655: what the computation of `call` (its first argument) does on a pass: `None` where it has none (a value that is no function, a
+    /// one-element spread tuple), `Sync`, `Promise` or `AsyncIterable` where proven, `Open` where nothing says. One definition: SC7002's
+    /// arms ask it, and so does the render effect's boundary site (ADR 0989).
+    pub(crate) fn computation_answer(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<StaticSource> {
+            let argument = call.arguments.first()?;
+            let lookup = self.lookup;
+            // A spread of an exact one-element tuple has no options slot, so
+            // nothing there can say `sync`.
+            let spread_tuple = file
+                .ast
+                .spreads
+                .iter()
+                .find(|spread| argument.spread && spread.span == argument.span)
+                .and_then(|spread| lookup.entity_at(file.path.as_str(), spread.argument))
+                .and_then(|entity| entity.tuple_shape)
+                .and_then(typefacts::TupleShape::exact_length);
+            if spread_tuple == Some(1) && call.arguments.len() == 1 {
+                return None;
+            }
+            // `createSignal(0, options)` has no computation: only a value
+            // that may be a function can return anything.
+            let entity = lookup.entity_at(file.path.as_str(), argument.span);
+            if !argument.spread
+                && (matches!(
+                    argument.runtime_value_kind,
+                    solid_facts::ast::RuntimeValueKind::Primitive
+                        | solid_facts::ast::RuntimeValueKind::Nullish
+                ) || entity.and_then(|entity| entity.callability)
+                    == Some(typefacts::Callability::NonCallable))
+            {
+                return None;
+            }
+            if computation_is_async(lookup, file, argument.span) {
+                let open =
+                    crate::owners::computation_may_answer_sync(lookup, file, argument.span);
+                return Some(if open {
+                    StaticSource::Open
+                } else {
+                    StaticSource::Promise("")
+                });
+            }
+            // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
+            // as `then`, unlike the static `dynamic()` check.
+            Some(match static_source_state(file, argument, self) {
+                StaticSource::AsyncIterable => StaticSource::Promise(""),
+                state => state,
+            })
+    
+    }
+}
+
+/// ADR 0989: the calls of `file` whose primitive the dialect reads as a render effect's compute slot (`createRenderEffect`) and whose compute is not
+/// proven synchronous: a thenable it returns makes the effect pending, and a render effect pending with no `Loading` above it is what the runtime warns about
+/// (ASYNC_OUTSIDE_LOADING_BOUNDARY, `dist/dev.js:2672-2700`, `notifyEffectStatus`, `EFFECT_RENDER` only). Each call's callee, in source order.
+pub(crate) fn render_effect_computes_not_proven_sync(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+) -> Vec<Span> {
+    let lookup = ctx.semantic_lookup;
+    let mut context = None;
+    let mut found = Vec::new();
+    for call in &file.ast.calls {
+        let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+            continue;
+        };
+        if !ctx.dialect.render_effect_compute(primitive) {
+            continue;
+        }
+        let context = context.get_or_insert_with(|| context_of(ctx));
+        if matches!(
+            context.computation_answer(file, call),
+            Some(StaticSource::Promise(_) | StaticSource::Open)
+        ) {
+            found.push(call.callee);
+        }
+    }
+    found
+}
+
 /// ADR 0830: a function-literal argument of `call` returns a value that is
 /// neither a function literal nor absent, on a line `tsc` may not check: the
 /// published type (`(() => void) | void`) is what rejects a non-cleanup there.
@@ -420,51 +504,7 @@ impl StaticApiContext<'_> {
             // `any`, a type that may be sync and a value no fact describes are
             // open; only an async function or a Promise on every path proves
             // that a pass returns one.
-            let compute = || {
-                let argument = call.arguments.first()?;
-                let lookup = self.lookup;
-                // A spread of an exact one-element tuple has no options slot, so
-                // nothing there can say `sync`.
-                let spread_tuple = file
-                    .ast
-                    .spreads
-                    .iter()
-                    .find(|spread| argument.spread && spread.span == argument.span)
-                    .and_then(|spread| lookup.entity_at(file.path.as_str(), spread.argument))
-                    .and_then(|entity| entity.tuple_shape)
-                    .and_then(typefacts::TupleShape::exact_length);
-                if spread_tuple == Some(1) && call.arguments.len() == 1 {
-                    return None;
-                }
-                // `createSignal(0, options)` has no computation: only a value
-                // that may be a function can return anything.
-                let entity = lookup.entity_at(file.path.as_str(), argument.span);
-                if !argument.spread
-                    && (matches!(
-                        argument.runtime_value_kind,
-                        solid_facts::ast::RuntimeValueKind::Primitive
-                            | solid_facts::ast::RuntimeValueKind::Nullish
-                    ) || entity.and_then(|entity| entity.callability)
-                        == Some(typefacts::Callability::NonCallable))
-                {
-                    return None;
-                }
-                if computation_is_async(lookup, file, argument.span) {
-                    let open =
-                        crate::owners::computation_may_answer_sync(lookup, file, argument.span);
-                    return Some(if open {
-                        StaticSource::Open
-                    } else {
-                        StaticSource::Promise("")
-                    });
-                }
-                // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
-                // as `then`, unlike the static `dynamic()` check.
-                Some(match static_source_state(file, argument, self) {
-                    StaticSource::AsyncIterable => StaticSource::Promise(""),
-                    state => state,
-                })
-            };
+            let compute = || self.computation_answer(file, call);
             // Options the syntax cannot read (`createMemo(fn, opts)`, a spread,
             // a non-literal `sync:` value) may assert `sync: true`: with a
             // computation not proven synchronous that is an obligation, not a
@@ -2275,7 +2315,7 @@ fn alias_claims(
 }
 
 /// What a static `dynamic()` source does on its one call (ADR 0654).
-enum StaticSource {
+pub(crate) enum StaticSource {
     Promise(&'static str),
     /// An async generator's iterator: no `then`, an async iterator (ADR 0865).
     AsyncIterable,

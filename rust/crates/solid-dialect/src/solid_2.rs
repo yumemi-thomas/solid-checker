@@ -470,6 +470,12 @@ impl Dialect for Solid2 {
         self.triple_exports == releases::TripleExports::Rc21
     }
 
+    // ADR 0989: `createRenderEffect(compute, apply)` makes an `EFFECT_RENDER` node of `compute` (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2672-2700`,
+    // `notifyEffectStatus`: the report is made `else if (this._type === EFFECT_RENDER)`); `createEffect` is `EFFECT_USER` and reports nothing there (Chrome rc.21).
+    fn render_effect_compute(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateRenderEffect
+    }
+
     // ADR 0989: `call_form` answers `DynamicStatic` for a literal `static: true` and `DynamicUnknownForm` for options that may hold it.
     fn static_dynamic_form(&self, primitive: Primitive) -> Option<crate::StaticDynamicForm> {
         match primitive {

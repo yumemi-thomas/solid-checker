@@ -498,6 +498,13 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0989: whether `primitive`'s first argument is the compute of a RENDER effect: a node the runtime tags `EFFECT_RENDER`, whose pending status, with no
+    /// `Loading` boundary above, raises ASYNC_OUTSIDE_LOADING_BOUNDARY. A user effect's compute (`createEffect`) and a tracked effect's are not.
+    fn render_effect_compute(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// ADR 0989: whether a call the dialect resolved to `primitive` is a `dynamic` call in its static form, or may be one
     /// ([`StaticDynamicForm`]): the calls whose source the runtime calls once and refuses to be a promise (`DYNAMIC_STATIC_PROMISE`).
     fn static_dynamic_form(&self, primitive: Primitive) -> Option<StaticDynamicForm> {

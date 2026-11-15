@@ -279,6 +279,9 @@ struct Site {
     through: Option<Location>,
     accessor: std::sync::Arc<str>,
     declaration: Location,
+    /// Only SC5003 asks here (ADR 0989): the site is a render effect's own compute, not a read of a source, so the untracked-read and caught-read rules have
+    /// nothing to say at it.
+    boundary_only: bool,
 }
 
 pub(crate) fn account_pending_reads(
@@ -339,6 +342,7 @@ pub(crate) fn account_pending_reads(
                             through: Some(reference.clone()),
                             accessor: format!("{name}.").into(),
                             declaration: declaration.clone(),
+                            boundary_only: false,
                         },
                         &mut sites,
                     );
@@ -358,6 +362,7 @@ pub(crate) fn account_pending_reads(
                             through: Some(reference.clone()),
                             accessor: name.to_string().into(),
                             declaration: declaration.clone(),
+                            boundary_only: false,
                         },
                         &mut sites,
                     );
@@ -375,7 +380,8 @@ pub(crate) fn account_pending_reads(
                         through: Some(reference.clone()),
                         accessor: format!("{name}()").into(),
                         declaration: declaration.clone(),
-                    },
+                            boundary_only: false,
+                        },
                     &mut sites,
                 );
             }
@@ -411,7 +417,8 @@ pub(crate) fn account_pending_reads(
                     through: Some(callee.clone()),
                     accessor: format!("{name}()").into(),
                     declaration: declaration.clone(),
-                },
+                            boundary_only: false,
+                        },
                 &mut sites,
             );
         }
@@ -432,7 +439,8 @@ pub(crate) fn account_pending_reads(
                     through: None,
                     accessor: read.accessor.clone(),
                     declaration: read.declaration.clone(),
-                },
+                            boundary_only: false,
+                        },
                 &mut sites,
             );
         }
@@ -496,6 +504,28 @@ pub(crate) fn account_pending_reads(
                     through: Some(through),
                     accessor: reach.accessor.clone(),
                     declaration: reach.declaration.clone(),
+                            boundary_only: false,
+                        },
+                &mut sites,
+            );
+        }
+    }
+    // (5) ADR 0989: the compute of every render effect (`createRenderEffect`) not proven synchronous: a thenable it returns makes the effect pending, and with no
+    // `Loading` above it the runtime raises ASYNC_OUTSIDE_LOADING_BOUNDARY at the mount, though nothing reads a source there. The site is the call's callee.
+    for file in lookup.files() {
+        if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        for callee in crate::static_api::render_effect_computes_not_proven_sync(ctx, file) {
+            let location = callee.location(file.path.as_str());
+            let name = file.source_text(callee).unwrap_or("createRenderEffect");
+            add(
+                Site {
+                    location: location.clone(),
+                    through: None,
+                    accessor: format!("{name}() compute").into(),
+                    declaration: location,
+                    boundary_only: true,
                 },
                 &mut sites,
             );
@@ -603,6 +633,9 @@ pub(crate) fn account_pending_reads(
                 })
             });
         for rule in PendingRule::ALL {
+            if site.boundary_only && rule != PendingRule::Boundary {
+                continue;
+            }
             if rule == PendingRule::Caught && (!caught_claim || caught_row) {
                 continue;
             }
