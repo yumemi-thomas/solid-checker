@@ -24423,6 +24423,24 @@
   "rediscovered": "pattern lane in Chrome, release builds: main fails the 3 declared twins (3 of 3 false clean); the first head of ADR 0981 failed 29 of the lane's `pkgaction/*`; this head passes all of them and the twins"
  },
  {
+  "finding": "SC2009: an optimistic setter recorded by an assignment's destructuring (`let o, setO; [o, setO] = createOptimistic(async () => 1); setO(2)`) made no async decision, so its write raised nothing where Chrome throws OPTIMISTIC_WRITE_BEFORE_LOAD; the declaration form had the decision (ADR 0987)",
+  "found": "the SC2009 audit of slice 8a (an untracked probe, then the runtime oracle case `optimistic-setter-forms`, Chrome rc.21, 2026-11-15)",
+  "fixed": "ADR 0987 (`source_discovery/discover_file.rs` `optimistic_setter_is_async`, used by the declaration, assignment and callback-return setter recordings)",
+  "grid": "mx-recall",
+  "code": "OPTIMISTIC_WRITE_BEFORE_LOAD",
+  "ids": [
+   "mx-optimistic-write-before-load-body-assigned-direct-none",
+   "mx-optimistic-write-before-load-body-assigned-direct-closure",
+   "mx-optimistic-write-before-load-body-assigned-direct-helper",
+   "mx-optimistic-write-before-load-body-assigned-direct-iife",
+   "mx-optimistic-write-before-load-body-assigned-direct-module-helper",
+   "mx-optimistic-write-before-load-body-assigned-alias-none",
+   "mx-optimistic-write-before-load-body-assigned-alias-closure",
+   "mx-optimistic-write-before-load-body-assigned-alias-helper"
+  ],
+  "rediscovered": "main 9878ba9d7 (release) on `focus.mjs --grids mx-recall,lg-recall --split-codes --codes LOADING_ON_ACCESSOR,OPTIMISTIC_WRITE_BEFORE_LOAD`: 36 false-clean, all the new `assigned` recall variant; this head: 0 (mx-recall OPTIMISTIC 1,426 agree, 1,334 recall-gap as before; lg-recall 1,146 uncertifiable, 54 clean). The callback-return and factory forms were already obligations (SC9012) on main, so the generator does not separate them; the fixture rc21-optimistic-setter-forms and the oracle case pin all four forms"
+ },
+ {
   "finding": "SC7002 `sync-computation-received-async` was a violation for `createMemo(async () => 1, { sync: true, ...optOver })` and for the same options on `createEffect`, `createSignal`, `createOptimistic`, `createRenderEffect` and `createTrackedEffect` where `optOver.sync` is `false`: the rule took `sync: true` from ANY literal `true` property, and the runtime reads the LAST `sync` (a spread after the literal, or a later duplicate key, decides). Chrome rc.21 reports nothing for these programs.",
   "found": "the coordinator's duplicate-key ruling for slice 8b (the check of `{ sync: true, sync: false }` against Chrome) and the pattern lane's `syncopt/d1`, `d3`, `d4`, `s-*`: 14 false positives on main; also `createTrackedEffect(async () => ..., { sync: true })`, a plain false positive: its node's compute returns `undefined` (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2878-2892`), so SYNC_NODE_RECEIVED_ASYNC is never raised there.",
   "fixed": "ADR 0989 (`static_api.rs` `sync_option_state`): the V arm needs the exact literal's last `sync` to be `true` (`call_option_literal`); a spread, computed key or non-literal options keep the existing uncertifiable arm; a duplicate `sync` key is TypeScript's (TS1117) unless a directive silences it, then the last one decides; `createTrackedEffect` left `supports_sync_option`.",

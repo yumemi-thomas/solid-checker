@@ -63,6 +63,17 @@ pub(super) fn push_callback_return_sources(
             if options != AsyncSourceOptions::default() {
                 result.source_async_options.push((symbol.clone(), options));
             }
+            // ADR 0987: a setter takes the decision a declaration's does (an optimistic creation's answer), never absence.
+            if value.kind == "setter"
+                && super::optimistic_setter_is_async(
+                    lookup,
+                    file,
+                    returned.created,
+                    returned.primitive,
+                )
+            {
+                result.async_sources.push(symbol.clone());
+            }
             if value.kind == "accessor"
                 && returned
                     .created

@@ -208,6 +208,15 @@ site_silences! {
     /// A creation the dialect says throws on an effect's apply, inside the callback of an exact owner-setting primitive (`runWithOwner`, `createRoot`, a
     /// computation's compute): an owner is current.
     EffectCreationOwnerSetAround => "leaf_universe.account.effect-creation-owner-set-around",
+    /// ADR 0987: a boundary's `on` that names nothing (`on={1}`: no identifier, no call), so it has no dependency to change and never re-arms. The fact is the
+    /// literal at the value.
+    LoadingOnNamesNothing => "loading_hold.loading_on_outside_hold_obligations.on-names-nothing",
+    /// ADR 0987: a boundary with an `on` under which no async source is read and every child is seen (`unproven_hold` answers `None`): it holds nothing. The fact
+    /// is the children.
+    LoadingHoldsNoAsyncSource => "loading_hold.loading_on_outside_hold_obligations.holds-no-async-source",
+    /// ADR 0987: the `on` handed to the boundary is proven not to be a function (the compiler's callability of the value is non-callable), so the boundary's
+    /// `typeof on === "function"` is false.
+    LoadingOnNotFunction => "loading_hold.loading_on_accessor.on-not-function",
     /// A `resolve`/`until` call (SC2004, SC2005) written past an `await` its function reaches on every path: a later task, with no observer (ADR 0612; the
     /// premise is the `await`).
     ResolvePastSuspension => "static_api.resolve_scope.past-suspension",
@@ -266,8 +275,9 @@ impl SiteSilence {
     /// row (`removed`, `removed_with`) names none here: it answers the codes the removed row's ending answered ([`SiteEnd::answers`]).
     pub(crate) const fn codes(self) -> &'static [SiteCode] {
         use SiteCode::{
-            ActionCall, CleanupForbidden, EffectCreation, OnFlush, PrimitiveForbidden,
-            ReactiveWrite, ResolveInScope, StoreWrite, StrictRead, UntilInScope,
+            ActionCall, CleanupForbidden, EffectCreation, LoadingOnAccessor, LoadingOnOutsideHold,
+            OnFlush, PrimitiveForbidden, ReactiveWrite, ResolveInScope, StoreWrite, StrictRead,
+            UntilInScope,
         };
         use SiteCode::{DynamicStaticPromise, MissingEffectFn, SyncNodeAsync};
         match self {
@@ -338,6 +348,11 @@ impl SiteSilence {
             Self::OwnerCurrent
             | Self::EffectCreationRunsOffApply
             | Self::EffectCreationOwnerSetAround => &[EffectCreation],
+            // ADR 0987: the `loading-on` universe's two codes, each ended by its own rule's finding or its own silence.
+            Self::LoadingOnNamesNothing | Self::LoadingHoldsNoAsyncSource => {
+                &[LoadingOnOutsideHold]
+            }
+            Self::LoadingOnNotFunction => &[LoadingOnAccessor],
             // The resolve/until universe (slice 7): the observer guard of the primitive the site's table names. A silence is a proof about the guard where the
             // call runs, so it answers the code of the primitive at the site; a `resolve` site never lists `until`'s code, and the two codes are separate sites.
             Self::ResolvePastSuspension
@@ -875,7 +890,7 @@ mod tests {
     }
 
     /// The sources that name silences, by the module a silence's id begins with.
-    const PRODUCERS: [(&str, &str); 7] = [
+    const PRODUCERS: [(&str, &str); 8] = [
         ("local_access", include_str!("local_access.rs")),
         (
             "shared_reactivity",
@@ -889,6 +904,7 @@ mod tests {
             include_str!("package_action_calls.rs"),
         ),
         ("leaf_universe", include_str!("owners/leaf_universe.rs")),
+        ("loading_hold", include_str!("loading_hold.rs")),
     ];
 
     /// ADR 0886's test of its emission arms, for these: every silence is named
@@ -1188,7 +1204,13 @@ mod tests {
         ));
         let census = removed(RemovedBy::Census);
         for code in SiteCode::ALL {
-            assert!(census.answers(policy(code).as_ref(), code), "{code:?}");
+            // An SC9012 answers every code that has a position; a placeless code (the `loading-on` universe's) has none for it to name (ADR 0987).
+            let placeless = policy(code).is_some_and(|policy| policy.placeless);
+            assert_eq!(
+                census.answers(policy(code).as_ref(), code),
+                !placeless,
+                "{code:?}"
+            );
         }
         let style = removed(RemovedBy::Rule {
             name: "prefer-show".into(),
