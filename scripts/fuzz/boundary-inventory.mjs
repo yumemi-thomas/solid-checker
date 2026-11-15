@@ -15,6 +15,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { endEntries } from "../proof-lint.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(here, "../..");
 export const IR_SRC = join(REPO, "rust/crates/solid-reactive-ir/src");
@@ -138,13 +140,12 @@ export function namedEnds(root = IR_SRC) {
   const stems = new Map(rustFiles(root).map((file) => [basename(file, ".rs"), relative(root, file)]));
   const ends = [];
   const seen = new Set();
-  for (const match of body.matchAll(/^\s*([A-Z][A-Za-z0-9]*)\s*=>\s*"([a-z_0-9]+\.[a-z_0-9]+\.[a-z0-9-]+)"/gm)) {
-    const [, variant, id] = match;
+  for (const { variant, id, index } of endEntries(body, "boundary-inventory")) {
     if (seen.has(id)) throw new Error(`boundary-inventory: the silence id ${id} is listed twice`);
     seen.add(id);
     const stem = id.split(".")[0];
     if (!stems.has(stem)) throw new Error(`boundary-inventory: ${id} (${variant}): no producer file ${stem}.rs under the IR source`);
-    ends.push({ id, file: stems.get(stem), line: lineAt(text, open + match.index), variant });
+    ends.push({ id, file: stems.get(stem), line: lineAt(text, open + index), variant });
   }
   return ends;
 }
