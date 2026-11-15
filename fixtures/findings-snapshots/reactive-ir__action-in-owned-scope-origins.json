@@ -376,6 +376,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-origins/App.tsx",
+      "start": 4958,
+      "end": 4964,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -450,6 +461,17 @@
       "path": "fixtures/reactive-ir/action-in-owned-scope-origins/App.tsx",
       "start": 5194,
       "end": 5220,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-origins/App.tsx",
+      "start": 5213,
+      "end": 5219,
       "fixes": 0
     },
     {

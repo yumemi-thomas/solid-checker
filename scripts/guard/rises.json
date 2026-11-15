@@ -3706,6 +3706,78 @@
    "to": 1,
    "adr": "ADR 0989",
    "fact": "the compute of a render effect not proven synchronous is now a site of SC5003 (the pending accounting's site (5), ADR 0989): here createRenderEffect(<an async memo accessor, a variable or an async function>, ..) with no Loading proven above and no discarded region or reviewed fresh stack: Chrome rc.21 reports ASYNC_OUTSIDE_LOADING_BOUNDARY for a render effect that goes pending with no boundary above it (dist/dev.js:2672-2700, EFFECT_RENDER only). An obligation, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC1001 package-value-read",
+   "from": 7,
+   "to": 9,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC1001 package-value-read",
+   "from": 4,
+   "to": 12,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/inferred-host-reachability",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 8,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/root-callback-return",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 26,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/route-config",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/route-config-instance-escaped",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-escaped",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0998",
+   "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
+   "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
   }
  ]
 }

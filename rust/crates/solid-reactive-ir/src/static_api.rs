@@ -694,6 +694,22 @@ impl StaticApiContext<'_> {
                             uncertain: true,
                         });
                     }
+                    // ADR 0997: the callback of `resolve` or `until` is a computation of that primitive's own.
+                    ScopeAnswer::OwnComputation(holder) => {
+                        let name = if resolves { "resolve" } else { "until" };
+                        result.violations.push(StaticViolation {
+                            id: if resolves { "SC2004" } else { "SC2005" }.into(),
+                            rule: "no-await-primitive-in-tracked-scope".into(),
+                            message: format!(
+                                "{name}() is called inside the callback of {holder}(), which {holder}() runs as a computation of its own: an observer is active there, so Solid throws \"Cannot call {name} inside a reactive scope\" in dev; the throw rejects the promise {holder}() returned, and no report of that rejection is proven"
+                            ),
+                            hint: scope_hint(resolves).into(),
+                            location: location(file.path.shared(), call.callee),
+                            analysis_context: crate::blockers::COMPUTATION_ERROR_UNOBSERVED.to_owned(),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
                     ScopeAnswer::Silent(silence, premises) => {
                         result
                             .ends
@@ -1898,6 +1914,11 @@ pub(crate) enum ScopeAnswer {
     Tracked(String),
     /// Nothing proves whether an observer is active where the call runs: an obligation.
     Unplaced,
+    /// ADR 0997: the call is written in the callback of a primitive that runs it as the compute of a node of its own (`resolve`, `until`:
+    /// the dialect's `deferred_slot_observer` answers `Some(true)`), so an observer is active and the guard throws; the throw rejects
+    /// the promise that primitive returned, and nothing proves that rejection is reported: an obligation that says so. The name is the
+    /// primitive whose callback holds the call.
+    OwnComputation(&'static str),
     /// A fact proves the guard does not throw where the call runs: the silence that names it and the premises (each a
     /// span the proof log can check) it rests on.
     Silent(
@@ -1935,6 +1956,7 @@ fn slot_answer(
     file: &FileFacts,
     call: Span,
     container: &solid_facts::ast::CallFact,
+    (primitive, index): (Primitive, usize),
     run: SlotRun,
     context: &StaticApiContext<'_>,
     limited: &Cell<Option<&'static str>>,
@@ -1942,11 +1964,27 @@ fn slot_answer(
     use crate::proof_log::PremiseKind;
     use crate::site_accounting::SiteSilence;
     match run {
-        SlotRun::Deferred => silent(
-            SiteSilence::ResolveSlotRunsElsewhere,
-            PremiseKind::SlotRunsElsewhere,
-            container.span,
-        ),
+        // ADR 0997: `Deferred` says whose reads the callback subscribes, not that no observer is active where it runs. The dialect
+        // states that apart: only a stated "none" is the silence.
+        SlotRun::Deferred => match context
+            .lookup
+            .dialect
+            .deferred_slot_observer(primitive, index)
+        {
+            Some(false) => silent(
+                SiteSilence::ResolveSlotRunsElsewhere,
+                PremiseKind::SlotRunsElsewhere,
+                container.span,
+            ),
+            Some(true) => ScopeAnswer::OwnComputation(
+                context
+                    .lookup
+                    .dialect
+                    .name_of(primitive)
+                    .unwrap_or("a primitive"),
+            ),
+            None => ScopeAnswer::Unplaced,
+        },
         SlotRun::InPlace(run) => match (run.observer, run.throws) {
             (SlotObserver::Clears, _) => silent(
                 SiteSilence::ResolveSlotClearsObserver,
@@ -2095,7 +2133,15 @@ fn resolve_scope_answer(
         // ADR 0941, ADR 0985: a call that takes whatever its callback throws (`isPending`) takes the observer guard's plain
         // throw whatever observer its own call has, so its slot answers before the walk reaches the call.
         if matches!(run, SlotRun::InPlace(in_place) if in_place.throws == SlotThrows::Swallows) {
-            return slot_answer(file, call.span, container, run, context, limited);
+            return slot_answer(
+                file,
+                call.span,
+                container,
+                (primitive, index),
+                run,
+                context,
+                limited,
+            );
         }
         // ADR 0857: a callback that runs during the call with the caller's
         // listener (`flush(fn)`) is placed where the call is.
@@ -2116,11 +2162,26 @@ fn resolve_scope_answer(
         }
         steps_on_callers |= primitive == solid_dialect::Primitive::Action;
         {
-            let answer = slot_answer(file, call.span, container, run, context, limited);
+            let answer = slot_answer(
+                file,
+                call.span,
+                container,
+                (primitive, index),
+                run,
+                context,
+                limited,
+            );
             judged = match (judged.take(), answer) {
                 (Some(ScopeAnswer::Unplaced), _) | (_, ScopeAnswer::Unplaced) => {
                     Some(ScopeAnswer::Unplaced)
                 }
+                // ADR 0997: two slots that both run the call as a compute of their own agree; one beside a slot that is silent (which of
+                // the two stands nearer the call is not asked) proves neither.
+                (Some(ScopeAnswer::OwnComputation(name)), ScopeAnswer::OwnComputation(_)) => {
+                    Some(ScopeAnswer::OwnComputation(name))
+                }
+                (Some(ScopeAnswer::OwnComputation(_)), _)
+                | (Some(_), ScopeAnswer::OwnComputation(_)) => Some(ScopeAnswer::Unplaced),
                 (Some(first), _) => Some(first),
                 (None, answer) => Some(answer),
             };

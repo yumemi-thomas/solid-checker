@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0997: from's subscribe function runs inside the memo that consumes the iterator: Chrome throws RESOLVE_IN_REACTIVE_SCOPE and UNTIL_IN_REACTIVE_SCOPE (covered-uncertifiable)."
+}

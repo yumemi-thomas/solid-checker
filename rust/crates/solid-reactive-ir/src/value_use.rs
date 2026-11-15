@@ -428,6 +428,11 @@ pub(crate) struct Census<'l, 'a> {
     reached: Vec<Location>,
     /// Each file's callback spans, for the role of a site past an escape.
     allowed: HashMap<String, Vec<Span>>,
+    /// ADR 0998: the walked value is one a package the build does not read returned ([`Self::package_value_start`]). It may be an accessor or an
+    /// object whose Gets run one, so a call through it is a read (not a write of a root), a write through it is no site of this walk (the claim is
+    /// the read's), and a callee nothing resolves is handed the value without holding it in what the call answers (a package's result has a start
+    /// of its own).
+    package_value: bool,
 }
 
 /// ADR 0811: the store member writes SC2003 decides in a file.
@@ -499,7 +504,36 @@ impl<'l, 'a> Census<'l, 'a> {
             escaped_uses: Vec::new(),
             reached: Vec::new(),
             allowed: HashMap::default(),
+            package_value: false,
         }
+    }
+
+    /// ADR 0998: where a value a package the build does not read returned goes, walked forward as a value past an escape (ADR 0860): it may be,
+    /// or may hold, a reactive source the package made or was handed, so every call or Get through it in project code is a site whose role
+    /// decides it ([`Self::site`]), through every position the escaped walk follows (a binding, a pattern, an assignment, a literal's slot, a
+    /// return, a project function's parameter, a standard method's result and callbacks). A position the walk cannot follow is a use with its own
+    /// blocker. The answer's `uses` and `escaped_uses` are those sites and ends; `open` is never set (the start is a value, not a reference).
+    pub(crate) fn package_value_start(
+        &mut self,
+        file: &'a FileFacts,
+        value: Span,
+        blocker: &'static str,
+    ) -> StartAnswer {
+        self.async_walk = false;
+        self.carried = Carried::Accessor;
+        self.package_value = true;
+        self.begin_start();
+        let _ = self.position(
+            file,
+            value,
+            Mode::Escaped {
+                root: true,
+                blocker,
+            },
+        );
+        self.run_escapes();
+        self.package_value = false;
+        self.end_start(None)
     }
 
     /// Starts one start's walk from nothing this census walked before: a
@@ -1311,6 +1345,10 @@ impl<'l, 'a> Census<'l, 'a> {
     /// role proves the operation legal there. A store write is legal only in
     /// its setter's callback, whose draft no escaped value is: it always has one.
     fn site(&mut self, file: &'a FileFacts, span: Span, site: Site, blocker: &'static str) {
+        // ADR 0998: a write through a package's value is no site of that walk.
+        if self.package_value && site == Site::Write {
+            return;
+        }
         let path = file.path.as_str();
         if !self.allowed.contains_key(path) {
             let spans = crate::execution_role::allowed_callback_spans(file, self.lookup);
@@ -1332,6 +1370,14 @@ impl<'l, 'a> Census<'l, 'a> {
         // A compute's read past an await runs with no observer, whatever the
         // role says of the compute: no role clears it there.
         let suspended = crate::execution_role::past_suspension(file, span, self.lookup).is_some();
+        // ADR 0998: a package's value is asked the question ADR 0981's rule asks of the read it reaches directly: a row where the role reports
+        // an untracked read or places nothing, and nowhere else.
+        if self.package_value {
+            if role.reports_untracked_read() || role.reports_unplaced() {
+                self.uses.push((span.location(path), blocker));
+            }
+            return;
+        }
         let reads = !self.async_walk
             && role != crate::ExecutionRole::Unknown
             && !deferred_unproven
@@ -1370,7 +1416,12 @@ impl<'l, 'a> Census<'l, 'a> {
                 let call = ast.calls[call].span;
                 // ADR 0928: a call through a root (a bound `push`) may write
                 // it, which no role clears.
-                let site = if root { Site::Write } else { Site::Call };
+                // ADR 0998: a call through a package's value runs what it holds: a read.
+                let site = if root && !self.package_value {
+                    Site::Write
+                } else {
+                    Site::Call
+                };
                 self.site(file, call_use_span(file, call), site, blocker);
                 self.position(file, call, mode);
                 Position::Followed
@@ -1395,6 +1446,13 @@ impl<'l, 'a> Census<'l, 'a> {
                 // A pattern over a root reads it, and its slots hold what it read.
                 if root && binding.shape != solid_facts::ast::BindingShape::Identifier {
                     self.site(file, binding.pattern, Site::Read, blocker);
+                    // ADR 0998: what a pattern read out of a package's value may be such a value too (an element of a tuple, a nested
+                    // object with getters of its own), so its slots are walked on.
+                    if self.package_value {
+                        for name in &binding.names {
+                            self.name_uses(file, name.span, mode);
+                        }
+                    }
                     return Position::Followed;
                 }
                 for name in &binding.names {
@@ -1526,6 +1584,13 @@ impl<'l, 'a> Census<'l, 'a> {
         if exported_directly(file, at) {
             // ADR 0923: a default export's importers use it as well.
             self.default_export_uses(file, at, mode);
+            return Position::Followed;
+        }
+        // ADR 0998: a name in a type (`typeof v`, a type reference) holds no value.
+        if self.package_value
+            && (file.ast.type_queries.iter().any(|query| query.contains(at))
+                || file.ast.type_names.iter().any(|name| name.contains(at)))
+        {
             return Position::Followed;
         }
         Position::Open(blockers::VALUE_USE_UNCLASSIFIED)
@@ -1736,7 +1801,10 @@ impl<'l, 'a> Census<'l, 'a> {
             blockers::VALUE_TO_UNRESOLVED_CALLEE
         };
         self.uses.push((at.location(file.path.as_str()), blocker));
-        self.handed_on(file, call, index, mode);
+        // ADR 0998: a callee nothing resolves is handed a package's value; what it answers is its own (a package's result is a start).
+        if !self.package_value {
+            self.handed_on(file, call, index, mode);
+        }
         Position::Followed
     }
 

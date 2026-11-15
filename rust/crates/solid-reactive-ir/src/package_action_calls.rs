@@ -1280,7 +1280,10 @@ fn global_origin(
     span: Span,
 ) -> Origin {
     // The global object goes by several names, whatever the library declares them as.
-    if file.source_text(span).is_some_and(is_global_object_name) {
+    if file
+        .source_text(span)
+        .is_some_and(|text| is_global_object_name(&cooked_identifier(text)))
+    {
         return Origin::GlobalObject;
     }
     // A name the compiler resolves to nothing at all is unknown; one it resolves to a symbol no file declares is the language's own (`globalThis`, `undefined`):
@@ -1309,6 +1312,8 @@ fn global_origin(
 /// it runs no code); a package that defines an accessor under a key nothing decides answers for a name the others do not define ([`WRITE_ANY_PREFIX`]).
 fn global_accessor(ctx: &AnalysisContext<'_>, name: &str) -> Option<DeclarationAt> {
     // `undefined`, `NaN` and `Infinity` are properties of the global object that cannot be redefined.
+    let name = cooked_identifier(name);
+    let name = name.as_ref();
     if matches!(name, "undefined" | "NaN" | "Infinity") {
         return None;
     }
@@ -1342,8 +1347,45 @@ fn is_identifier_name(name: &str) -> bool {
     let mut chars = name.chars();
     chars
         .next()
-        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
-        && chars.all(|next| next.is_ascii_alphanumeric() || next == '_' || next == '$')
+        .is_some_and(|first| first.is_alphabetic() || first == '_' || first == '$')
+        && chars.all(|next| {
+            next.is_alphanumeric() || matches!(next, '_' | '$' | '\u{200c}' | '\u{200d}')
+        })
+}
+
+/// ADR 0999: the name an identifier's source text spells. An identifier may be written with Unicode escapes (`\u0062toa`, `\u{62}toa` are `btoa`), and the runtime
+/// reads the name, not the spelling: a global, a member of the global object and a pattern key are compared by this. Text with an escape this cannot read is returned
+/// as written (it is then no identifier name, and matches nothing).
+fn cooked_identifier(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains('\\') {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut cooked = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("\\u") {
+        cooked.push_str(&rest[..at]);
+        let after = &rest[at + 2..];
+        let (digits, consumed) = if let Some(braced) = after.strip_prefix('{') {
+            match braced.find('}') {
+                Some(end) => (&braced[..end], end + 2),
+                None => return std::borrow::Cow::Borrowed(text),
+            }
+        } else if after.len() >= 4 && after.is_char_boundary(4) {
+            (&after[..4], 4)
+        } else {
+            return std::borrow::Cow::Borrowed(text);
+        };
+        let Some(character) = u32::from_str_radix(digits, 16)
+            .ok()
+            .and_then(char::from_u32)
+        else {
+            return std::borrow::Cow::Borrowed(text);
+        };
+        cooked.push(character);
+        rest = &after[consumed..];
+    }
+    cooked.push_str(rest);
+    std::borrow::Cow::Owned(cooked)
 }
 
 /// The origin of a global the standard library declares that some installed package the program loads writes at run time and may reach a Solid action there
@@ -1351,6 +1393,8 @@ fn is_identifier_name(name: &str) -> bool {
 /// whatever type the library declares the global with. The premise is that types are sound for declarations and runtime writes come from the scan. A writer under a key
 /// nothing in its file decides may have written any global, so it answers for a name the others do not write ([`WRITE_ANY_PREFIX`]); one that writes the name answers first.
 fn written_global(ctx: &AnalysisContext<'_>, name: &str) -> Option<Origin> {
+    let name = cooked_identifier(name);
+    let name = name.as_ref();
     if !is_identifier_name(name) {
         return None;
     }
@@ -1368,7 +1412,9 @@ fn written_global(ctx: &AnalysisContext<'_>, name: &str) -> Option<Origin> {
 /// Whether the expression at `span` is a reference to the global `name`: a reference no declaration of the file binds (so a local `document` is not it), spelled `name`.
 fn is_unbound_global(file: &FileFacts, span: Span, name: &str) -> bool {
     file.ast.reference_declaration(span).is_none()
-        && file.source_text(span).is_some_and(|text| text == name)
+        && file
+            .source_text(span)
+            .is_some_and(|text| cooked_identifier(text) == name)
 }
 
 /// Whether the member is `document.defaultView`, the global object, of the unbound global `document`.
@@ -1392,7 +1438,9 @@ enum Key {
 fn member_key_text(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Option<String> {
     let ast = &file.ast;
     if ast.computed_members.binary_search(&member.span).is_err() {
-        return file.source_text(member.property).map(str::to_owned);
+        return file
+            .source_text(member.property)
+            .map(|text| cooked_identifier(text).into_owned());
     }
     ast.literal_computed_members
         .binary_search_by_key(&member.span, |known| known.span)
@@ -2810,7 +2858,7 @@ pub(crate) fn universe_sites<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_identifier_name, package_name};
+    use super::{cooked_identifier, is_identifier_name, package_name};
 
     #[test]
     fn a_module_names_its_package() {
@@ -2824,8 +2872,19 @@ mod tests {
     /// ADR 0974: only an identifier can name a global; the text of any other expression the origin walk ends on is none (an any-name writer matches no function literal).
     #[test]
     fn only_an_identifier_names_a_global() {
-        for name in ["btoa", "JSON", "_x", "$", "XRWebGLBinding", "a1"] {
+        for name in ["btoa", "JSON", "_x", "$", "XRWebGLBinding", "a1", "café"] {
             assert!(is_identifier_name(name), "{name}");
+        }
+        // ADR 0999: an escaped spelling is the name it spells.
+        for (text, name) in [
+            ("\\u0062toa", "btoa"),
+            ("\\u{62}toa", "btoa"),
+            ("bto\\u0061", "btoa"),
+            ("btoa", "btoa"),
+            ("\\u00", "\\u00"),
+            ("\\u{110000}x", "\\u{110000}x"),
+        ] {
+            assert_eq!(cooked_identifier(text), name, "{text}");
         }
         for name in [
             "",

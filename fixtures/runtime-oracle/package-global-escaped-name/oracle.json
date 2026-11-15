@@ -1,0 +1,6 @@
+{
+  "note": "ADR 0999: `\\u0062toa(\"x\")` in a component body calls the `btoa` fz-patch replaced: Chrome throws ACTION_CALLED_IN_OWNED_SCOPE, covered-uncertifiable (SC2002 package-may-call-action).",
+  "packages": [
+    "fz-patch"
+  ]
+}
