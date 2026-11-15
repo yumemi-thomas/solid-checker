@@ -1,4 +1,4 @@
-// The split of the API-fire plan (api-fire-plan.mjs): the two halves api-fire-1of2.test.mjs and api-fire-2of2.test.mjs run have no program in common and together are the plan the one
+// The split of the API-fire plan (api-fire-plan.mjs): the three parts the api-fire-*of3 test files run have no program in common and together are the plan the one
 // test had (`plans()` is that plan, moved unchanged, with each entry's place in it), and the halves are balanced enough that each stays under the 300 s limit it keeps. The cells'
 // shapes the one test also held are here (no runtime).
 import { describe, expect, it } from "vitest";
@@ -7,7 +7,7 @@ import { SPEC } from "./misuse.mjs";
 import { recallShapes } from "./matrix.mjs";
 import { recallLegalShapes } from "./legal.mjs";
 
-describe("the API-fire plan and its two halves", () => {
+describe("the API-fire plan and its three parts", () => {
   const whole = plans();
   const halves = Array.from({ length: PARTS }, (_, part) => partOf(part, whole));
 
@@ -18,12 +18,14 @@ describe("the API-fire plan and its two halves", () => {
     expect(new Set(whole.map((entry) => entry.kind))).toEqual(new Set(["misuse", "legal"]));
   });
 
-  it("splits into two halves that do not overlap", () => {
-    expect(halves.length).toBe(2);
-    const [first, second] = halves.map((half) => new Set(half.map((entry) => entry.index)));
-    expect([...first].filter((index) => second.has(index))).toEqual([]);
+  it("splits into three parts that do not overlap", () => {
+    expect(halves.length).toBe(3);
+    const indexes = halves.map((half) => new Set(half.map((entry) => entry.index)));
     const keys = halves.map((half) => new Set(half.map(keyOf)));
-    expect([...keys[0]].filter((key) => keys[1].has(key))).toEqual([]);
+    for (const [a, b] of [[0, 1], [0, 2], [1, 2]]) {
+      expect([...indexes[a]].filter((index) => indexes[b].has(index))).toEqual([]);
+      expect([...keys[a]].filter((key) => keys[b].has(key))).toEqual([]);
+    }
     // an entry is in the half its key hashes to, and in no other
     for (const [part, half] of halves.entries()) for (const entry of half) expect(halfOf(entry)).toBe(part);
   });
@@ -37,8 +39,8 @@ describe("the API-fire plan and its two halves", () => {
   it("holds both kinds of cell in each half, and neither is much the larger (each keeps the one limit)", () => {
     for (const half of halves) {
       expect(new Set(half.map((entry) => entry.kind))).toEqual(new Set(["misuse", "legal"]));
-      expect(half.length).toBeGreaterThan(whole.length * 0.4);
-      expect(half.length).toBeLessThan(whole.length * 0.6);
+      expect(half.length).toBeGreaterThan(whole.length * 0.25);
+      expect(half.length).toBeLessThan(whole.length * 0.42);
     }
   });
 });

@@ -705,7 +705,9 @@ async function runCase(id, slot) {
   `${id}: dependencySources must be a non-empty list of distinct names, each listed in packages`);
   // `mount` lists the exported components to render by name (ADR 0501): the differential fuzzer's cases.
   assert(spec.mount === undefined || (Array.isArray(spec.mount) && spec.mount.length > 0 && spec.mount.every((name) => /^[A-Z][A-Za-z0-9_]*$/.test(name))), `${id}: mount must be a non-empty list of component names`);
-  writeFileSync(join(dir, "main.tsx"), mainSource(observations, spec.mount));
+  // `main` is the entry's own text, for a case that asks for an entry other than the namespace loop's (the fuzzer's named entry, scripts/fuzz/checker.mjs `namedEntry`, ADR 0990).
+  assert(spec.main === undefined || typeof spec.main === "string", `${id}: main must be the entry's text`);
+  writeFileSync(join(dir, "main.tsx"), spec.main ?? mainSource(observations, spec.mount));
   assert(spec.haltMarker === undefined || typeof spec.haltMarker === "boolean", `${id}: haltMarker must be a boolean`);
   if (spec.haltMarker) writeFileSync(join(dir, "sc-halt.ts"), haltModule);
   // `external` names case files the page loads by a script of its own after the entry's and the checker's program does not hold: an importer outside the program, the

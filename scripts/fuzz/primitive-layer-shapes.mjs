@@ -30,12 +30,16 @@ export const PL_BASE_LAYERS = ["untrack", "latest", "ispending", "owner", "owner
  * ADR 0960: the callback a layer hands the site to, in the forms the slot climbs ended at. `param`: a callback that takes an argument it never uses
  * (`untrack((p0?: number) => …)`; `createRoot`'s own parameter is its dispose); `async`: an async callback whose site runs before its first await
  * (`untrack(async () => { … })`). Each is a layer value of its own, `pl-<layer>-<form>-<host>`, crossed with every host.
+ * ADR 0990 (batch 11, slices 5 and 7): `named` and `named-async` hand the callback BY NAME, `const cb = () => { <site> }` (async for `named-async`) declared in
+ * the host's callback just before the layer's statement (a component body for the `body` host), `untrack(cb)`: the slot is reached through a binding, the reader
+ * the literal callback never went through.
  */
-export const PL_CALLBACK_FORMS = ["param", "async"];
+export const PL_CALLBACK_FORMS = ["param", "async", "named", "named-async"];
 export const PL_LAYERS = [...PL_BASE_LAYERS, ...PL_BASE_LAYERS.flatMap((layer) => PL_CALLBACK_FORMS.map((form) => `${layer}-${form}`))];
 /** `{ base, form }` of a layer name: `owner-null-async` is the `owner-null` layer in the `async` callback form. */
 export const plLayerParts = (layer) => {
-  const form = PL_CALLBACK_FORMS.find((one) => layer.endsWith(`-${one}`));
+  // The longest form first: `untrack-named-async` is the `named-async` form, not `async` on a layer `untrack-named`.
+  const form = [...PL_CALLBACK_FORMS].sort((a, b) => b.length - a.length).find((one) => layer.endsWith(`-${one}`));
   return form ? { base: layer.slice(0, -(form.length + 1)), form } : { base: layer, form: null };
 };
 export const PL_HOSTS = ["tracked", "settled", "effect-apply", "memo-async", "action", "body"];
@@ -59,18 +63,22 @@ export const plParts = (context) => { const match = NAME.exec(context); return m
  * `{ pre, inner }` of a layer around `stmts`: `inner` is the layer's statement, `pre` what the host's callback holds first (the `owner` layer's
  * captured owner: `getOwner()` in a callback is that callback's own owner, so it is read before an `await` the host may hold).
  */
-function layered(layer, stmts) {
+function layered(layer, stmts, kit) {
   const { base, form } = plLayerParts(layer);
   // ADR 0960: the callback the site is the body of. `createRoot`'s callback already takes its dispose, so its `param` form names it.
-  const callback = form === "param" ? fn(stmts, { params: [base === "root" ? bareParam("() => void", false) : bareParam()] }) : form === "async" ? fn(stmts, { async: true }) : fn(stmts);
+  // ADR 0990: a `named` callback is declared first (in `pre`, so before an `await` the host holds) and the layer is handed its name.
+  const named = form === "named" || form === "named-async" ? kit.name("cb") : null;
+  const literal = form === "param" ? fn(stmts, { params: [base === "root" ? bareParam("() => void", false) : bareParam()] }) : form === "async" || form === "named-async" ? fn(stmts, { async: true }) : fn(stmts);
+  const callback = named ? ref(named) : literal;
+  const declared = named ? [decl(named, literal)] : [];
   switch (base) {
-    case "untrack": return { pre: [], inner: [expr(prim("untrack", callback))] };
-    case "latest": return { pre: [], inner: [expr(prim("latest", callback))] };
-    case "ispending": return { pre: [], inner: [expr(prim("isPending", callback))] };
-    case "owner": return { pre: [decl("owner", getOwner())], inner: [expr(prim("owner", callback, { ownerArg: "owner" }))] };
-    case "owner-null": return { pre: [], inner: [expr(prim("owner", callback, { ownerArg: "null" }))] };
-    case "root": return { pre: [], inner: [expr(prim("root", callback))] };
-    case "flush": return { pre: [], inner: [expr(flush(callback))] };
+    case "untrack": return { pre: declared, inner: [expr(prim("untrack", callback))] };
+    case "latest": return { pre: declared, inner: [expr(prim("latest", callback))] };
+    case "ispending": return { pre: declared, inner: [expr(prim("isPending", callback))] };
+    case "owner": return { pre: [...declared, decl("owner", getOwner())], inner: [expr(prim("owner", callback, { ownerArg: "owner" }))] };
+    case "owner-null": return { pre: declared, inner: [expr(prim("owner", callback, { ownerArg: "null" }))] };
+    case "root": return { pre: declared, inner: [expr(prim("root", callback))] };
+    case "flush": return { pre: declared, inner: [expr(flush(callback))] };
     default: throw new Error(`no primitive layer ${layer}`);
   }
 }
@@ -79,7 +87,7 @@ function layered(layer, stmts) {
 export function plContext(context, stmts, kit) {
   const parts = plParts(context);
   if (!parts) return undefined;
-  const { pre, inner } = layered(parts.layer, stmts);
+  const { pre, inner } = layered(parts.layer, stmts, kit);
   const held = [...pre, ...inner];
   switch (parts.host) {
     case "tracked": return { body: [expr(prim("tracked", fn(held)))], view: [] };
@@ -123,136 +131,136 @@ export const PL_HOSTS_OF = { UNTRACKED_READ_AFTER_AWAIT: ["memo-async"] };
 export const PL_MEASURED = {
   CLEANUP_IN_FORBIDDEN_SCOPE: {
     misuse: {
-      "tracked": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "flush-param", "flush-async"],
-      "settled": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "flush-param", "flush-async"],
+      "tracked": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "settled": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
     legal: {
-      "memo-async": ["owner", "root", "owner-param", "owner-async", "root-param", "root-async"],
-      "action": ["root", "root-param", "root-async"],
-      "body": ["untrack", "latest", "ispending", "owner", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "memo-async": ["owner", "root", "owner-param", "owner-async", "owner-named", "owner-named-async", "root-param", "root-async", "root-named", "root-named-async"],
+      "action": ["root", "root-param", "root-async", "root-named", "root-named-async"],
+      "body": ["untrack", "latest", "ispending", "owner", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
   },
   PRIMITIVE_IN_FORBIDDEN_SCOPE: {
     misuse: {
-      "tracked": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "flush-param", "flush-async"],
-      "settled": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "flush-param", "flush-async"],
+      "tracked": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "settled": ["untrack", "latest", "ispending", "owner", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
     legal: {
-      "tracked": ["owner-null", "owner-null-param", "owner-null-async"],
-      "settled": ["owner-null", "owner-null-param", "owner-null-async"],
-      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
-      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async"],
-      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "tracked": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "settled": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async"],
+      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
     without: {
-      "tracked": {"latest":["resolve","until"],"ispending":["resolve","until"],"owner-null":["effect"],"flush":["resolve","until"],"latest-param":["resolve","until"],"latest-async":["resolve","until"],"ispending-param":["resolve","until"],"ispending-async":["resolve","until"],"owner-null-param":["effect"],"owner-null-async":["effect"],"flush-param":["resolve","until"],"flush-async":["resolve","until"]},
-      "settled": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"]},
-      "memo-async": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner-null":["effect"],"flush":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"flush-param":["effect"],"flush-async":["effect"]},
-      "action": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner":["effect"],"owner-null":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-param":["effect"],"owner-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"]},
-      "body": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"]},
+      "tracked": {"latest":["resolve","until"],"ispending":["resolve","until"],"owner-null":["effect"],"flush":["resolve","until"],"latest-param":["resolve","until"],"latest-async":["resolve","until"],"ispending-param":["resolve","until"],"ispending-async":["resolve","until"],"owner-null-param":["effect"],"owner-null-async":["effect"],"flush-param":["resolve","until"],"flush-async":["resolve","until"],"latest-named":["resolve","until"],"latest-named-async":["resolve","until"],"ispending-named":["resolve","until"],"ispending-named-async":["resolve","until"],"owner-null-named":["effect"],"owner-null-named-async":["effect"],"flush-named":["resolve","until"],"flush-named-async":["resolve","until"]},
+      "settled": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"]},
+      "memo-async": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner-null":["effect"],"flush":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"flush-param":["effect"],"flush-async":["effect"],"untrack-named":["effect"],"untrack-named-async":["effect"],"latest-named":["effect"],"latest-named-async":["effect"],"ispending-named":["effect"],"ispending-named-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"],"flush-named":["effect"],"flush-named-async":["effect"]},
+      "action": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner":["effect"],"owner-null":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-param":["effect"],"owner-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"untrack-named":["effect"],"untrack-named-async":["effect"],"latest-named":["effect"],"latest-named-async":["effect"],"ispending-named":["effect"],"ispending-named-async":["effect"],"owner-named":["effect"],"owner-named-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"]},
+      "body": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"]},
     },
   },
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: {
     misuse: {
-      "tracked": ["untrack", "latest", "owner", "owner-null", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "flush-async"],
-      "settled": ["untrack", "latest", "owner", "owner-null", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "flush-async"],
+      "tracked": ["untrack", "latest", "owner", "owner-null", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-async", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "flush-async", "flush-named-async"],
+      "settled": ["untrack", "latest", "owner", "owner-null", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-async", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "flush-async", "flush-named-async"],
     },
     legal: {
-      "tracked": ["ispending", "ispending-param"],
-      "settled": ["ispending", "ispending-param"],
-      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
-      "action": ["ispending", "ispending-param"],
-      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "tracked": ["ispending", "ispending-param", "ispending-named"],
+      "settled": ["ispending", "ispending-param", "ispending-named"],
+      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["ispending", "ispending-param", "ispending-named"],
+      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
   },
   PRIMITIVE_IN_EFFECT_CALLBACK: {
     misuse: {
-      "effect-apply": ["untrack", "latest", "ispending", "owner", "owner-null", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "flush-param", "flush-async"],
+      "effect-apply": ["untrack", "latest", "ispending", "owner", "owner-null", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
     legal: {
-      "tracked": ["owner-null", "owner-null-param", "owner-null-async"],
-      "settled": ["owner-null", "owner-null-param", "owner-null-async"],
-      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
-      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async"],
-      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "tracked": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "settled": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async"],
+      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
     without: {
-      "tracked": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"]},
-      "settled": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"]},
-      "memo-async": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner-null":["effect"],"flush":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"flush-param":["effect"],"flush-async":["effect"]},
-      "action": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner":["effect"],"owner-null":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-param":["effect"],"owner-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"]},
-      "body": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"]},
+      "tracked": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"]},
+      "settled": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"]},
+      "memo-async": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner-null":["effect"],"flush":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"flush-param":["effect"],"flush-async":["effect"],"untrack-named":["effect"],"untrack-named-async":["effect"],"latest-named":["effect"],"latest-named-async":["effect"],"ispending-named":["effect"],"ispending-named-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"],"flush-named":["effect"],"flush-named-async":["effect"]},
+      "action": {"untrack":["effect"],"latest":["effect"],"ispending":["effect"],"owner":["effect"],"owner-null":["effect"],"untrack-param":["effect"],"untrack-async":["effect"],"latest-param":["effect"],"latest-async":["effect"],"ispending-param":["effect"],"ispending-async":["effect"],"owner-param":["effect"],"owner-async":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"untrack-named":["effect"],"untrack-named-async":["effect"],"latest-named":["effect"],"latest-named-async":["effect"],"ispending-named":["effect"],"ispending-named-async":["effect"],"owner-named":["effect"],"owner-named-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"]},
+      "body": {"owner-null":["effect"],"owner-null-param":["effect"],"owner-null-async":["effect"],"owner-null-named":["effect"],"owner-null-named-async":["effect"]},
     },
   },
   RESOLVE_IN_REACTIVE_SCOPE: {
     misuse: {
-      "tracked": ["latest", "latest-param", "latest-async", "ispending-async", "flush-async"],
+      "tracked": ["latest", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-async", "ispending-named-async", "flush-async", "flush-named-async"],
     },
     legal: {
-      "tracked": ["ispending", "owner-null", "ispending-param", "owner-null-param", "owner-null-async"],
-      "settled": ["owner-null", "owner-null-param", "owner-null-async"],
-      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
-      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async"],
-      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "tracked": ["ispending", "owner-null", "ispending-param", "ispending-named", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "settled": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async"],
+      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
   },
   UNTIL_IN_REACTIVE_SCOPE: {
     misuse: {
-      "tracked": ["latest", "latest-param", "latest-async", "ispending-async", "flush-async"],
+      "tracked": ["latest", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-async", "ispending-named-async", "flush-async", "flush-named-async"],
     },
     legal: {
-      "tracked": ["ispending", "owner-null", "ispending-param", "owner-null-param", "owner-null-async"],
-      "settled": ["owner-null", "owner-null-param", "owner-null-async"],
-      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
-      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async"],
-      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "tracked": ["ispending", "owner-null", "ispending-param", "ispending-named", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "settled": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async"],
+      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
   },
   FLUSH_IN_ACTION: {
     misuse: {
-      "action": ["untrack", "latest", "owner", "owner-null", "root", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async"],
+      "action": ["untrack", "latest", "owner", "owner-null", "root", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-async", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async"],
     },
     legal: {
-      "tracked": ["ispending", "ispending-param"],
-      "settled": ["ispending", "ispending-param"],
-      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
-      "action": ["ispending", "ispending-param"],
-      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "tracked": ["ispending", "ispending-param", "ispending-named"],
+      "settled": ["ispending", "ispending-param", "ispending-named"],
+      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["ispending", "ispending-param", "ispending-named"],
+      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
   },
   FLUSH_IN_EFFECT_CALLBACK: {
     misuse: {
-      "effect-apply": ["untrack", "latest", "ispending", "owner", "owner-null", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "flush-param", "flush-async"],
+      "effect-apply": ["untrack", "latest", "ispending", "owner", "owner-null", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
     legal: {
-      "tracked": ["ispending", "ispending-param"],
-      "settled": ["ispending", "ispending-param"],
-      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
-      "action": ["ispending", "ispending-param"],
-      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "tracked": ["ispending", "ispending-param", "ispending-named"],
+      "settled": ["ispending", "ispending-param", "ispending-named"],
+      "memo-async": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["ispending", "ispending-param", "ispending-named"],
+      "body": ["untrack", "latest", "ispending", "owner", "owner-null", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
   },
   UNTRACKED_READ_AFTER_AWAIT: {
     misuse: {
-      "memo-async": ["latest", "ispending", "owner-null", "flush", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-null-param", "owner-null-async", "flush-param", "flush-async"],
+      "memo-async": ["latest", "ispending", "owner-null", "flush", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
     legal: {
-      "memo-async": ["untrack", "owner", "root", "untrack-param", "untrack-async", "owner-param", "owner-async", "root-param", "root-async"],
+      "memo-async": ["untrack", "owner", "root", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "root-param", "root-async", "root-named", "root-named-async"],
     },
   },
   NO_OWNER_CLEANUP: {
     misuse: {
-      "tracked": ["owner-null", "owner-null-param", "owner-null-async"],
-      "settled": ["owner-null", "owner-null-param", "owner-null-async"],
-      "effect-apply": ["untrack", "latest", "ispending", "owner", "owner-null", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async", "flush-param", "flush-async"],
-      "memo-async": ["untrack", "latest", "ispending", "owner-null", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-null-param", "owner-null-async", "flush-param", "flush-async"],
-      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "owner-null-param", "owner-null-async"],
-      "body": ["owner-null", "owner-null-param", "owner-null-async"],
+      "tracked": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "settled": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "effect-apply": ["untrack", "latest", "ispending", "owner", "owner-null", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "memo-async": ["untrack", "latest", "ispending", "owner-null", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
+      "action": ["untrack", "latest", "ispending", "owner", "owner-null", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
+      "body": ["owner-null", "owner-null-param", "owner-null-async", "owner-null-named", "owner-null-named-async"],
     },
     legal: {
-      "memo-async": ["owner", "root", "owner-param", "owner-async", "root-param", "root-async"],
-      "action": ["root", "root-param", "root-async"],
-      "body": ["untrack", "latest", "ispending", "owner", "root", "flush", "untrack-param", "untrack-async", "latest-param", "latest-async", "ispending-param", "ispending-async", "owner-param", "owner-async", "root-param", "root-async", "flush-param", "flush-async"],
+      "memo-async": ["owner", "root", "owner-param", "owner-async", "owner-named", "owner-named-async", "root-param", "root-async", "root-named", "root-named-async"],
+      "action": ["root", "root-param", "root-async", "root-named", "root-named-async"],
+      "body": ["untrack", "latest", "ispending", "owner", "root", "flush", "untrack-param", "untrack-async", "untrack-named", "untrack-named-async", "latest-param", "latest-async", "latest-named", "latest-named-async", "ispending-param", "ispending-async", "ispending-named", "ispending-named-async", "owner-param", "owner-async", "owner-named", "owner-named-async", "root-param", "root-async", "root-named", "root-named-async", "flush-param", "flush-async", "flush-named", "flush-named-async"],
     },
   },
 };

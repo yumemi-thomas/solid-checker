@@ -50,11 +50,17 @@ describe("the primitive-layer contexts", () => {
   });
   // ADR 0960: the slot climbs ended at a callback with a parameter or an async one; each layer is generated in both forms, the site the callback's body.
   it("hand the site to a callback that takes an unused parameter, or is async (the forms a slot climb ended at)", () => {
-    expect(PL_CALLBACK_FORMS).toEqual(["param", "async"]);
+    expect(PL_CALLBACK_FORMS).toEqual(["param", "async", "named", "named-async"]);
     expect(PL_LAYERS).toEqual([...PL_BASE_LAYERS, ...PL_BASE_LAYERS.flatMap((layer) => PL_CALLBACK_FORMS.map((form) => `${layer}-${form}`))]);
     expect(plLayerParts("owner-null-async")).toEqual({ base: "owner-null", form: "async" });
     expect(plLayerParts("untrack-param")).toEqual({ base: "untrack", form: "param" });
     expect(plLayerParts("owner")).toEqual({ base: "owner", form: null });
+    // ADR 0990: the longest form wins (`named-async` is not `async` on a layer called `untrack-named`).
+    expect(plLayerParts("untrack-named")).toEqual({ base: "untrack", form: "named" });
+    expect(plLayerParts("untrack-named-async")).toEqual({ base: "untrack", form: "named-async" });
+    expect(plLayerParts("owner-null-named-async")).toEqual({ base: "owner-null", form: "named-async" });
+    expect(plParts("pl-owner-null-named-async-memo-async")).toEqual({ layer: "owner-null-named-async", host: "memo-async" });
+    expect(plParts("pl-flush-named-effect-apply")).toEqual({ layer: "flush-named", host: "effect-apply" });
     expect(plParts("pl-owner-null-param-tracked")).toEqual({ layer: "owner-null-param", host: "tracked" });
     expect(plParts("pl-untrack-async-memo-async")).toEqual({ layer: "untrack-async", host: "memo-async" });
     const text = (code, context) => printProgram(program(code, context)).text;
@@ -65,6 +71,28 @@ describe("the primitive-layer contexts", () => {
     expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-root-param-body")).toContain("createRoot((p0: () => void) =>");
     expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-owner-async-tracked")).toMatch(/runWithOwner\(owner, async \(\) =>/);
     expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-flush-param-body")).toMatch(/flush\(\(p0\?: number\) =>/);
+  });
+  // ADR 0990 (slices 5 and 7): the callback handed BY NAME, declared in the host's callback just before the layer's statement.
+  it("hand the site to a callback the host's callback named, async or not: `const cb = () => { site }; untrack(cb)`", () => {
+    const text = (code, context) => printProgram(program(code, context)).text;
+    expect(text("FLUSH_IN_ACTION", "pl-untrack-named-action")).toMatch(/const cb1 = \(\) => \{\n\s+flush\(\);\n\s+\};\n\s+untrack\(cb1\);/);
+    expect(text("FLUSH_IN_ACTION", "pl-untrack-named-async-action")).toMatch(/const cb1 = async \(\) => \{\n\s+flush\(\);\n\s+\};\n\s+untrack\(cb1\);/);
+    expect(text("FLUSH_IN_ACTION", "pl-flush-named-action")).toMatch(/const cb1 = \(\) => \{\n\s+flush\(\);\n\s+\};\n\s+flush\(cb1\);/);
+    expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-root-named-body")).toMatch(/createRoot\(cb1\)/);
+    expect(text("CLEANUP_IN_FORBIDDEN_SCOPE", "pl-ispending-named-async-tracked")).toMatch(/isPending\(cb1\)/);
+    expect(text("PRIMITIVE_IN_FORBIDDEN_SCOPE", "pl-owner-null-named-settled")).toMatch(/runWithOwner\(null, cb1\)/);
+    // the owner layer captures the owner before the await of the async host, and the named callback is declared before it too
+    const owner = text("NO_OWNER_CLEANUP", "pl-owner-named-async-memo-async");
+    expect(owner.indexOf("const cb1")).toBeGreaterThan(-1);
+    expect(owner.indexOf("const cb1")).toBeLessThan(owner.indexOf("await"));
+    expect(owner.indexOf("await")).toBeLessThan(owner.indexOf("runWithOwner(owner, cb1)"));
+    // one marked site, the callback's body, never the layer's statement
+    for (const layer of PL_LAYERS.filter((one) => plLayerParts(one).form?.startsWith("named"))) for (const where of PL_HOSTS) {
+      const printed = printProgram(program("CLEANUP_IN_FORBIDDEN_SCOPE", `pl-${layer}-${where}`));
+      expect(printed.sites, `${layer}/${where}`).toHaveLength(1);
+      expect(printed.text, `${layer}/${where}`).toContain("const cb1 = ");
+      expect(printed.text, `${layer}/${where}`).toMatch(/\(cb1\)|, cb1\)/);
+    }
   });
   it("capture the owner before the await of an async host, so `runWithOwner(owner)` restores it", () => {
     const { text } = printProgram(program("NO_OWNER_CLEANUP", "pl-owner-memo-async"));
