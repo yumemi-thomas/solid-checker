@@ -544,7 +544,7 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
     for (const binding of gridBindingsOf(code, variant)) for (const layer of layers) shapes.push({ variant, binding, layer });
   }
   // Variants only the recall grids cross (misuse.mjs `recallVariants`), on the base bindings and layers.
-  for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context)).filter(takes)) for (const binding of bindingsOf(code, variant)) for (const layer of LAYERS) shapes.push({ variant, binding, layer });
+  for (const variant of recallVariantsOf(code, { legal }).filter(variantFits(code, context)).filter(takes)) for (const binding of bindingsOf(code, variant)) for (const layer of SPEC[code].variantLayers?.[variant] ?? LAYERS) shapes.push({ variant, binding, layer });
   const local = base.filter((shape) => !shape.mount && !shape.source && takes(shape.variant));
   if (CALLBACK_CONTEXTS.includes(context)) for (const callback of CALLBACK_FORMS.filter((form) => !lean || !LEAN_DEMOTED.callbacks.includes(form))) for (const shape of local) shapes.push({ ...shape, callback });
   // `dynamic()` renders a component with an unlabelled `untrack` (solid-js rc.17 `dynamicCore`, `solid.dev.js:1444-1527`), so a body's

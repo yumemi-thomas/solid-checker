@@ -22134,5 +22134,17 @@
   "fixed": "ADR 0980 (`package_hand_off/callers.rs`): `exact_callers` lists every reference of the binding in every file or has no list (a use that is no call, a re-export, a missing symbol, reference list or file, a method, a reassigned binding, an export a program may enter, a namespace that hands the function out by name give none); the store is handed when there is none. `foreign_reference_hand_offs` itself is unchanged (fifteen other rules read it).",
   "outside": "the generator prints one file per program (a package's files beside it, no second module of the project), so `putimport`, `putreexport` and `putstar` are not routes; and with the grids' entry (`main.tsx` loops over `App`'s exports) or the pattern lane's the flush is already uncertifiable on main (the namespace escape of the entry, or the lane's own `main.tsx`: `pkghand/put-import-step`, `put-reexport-step`, `put-star-step`, `put-relay-step` hold the programs and are uncertifiable on main and on this head). The false clean shows only in an entry-less project, which is a fixture.",
   "rediscovered": "fixture `flush-holder-put-crossfile` (closed boundary; main certified N1, N3, N4, N5, N6 and N8 with no row at the flush; this head gives each three uncertifiable rows, and its twins `twin` and `twin2`, whose step never reads the member, stay silent); `flush-holder-put-crossfile-open` (open boundary: unchanged, uncertifiable on both)."
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT false clean (pattern lane api/v49-await-accessor): the accessor itself came out of an await, `const f = await Promise.resolve(c); await 0; return f();` in an async memo, and the call past the second await had no row; Chrome rc.21 reports it. The lane listed it in open-defects.json from 516acd229 (ADR 0815's position rule) until this entry.",
+  "found": "the pattern lane (scripts/fuzz/patterns/api/v49-await-accessor, audit program); seen passing by Research C on main 2026-11-15, confirmed by make fuzz-patterns on 23ad6b7f4 plus ADR 0986's tree (FIXED api/v49-await-accessor)",
+  "fixed": "between 516acd229 (the lane reports false-clean) and 9d875bff0 (the lane reports fine); not bisected to a commit",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-memo-async-use-await-forwarded-direct-none",
+   "mx-untracked-read-after-await-effect-async-use-await-forwarded-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall,lg-recall -- --contexts memo-async,effect-async (the arguments of make fuzz-focus CODES=UNTRACKED_READ_AFTER_AWAIT FUZZ_GRIDS=mx-recall,lg-recall, narrowed to the two contexts), 1,822 programs, on the new AWAIT_USES variants `use-await-forwarded` (mx: the call past the second await) and `use-await-forwarded-unread` (the same forward, never called; legal in lg), layer none only (`layers`: the variant's `await` cannot sit in a closure, helper or iife layer): the 516acd229 release build exits 1 with 26 false-clean programs, both ids of this entry among them (the lane program api/v49-await-accessor is a false clean there too); the head of this branch (23ad6b7f4 plus ADR 0986) exits 0, `nothing needs a look`: both ids recall-gap (uncertifiable, never silent), the twins not-fired in mx and uncertifiable in lg, oracle 22 compared, 0 behaviour differences."
  }
 ]
