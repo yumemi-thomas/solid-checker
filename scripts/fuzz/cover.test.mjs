@@ -86,13 +86,15 @@ describe("the two jobs of the smoke (ADR 1001)", () => {
     // each leg computes the cover over every grid and keeps its own: the same lists, so the same hash
     const rest = sample({ grids, codes }), census = sample({ grids, codes });
     const legs = { rest: ["mx-base", "lg-base"], census: ["mx-census"] };
-    const ran = (drawn, leg) => Object.fromEntries(legs[leg].map((grid) => [grid, drawn.byGrid[grid]]));
-    expect(coverHash({ ...ran(rest, "rest"), ...ran(census, "census") })).toBe(coverHash(Object.fromEntries(grids.map((grid) => [grid, whole.byGrid[grid]]))));
+    const named = (list) => ({ ids: list });
+    const ran = (drawn, leg) => Object.fromEntries(legs[leg].map((grid) => [grid, named(drawn.byGrid[grid])]));
+    expect(whole.byGrid["mx-base"].length).toBeGreaterThan(0);
+    expect(coverHash({ ...ran(rest, "rest"), ...ran(census, "census") })).toBe(coverHash(Object.fromEntries(grids.map((grid) => [grid, named(whole.byGrid[grid])]))));
     const union = [...legs.rest.flatMap((grid) => whole.byGrid[grid]), ...whole.byGrid["mx-census"]];
     expect(new Set(union).size).toBe(union.length);
     expect(union.length).toBe(whole.programs);
     // another list is another hash
-    expect(coverHash({ "mx-base": ["a"], "lg-base": ["b"] })).not.toBe(coverHash({ "mx-base": ["b"], "lg-base": ["a"] }));
+    expect(coverHash({ "mx-base": named(["a"]), "lg-base": named(["b"]) })).not.toBe(coverHash({ "mx-base": named(["b"]), "lg-base": named(["a"]) }));
   });
 });
 
