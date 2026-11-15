@@ -599,8 +599,8 @@ const NO_DEMAND_DETAIL: &str =
 /// ADR 0981: decides, for a package that declares no Solid package, whether its entry closure imports one anyway (a phantom
 /// dependency: `import { createMemo } from "solid-js"` in a package whose manifest names no peer).
 ///
-/// A Solid package here is decided by the module an import resolves to ([`runtime_package_root`], then the manifest name of
-/// that directory), never by how the specifier is spelled: the dialect's runtime, a package of an ecosystem scope, or one whose
+/// A Solid package here is read off the module an import resolves to ([`runtime_package_root`], then the manifest name of
+/// that directory), never off how the specifier is spelled: the dialect's runtime, a package of an ecosystem scope, or one whose
 /// manifest declares either ([`prepare_all`]'s own test). A package the entry closure loads that is none of these is read the
 /// same way, so a wrapper that only re-exports a phantom package is found. The reads are those of [`walk`]: the same entry
 /// ([`select_entry`]), the same relative closure inside the package, and one shared limit of [`MAX_CLOSURE_FILES`] files for

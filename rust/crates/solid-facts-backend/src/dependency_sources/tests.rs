@@ -879,10 +879,13 @@ fn an_unmapped_root_refuses_the_generated_program() {
         && refusal.kind == UnanalyzableReason::ProgramPreparationUnavailable));
 }
 
+/// An installed package of a test tree: its directory name, its `package.json`, and its files.
+type Package<'a> = (&'a str, &'a str, &'a [(&'a str, &'a str)]);
+
 /// ADR 0981: what `prepare_all` selects from a tree of installed packages, none of which declares a Solid package but the one that says so.
 fn selection_in(
     name: &str,
-    packages: &[(&str, &str, &[(&str, &str)])],
+    packages: &[Package<'_>],
     requests: &[&str],
 ) -> (Vec<String>, super::SelectionNotes) {
     let directory = std::env::temp_dir().join(format!(
@@ -928,7 +931,7 @@ fn selection_in(
     (roots, notes)
 }
 
-const SOLID: (&str, &str, &[(&str, &str)]) = (
+const SOLID: Package<'static> = (
     "solid-js",
     r#"{"name":"solid-js","version":"2.0.0-rc.21"}"#,
     &[],
