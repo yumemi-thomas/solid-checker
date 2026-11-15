@@ -156,3 +156,7 @@ edge places is uncertifiable (blocker `mount-unresolved`), never uncovered: the 
 of the props (a function-valued `children`, a method, `on`), an array element, a class element,
 a tag function, a closure handed to a call whose target the analysis does not resolve
 (`Loading.call(null, props)`, `[Loading][0](props)`, a wrapper's `props`).
+
+## A render effect's own compute (ADR 0989)
+
+A `createRenderEffect` whose compute is not proven synchronous is a site of this rule, though nothing reads a source there: a thenable it returns makes the effect pending, and a render effect pending with no `Loading` above it is what the runtime reports (`notifyEffectStatus`, `EFFECT_RENDER` only: `createEffect` reports nothing). The site is ended by a covering `Loading`, a discarded region or a reviewed fresh stack; otherwise it is an uncertifiable `async-read-unaccounted` row, never a violation (whether the call runs inside the mount's window is not proven).
