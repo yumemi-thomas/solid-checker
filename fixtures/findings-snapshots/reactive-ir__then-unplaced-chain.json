@@ -93,6 +93,17 @@
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/then-unplaced-chain/App.tsx",
+      "start": 1988,
+      "end": 1991,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/then-unplaced-chain/App.tsx",

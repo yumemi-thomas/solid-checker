@@ -1647,3 +1647,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-read-first-writes/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-unread-code/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-unread-code/node_modules/**
+!fixtures/reactive-ir/after-await-handler-forms/node_modules/
+!fixtures/reactive-ir/after-await-handler-forms/node_modules/**
