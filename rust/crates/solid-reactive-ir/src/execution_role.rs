@@ -693,7 +693,11 @@ pub(crate) fn dynamic_component_entry(
     let mut climbed = false;
     for _ in 0..32 {
         if let Some((climb, generator)) = in_place_run_site(file, span, lookup) {
-            if generator || climb.suspended.is_some() || climb.in_list.is_some() || climb.among_others {
+            if generator
+                || climb.suspended.is_some()
+                || climb.in_list.is_some()
+                || climb.among_others
+            {
                 return None;
             }
             span = climb.at;

@@ -3647,25 +3647,6 @@ pub(crate) enum InPlaceStop {
     Bound,
 }
 
-impl InPlaceStop {
-    /// Whether a walk asking "is this code my own site?" owes an obligation at this stop: the stops that prove nothing about where the
-    /// code runs (the bound; a generator body that may be stepped), against the stops that are the code's own position, the compiler's
-    /// or the dialect's, or a layer another walk owns. Matched with no wildcard: a new stop is decided here.
-    #[deny(clippy::wildcard_enum_match_arm)]
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) const fn owes_obligation(self) -> bool {
-        match self {
-            Self::Bound | Self::Generator => true,
-            Self::NoFunction
-            | Self::Within
-            | Self::FreshStack
-            | Self::Elsewhere
-            | Self::Withheld
-            | Self::JsxPlaced => false,
-        }
-    }
-}
-
 /// A site on the climb follows an await of its own layer: on every path, or possibly.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Suspension {

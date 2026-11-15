@@ -273,7 +273,8 @@ pub(crate) fn climb_through_slots(
     // question of the next slot and, where it would be crossed too, ends at the bound (ADR 0988).
     let mut stop = ClimbStop::Bound;
     for step in 0..=16 {
-        let next = super::write_roles::climb_layers(file, merged.at, lookup, false, None, &mut Vec::new());
+        let next =
+            super::write_roles::climb_layers(file, merged.at, lookup, false, None, &mut Vec::new());
         merged.merge_flags(&next);
         merged.at = next.at;
         merged.stop = next.stop;

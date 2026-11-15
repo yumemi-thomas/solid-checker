@@ -11,8 +11,8 @@ use typefacts::Location;
 
 use crate::effect_api::{ProofStatus, classify_effect_call};
 use crate::execution_role::{
-    ClimbStop, InPlaceStop, RootBodyGuard, SlotClimb, allowed_callback_spans, climb_in_place_layers,
-    semantic_write_execution_role,
+    ClimbStop, InPlaceStop, RootBodyGuard, SlotClimb, allowed_callback_spans,
+    climb_in_place_layers, semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -2084,7 +2084,9 @@ fn resolve_scope_answer(
         ExecutionRole::DiscardedRendering => SiteSilence::ResolveRoleDiscardedRendering,
         // Every other role is no proof that no observer is active (a tracked role the walk did not place, a role that reports,
         // `Unreported`, `Unknown`): an obligation.
-        _ => return ScopeAnswer::Unplaced,
+        ExecutionRole::Unknown | ExecutionRole::Unreported | ExecutionRole::TrackedJsx => {
+            return ScopeAnswer::Unplaced;
+        }
     };
     // ADR 0614: a deferred role inside tracked JSX is no proof the observer is
     // clear: an IIFE in a flow child's expression runs under the render effect.
