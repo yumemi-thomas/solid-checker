@@ -1188,6 +1188,57 @@ fn the_slot_run_of_the_primitives_that_take_a_callback_is_pinned() {
 /// ADR 0944: `slot_run` says what the questions it is derived from say, for every primitive, slot and call
 /// shape in every vocabulary, and an inline slot is never left unclassified by an owner the vocabulary has no
 /// word for: that would be a slot a walk silently refuses.
+/// ADR 0997: the observer of a deferred slot is stated only for a slot that is deferred, and every deferred slot of the pinned
+/// release is either stated or one of the four the dialect leaves open (`from`, `lazy`, `lazyModule`, `clientOnly`): a new deferred
+/// slot has to be read before a proof can stand on it.
+#[test]
+fn the_observer_of_a_deferred_slot_is_stated_or_named_open() {
+    let dialect = &Solid2::RC21 as &'static dyn Dialect;
+    let open = [
+        Primitive::From,
+        Primitive::Lazy,
+        Primitive::LazyModule,
+        Primitive::ClientOnly,
+    ];
+    let mut stated = 0;
+    for primitive in profiled_primitives(dialect) {
+        for argument in 0..3 {
+            let deferred = (argument + 1..=4)
+                .any(|count| dialect.slot_run(primitive, argument, count) == SlotRun::Deferred);
+            let observer = dialect.deferred_slot_observer(primitive, argument);
+            let at = format!("{primitive:?} argument {argument}");
+            if deferred {
+                assert_eq!(
+                    observer.is_none(),
+                    open.contains(&primitive),
+                    "{at}: a deferred slot is stated, or one the dialect names open"
+                );
+                stated += usize::from(observer.is_some());
+            } else {
+                assert_eq!(observer, None, "{at}: no deferred slot");
+            }
+        }
+    }
+    assert!(stated >= 9, "{stated} deferred slots stated");
+    // `resolve` and `until` run their callback as the compute of a `watch` node: an observer is active.
+    assert_eq!(
+        dialect.deferred_slot_observer(Primitive::Resolve, 0),
+        Some(true)
+    );
+    assert_eq!(
+        dialect.deferred_slot_observer(Primitive::Until, 0),
+        Some(true)
+    );
+    assert_eq!(
+        dialect.deferred_slot_observer(Primitive::CreateEffect, 1),
+        Some(false)
+    );
+    assert_eq!(
+        dialect.deferred_slot_observer(Primitive::OnCleanup, 0),
+        Some(false)
+    );
+}
+
 #[test]
 fn the_slot_run_is_derived_from_the_callback_questions() {
     let two = &Solid2 as &'static dyn Dialect;
