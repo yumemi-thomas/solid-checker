@@ -37,6 +37,12 @@ export function EffectShadowed() {
   createEffect(() => n(), 1);
   return <div />;
 }
+// silent, tsc-rejected: the published overloads take an apply (TS2554), so TypeScript reports the call and it is TypeScript's.
+export function EffectOneArgument() {
+  // the stub types two arguments, and no directive covers this line
+  createEffect(() => n());
+  return <div />;
+}
 // V: an apply argument no type vouches for (`undefined as any`), the runtime throws MISSING_EFFECT_FN.
 export function EffectMissing() {
   createEffect(() => n(), undefined as any);

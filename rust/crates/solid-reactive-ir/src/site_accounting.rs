@@ -258,8 +258,6 @@ site_silences! {
     /// A static-form `dynamic` call whose source is proven to answer synchronously (a closed return type with no thenable, a sync or async generator: the static form
     /// throws on a thenable only; SC2007; the premise is the source function).
     DynamicSourceSynchronous => "static_api.dynamic_static.source-synchronous",
-    /// A `dynamic` call with no source argument that TypeScript rejects (`Recovery` validity): TypeScript's (SC2007; the premise is the callee).
-    DynamicNoSourceTscRejected => "static_api.dynamic_static.no-source-tsc-rejected",
 }
 
 impl SiteSilence {
@@ -362,9 +360,7 @@ impl SiteSilence {
             Self::SyncOptionNotAsserted
             | Self::SyncOptionTscReports
             | Self::ComputationNotAsync => &[SyncNodeAsync],
-            Self::DynamicSourceSynchronous | Self::DynamicNoSourceTscRejected => {
-                &[DynamicStaticPromise]
-            }
+            Self::DynamicSourceSynchronous => &[DynamicStaticPromise],
             // The passes that remove a row: the codes the removed row's ending answered.
             Self::ApplyNeverRuns
             | Self::ClosedProgramExportDischarge

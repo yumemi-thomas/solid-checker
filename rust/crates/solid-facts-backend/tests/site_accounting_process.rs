@@ -241,3 +241,64 @@ fn a_resolve_or_until_call_no_silence_ends_is_an_obligation_never_a_violation() 
         "{all:?}"
     );
 }
+
+/// The rows dropping `silence` adds to the fixture `fixture`: each an uncertifiable row of one of `ids` with `blocker`, and nothing else moves.
+fn ablation_rows(
+    typefacts: &str,
+    fixture: &str,
+    silence: &str,
+    ids: &[&str],
+    blocker: &str,
+) -> BTreeSet<String> {
+    let named = check(typefacts, fixture, None, &[]);
+    let ablated = check(typefacts, fixture, Some(silence), &[]);
+    let before = named.iter().map(key).collect::<BTreeSet<_>>();
+    let after = ablated.iter().map(key).collect::<BTreeSet<_>>();
+    assert!(before.is_subset(&after), "an answer was lost");
+    let added = after.difference(&before).cloned().collect::<BTreeSet<_>>();
+    for row in &added {
+        assert!(
+            ids.iter().any(|id| row.contains(id))
+                && row.contains("\"uncertifiable\"")
+                && row.contains(blocker),
+            "dropping `{silence}` moved an answer that is no unaccounted {blocker} call: {row}"
+        );
+    }
+    added
+}
+
+/// ADR 0989: every call of an effect primitive and of a primitive that takes `sync` ends in a row or a typed silence; each silence dropped on its own leaves its
+/// calls an obligation of their rule (never a violation), the others and the rows untouched.
+#[test]
+fn a_static_api_call_no_silence_ends_is_an_obligation_never_a_violation() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let fixture = "static-api-silences";
+    let named = check(&typefacts, fixture, None, &[]);
+    for blocker in ["effect-fn-unaccounted", "sync-option-unaccounted"] {
+        assert!(
+            unaccounted(&named, blocker).is_empty(),
+            "a call is {blocker} with every silence named"
+        );
+    }
+    let per_silence = [
+        ("static_api.effect_function.slot-callable", &["SC7001"][..], "effect-fn-unaccounted", 9),
+        ("static_api.sync_option.not-asserted", &["SC7002"][..], "sync-option-unaccounted", 11),
+        ("static_api.sync_option.tsc-reports", &["SC7002"][..], "sync-option-unaccounted", 1),
+        ("static_api.sync_option.computation-not-async", &["SC7002"][..], "sync-option-unaccounted", 2),
+    ];
+    for (silence, ids, blocker, rows) in per_silence {
+        let added = ablation_rows(&typefacts, fixture, silence, ids, blocker);
+        assert_eq!(added.len(), rows, "{silence}: {added:?}");
+    }
+    // The dynamic fixture: a static `dynamic` call whose source is proven synchronous (four of them) ends in a silence.
+    let dynamic = "rc9-static-dynamic-async";
+    assert!(unaccounted(&check(&typefacts, dynamic, None, &[]), "dynamic-static-unaccounted").is_empty());
+    let added = ablation_rows(
+        &typefacts,
+        dynamic,
+        "static_api.dynamic_static.source-synchronous",
+        &["SC2007"],
+        "dynamic-static-unaccounted",
+    );
+    assert_eq!(added.len(), 4, "{added:?}");
+}

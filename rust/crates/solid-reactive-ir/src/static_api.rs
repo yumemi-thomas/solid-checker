@@ -677,26 +677,6 @@ impl StaticApiContext<'_> {
             // ADR 0654: a source not proven synchronous is open, and so is a
             // form the options do not decide (`dynamic(source, options)`).
             let dynamic_form = kind.and_then(|primitive| dialect.static_dynamic_form(primitive));
-            if dynamic_form.is_some() && call.arguments.is_empty() {
-                // ADR 0989: no source at all is a call the published overloads reject: TypeScript's where its resolved call is `Recovery` and no directive
-                // may silence it; otherwise the site keeps its row.
-                if self
-                    .lookup
-                    .resolved_callee_call(file, call.callee)
-                    .is_some_and(|resolved| {
-                        resolved.validity == typefacts::ResolvedCallValidity::Recovery
-                    })
-                    && !file.tsc_may_be_silent_within(call.span)
-                {
-                    result.ends.end_at(
-                        file,
-                        call.callee,
-                        crate::site_accounting::SiteSilence::DynamicNoSourceTscRejected,
-                        crate::proof_log::PremiseKind::TscReportsAtSite,
-                        || Some(call.callee),
-                    );
-                }
-            }
             if let Some(form) = dynamic_form
                 && let Some(source) = call.arguments.first()
             {
