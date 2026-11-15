@@ -1,12 +1,12 @@
-// The plan of the API-fire test (api-fire-1of2.test.mjs, api-fire-2of2.test.mjs, api-fire-plan.test.mjs): one program per (code, context, variant) the recall grids hold for the
+// The plan of the API-fire test (api-fire-1of3.test.mjs, api-fire-2of3.test.mjs, api-fire-3of3.test.mjs, api-fire-plan.test.mjs): one program per (code, context, variant) the recall grids hold for the
 // rc.17 API variants, the lazy-memo / deferred-apply contexts (misuse.mjs API_VARIANTS, API_CONTEXTS), and the later-fire, named-handler, never-run and attached-callback-prop
 // contexts (FIRE_CONTEXTS, HANDLER_CONTEXTS, DEAD_CONTEXTS): each does what its cell says on the fast runtime: a misuse cell reports its code at the site, a legal cell reports no
 // defect code (and its site ran, or, for a site rc.17 never runs, did not run).
 //
-// Owner ruling (batch 10): the plan outgrew the 300 s limit of its one test (1,883 programs, 322 s alone on a quiet VM), and the limit is not raised: the plan is SPLIT into two
-// halves, each its own test file with the same limit. `plans()` is the whole plan, as the one test built it; `partOf(0|1)` is a half: an entry goes to the half its cell's key hashes
+// Owner ruling (batch 10): the plan outgrew the 300 s limit of its one test (1,883 programs, 322 s alone on a quiet VM), and the limit is not raised: the plan is SPLIT into
+// parts (two, three since ADR 0990), each its own test file with the same limit. `plans()` is the whole plan, as the one test built it; `partOf(0|1|2)` is a part: an entry goes to the part its cell's key hashes
 // to (`halfOf`, a function of the entry alone, so adding a cell moves no other), and keeps its place `index` in the whole plan, from which its program's seed and id come, so every
-// program is the program the one test ran. api-fire-plan.test.mjs holds that the halves do not overlap and their union is the plan.
+// program is the program the one test ran. api-fire-plan.test.mjs holds that the parts do not overlap and their union is the plan.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,7 +40,8 @@ import { PA_CONTEXT_NAMES } from "./pa-shapes.mjs";
 import { TABLE_CONTEXT_NAMES } from "./table-shapes.mjs";
 import { fnv } from "./rng.mjs";
 
-export const PARTS = 2;
+/** ADR 0990: three parts (two until the named primitive layers took the plan from 1,885 to 2,377 programs; a part of ~1,190 was over 200 s on a quiet machine, against the 300 s limit that stays). */
+export const PARTS = 3;
 
 // ADR 0927: an apply that only names the compute's returned function never runs it.
 export const NEVER_RUN = ["memo-lazy-unread", "effect-apply-defer", ...DEAD_CONTEXTS, ...APPLY_VOID_UNRUN];

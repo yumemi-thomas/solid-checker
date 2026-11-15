@@ -160,7 +160,7 @@ the value still will not update).
 - **An async callback of `isPending` (ADR 0959).** `isPending` catches what its callback throws, so a `resolve()` or
   `until()` in a plain callback of it is quiet (ADR 0941). An async callback's synchronous throw is the function's
   rejection, which `isPending` does not catch, so the same call there is an uncertifiable row (blocker
-  `async-slot-unmodelled`), not silence.
+  `async-slot-unmodelled`), not silence. The callback is read the same way when it is NAMED (`const cb = () => { resolve(…) }; isPending(cb)`, a function declaration, a name another binding holds, a callback that calls a helper): the leaf walk asks the one question the literal form asks (ADR 0990), so a tracked effect's `createTrackedEffect(() => { … isPending(cb) … })` gets no violation at the `isPending` call (it did before: a false positive, Chrome quiet); the rows at the `resolve()` itself stay obligations where the callback's identity is not exact. In `onSettled` there is no observer, `resolve()` is the creation the leaf owner refuses, and the row stays.
 - **`onSettled` / leaf owners.** `resolve()` passes the observer guard there,
   so this rule is silent — but note that in an *owner-backed* `onSettled` the
   promise still rejects in dev with `PRIMITIVE_IN_FORBIDDEN_SCOPE` (probed):
