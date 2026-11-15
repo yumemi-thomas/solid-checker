@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { censusIds, cover, familyIds, gridRows, ledgerIds, requiredIds, sample, wholeGrid } from "./cover.mjs";
+import { censusIds, coverHash, cover, familyIds, gridRows, ledgerIds, requiredIds, sample, wholeGrid } from "./cover.mjs";
 
 const row = (id, code, context, variant, layer) => ({ id, side: "misuse", code, context, variant, binding: "direct", layer });
 
@@ -77,3 +77,24 @@ describe("the covering sample", () => {
     expect(byGrid["mx-base"].length + byGrid["lg-base"].length).toBe(programs);
   });
 });
+
+describe("the two jobs of the smoke (ADR 1001)", () => {
+  it("draw the one sample: a leg's programs are the cover's, restricted to its grids, and the hash names the whole list", () => {
+    const codes = ["STRICT_READ_UNTRACKED", "NO_OWNER_EFFECT"];
+    const grids = ["mx-base", "lg-base", "mx-census"];
+    const whole = sample({ grids, codes });
+    // each leg computes the cover over every grid and keeps its own: the same lists, so the same hash
+    const rest = sample({ grids, codes }), census = sample({ grids, codes });
+    const legs = { rest: ["mx-base", "lg-base"], census: ["mx-census"] };
+    const named = (list) => ({ ids: list });
+    const ran = (drawn, leg) => Object.fromEntries(legs[leg].map((grid) => [grid, named(drawn.byGrid[grid])]));
+    expect(whole.byGrid["mx-base"].length).toBeGreaterThan(0);
+    expect(coverHash({ ...ran(rest, "rest"), ...ran(census, "census") })).toBe(coverHash(Object.fromEntries(grids.map((grid) => [grid, named(whole.byGrid[grid])]))));
+    const union = [...legs.rest.flatMap((grid) => whole.byGrid[grid]), ...whole.byGrid["mx-census"]];
+    expect(new Set(union).size).toBe(union.length);
+    expect(union.length).toBe(whole.programs);
+    // another list is another hash
+    expect(coverHash({ "mx-base": named(["a"]), "lg-base": named(["b"]) })).not.toBe(coverHash({ "mx-base": named(["b"]), "lg-base": named(["a"]) }));
+  });
+});
+

@@ -53,7 +53,7 @@ import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rowProblem } from "./codes.mjs";
 import { gridStanding, heldLine, ledgerCovers, manifestIds, offLedger, readOpenDefects } from "./open-defects.mjs";
-import { GRIDS } from "./focus-grids.mjs";
+import { GRIDS, SMOKE_LEGS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
 import { FIXED_SEED, wholeGrid, writeSample } from "./cover.mjs";
@@ -69,7 +69,7 @@ import { compareLines, comparePerf, readRun } from "./perf-compare.mjs";
 import { compareRuns, reportLines } from "./boundary-twin.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-export { GRIDS } from "./focus-grids.mjs";
+export { GRIDS, SMOKE_LEGS } from "./focus-grids.mjs";
 /** The programs a sample sends through Chrome, per grid: the oracle runs about 2.2 programs a second. */
 const ORACLE_CAP = 25;
 /** The census's oracle strata. */
@@ -255,7 +255,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
       if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
-      if (!["cover", "coverSeed", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard", "boundary", "entry"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+      if (!["cover", "coverSeed", "coverGrids", "smokeLeg", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard", "boundary", "entry"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
@@ -288,6 +288,18 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       options.cover ??= "all";
       options.oracleCap ??= String(ORACLE_CAP);
       if (options.grids === DEFAULT_GRIDS.join(",")) options.grids = Object.keys(GRIDS).join(",");
+    }
+    // One job of the pull request's smoke (ADR 1001): this leg's grids run, the cover is computed over every grid, so the legs split one sample.
+    if (options.smokeLeg !== undefined) {
+      if (!options.smoke) throw new Error("focus.mjs: --smoke-leg needs --smoke");
+      if (!SMOKE_LEGS[options.smokeLeg]) throw new Error(`focus.mjs: no smoke leg ${options.smokeLeg} (${Object.keys(SMOKE_LEGS).join(", ")})`);
+      if (own.includes("--grids") || options.coverGrids !== undefined) throw new Error("focus.mjs: --smoke-leg sets --grids and --cover-grids");
+      options.grids = SMOKE_LEGS[options.smokeLeg].join(",");
+      options.coverGrids = Object.keys(GRIDS).join(",");
+    }
+    if (options.coverGrids !== undefined) {
+      if (!options.cover) throw new Error("focus.mjs: --cover-grids needs --cover");
+      for (const grid of options.coverGrids.split(",")) if (!GRIDS[grid]) throw new Error(`focus.mjs: no grid ${grid} in --cover-grids (${Object.keys(GRIDS).join(", ")})`);
     }
     if (options.cover && !["all", "per-code"].includes(options.cover)) throw new Error("focus.mjs: --cover takes all or per-code");
     if (options.cover && options.codes !== "all") throw new Error("focus.mjs: --cover samples every code: it takes --codes all");
@@ -362,7 +374,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
-    const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: options.grids.split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
+    const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: (options.coverGrids ?? options.grids).split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
     const runUnit = (grid, script, shape, unit, manifest) => {
       // Room for the grid before it starts: a run that fills the disk midway fails late, with ENOSPC rows (ADR 0519's preflight runs at
       // sync only; a run of many codes writes a directory per program).
