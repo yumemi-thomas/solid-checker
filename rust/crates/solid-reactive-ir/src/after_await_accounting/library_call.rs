@@ -106,11 +106,53 @@ fn standard_call_runs_nothing(
     {
         return false;
     }
+    // ADR 0999: the declaration is the library's, but what runs is whatever holds the global at run time. A global an installed package the program loads writes
+    // (`window.structuredClone = …`, by that name or under a key nothing decides) is that package's function, which may call what the program handed it earlier.
+    if package_writes_global(ctx, file, callee) {
+        return false;
+    }
     receiver_is_the_librarys(ctx, file, call)
         && call.arguments.iter().enumerate().all(|(index, argument)| {
             let behavior = runtime_semantics::argument_behavior(resolved, None, index);
             argument_is_inert(ctx, file, argument, behavior, object_prototype_touched)
         })
+}
+
+/// ADR 0999: whether some installed package the program loads writes the global a call goes through: the callee's own name (`fetch(…)`), or the global its receiver
+/// is (`JSON.parse(…)`, `window.fetch(…)`: the root of the member chain). Every writer counts, a package whose closure names no Solid package too: it runs no action,
+/// but it may run a function of the project it was handed. A name no unbound identifier spells answers by the any-name writers alone.
+fn package_writes_global(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    callee: solid_facts::core::Span,
+) -> bool {
+    let Some(reach) = ctx.package_reach else {
+        return false;
+    };
+    if reach.global_writers.is_empty() && reach.global_writers_any.is_empty() {
+        return false;
+    }
+    let ast = &file.ast;
+    let mut names = Vec::new();
+    let mut at = ast.peel_ts_sugar_span(callee);
+    while let Some(member) = ast.member_at(at) {
+        if !ast.computed_members.contains(&member.span)
+            && let Some(name) = file.source_text(member.property)
+        {
+            names.push(name);
+        }
+        at = ast.peel_ts_sugar_span(member.object);
+    }
+    if crate::owners::is_identifier_span(file, at)
+        && ast.reference_declaration(at).is_none()
+        && let Some(name) = file.source_text(at)
+    {
+        names.push(name);
+    }
+    !reach.global_writers_any.is_empty()
+        || names
+            .iter()
+            .any(|name| reach.global_writers.contains_key(*name))
 }
 
 /// Whether a setter call runs no project code: its arguments are inert and the signal has no function-valued `equals` option. The callee is an identifier bound by a destructuring
