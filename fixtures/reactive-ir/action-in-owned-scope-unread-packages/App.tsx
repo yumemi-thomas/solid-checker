@@ -86,6 +86,7 @@ export function MissingSource() {
 }
 
 // Silent: the same package where its role allows an action, or a package whose closure is clear.
+// (ADR 1002: the `setTimeout` call itself is a row here, since `dynpkg` holds code nobody read and may have replaced it; the `runStep` call stays silent.)
 export function ReachTimer() {
   setTimeout(() => {
     runStep(() => {});

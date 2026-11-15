@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1003: a promise handler given as a member of a project object, a conditional, a parameter, a bound function or a spread array; Chrome raises UNTRACKED_READ_AFTER_AWAIT at the read in each function it may be, and each has SC1002's uncertifiable row (covered-uncertifiable). A handler that is a call's result reading nothing, the library's resolve and a nullish literal raise nothing."
+}

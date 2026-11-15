@@ -1,6 +1,7 @@
 // ADR 0998: a value a package the build does not read returned is read as possibly reactive on every route to the read, not only where the read's own
 // expression leads back to the call. `dep-router` is not read as source (its closure cannot be read), and `useLocation()` returns getters over a memo:
 // Chrome rc.21 warns STRICT_READ_UNTRACKED at each untracked `.search` below (`fixtures/runtime-oracle/package-value-flow`).
+import { createContext, useContext } from "solid-js";
 import { Router, useLocation } from "dep-router";
 
 // U (package-value-read:untracked, ADR 0981): the read's own expression leads back to the call.
@@ -68,10 +69,57 @@ function Local() {
   return <p>{s}</p>;
 }
 
+// ADR 1002: the value handed on as a JSX attribute is followed where the tag names its reader.
+// U (package-value-read:flowed): a project component reads the prop untracked in its body.
+function Child(props: { location: { search: string } }) {
+  const s = props.location.search;
+  return <p>{s}</p>;
+}
+function ViaProp() {
+  const location = useLocation();
+  return <Child location={location} />;
+}
+
+// U: the child takes its props by a pattern.
+function ChildPattern({ location }: { location: { search: string } }) {
+  const s = location.search;
+  return <p>{s}</p>;
+}
+function ViaPropPattern() {
+  const location = useLocation();
+  return <ChildPattern location={location} />;
+}
+
+// U: a context provider's value, read by a consumer of the context.
+const LocationContext = createContext<{ search: string }>();
+function Consumer() {
+  const location = useContext(LocationContext);
+  const s = location.search;
+  return <p>{s}</p>;
+}
+function ViaContext() {
+  const location = useLocation();
+  return (
+    <LocationContext value={location}>
+      <Consumer />
+    </LocationContext>
+  );
+}
+
+// no row: the child reads the prop where an expression tracks the read.
+function ChildTracked(props: { location: { search: string } }) {
+  return <p>{props.location.search}</p>;
+}
+function ViaPropTracked() {
+  const location = useLocation();
+  return <ChildTracked location={location} />;
+}
+
 export function App() {
   return (
     <Router>
       <Direct /><ViaArray /><ViaLet /><ViaObject /><ViaParam /><ViaCopy /><TrackedObject /><TrackedLet /><Local />
+      <ViaProp /><ViaPropPattern /><ViaContext /><ViaPropTracked />
     </Router>
   );
 }

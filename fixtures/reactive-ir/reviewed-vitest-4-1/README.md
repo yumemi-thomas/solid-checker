@@ -8,7 +8,7 @@
 
 Module scope (`onLoad`, `text`, ...) has no owner, so nothing there is a site.
 
-**Published bytes.** `node_modules` holds, byte for byte, the declaration files TypeScript loads for a vitest test file, vitest's entry (`dist/index.js`, whose other chunks are not copied: the package is not clear, as the whole package is not) and the runtime files the reading rests on, with each package's manifest, copied from the installed packages of the corpus project `probus-hk` (bun.lock integrity below; the digests of the runtime files are in `reviewed_packages.rs`). `node_modules/solid-js` and `@solidjs/*` are the manifests of `action-in-owned-scope-unread-packages`; `node_modules/fz-step` is **not** published bytes: it is written for `StoredPackageFunction`.
+**Published bytes.** `node_modules` holds, byte for byte, the declaration files TypeScript loads for a vitest test file, vitest's entries (`dist/index.js`, whose other chunks are not copied: the package is not clear, as the whole package is not; and `index.cjs`, which ADR 1000 pins with `dist/index.js` and each manifest) and the runtime files the reading rests on, with each package's manifest, copied from the installed packages of the corpus project `probus-hk` (bun.lock integrity below; the digests of the runtime files are in `reviewed_packages.rs`). `node_modules/solid-js` and `@solidjs/*` are the manifests of `action-in-owned-scope-unread-packages`; `node_modules/fz-step` is **not** published bytes: it is written for `StoredPackageFunction`.
 
 | package | integrity |
 |---|---|

@@ -156,8 +156,11 @@ impl AfterAwaitSafe {
                         .root
                         .is_some_and(|root| member_reads::root_is_plain(ctx, site.file, root))
             }
+            // A promise handler handed as an argument (ADR 1003's `handler` site) runs from a later job, not as this callback's own code: the reason does not take it,
+            // as it does not take a handler written as a function literal (that function's own sites).
             Self::RunnerScheduled => site.registration.is_some_and(|(registration, read_bytes)| {
                 read_bytes
+                    && site.via != "handler"
                     && crate::flush_accounting::runs_when_the_call_runs(
                         site.file,
                         site.at,
@@ -233,7 +236,8 @@ struct AwaitSite<'a> {
     at: Span,
     alternates: Vec<Span>,
     /// How the site is listed: `read`, `call`, `member`, `inexact`, `inexact-member`, `invocation`, `iife`, `apply`, `project`, `unresolved`, and (ADR 0976) `library`, `package`,
-    /// `symbol`, `construct`, `setter`, `action`, `typed`, `primitive` (R5: a `runWithOwner` call), `package` or `package-symbol`.
+    /// `symbol`, `construct`, `setter`, `action`, `typed`, `primitive` (R5: a `runWithOwner` call), `package` or `package-symbol`, and (ADR 1003) `handler`: the argument of a
+    /// promise handler call whose functions the walk could not all name.
     via: &'static str,
     /// The function holding the site is a literal a reviewed runner schedules.
     test: bool,
@@ -468,7 +472,10 @@ fn sites<'a>(
         (set.get(&function.span).copied(), host)
     };
     // ADR 0976, S3: the functions a promise handler call runs after a suspension are after one, async or not.
-    let handlers = handlers::handler_functions(ctx);
+    let handlers::Found {
+        functions: handlers,
+        unresolved,
+    } = handlers::handler_functions(ctx);
     let after = |file: &FileFacts, span: Span| {
         crate::execution_role::may_follow_suspension(file, span)
             || handlers::in_handler(&handlers, file, span)
@@ -482,6 +489,33 @@ fn sites<'a>(
         })
     };
     let mut found = Vec::new();
+    // ADR 1003: a handler argument whose functions the walk could not all name runs, after the suspension, a function nothing names.
+    let unresolved_files: HashMap<&str, &'a FileFacts> = if unresolved.is_empty() {
+        HashMap::default()
+    } else {
+        lookup
+            .files()
+            .iter()
+            .map(|file| (file.path.as_str(), file))
+            .collect()
+    };
+    for (path, at) in unresolved {
+        let Some(&file) = unresolved_files.get(path) else {
+            continue;
+        };
+        let (registration, host) = classify(file, at);
+        found.push(AwaitSite {
+            file,
+            at,
+            alternates: Vec::new(),
+            via: "handler",
+            test: registration.is_some(),
+            registration,
+            host,
+            call: None,
+            root: None,
+        });
+    }
     for &(file, ref site) in universe {
         if site.table != "read"
             || lookup.in_dependency_source(file.path.as_str())
