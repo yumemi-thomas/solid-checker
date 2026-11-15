@@ -8,8 +8,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/test-runner-node/variants/after-await/App.test.tsx",
-      "start": 178,
-      "end": 183,
+      "start": 190,
+      "end": 195,
       "fixes": 0
     },
     {
@@ -19,8 +19,30 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/test-runner-node/variants/after-await/App.test.tsx",
-      "start": 744,
-      "end": 749,
+      "start": 756,
+      "end": 761,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-node/variants/after-await/App.test.tsx",
+      "start": 1054,
+      "end": 1064,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-node/variants/after-await/App.test.tsx",
+      "start": 1108,
+      "end": 1112,
       "fixes": 0
     }
   ]

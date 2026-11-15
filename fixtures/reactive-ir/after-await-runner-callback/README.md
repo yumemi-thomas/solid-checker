@@ -8,13 +8,15 @@ The facts asked, the flush accounting's for the same class (`flush_accounting::r
 
 | site (`App.test.tsx`) | outcome |
 |---|---|
-| `state.n`, `reads()`, `expect(count())` and its `.toBe`, `new Map(…)` in `it("a read", async …)` | ended, no row (`count()` and the `expect` chain's inner read keep the producers' own `function-run-unplaced` rows: the reason ends only a site no row stands at) |
+| `reads()`, `expect(…)` and its `.toBe`, `new Map(…)`, `setCount(1)` in `it("a read", async …)` | ended, no row |
+| `count()`, `state.n` and the `count()` inside `expect(…)` in the same callback | each keeps another producer's row, SC1002 `function-run-unplaced` (the walk's own obligation for a read whose function it cannot place): the reason ends only a site no row stands at, so it is not asked there |
 | `reads()` in `beforeEach`, in vitest's `describe` body, under `test.only`, `it.each(…)(…)`, the alias `check` and the re-export `spec` (`runner.ts`) | ended, no row |
 | `reads()` in a wrapper's argument (`wrap(async …)`) and in a binding handed by name (`shared`) | SC1002 uncertifiable, `read-after-await-unaccounted`: no literal in the registration |
 | `reads()` under a block-scoped `it` bound to a project function | the same: a project declaration is not the runner |
 | `reads()` in `again`, a named function expression that hands its own name to `createMemo` | the same; the read it runs (`count()` in `signals.ts`) is the walk's **violation**, `again` being that computation's compute (the probe's `named-again` row) |
 | `count()` in the async memo written in the test | SC1002 **violation**: the computation's own read after its own await |
 | the promise handler's read, the nested async arrow's read | uncertifiable: each is its own function |
+| `make()` in `pause().then(make())` in `it("a handler argument", …)` | SC1002 uncertifiable, `read-after-await-unaccounted`: ADR 1003's site for a promise handler handed as an argument that names no function. A later job runs the handler, not the callback's own code, so the reason refuses the site (`via: handler`); without that refusal the row is gone (checked by building without it). The `.then` call itself ends |
 | `count()` in `helper` (called from a test and handed to `createMemo`) | uncertifiable: a test-only helper is not covered, and this one is no test-only helper |
 | `helper()` in `it("a helper", …)` | ended: the call is the callback's own site |
 

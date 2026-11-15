@@ -101,6 +101,14 @@ it("nested", async () => {
   });
 });
 
+// Kept (ADR 1003's site): a promise handler handed as an argument that names no function (a call's result). A later job runs the handler, not the callback's
+// own code, so the reason does not take the argument: it keeps SC1002's row. The `.then` call itself is the callback's own site and ends.
+const make = (): (() => number) => reads;
+it("a handler argument", async () => {
+  await pause();
+  void pause().then(make());
+});
+
 // Kept: an async helper the tests call is a function like any other (a computation may run it too): its own sites keep their rows. The call of it in the test ends.
 async function helper() {
   await pause();

@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createMemo, createSignal } from "solid-js";
 import { describe, test } from "node:test";
 
 const [count] = createSignal(0);
@@ -17,3 +17,15 @@ describe("an inline suite body", async () => {
   await pause();
   reads();
 });
+
+// A registration written after an await in an async computation: the call of `test` is that computation's own site (a call into a package on its flight), and keeps
+// SC1002's uncertifiable row. The callback it registers is scheduled like any other.
+export const registers = () =>
+  createMemo(async () => {
+    await pause();
+    await test("registered on a flight", async () => {
+      await pause();
+      reads();
+    });
+    return 1;
+  });
