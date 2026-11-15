@@ -1147,6 +1147,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/impostor-prototype-own/node_modules/**
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/
 !fixtures/reactive-ir/impostor-withheld-no-run/node_modules/**
+!fixtures/reactive-ir/write-fold-withheld-caller/node_modules/
+!fixtures/reactive-ir/write-fold-withheld-caller/node_modules/**
+!fixtures/reactive-ir/write-fold-withheld-caller-no-veto/node_modules/
+!fixtures/reactive-ir/write-fold-withheld-caller-no-veto/node_modules/**
 !fixtures/reactive-ir/impostor-symbol-key/node_modules/
 !fixtures/reactive-ir/impostor-symbol-key/node_modules/**
 !fixtures/reactive-ir/impostor-symbol-key-lie/node_modules/

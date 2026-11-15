@@ -1931,12 +1931,8 @@ pub(super) fn semantic_write_execution_role_within(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
-    // ADR 0874: nothing places code an impostor may run, or never run.
-    if !super::discarded_region_contains(file, span) && runs_in_withheld_layer(file, span, lookup) {
-        return role_arm!(
-            "write_roles.semantic_write_execution_role_within.withheld-callback",
-            ExecutionRole::Unknown
-        );
+    if let Some(role) = withheld_caller_role(file, span, lookup) {
+        return role;
     }
     let mut decided = false;
     let role = write_role_walk(
@@ -1952,6 +1948,24 @@ pub(super) fn semantic_write_execution_role_within(
         None,
     );
     write_role_fallback(file, span, role, decided, root_body, lookup)
+}
+
+/// ADR 0874 and ADR 0991: the veto every walk that places a caller asks first. Nothing places code an impostor may run, or never run: a call written in a
+/// callback of a withheld standard call (outside discarded code) has no role, whatever the arms that follow would answer. The one definition of it: the path
+/// walk asks it per caller ([`semantic_write_execution_role_within`], which `caller_loop`'s reference fold and `walk`'s direct callers reach), and so does the
+/// region fold's own placement of each call site (`write_components`, `place_sites`), so the two cannot answer differently (ADR 0546's promise).
+pub(super) fn withheld_caller_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    (!super::discarded_region_contains(file, span) && runs_in_withheld_layer(file, span, lookup))
+        .then(|| {
+            role_arm!(
+                "write_roles.semantic_write_execution_role_within.withheld-callback",
+                ExecutionRole::Unknown
+            )
+        })
 }
 
 /// What [`semantic_write_execution_role_within`] answers for the walk's
